@@ -44,6 +44,7 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
             <div class="pp-chrome-addrow">
                 <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="page">+ Página</button>
                 <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="link">+ Enlace</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="dropdown">+ Submenú</button>
             </div>
         </section>
 
@@ -108,6 +109,16 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
             <h3>Pie · Bloques</h3>
             <p class="pp-design-hint">Activa, desactiva y ordena los bloques del pie.</p>
             <div id="blocks-list" class="pp-chrome-list"></div>
+        </section>
+
+        <section class="pp-form-card">
+            <h3>Pie · Navegación (Explora)</h3>
+            <p class="pp-design-hint">Enlaces de la columna «Explora» del pie. Si lo dejas vacío, se usan tus páginas publicadas.</p>
+            <div id="footernav-list" class="pp-chrome-list"></div>
+            <div class="pp-chrome-addrow">
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="page">+ Página</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="link">+ Enlace</button>
+            </div>
         </section>
 
         <section class="pp-form-card">

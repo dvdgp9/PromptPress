@@ -110,11 +110,18 @@ final class ChromeService
         $cut = static fn($v, int $n): string => mb_substr(trim((string) $v), 0, $n);
         $enum = static fn($v, array $opts, string $def): string => in_array($v, $opts, true) ? (string) $v : $def;
 
-        // Menú (cap 14 ítems, hijos cap 8)
+        // Menú header (cap 14 ítems, hijos cap 8). Permite desplegables.
         $menu = [];
         foreach (array_slice((array) ($h['menu'] ?? []), 0, 14) as $it) {
             $item = self::sanitizeMenuItem((array) $it, $cut, $enum, false);
             if ($item !== null) $menu[] = $item;
+        }
+
+        // Navegación del pie (cap 14): solo página/enlace, sin desplegables.
+        $footerNav = [];
+        foreach (array_slice((array) ($f['nav'] ?? []), 0, 14) as $it) {
+            $item = self::sanitizeMenuItem((array) $it, $cut, $enum, true);
+            if ($item !== null) $footerNav[] = $item;
         }
 
         // Bloques footer (subconjunto único)
@@ -158,7 +165,7 @@ final class ChromeService
                 ],
                 'blocks'  => $blocks,
                 'tagline' => $cut($f['tagline'] ?? '', 200),
-                'nav'     => $d['footer']['nav'],
+                'nav'     => $footerNav,
                 'contact' => [
                     'address' => $cut($fc['address'] ?? '', 300),
                     'phone'   => $cut($fc['phone'] ?? '', 60),

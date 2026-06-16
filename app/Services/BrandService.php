@@ -284,11 +284,18 @@ final class BrandService
             $tagline = $taglineOverride;
         }
 
-        $navLinks = '';
-        foreach (self::navPages($siteId) as $p) {
-            $href = htmlspecialchars(base_url(ltrim($p['slug'], '/')), ENT_QUOTES, 'UTF-8');
-            $navLinks .= '<a class="pp-site-footer__link" href="' . $href . '">'
-                . htmlspecialchars($p['title'], ENT_QUOTES, 'UTF-8') . '</a>';
+        // CHROME-EDITOR — navegación del pie: items propios si están configurados,
+        // si no, las páginas publicadas (comportamiento histórico).
+        $footerNavItems = (array) ($config['footer']['nav'] ?? []);
+        if ($footerNavItems !== []) {
+            $navLinks = self::footerNavFromItems($siteId, $footerNavItems);
+        } else {
+            $navLinks = '';
+            foreach (self::navPages($siteId) as $p) {
+                $href = htmlspecialchars(base_url(ltrim($p['slug'], '/')), ENT_QUOTES, 'UTF-8');
+                $navLinks .= '<a class="pp-site-footer__link" href="' . $href . '">'
+                    . htmlspecialchars($p['title'], ENT_QUOTES, 'UTF-8') . '</a>';
+            }
         }
 
         // CHROME-EDITOR — columnas por bloque, en el orden configurado.
@@ -339,6 +346,21 @@ final class BrandService
              . '<div class="pp-site-footer__bottom"><span class="pp-site-footer__copy">' . $copy . '</span></div>'
              . '</footer>'
              . $bannerHtml;
+    }
+
+    /** Enlaces de navegación del pie desde items propios (página/enlace; sin desplegables). */
+    private static function footerNavFromItems(int $siteId, array $items): string
+    {
+        $out = '';
+        foreach ($items as $it) {
+            if (!is_array($it) || (($it['visible'] ?? true) === false)) continue;
+            if ((string) ($it['type'] ?? 'page') === 'dropdown') continue; // el pie no usa desplegables
+            [$href, $label, $target] = self::resolveItem($siteId, $it);
+            if ($href === '' || $label === '') continue;
+            $t = $target === '_blank' ? ' target="_blank" rel="noopener"' : '';
+            $out .= '<a class="pp-site-footer__link" href="' . $href . '"' . $t . '>' . $label . '</a>';
+        }
+        return $out;
     }
 
     /** Columna de contacto (dirección/teléfono/email/horario). '' si vacía. */
