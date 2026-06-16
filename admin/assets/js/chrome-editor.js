@@ -13,7 +13,22 @@
     var blocksList = document.getElementById('blocks-list');
     var socialList = document.getElementById('social-list');
     var iframe = document.getElementById('chrome-preview');
+    var previewFrame = document.getElementById('chrome-preview-frame');
     var hidden = document.getElementById('config_json');
+
+    /* Vista previa: renderiza a ancho real de dispositivo y escala para encajar. */
+    var DEVICES = { desktop: { w: 1280, h: 880 }, mobile: { w: 390, h: 760 } };
+    var device = 'desktop';
+    function fitPreview() {
+        if (!previewFrame) return;
+        var dim = DEVICES[device] || DEVICES.desktop;
+        var avail = previewFrame.clientWidth || dim.w;
+        var scale = avail / dim.w;
+        iframe.style.width = dim.w + 'px';
+        iframe.style.height = dim.h + 'px';
+        iframe.style.transform = 'scale(' + scale + ')';
+        previewFrame.style.height = (dim.h * scale) + 'px';
+    }
 
     var BLOCK_LABELS = {
         brand: 'Marca y lema', nav: 'Navegación (Explora)', legal: 'Enlaces legales',
@@ -238,5 +253,17 @@
     form.addEventListener('change', preview);
     form.addEventListener('submit', function () { hidden.value = JSON.stringify(buildConfig()); });
 
+    // Toggle de dispositivo (escritorio / móvil)
+    document.querySelectorAll('.pp-chrome-devtoggle button').forEach(function (b) {
+        b.addEventListener('click', function () {
+            device = b.getAttribute('data-device') === 'mobile' ? 'mobile' : 'desktop';
+            document.querySelectorAll('.pp-chrome-devtoggle button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+            fitPreview();
+        });
+    });
+    var resizeTimer = null;
+    window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(fitPreview, 150); });
+
+    fitPreview();
     preview();
 })();

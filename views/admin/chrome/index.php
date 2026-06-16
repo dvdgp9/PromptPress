@@ -176,8 +176,16 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
     </form>
 
     <aside class="pp-chrome-editor__preview">
-        <div class="pp-chrome-preview-head"><span>Vista previa</span></div>
-        <iframe id="chrome-preview" title="Vista previa del sitio"></iframe>
+        <div class="pp-chrome-preview-head">
+            <span>Vista previa</span>
+            <div class="pp-chrome-devtoggle" role="group" aria-label="Tamaño de pantalla">
+                <button type="button" data-device="desktop" class="is-active">Escritorio</button>
+                <button type="button" data-device="mobile">Móvil</button>
+            </div>
+        </div>
+        <div class="pp-chrome-preview-frame" id="chrome-preview-frame">
+            <iframe id="chrome-preview" title="Vista previa del sitio" scrolling="no"></iframe>
+        </div>
     </aside>
 </div>
 
