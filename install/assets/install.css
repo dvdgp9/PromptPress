@@ -1,0 +1,333 @@
+/* ============================================================
+   PromptPress — Instalador
+   CSS propio, sin dependencias externas.
+   ============================================================ */
+
+:root {
+    --pp-bg:        #f5f7fb;
+    --pp-card:      #ffffff;
+    --pp-text:      #1f2937;
+    --pp-muted:     #6b7280;
+    --pp-border:    #e5e7eb;
+
+    --pp-primary:   #2563eb;
+    --pp-primary-d: #1d4ed8;
+
+    --pp-ok:        #16a34a;
+    --pp-ok-bg:     #dcfce7;
+    --pp-fail:      #dc2626;
+    --pp-fail-bg:   #fee2e2;
+    --pp-warn:      #d97706;
+    --pp-warn-bg:   #fef3c7;
+    --pp-info-bg:   #dbeafe;
+
+    --pp-radius:    10px;
+    --pp-shadow:    0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --pp-shadow-lg: 0 10px 30px rgba(0,0,0,.08);
+
+    --pp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+    --pp-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.pp-install {
+    font-family: var(--pp-font);
+    color: var(--pp-text);
+    background: var(--pp-bg);
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- Header ---------- */
+.pp-install__header {
+    padding: 1.5rem 2rem;
+    background: white;
+    border-bottom: 1px solid var(--pp-border);
+}
+.pp-install__brand strong {
+    font-size: 1.125rem;
+    letter-spacing: -0.01em;
+}
+.pp-install__version {
+    color: var(--pp-muted);
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+}
+.pp-install__subtitle {
+    color: var(--pp-muted);
+    font-size: 0.9rem;
+    margin-top: 2px;
+}
+
+/* ---------- Steps progress ---------- */
+.pp-steps {
+    background: white;
+    border-bottom: 1px solid var(--pp-border);
+    padding: 1rem 2rem;
+}
+.pp-steps ol {
+    display: flex;
+    gap: 1rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+}
+.pp-steps__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--pp-muted);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+.pp-steps__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--pp-border);
+    color: white;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+.pp-steps__item.is-current { color: var(--pp-text); font-weight: 600; }
+.pp-steps__item.is-current .pp-steps__num { background: var(--pp-primary); }
+.pp-steps__item.is-done .pp-steps__num     { background: var(--pp-ok); }
+.pp-steps__item.is-done                    { color: var(--pp-ok); }
+
+/* ---------- Main ---------- */
+.pp-install__main {
+    flex: 1;
+    padding: 2rem;
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+}
+.pp-card {
+    background: var(--pp-card);
+    border-radius: var(--pp-radius);
+    box-shadow: var(--pp-shadow-lg);
+    padding: 2rem;
+}
+
+/* ---------- Step content ---------- */
+.pp-step-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+}
+.pp-step-intro {
+    color: var(--pp-muted);
+    margin: 0 0 1.5rem 0;
+}
+
+/* ---------- Checks ---------- */
+.pp-checks {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+.pp-check {
+    border-bottom: 1px solid var(--pp-border);
+}
+.pp-check:last-child { border-bottom: 0; }
+.pp-check__icon {
+    width: 36px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+    padding: 0.85rem 0.5rem 0.85rem 0;
+}
+.pp-check--ok   .pp-check__icon { color: var(--pp-ok); }
+.pp-check--fail .pp-check__icon { color: var(--pp-fail); }
+.pp-check--warn .pp-check__icon { color: var(--pp-warn); }
+.pp-check__label {
+    padding: 0.85rem 0;
+}
+.pp-check__msg {
+    font-size: 0.85rem;
+    color: var(--pp-muted);
+    margin-top: 2px;
+}
+.pp-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--pp-border);
+    color: var(--pp-muted);
+    margin-left: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+}
+
+/* ---------- Alerts ---------- */
+.pp-alert {
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+.pp-alert--ok   { background: var(--pp-ok-bg);   color: var(--pp-ok); }
+.pp-alert--fail { background: var(--pp-fail-bg); color: var(--pp-fail); }
+.pp-alert--warn { background: var(--pp-warn-bg); color: var(--pp-warn); }
+.pp-alert--info { background: var(--pp-info-bg); color: var(--pp-primary-d); }
+.pp-alert h2 { margin: 0 0 0.5rem 0; font-size: 1.05rem; }
+.pp-alert p:last-child { margin-bottom: 0; }
+.pp-alert code {
+    background: rgba(0,0,0,.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--pp-mono);
+    font-size: 0.85em;
+}
+
+/* ---------- Buttons ---------- */
+.pp-btn {
+    display: inline-block;
+    padding: 0.6rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border: 1px solid var(--pp-border);
+    border-radius: 8px;
+    background: white;
+    color: var(--pp-text);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+.pp-btn:hover    { background: #f9fafb; }
+.pp-btn:active   { transform: translateY(1px); }
+.pp-btn--primary {
+    background: var(--pp-primary);
+    color: white;
+    border-color: var(--pp-primary);
+}
+.pp-btn--primary:hover { background: var(--pp-primary-d); border-color: var(--pp-primary-d); }
+.pp-btn--lg { padding: 0.75rem 1.5rem; font-size: 1rem; }
+
+/* ---------- Form ---------- */
+.pp-form { margin-top: 1rem; }
+
+.pp-field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+.pp-field label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.35rem;
+    color: var(--pp-text);
+}
+.pp-field input[type="text"],
+.pp-field input[type="number"],
+.pp-field input[type="password"],
+.pp-field input[type="email"],
+.pp-field input[type="url"],
+.pp-field select,
+.pp-field textarea {
+    font: inherit;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--pp-border);
+    border-radius: 8px;
+    background: white;
+    color: var(--pp-text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+}
+.pp-field input:focus,
+.pp-field select:focus,
+.pp-field textarea:focus {
+    outline: 0;
+    border-color: var(--pp-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+}
+.pp-field small {
+    color: var(--pp-muted);
+    font-size: 0.8rem;
+    margin-top: 0.3rem;
+}
+.pp-field small code {
+    background: rgba(0,0,0,.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--pp-mono);
+    font-size: 0.85em;
+}
+
+.pp-field-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0;
+}
+.pp-field-row .pp-field { flex: 1; }
+
+@media (max-width: 540px) {
+    .pp-field-row { flex-direction: column; gap: 0; }
+}
+
+.pp-form__actions {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--pp-border);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.pp-fieldset {
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius);
+    padding: 1rem 1.25rem 0.5rem;
+    margin: 0 0 1.25rem 0;
+}
+.pp-fieldset legend {
+    padding: 0 0.5rem;
+    font-weight: 600;
+    color: var(--pp-text);
+    font-size: 0.95rem;
+}
+
+.pp-field select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='none' stroke='%236b7280' stroke-width='2' d='M1 1l5 5 5-5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+    cursor: pointer;
+}
+
+/* ---------- Complete page ---------- */
+.pp-complete {
+    text-align: center;
+    padding: 0.5rem 0 1rem;
+}
+.pp-complete__icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--pp-ok-bg);
+    color: var(--pp-ok);
+    font-size: 2.5rem;
+    line-height: 72px;
+    margin: 0 auto 1.25rem;
+    font-weight: bold;
+}
+.pp-complete .pp-step-title { text-align: center; }
+.pp-complete .pp-step-intro { text-align: center; }
+.pp-complete .pp-alert { text-align: left; }
+
+/* ---------- Footer ---------- */
+.pp-install__footer {
+    text-align: center;
+    color: var(--pp-muted);
+    padding: 1.5rem 2rem;
+    border-top: 1px solid var(--pp-border);
+}

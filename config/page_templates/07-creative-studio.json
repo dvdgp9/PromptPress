@@ -1,0 +1,19 @@
+{
+    "slug": "creative-studio",
+    "label": "Estudio creativo",
+    "page_type": "home",
+    "description": "Página de estudio creativo o agencia: hero visual a pantalla completa, mosaico de proyectos, propuesta editorial y cita destacada.",
+    "visual_style": "editorial-xl",
+    "palette_preset": "ink-bone",
+    "suggested_palette": "accent",
+    "needs_images": ["hero", "gallery", "text_image"],
+    "sections": [
+        { "type": "hero", "variant": "poster-stack", "image_query": "creative studio workspace" },
+        { "type": "gallery", "variant": "editorial-strip", "image_query": "creative project showcase" },
+        { "type": "text_image", "variant": "wide-media", "image_query": "designer at work" },
+        { "type": "testimonials", "variant": "featured-quote" },
+        { "type": "logos_strip", "variant": "default", "image_query": "client logo" },
+        { "type": "cta", "variant": "poster-close" },
+        { "type": "form", "variant": "default" }
+    ]
+}

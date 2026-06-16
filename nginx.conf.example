@@ -1,0 +1,55 @@
+# Configuración Nginx para PromptPress
+# Copiar dentro del bloque server { ... } correspondiente
+
+# Front controller
+location / {
+    try_files $uri $uri/ /index.php?$query_string;
+}
+
+# Procesar PHP
+location ~ \.php$ {
+    fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;  # ajustar versión
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+}
+
+# Bloquear acceso directo a directorios sensibles
+location ~ ^/(config|core|app|views|install/views|install/steps|storage)/ {
+    deny all;
+    return 403;
+}
+
+# Bloquear ejecución de PHP en uploads
+location ~ ^/storage/uploads/.*\.(php|php3|php4|php5|phtml|pl|py|cgi|sh)$ {
+    deny all;
+}
+
+# Permitir acceso a uploads (imágenes, etc.)
+location /storage/uploads/ {
+    try_files $uri =404;
+}
+
+# Bloquear archivos sensibles
+location ~ /\.(ht|git) {
+    deny all;
+}
+
+location ~* \.(sql|md|json|lock)$ {
+    deny all;
+}
+
+# Cache de assets
+location ~* \.(css|js|jpg|jpeg|png|webp|svg|ico)$ {
+    expires 7d;
+    add_header Cache-Control "public, immutable";
+}
+
+# Compresión
+gzip on;
+gzip_types text/html text/css application/javascript application/json image/svg+xml;
+
+# Cabeceras de seguridad
+add_header X-Content-Type-Options "nosniff";
+add_header X-Frame-Options "SAMEORIGIN";
+add_header Referrer-Policy "strict-origin-when-cross-origin";

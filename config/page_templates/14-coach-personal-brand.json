@@ -1,0 +1,19 @@
+{
+    "slug": "coach-personal-brand",
+    "label": "Coach / Marca personal",
+    "page_type": "home",
+    "description": "Página para coach, formador o marca personal: hero con foto, propuesta, metodología por pasos y cita destacada.",
+    "visual_style": "editorial-xl",
+    "palette_preset": "boutique-rosa",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "text_image"],
+    "sections": [
+        { "type": "hero", "variant": "metric-led", "image_query": "professional coach portrait" },
+        { "type": "text_image", "variant": "wide-media", "image_query": "coaching session" },
+        { "type": "benefits", "variant": "manifesto" },
+        { "type": "testimonials", "variant": "featured-quote" },
+        { "type": "steps", "variant": "staggered-cards" },
+        { "type": "cta", "variant": "card" },
+        { "type": "form", "variant": "default" }
+    ]
+}

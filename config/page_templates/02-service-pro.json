@@ -1,0 +1,19 @@
+{
+    "slug": "service-pro",
+    "label": "Servicio profesional",
+    "page_type": "service",
+    "description": "Página de servicio con prueba social fuerte, datos clave y formulario lateral. Ideal para consultoría, despachos y servicios B2B.",
+    "visual_style": "precision-grid",
+    "palette_preset": "paper-cobalt",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "text_image", "form"],
+    "sections": [
+        { "type": "hero", "variant": "metric-led", "image_query": "professional consultant office" },
+        { "type": "benefits", "variant": "proof-strip" },
+        { "type": "text_image", "variant": "wide-media", "image_query": "consulting meeting" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "stats", "variant": "scoreboard" },
+        { "type": "cta", "variant": "poster-close" },
+        { "type": "form", "variant": "with-side-image", "image_query": "team collaboration" }
+    ]
+}

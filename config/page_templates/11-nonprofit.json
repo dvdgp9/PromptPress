@@ -1,0 +1,19 @@
+{
+    "slug": "nonprofit",
+    "label": "ONG / Asociación",
+    "page_type": "home",
+    "description": "Página para ONG o asociación: hero con causa, impacto en cifras, historia, galería de proyectos y llamada a colaborar.",
+    "visual_style": "atelier-soft",
+    "palette_preset": "agave",
+    "suggested_palette": "accent",
+    "needs_images": ["hero", "text_image", "gallery"],
+    "sections": [
+        { "type": "hero", "variant": "with-image-bg", "image_query": "community volunteers helping" },
+        { "type": "stats", "variant": "scoreboard" },
+        { "type": "text_image", "variant": "wide-media", "image_query": "social impact project" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "gallery", "variant": "editorial-strip", "image_query": "community project" },
+        { "type": "cta", "variant": "card" },
+        { "type": "form", "variant": "default" }
+    ]
+}

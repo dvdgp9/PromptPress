@@ -1,0 +1,34 @@
+{
+    "name": "promptpress/promptpress",
+    "description": "PromptPress (PPress) — CMS ligero asistido por IA. PHP puro, sin frameworks, instalable en hosting compartido.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.0",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-fileinfo": "*",
+        "ext-curl": "*",
+        "ext-openssl": "*",
+        "smalot/pdfparser": "^2.10",
+        "phpoffice/phpword": "^1.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Core\\": "core/",
+            "App\\": "app/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "platform-check": false
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

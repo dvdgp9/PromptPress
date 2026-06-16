@@ -1,0 +1,15 @@
+{
+    "slug": "contact",
+    "label": "Contacto",
+    "page_type": "contact",
+    "description": "Página de contacto sencilla: hero limpio, formulario con imagen lateral y FAQ corta para anticipar dudas.",
+    "visual_style": "signal-clean",
+    "palette_preset": "studio-mono",
+    "suggested_palette": "primary",
+    "needs_images": ["form"],
+    "sections": [
+        { "type": "hero", "variant": "statement-left" },
+        { "type": "form", "variant": "with-side-image", "image_query": "team welcome smiling" },
+        { "type": "faq", "variant": "default" }
+    ]
+}

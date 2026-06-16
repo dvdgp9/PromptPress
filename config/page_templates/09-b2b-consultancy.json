@@ -1,0 +1,20 @@
+{
+    "slug": "b2b-consultancy",
+    "label": "Consultoría B2B",
+    "page_type": "service",
+    "description": "Consultoría B2B: hero serio, banda de logos clientes, metodología numerada, métricas, FAQ y formulario lead-gen.",
+    "visual_style": "precision-grid",
+    "palette_preset": "paper-cobalt",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "logos_strip", "form"],
+    "sections": [
+        { "type": "hero", "variant": "metric-led", "image_query": "executive boardroom meeting" },
+        { "type": "logos_strip", "variant": "marquee", "image_query": "corporate logo" },
+        { "type": "benefits", "variant": "manifesto" },
+        { "type": "stats", "variant": "scoreboard" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "faq", "variant": "accordion" },
+        { "type": "cta", "variant": "quiet-inline" },
+        { "type": "form", "variant": "with-side-image", "image_query": "business consulting" }
+    ]
+}

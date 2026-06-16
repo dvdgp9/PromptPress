@@ -1,0 +1,20 @@
+{
+    "slug": "landing-saas",
+    "label": "Landing SaaS",
+    "page_type": "landing",
+    "description": "Landing para producto SaaS: hero con captura, banda de logos, beneficios, métricas, planes y FAQ. Optimizada para conversión.",
+    "visual_style": "signal-clean",
+    "palette_preset": "paper-cobalt",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "logos_strip"],
+    "sections": [
+        { "type": "hero", "variant": "split", "image_query": "saas dashboard interface" },
+        { "type": "logos_strip", "variant": "marquee", "image_query": "company logo" },
+        { "type": "benefits", "variant": "offset-grid" },
+        { "type": "stats", "variant": "scoreboard" },
+        { "type": "testimonials", "variant": "quote-wall" },
+        { "type": "pricing", "variant": "editorial-list" },
+        { "type": "faq", "variant": "accordion" },
+        { "type": "cta", "variant": "card" }
+    ]
+}

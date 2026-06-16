@@ -1,0 +1,19 @@
+{
+    "slug": "local-business",
+    "label": "Negocio local",
+    "page_type": "home",
+    "description": "Negocio de proximidad (taller, peluquería, gimnasio, tienda): hero claro, servicios, opiniones, preguntas frecuentes y reserva.",
+    "visual_style": "studio-warm",
+    "palette_preset": "cream-ink",
+    "suggested_palette": "primary",
+    "needs_images": ["text_image", "form"],
+    "sections": [
+        { "type": "hero", "variant": "statement-left" },
+        { "type": "benefits", "variant": "offset-grid" },
+        { "type": "text_image", "variant": "card", "image_query": "local business storefront" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "faq", "variant": "default" },
+        { "type": "cta", "variant": "quiet-inline" },
+        { "type": "form", "variant": "with-side-image", "image_query": "friendly customer service" }
+    ]
+}

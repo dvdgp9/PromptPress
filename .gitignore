@@ -1,0 +1,42 @@
+# Dependencias PHP
+/vendor/
+
+# Notas y herramientas locales de desarrollo/agentes
+/cursor/
+/.claude/
+/skill-web-compliance/
+
+# Entregables/documentos generados fuera del producto
+/deliverables/
+
+# Configuración generada por instalador
+/config/config.php
+
+# Storage runtime
+/storage/uploads/*
+!/storage/uploads/.htaccess
+!/storage/uploads/.gitkeep
+/storage/documents/*
+!/storage/documents/.htaccess
+!/storage/documents/.gitkeep
+/storage/cache/*
+!/storage/cache/.htaccess
+!/storage/cache/.gitkeep
+/storage/logs/*
+!/storage/logs/.htaccess
+!/storage/logs/.gitkeep
+
+# Lock file de instalación
+/install/.installed
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Scripts temporales locales
+.t13-test.sh

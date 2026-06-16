@@ -1,0 +1,19 @@
+{
+    "slug": "landing-product",
+    "label": "Lanzamiento de producto",
+    "page_type": "landing",
+    "description": "Landing para producto físico o tangible: hero a pantalla completa con imagen, galería de detalles, planes y formulario de contacto.",
+    "visual_style": "brutalist-mono",
+    "palette_preset": "night-citrus",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "gallery"],
+    "sections": [
+        { "type": "hero", "variant": "poster-stack", "image_query": "product hero shot" },
+        { "type": "benefits", "variant": "manifesto" },
+        { "type": "gallery", "variant": "editorial-strip", "image_query": "product details closeup" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "pricing", "variant": "split-value" },
+        { "type": "cta", "variant": "poster-close" },
+        { "type": "form", "variant": "default" }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "slug": "portfolio",
+    "label": "Portfolio personal",
+    "page_type": "home",
+    "description": "Portfolio para profesional independiente: hero con foto, mosaico de trabajos, sobre mí y contacto sencillo.",
+    "visual_style": "editorial-xl",
+    "palette_preset": "studio-mono",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "gallery", "text_image"],
+    "sections": [
+        { "type": "hero", "variant": "statement-left", "image_query": "professional portrait" },
+        { "type": "gallery", "variant": "mosaic", "image_query": "portfolio project" },
+        { "type": "text_image", "variant": "card", "image_query": "creative work in progress" },
+        { "type": "testimonials", "variant": "quote-wall" },
+        { "type": "cta", "variant": "split" },
+        { "type": "form", "variant": "default" }
+    ]
+}

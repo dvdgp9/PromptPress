@@ -1,0 +1,19 @@
+{
+    "slug": "restaurant",
+    "label": "Restaurante",
+    "page_type": "home",
+    "description": "Página para restaurante o establecimiento gastronómico: hero a pantalla completa, ambiente, propuesta culinaria y reserva.",
+    "visual_style": "studio-warm",
+    "palette_preset": "cream-ink",
+    "suggested_palette": "accent",
+    "needs_images": ["hero", "text_image", "gallery"],
+    "sections": [
+        { "type": "hero", "variant": "with-image-bg", "image_query": "restaurant interior warm" },
+        { "type": "text_image", "variant": "card", "image_query": "chef plating dish" },
+        { "type": "benefits", "variant": "manifesto" },
+        { "type": "gallery", "variant": "editorial-strip", "image_query": "restaurant food details" },
+        { "type": "testimonials", "variant": "featured-quote" },
+        { "type": "cta", "variant": "quiet-inline" },
+        { "type": "form", "variant": "with-side-image", "image_query": "restaurant ambiance" }
+    ]
+}

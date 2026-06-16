@@ -1,0 +1,18 @@
+{
+    "slug": "ecommerce-collection",
+    "label": "Colección e-commerce",
+    "page_type": "landing",
+    "description": "Página de colección o catálogo: hero editorial, mosaico de producto, beneficios y FAQ. Pensada para tiendas online.",
+    "visual_style": "editorial-xl",
+    "palette_preset": "boutique-rosa",
+    "suggested_palette": "accent",
+    "needs_images": ["hero", "gallery"],
+    "sections": [
+        { "type": "hero", "variant": "poster-stack", "image_query": "fashion lookbook editorial" },
+        { "type": "gallery", "variant": "editorial-strip", "image_query": "product collection" },
+        { "type": "benefits", "variant": "proof-strip" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "faq", "variant": "two-columns" },
+        { "type": "cta", "variant": "default" }
+    ]
+}

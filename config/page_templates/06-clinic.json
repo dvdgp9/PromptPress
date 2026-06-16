@@ -1,0 +1,19 @@
+{
+    "slug": "clinic",
+    "label": "Clínica / Salud",
+    "page_type": "home",
+    "description": "Página para clínica, consulta o profesional sanitario: hero confiable, especialidades, proceso de visita, testimonios y reserva.",
+    "visual_style": "signal-clean",
+    "palette_preset": "agave",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "form"],
+    "sections": [
+        { "type": "hero", "variant": "statement-left", "image_query": "modern medical clinic" },
+        { "type": "benefits", "variant": "proof-strip" },
+        { "type": "steps", "variant": "staggered-cards" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "faq", "variant": "two-columns" },
+        { "type": "cta", "variant": "card" },
+        { "type": "form", "variant": "with-side-image", "image_query": "doctor consultation" }
+    ]
+}

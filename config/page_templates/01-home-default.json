@@ -1,0 +1,17 @@
+{
+    "slug": "home-default",
+    "label": "Home estándar",
+    "page_type": "home",
+    "description": "Página de inicio versátil: hero dividido, beneficios destacados, bloque de propuesta y cierre con llamada a la acción.",
+    "visual_style": "signal-clean",
+    "palette_preset": "studio-mono",
+    "suggested_palette": "primary",
+    "needs_images": ["hero", "text_image"],
+    "sections": [
+        { "type": "hero", "variant": "statement-left", "image_query": "modern workspace" },
+        { "type": "benefits", "variant": "offset-grid" },
+        { "type": "text_image", "variant": "default", "image_query": "team collaboration" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "cta", "variant": "quiet-inline" }
+    ]
+}

@@ -1,0 +1,19 @@
+{
+    "slug": "event",
+    "label": "Evento / Conferencia",
+    "page_type": "landing",
+    "description": "Página de evento, congreso o jornada: hero con fecha, datos clave, programa por pasos, testimonios y registro.",
+    "visual_style": "magazine-bold",
+    "palette_preset": "night-citrus",
+    "suggested_palette": "accent",
+    "needs_images": ["hero"],
+    "sections": [
+        { "type": "hero", "variant": "poster-stack", "image_query": "conference event audience" },
+        { "type": "stats", "variant": "scoreboard" },
+        { "type": "steps", "variant": "staggered-cards" },
+        { "type": "testimonials", "variant": "default" },
+        { "type": "faq", "variant": "default" },
+        { "type": "cta", "variant": "card" },
+        { "type": "form", "variant": "default" }
+    ]
+}
