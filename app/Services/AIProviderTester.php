@@ -28,7 +28,9 @@ final class AIProviderTester
     /** Modelos sugeridos por proveedor (texto libre, el usuario puede personalizar). */
     public const SUGGESTED_MODELS = [
         'openrouter' => [
-            'google/gemini-2.5-flash',
+            'google/gemini-3-flash-preview',
+            'google/gemini-3.1-flash-lite',
+            'google/gemini-3.5-flash',
             'openai/gpt-4o-mini',
             'anthropic/claude-3.5-haiku',
             'meta-llama/llama-3.3-70b-instruct',

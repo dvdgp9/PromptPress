@@ -20,8 +20,9 @@ $providers       = AIProviderTester::PROVIDERS;
 $suggestedModels = AIProviderTester::SUGGESTED_MODELS;
 
 $defaults = [
-    'provider' => Request::post('provider') ?? 'openrouter',
-    'model'    => Request::post('model') ?? '',
+    'provider'    => Request::post('provider') ?? 'openrouter',
+    'model'       => Request::post('model') ?? 'google/gemini-3-flash-preview',
+    'model_light' => Request::post('model_light') ?? 'google/gemini-3.1-flash-lite',
 ];
 
 $errors  = [];
@@ -34,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $provider = (string) $defaults['provider'];
     $model    = trim((string) $defaults['model']);
+    $modelLight = trim((string) $defaults['model_light']);
     $apiKey   = (string) (Request::post('api_key') ?? '');
 
     if (empty($errors)) {
@@ -41,7 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Proveedor no válido.';
         }
         if ($model === '' || strlen($model) > 100) {
-            $errors[] = 'El modelo es obligatorio (máx. 100 caracteres).';
+            $errors[] = 'El modelo principal es obligatorio (máx. 100 caracteres).';
+        }
+        if ($modelLight !== '' && strlen($modelLight) > 100) {
+            $errors[] = 'El modelo pequeño no puede superar 100 caracteres.';
         }
         if (trim($apiKey) === '') {
             $errors[] = 'La API key es obligatoria.';
@@ -80,8 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_encrypted = VALUES(is_encrypted)'
             );
             $upsert->execute([$siteId, 'ai_provider', $provider, 0]);
-            $upsert->execute([$siteId, 'ai_model',    $model,    0]);
-            $upsert->execute([$siteId, 'ai_api_key',  $encryptedKey, 1]);
+            $upsert->execute([$siteId, 'ai_model', $model, 0]);
+            $upsert->execute([$siteId, 'ai_model_light', $modelLight, 0]);
+            $upsert->execute([$siteId, 'ai_api_key', $encryptedKey, 1]);
 
             $pdo->commit();
 
@@ -141,7 +147,7 @@ ob_start();
     </div>
 
     <div class="pp-field">
-        <label for="model">Modelo</label>
+        <label for="model">Modelo principal</label>
         <input type="text" id="model" name="model" value="<?= e($defaults['model']) ?>" required maxlength="100" list="model-suggestions">
         <datalist id="model-suggestions">
             <?php foreach ($suggestedModels as $providerCode => $models): ?>
@@ -150,7 +156,13 @@ ob_start();
                 <?php endforeach; ?>
             <?php endforeach; ?>
         </datalist>
-        <small id="model-help">Sugerencias del proveedor seleccionado aparecerán al hacer clic en el campo.</small>
+        <small id="model-help">Para generación de páginas, secciones y artículos completos.</small>
+    </div>
+
+    <div class="pp-field">
+        <label for="model_light">Modelo pequeño</label>
+        <input type="text" id="model_light" name="model_light" value="<?= e($defaults['model_light']) ?>" maxlength="100" list="model-suggestions">
+        <small id="model-light-help">Para reescrituras, SEO, resúmenes y tareas rápidas. Puedes dejarlo vacío para usar siempre el principal.</small>
     </div>
 
     <div class="pp-field">
@@ -174,13 +186,17 @@ ob_start();
 (function () {
     var providerSel = document.getElementById('provider');
     var modelInput  = document.getElementById('model');
+    var modelLightInput = document.getElementById('model_light');
     var help        = document.getElementById('model-help');
+    var lightHelp   = document.getElementById('model-light-help');
     var suggestions = <?= json_encode($suggestedModels, JSON_UNESCAPED_SLASHES) ?>;
     function update() {
         var p = providerSel.value;
         var arr = suggestions[p] || [];
         modelInput.placeholder = arr[0] || '';
-        if (help) help.textContent = 'Sugerencias para ' + providerSel.options[providerSel.selectedIndex].text + ': ' + arr.join(', ');
+        if (modelLightInput) modelLightInput.placeholder = arr[1] || arr[0] || '';
+        if (help) help.textContent = 'Principal sugerido: ' + (arr[0] || 'escribe un ID compatible');
+        if (lightHelp) lightHelp.textContent = 'Pequeño sugerido: ' + (arr[1] || arr[0] || 'opcional');
     }
     providerSel.addEventListener('change', update);
     update();

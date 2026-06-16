@@ -174,7 +174,7 @@
             <input type="text" id="pp-ai-model-light" name="model_light"
                    value="<?= e($current_model_light ?? '') ?>" maxlength="100"
                    list="pp-ai-model-list"
-                   placeholder="Ej: google/gemini-3.1-flash-lite-preview, anthropic/claude-3.5-haiku, gpt-4o-mini">
+                   placeholder="Ej: google/gemini-3.1-flash-lite, anthropic/claude-3.5-haiku, gpt-4o-mini">
             <small class="pp-design-hint">
                 Sugerencia: usa la misma familia de proveedor que el modelo principal y elige una variante <em>flash / mini / haiku / lite</em>.
                 Compatible con la misma API key configurada abajo.

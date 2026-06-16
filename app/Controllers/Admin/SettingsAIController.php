@@ -30,29 +30,15 @@ class SettingsAIController
         'anthropic'  => ['claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-opus-latest'],
         'mistral'    => ['mistral-small-latest', 'mistral-large-latest', 'codestral-latest'],
         'openrouter' => [
-            // OpenRouter aliases (redirigen a la familia latest del proveedor)
-            'google/gemini-pro-latest',
-            'google/gemini-flash-latest',
-
-            // Google Gemini recientes en OpenRouter (texto / structured output)
-            'google/gemini-3.1-pro-preview',
+            // Gemini en OpenRouter (IDs confirmados desde la plataforma).
             'google/gemini-3-flash-preview',
-            'google/gemini-3.1-flash-lite-preview',
-            'google/gemini-2.5-pro',
-            'google/gemini-2.5-flash',
-            'google/gemini-2.5-flash-lite',
+            'google/gemini-3.1-flash-lite',
+            'google/gemini-3.5-flash',
 
-            // Open models de Google para pruebas baratas/rápidas
-            'google/gemma-4-31b-it',
-            'google/gemma-4-31b-it:free',
-            'google/gemma-4-26b-a4b-it',
-            'google/gemma-4-26b-a4b-it:free',
-
-            // Modelos que ya estaban en la lista anterior
+            // Alternativas útiles desde OpenRouter.
             'openai/gpt-4o-mini',
             'anthropic/claude-3.5-haiku',
             'anthropic/claude-3.5-sonnet',
-            'google/gemini-2.0-flash-001',
             'meta-llama/llama-3.3-70b-instruct',
             'meta-llama/llama-3.1-8b-instruct:free',
             'mistralai/mistral-small-24b-instruct-2501:free',
@@ -63,40 +49,31 @@ class SettingsAIController
     private const MODEL_PRESETS = [
         'openrouter' => [
             [
-                'model' => 'google/gemini-3.1-flash-lite-preview',
-                'name' => 'Gemini Flash Lite',
-                'badge' => 'Recomendado',
-                'tone' => 'balanced',
-                'summary' => 'Rápido, económico y suficientemente bueno para SEO, reescrituras y ajustes de contenido.',
-                'use_case' => 'Día a día',
-                'cost' => '$0.25 / $1.50',
-            ],
-            [
                 'model' => 'google/gemini-3-flash-preview',
                 'name' => 'Gemini 3 Flash',
-                'badge' => 'Contenido',
+                'badge' => 'Principal',
+                'tone' => 'balanced',
+                'summary' => 'Modelo recomendado para generación de páginas, secciones y contenido largo dentro de PromptPress.',
+                'use_case' => 'Principal',
+                'cost' => 'OpenRouter',
+            ],
+            [
+                'model' => 'google/gemini-3.1-flash-lite',
+                'name' => 'Gemini 3.1 Flash Lite',
+                'badge' => 'Pequeño',
                 'tone' => 'standard',
-                'summary' => 'Mejor equilibrio para generar secciones completas y trabajar con instrucciones algo más largas.',
-                'use_case' => 'Secciones',
-                'cost' => '$0.50 / $3.00',
+                'summary' => 'Opción ligera para reescrituras, SEO, resúmenes y tareas frecuentes de bajo coste.',
+                'use_case' => 'Auxiliar',
+                'cost' => 'OpenRouter',
             ],
             [
-                'model' => 'google/gemini-3.1-pro-preview',
-                'name' => 'Gemini 3.1 Pro',
-                'badge' => 'Fuerte',
+                'model' => 'google/gemini-3.5-flash',
+                'name' => 'Gemini 3.5 Flash',
+                'badge' => 'Avanzado',
                 'tone' => 'premium',
-                'summary' => 'Para páginas completas, arquitectura de contenido y tareas donde importa más la calidad que el coste.',
-                'use_case' => 'Páginas completas',
-                'cost' => '$2.00 / $12.00',
-            ],
-            [
-                'model' => 'google/gemma-4-26b-a4b-it:free',
-                'name' => 'Gemma 4 Free',
-                'badge' => 'Gratis',
-                'tone' => 'free',
-                'summary' => 'Una opción útil para pruebas sin coste, con límites y disponibilidad propios de OpenRouter.',
-                'use_case' => 'Pruebas',
-                'cost' => '$0 / $0',
+                'summary' => 'Alternativa más capaz para contenido exigente manteniendo la familia Gemini en OpenRouter.',
+                'use_case' => 'Calidad',
+                'cost' => 'OpenRouter',
             ],
         ],
         'openai' => [
