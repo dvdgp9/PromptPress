@@ -104,6 +104,65 @@ final class ImageBankService
         return ['ok' => false, 'error' => 'Unsplash respondió con un código inesperado (' . $status . ').'];
     }
 
+    /** Ruta del archivo de configuración del banco (gitignored). */
+    public static function configPath(): string
+    {
+        return PP_CONFIG . '/image_bank.php';
+    }
+
+    /**
+     * Devuelve la key actual enmascarada para mostrarla en UI sin revelarla.
+     * Ej. '-YVf••••••dAa4'. Cadena vacía si no hay key.
+     */
+    public static function maskedKey(): string
+    {
+        $key = self::accessKey();
+        if ($key === '') return '';
+        $len = strlen($key);
+        if ($len <= 8) return str_repeat('•', $len);
+        return substr($key, 0, 4) . str_repeat('•', 6) . substr($key, -4);
+    }
+
+    /**
+     * Escribe `config/image_bank.php` con la Access Key dada (o la vacía para
+     * desactivar el banco). Fuente única usada por el instalador y por Ajustes.
+     * Devuelve false si la carpeta config no es escribible.
+     */
+    public static function writeConfig(string $accessKey): bool
+    {
+        $content = self::buildConfigContent(trim($accessKey));
+        $bytes = @file_put_contents(self::configPath(), $content, LOCK_EX);
+        if ($bytes === false) {
+            return false;
+        }
+        @chmod(self::configPath(), 0640);
+        return true;
+    }
+
+    /** Genera el contenido PHP de config/image_bank.php con la key dada. */
+    public static function buildConfigContent(string $accessKey): string
+    {
+        $template = <<<'PHP'
+<?php
+/**
+ * PromptPress — Banco de imágenes (Unsplash). Generado automáticamente
+ * (instalador o Ajustes · IA). Archivo GITIGNORED: no se sube al repo y el
+ * instalador no lo pisa salvo que vuelvas a introducir una clave.
+ * `core/App::boot()` lo fusiona bajo config.php.
+ */
+
+return [
+    'image_bank' => [
+        'provider'   => 'unsplash',
+        'access_key' => %s,
+        'app_name'   => 'promptpress',
+        'cache_ttl'  => 86400,
+    ],
+];
+PHP;
+        return sprintf($template, var_export($accessKey, true));
+    }
+
     /**
      * Self-healing migration: añade las columnas T18.4 a la tabla `media` si
      * no existen. Idempotente; solo hace trabajo la primera vez. Cacheado por

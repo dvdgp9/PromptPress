@@ -267,6 +267,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/settings/reset-site', [SettingsController::class, 'resetSite']);
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
+    $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install
 }, [$requireAuth, $requireOnboarding]);
 
 // Health check (debug / smoke test)

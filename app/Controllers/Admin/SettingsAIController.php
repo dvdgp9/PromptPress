@@ -6,6 +6,7 @@ namespace App\Controllers\Admin;
 
 use App\Services\AI\AIException;
 use App\Services\AI\AIProviderFactory;
+use App\Services\ImageBankService;
 use Core\App;
 use Core\Auth;
 use Core\Crypto;
@@ -157,6 +158,10 @@ class SettingsAIController
                 'errors'              => [],
                 'notice'              => Session::flash('notice'),
                 'csrf'                => CSRF::token(),
+                'unsplash_configured' => ImageBankService::isAvailable(),
+                'unsplash_masked'     => ImageBankService::maskedKey(),
+                'image_notice'        => Session::flash('image_notice'),
+                'image_error'         => Session::flash('image_error'),
             ]
         ));
     }
@@ -295,8 +300,57 @@ class SettingsAIController
                 'errors'              => $errors,
                 'notice'              => null,
                 'csrf'                => CSRF::token(),
+                'unsplash_configured' => ImageBankService::isAvailable(),
+                'unsplash_masked'     => ImageBankService::maskedKey(),
+                'image_notice'        => null,
+                'image_error'         => null,
             ]
         ));
+    }
+
+    /**
+     * Guarda/cambia/elimina la Access Key de Unsplash (banco de imágenes).
+     * La key es universal: se escribe en config/image_bank.php (gitignored),
+     * no en settings. Solo admin.
+     */
+    public function updateImages(): void
+    {
+        CSRF::check();
+        if (Auth::role() !== 'admin') {
+            Response::forbidden('Solo un administrador puede cambiar la conexión de imágenes.');
+        }
+        $this->requireSiteId();
+
+        $key    = trim((string) (Request::post('unsplash_key') ?? ''));
+        $remove = (string) (Request::post('remove_unsplash') ?? '') === '1';
+
+        if ($remove) {
+            if (ImageBankService::writeConfig('')) {
+                Session::flash('image_notice', 'Clave de Unsplash eliminada. Las páginas se generarán sin imágenes hasta que añadas otra.');
+            } else {
+                Session::flash('image_error', 'No se pudo escribir config/image_bank.php (revisa los permisos de la carpeta config/).');
+            }
+            Response::redirect(base_url('admin/settings/ai'));
+        }
+
+        if ($key === '') {
+            Session::flash('image_error', 'Pega una Access Key de Unsplash, o marca "Quitar la clave" para borrarla.');
+            Response::redirect(base_url('admin/settings/ai'));
+        }
+
+        $check = ImageBankService::validateKey($key);
+        if (!$check['ok']) {
+            Session::flash('image_error', 'Unsplash no aceptó la clave: ' . ($check['error'] ?? 'motivo desconocido') . '.');
+            Response::redirect(base_url('admin/settings/ai'));
+        }
+
+        if (!ImageBankService::writeConfig($key)) {
+            Session::flash('image_error', 'La clave es válida, pero no se pudo escribir config/image_bank.php. Revisa los permisos de la carpeta config/ o crea el archivo a mano.');
+            Response::redirect(base_url('admin/settings/ai'));
+        }
+
+        Session::flash('image_notice', 'Clave de Unsplash guardada y verificada ✓ Ya puedes generar páginas con imágenes.');
+        Response::redirect(base_url('admin/settings/ai'));
     }
 
     private function requireSiteId(): int

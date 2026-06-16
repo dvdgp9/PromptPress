@@ -18,8 +18,8 @@
 <?php if (!$available): ?>
     <div class="pp-alert pp-alert--info">
         <strong>Banco no disponible.</strong>
-        El administrador del sistema no ha configurado la conexión con Unsplash.
-        Para activarla, edita <code>config/config.php</code> y rellena <code>image_bank.access_key</code>.
+        Aún no se ha configurado la conexión con Unsplash.
+        Actívala en <a href="<?= e(base_url('admin/settings/ai')) ?>">Ajustes · IA</a>, en la sección «Imágenes · Unsplash».
     </div>
 <?php else: ?>
 

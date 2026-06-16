@@ -10,6 +10,10 @@
  * @var array  $errors
  * @var ?string $notice
  * @var string $csrf
+ * @var bool   $unsplash_configured
+ * @var string $unsplash_masked
+ * @var ?string $image_notice
+ * @var ?string $image_error
  */
 \Core\View::extend('admin/layout');
 ?>
@@ -223,3 +227,55 @@
         <?php endif; ?>
     </div>
 </form>
+
+<section class="pp-ai-config-panel" aria-labelledby="pp-img-title" style="margin-top:2rem;">
+    <div class="pp-ai-section-head">
+        <div>
+            <h3 id="pp-img-title">Imágenes · Unsplash <span class="pp-ai-optional-tag">opcional</span></h3>
+            <p>Permite que las páginas se generen con fotos reales de Unsplash. La clave es única para toda la instalación.</p>
+        </div>
+        <div class="pp-ai-status-card <?= $unsplash_configured ? 'is-ready' : 'is-empty' ?>">
+            <span class="pp-ai-status-dot"></span>
+            <strong><?= $unsplash_configured ? 'Conectado' : 'Sin configurar' ?></strong>
+            <small><?= $unsplash_configured ? e($unsplash_masked) : 'Las páginas se generan sin imágenes.' ?></small>
+        </div>
+    </div>
+
+    <?php if ($image_notice): ?>
+        <div class="pp-alert pp-alert--success"><?= e($image_notice) ?></div>
+    <?php endif; ?>
+    <?php if ($image_error): ?>
+        <div class="pp-alert pp-alert--error"><?= e($image_error) ?></div>
+    <?php endif; ?>
+
+    <form method="POST" action="<?= e(base_url('admin/settings/images')) ?>" class="pp-form" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+
+        <div class="pp-form-group">
+            <label for="pp-unsplash-key">Unsplash Access Key</label>
+            <input type="password" id="pp-unsplash-key" name="unsplash_key"
+                   placeholder="<?= $unsplash_configured ? '•••••••••••••• (deja vacío para no cambiar)' : 'Tu Access Key de Unsplash' ?>"
+                   autocomplete="new-password">
+            <small>
+                Consíguela gratis en <a href="https://unsplash.com/developers" target="_blank" rel="noopener">unsplash.com/developers</a>
+                (crea una app → copia la <em>Access Key</em>; 50 imágenes/hora en modo demo). Verificamos la clave antes de guardarla.
+            </small>
+        </div>
+
+        <?php if ($unsplash_configured): ?>
+            <div class="pp-form-group pp-ai-test-row">
+                <label class="pp-checkbox-label">
+                    <input type="checkbox" name="remove_unsplash" value="1">
+                    Quitar la clave actual (desactivar imágenes)
+                </label>
+            </div>
+        <?php endif; ?>
+
+        <div class="pp-form-actions">
+            <button type="submit" class="pp-btn pp-btn--primary">
+                <span class="pp-icon pp-icon--check"></span>
+                Guardar imágenes
+            </button>
+        </div>
+    </form>
+</section>
