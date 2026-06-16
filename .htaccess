@@ -1,9 +1,9 @@
 RewriteEngine On
 
 # Front controller: enviar todas las peticiones a index.php
-# excepto archivos y directorios reales
+# excepto archivos reales. Directorios como /admin/ también son rutas de app;
+# sus assets se siguen sirviendo directamente porque sí son archivos reales.
 RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
 
 # Bloquear acceso a archivos sensibles
