@@ -74,10 +74,10 @@ final class BrandService
         ], $rows);
     }
 
-    public static function publicHeader(int $siteId): string
+    public static function publicHeader(int $siteId, ?array $config = null): string
     {
         $data = self::data($siteId);
-        $config = ChromeService::load($siteId);
+        $config = $config ?? ChromeService::load($siteId);
         [$links, $cta] = self::headerNav($siteId, $config);
 
         // CHROME-EDITOR — clases de estilo SOLO cuando difieren del defecto, para
@@ -228,11 +228,11 @@ final class BrandService
      * Renderiza solo las páginas con `page_type='legal'` que estén `published`.
      * Si no hay ninguna, devuelve un footer mínimo (©/marca) sin enlaces.
      */
-    public static function publicFooter(int $siteId): string
+    public static function publicFooter(int $siteId, ?array $config = null): string
     {
         $name = htmlspecialchars(self::data($siteId)['name'], ENT_QUOTES, 'UTF-8');
         $year = date('Y');
-        $config = ChromeService::load($siteId);
+        $config = $config ?? ChromeService::load($siteId);
         try {
             $legal = Database::select(
                 "SELECT title, slug FROM pages

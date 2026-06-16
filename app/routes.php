@@ -11,6 +11,7 @@ use App\Controllers\Admin\AITestController;
 use App\Controllers\Admin\AIUsageController;
 use App\Controllers\Admin\AuthController;
 use App\Controllers\Admin\DashboardController;
+use App\Controllers\Admin\ChromeController;
 use App\Controllers\Admin\DesignController;
 use App\Controllers\Admin\SettingsAIController;
 use App\Services\DesignSystem;
@@ -268,6 +269,9 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
     $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install
+    $r->get('/chrome',          [ChromeController::class, 'index']);   // Editor Header y pie
+    $r->post('/chrome',         [ChromeController::class, 'save']);
+    $r->post('/chrome/preview', [ChromeController::class, 'preview']);
 }, [$requireAuth, $requireOnboarding]);
 
 // Health check (debug / smoke test)

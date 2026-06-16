@@ -38,6 +38,7 @@
                 ['url' => 'admin/memory',     'icon' => 'memory',    'label' => 'Conocimiento',   'match' => '/admin/memory'],
                 ['url' => 'admin/documents',  'icon' => 'documents', 'label' => 'Documentos',     'match' => '/admin/documents'],
                 ['url' => 'admin/design',     'icon' => 'design',    'label' => 'Diseño',         'match' => '/admin/design'],
+                ['url' => 'admin/chrome',     'icon' => 'chrome',    'label' => 'Header y pie',   'match' => '/admin/chrome'],
                 ['url' => 'admin/seo',        'icon' => 'seo',       'label' => 'SEO',            'match' => '/admin/seo'],
                 ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => 'IA',             'match' => '/admin/ai'],
                 ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => 'Privacidad',     'match' => '/admin/privacy'],

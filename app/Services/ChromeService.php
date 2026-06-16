@@ -92,6 +92,121 @@ final class ChromeService
         );
     }
 
+    /**
+     * Normaliza/sanea una config cruda (p. ej. del editor) sobre los defaults:
+     * enums validados, longitudes acotadas y tamaños de listas limitados.
+     */
+    public static function sanitize(array $raw): array
+    {
+        $d = self::defaults();
+        $h = (array) ($raw['header'] ?? []);
+        $f = (array) ($raw['footer'] ?? []);
+        $hl = (array) ($h['layout'] ?? []);
+        $cta = (array) ($h['cta'] ?? []);
+        $fs = (array) ($f['style'] ?? []);
+        $fc = (array) ($f['contact'] ?? []);
+        $fn = (array) ($f['newsletter'] ?? []);
+
+        $cut = static fn($v, int $n): string => mb_substr(trim((string) $v), 0, $n);
+        $enum = static fn($v, array $opts, string $def): string => in_array($v, $opts, true) ? (string) $v : $def;
+
+        // Menú (cap 14 ítems, hijos cap 8)
+        $menu = [];
+        foreach (array_slice((array) ($h['menu'] ?? []), 0, 14) as $it) {
+            $item = self::sanitizeMenuItem((array) $it, $cut, $enum, false);
+            if ($item !== null) $menu[] = $item;
+        }
+
+        // Bloques footer (subconjunto único)
+        $allowedBlocks = ['brand', 'nav', 'legal', 'contact', 'social', 'newsletter'];
+        $blocks = [];
+        foreach ((array) ($f['blocks'] ?? []) as $b) {
+            $b = (string) $b;
+            if (in_array($b, $allowedBlocks, true) && !in_array($b, $blocks, true)) $blocks[] = $b;
+        }
+
+        // Redes (cap 10)
+        $social = [];
+        foreach (array_slice((array) ($f['social'] ?? []), 0, 10) as $s) {
+            $s = (array) $s;
+            $url = $cut($s['url'] ?? '', 300);
+            $net = $cut($s['network'] ?? '', 40);
+            if ($url !== '' && $net !== '') $social[] = ['network' => $net, 'url' => $url];
+        }
+
+        return [
+            'header' => [
+                'layout' => [
+                    'sticky'                => (bool) ($hl['sticky'] ?? true),
+                    'transparent_over_hero' => (bool) ($hl['transparent_over_hero'] ?? false),
+                    'density'               => $enum($hl['density'] ?? 'regular', ['compact', 'regular', 'tall'], 'regular'),
+                    'logo_position'         => $enum($hl['logo_position'] ?? 'left', ['left', 'center'], 'left'),
+                ],
+                'logo' => ['dark_variant_path' => $cut($h['logo']['dark_variant_path'] ?? '', 300)],
+                'menu' => $menu,
+                'cta'  => [
+                    'mode'  => $enum($cta['mode'] ?? 'auto', ['auto', 'custom', 'off'], 'auto'),
+                    'label' => $cut($cta['label'] ?? '', 60),
+                    'url'   => $cut($cta['url'] ?? '', 300),
+                    'style' => $enum($cta['style'] ?? 'primary', ['primary', 'ghost'], 'primary'),
+                ],
+            ],
+            'footer' => [
+                'style'   => [
+                    'background' => $enum($fs['background'] ?? 'dark', ['dark', 'light', 'brand'], 'dark'),
+                    'columns'    => max(0, min(4, (int) ($fs['columns'] ?? 0))),
+                ],
+                'blocks'  => $blocks,
+                'tagline' => $cut($f['tagline'] ?? '', 200),
+                'nav'     => $d['footer']['nav'],
+                'contact' => [
+                    'address' => $cut($fc['address'] ?? '', 300),
+                    'phone'   => $cut($fc['phone'] ?? '', 60),
+                    'email'   => $cut($fc['email'] ?? '', 120),
+                    'hours'   => $cut($fc['hours'] ?? '', 120),
+                ],
+                'social'  => $social,
+                'newsletter' => [
+                    'enabled'  => (bool) ($fn['enabled'] ?? false),
+                    'form_ref' => $cut($fn['form_ref'] ?? '', 120),
+                    'heading'  => $cut($fn['heading'] ?? '', 120),
+                ],
+                'copyright'  => $cut($f['copyright'] ?? '', 160),
+            ],
+        ];
+    }
+
+    private static function sanitizeMenuItem(array $it, callable $cut, callable $enum, bool $isChild): ?array
+    {
+        $type = $enum($it['type'] ?? 'page', $isChild ? ['page', 'link'] : ['page', 'link', 'dropdown'], 'page');
+        $base = [
+            'type'    => $type,
+            'label'   => $cut($it['label'] ?? '', 120),
+            'visible' => ($it['visible'] ?? true) !== false,
+        ];
+        if ($type === 'dropdown') {
+            $children = [];
+            foreach (array_slice((array) ($it['children'] ?? []), 0, 8) as $c) {
+                $child = self::sanitizeMenuItem((array) $c, $cut, $enum, true);
+                if ($child !== null) $children[] = $child;
+            }
+            if ($base['label'] === '' || $children === []) return null;
+            $base['children'] = $children;
+            return $base;
+        }
+        if ($type === 'link') {
+            $base['url'] = $cut($it['url'] ?? '', 300);
+            $base['target'] = $enum($it['target'] ?? '_self', ['_self', '_blank'], '_self');
+            if ($base['url'] === '' || $base['label'] === '') return null;
+            return $base;
+        }
+        // page
+        $base['page_id'] = (int) ($it['page_id'] ?? 0);
+        $base['target'] = $enum($it['target'] ?? '_self', ['_self', '_blank'], '_self');
+        if ($base['page_id'] <= 0) return null;
+        return $base;
+    }
+
     /** Merge recursivo: $override gana; arrays asociativos se funden, listas se reemplazan. */
     private static function mergeDeep(array $base, array $override): array
     {
