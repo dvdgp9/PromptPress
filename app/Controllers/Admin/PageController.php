@@ -423,6 +423,16 @@ class PageController
     // Crear página completa con IA (T10.4)
     // POST /admin/pages/ai-create
     // ----------------------------------------------------------------------
+    /**
+     * PANEL-CANVAS — Tipos de página "de marketing" que se generan en canvas
+     * (HTML libre + Studio). Artículos y legales quedan fuera: usan el editor
+     * estructurado clásico.
+     */
+    private static function isCanvasMarketingType(string $type): bool
+    {
+        return in_array($type, ['home', 'service', 'product', 'landing', 'contact'], true);
+    }
+
     public function aiCreate(array $params = []): void
     {
         CSRF::check();
@@ -460,6 +470,35 @@ class PageController
         }
         if ($parentId > 0 && !self::pageBelongsToSite($parentId, $siteId)) {
             Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
+        }
+
+        // PANEL-CANVAS — Las páginas de marketing se generan con el MISMO motor
+        // que el onboarding: canvas (HTML libre + Studio), reutilizando las
+        // referencias visuales guardadas y manteniendo coherencia con las
+        // páginas ya existentes. Artículos y legales siguen en el editor
+        // estructurado clásico (más abajo). Si el canvas falla, degradamos a
+        // bloques para no romper la creación.
+        if (self::isCanvasMarketingType($pageType)) {
+            try {
+                $canvasContext = trim(
+                    ($audience !== '' ? "Público objetivo: {$audience}\n" : '')
+                  . ($details !== '' ? $details : '')
+                );
+                $result = OnboardingController::generateCanvasPageForPanel(
+                    $siteId, $title, $pageType, $goal, $canvasContext, $parentId
+                );
+                Session::flash('success', 'Página generada con IA. Revísala en el Studio antes de publicar.');
+                Response::json([
+                    'ok' => true,
+                    'page_id' => $result['id'],
+                    'edit_url' => $result['edit_url'],
+                    'sections_count' => $result['sections_count'],
+                    'ai_usage' => self::emptyAiUsage(),
+                ]);
+            } catch (\Throwable $e) {
+                error_log('[aiCreate] canvas falló, fallback a bloques: ' . get_class($e) . ': ' . $e->getMessage());
+                // continúa al flujo clásico de bloques de abajo
+            }
         }
 
         $extraContext = trim(

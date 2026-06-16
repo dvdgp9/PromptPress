@@ -470,6 +470,30 @@ final class OnboardingController
              . "Mismo lenguaje de marca (tokens, tipografías, aire), pero que al navegar se note que es OTRA página, no un clon de la portada.";
     }
 
+    /**
+     * PANEL-CANVAS — Coherencia de sistema: lista breve de las páginas canvas
+     * que ya existen en el sitio (título + tipo) para que una página nueva
+     * mantenga el mismo lenguaje visual sin clonarlas. Ligero a propósito (no
+     * vuelca HTML; el hero de la home ya lo aporta heroDifferentiationContext).
+     */
+    private static function existingCanvasPagesContext(int $siteId): string
+    {
+        $rows = Database::select(
+            'SELECT title, page_type FROM pages WHERE site_id = ? AND render_mode = "canvas" ORDER BY id ASC LIMIT 12',
+            [$siteId]
+        );
+        if ($rows === []) return '';
+        $list = [];
+        foreach ($rows as $r) {
+            $t = trim((string) ($r['title'] ?? ''));
+            if ($t === '') continue;
+            $list[] = '- ' . $t . ' (' . (string) ($r['page_type'] ?? '') . ')';
+        }
+        if ($list === []) return '';
+        return "\nPÁGINAS YA EXISTENTES EN ESTE SITIO (mantén el MISMO sistema visual que ellas: tokens de marca, tipografías, ritmo y aire; esta página debe sentirse del mismo sitio, pero NO duplicarlas):\n"
+            . implode("\n", $list);
+    }
+
     /** FH6 — Nº de secciones canvas (data-pp-section) de un borrador. */
     private static function canvasSectionCount(int $pageId): int
     {
@@ -1616,6 +1640,22 @@ final class OnboardingController
      * completa en HTML+CSS libres. Persiste con render_mode='canvas' +
      * CanvasService::save (sanea + crea versión).
      */
+    /**
+     * PANEL-CANVAS — Punto de entrada público para crear una página canvas
+     * desde FUERA del onboarding (p. ej. `PageController::aiCreate`). Reutiliza
+     * el mismo motor (referencias visuales guardadas + coherencia con páginas
+     * existentes) que el onboarding. Lanza si la generación canvas falla; el
+     * caller decide el fallback.
+     *
+     * @return array{id:int,title:string,edit_url:string,sections_count:int,template:string}
+     */
+    public static function generateCanvasPageForPanel(int $siteId, string $title, string $type, string $goal, string $context, int $parentId = 0): array
+    {
+        $referenceImages = self::loadReferenceImagesForVision($siteId);
+        $item = ['reason' => $context !== '' ? $context : $goal];
+        return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages);
+    }
+
     private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages): array
     {
         $hasRefs = $referenceImages !== [];
@@ -1672,6 +1712,7 @@ final class OnboardingController
               . ($hasRefs ? "Referencias visuales adjuntas: " . count($referenceImages) . " captura(s). Úsalas como fuente principal de layout.\n" : "Referencias visuales adjuntas: ninguna.\n")
               . $context . "\n"
               . self::heroDifferentiationContext($siteId, $type)
+              . self::existingCanvasPagesContext($siteId)
             ),
             'reference_images' => $referenceImages,
         ], 2);
