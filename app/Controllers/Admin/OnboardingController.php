@@ -372,7 +372,12 @@ final class OnboardingController
     {
         $draft = json_decode(self::loadSetting($siteId, 'onboarding_home_draft', ''), true);
         $existingId = is_array($draft) ? (int) ($draft['page_id'] ?? 0) : 0;
+        $referenceSignature = self::referenceSignature($siteId);
         if ($existingId > 0 && !self::draftIsCanvas($existingId, $siteId)) $existingId = 0;
+        if ($existingId > 0 && (string) ($draft['reference_signature'] ?? '') !== $referenceSignature) {
+            self::deleteDraftPage($existingId);
+            $existingId = 0;
+        }
         if ($existingId > 0 && !$force) return $existingId;
         if ($existingId > 0 && $force) {
             self::deleteDraftPage($existingId);
@@ -397,7 +402,7 @@ final class OnboardingController
         $pageId = (int) ($created['id'] ?? 0);
         if ($pageId > 0) {
             self::storeSetting($siteId, 'onboarding_home_draft', json_encode(
-                ['page_id' => $pageId, 'title' => $title],
+                ['page_id' => $pageId, 'title' => $title, 'reference_signature' => $referenceSignature],
                 JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             ));
         }
@@ -644,6 +649,10 @@ final class OnboardingController
         $homeDraft = json_decode(self::loadSetting($siteId, 'onboarding_home_draft', ''), true);
         $homeDraftId = is_array($homeDraft) ? (int) ($homeDraft['page_id'] ?? 0) : 0;
         if ($homeDraftId > 0 && !self::draftIsCanvas($homeDraftId, $siteId)) $homeDraftId = 0;
+        if ($homeDraftId > 0 && (string) ($homeDraft['reference_signature'] ?? '') !== self::referenceSignature($siteId)) {
+            self::deleteDraftPage($homeDraftId);
+            $homeDraftId = 0;
+        }
         $homeReused = false;
 
         $created = [];
@@ -1182,7 +1191,18 @@ final class OnboardingController
 
         self::storeSetting($siteId, 'onboarding_visual_references', json_encode($saved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         Database::execute('DELETE FROM settings WHERE site_id = ? AND setting_key = ?', [$siteId, 'onboarding_reference_preview_content']);
+        self::invalidateHomeDraft($siteId);
         return count($saved);
+    }
+
+    private static function invalidateHomeDraft(int $siteId): void
+    {
+        $draft = json_decode(self::loadSetting($siteId, 'onboarding_home_draft', ''), true);
+        $pageId = is_array($draft) ? (int) ($draft['page_id'] ?? 0) : 0;
+        if ($pageId > 0) {
+            self::deleteDraftPage($pageId);
+        }
+        self::storeSetting($siteId, 'onboarding_home_draft', '');
     }
 
     /** Convierte un valor de ini estilo "8M"/"512K"/"1G" a bytes. */
@@ -2150,6 +2170,22 @@ final class OnboardingController
             $valid[] = $item;
         }
         return ['items' => $valid, 'count' => count($valid)];
+    }
+
+    private static function referenceSignature(int $siteId): string
+    {
+        $refs = self::loadReferenceValues($siteId);
+        $parts = [];
+        foreach ($refs['items'] as $item) {
+            $path = (string) ($item['path'] ?? '');
+            $fullPath = PP_ROOT . '/' . ltrim($path, '/');
+            $parts[] = [
+                'path' => $path,
+                'size' => is_file($fullPath) ? (int) filesize($fullPath) : (int) ($item['size'] ?? 0),
+                'created_at' => (string) ($item['created_at'] ?? ''),
+            ];
+        }
+        return hash('sha256', json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
     }
 
     /** @return array<int,array{mime:string,data:string}> */

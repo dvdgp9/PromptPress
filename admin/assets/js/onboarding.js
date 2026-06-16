@@ -654,7 +654,7 @@
                     nudgePairHtml('warmth',   'Más cálido',  'Más sobrio'),
                     nudgePairHtml('modernity','Más moderno', 'Más clásico'),
                     nudgePairHtml('energy',   'Más rotundo', 'Más suave'),
-                    '<button type="button" class="pp-onboarding-skin__regen" data-regenerate-skin>↻ Regenerar desde cero</button>',
+                    '<button type="button" class="pp-onboarding-skin__regen" data-regenerate-skin>Regenerar desde cero</button>',
                 '</div>',
             '</section>'
         ].join('');
