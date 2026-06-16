@@ -88,8 +88,11 @@ final class App
         ini_set('log_errors', '1');
         ini_set('error_log', PP_STORAGE . '/logs/php-errors.log');
         error_reporting(E_ALL);
-        // Asegurar UTF-8
-        mb_internal_encoding('UTF-8');
+        // Asegurar UTF-8 si mbstring está disponible. El instalador ya avisa
+        // si falta la extensión; no debe provocar un 500 antes de poder verlo.
+        if (function_exists('mb_internal_encoding')) {
+            mb_internal_encoding('UTF-8');
+        }
         // Timezone por defecto (puede sobrescribirse)
         if (!ini_get('date.timezone')) {
             date_default_timezone_set('UTC');
