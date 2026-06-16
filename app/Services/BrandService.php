@@ -77,19 +77,7 @@ final class BrandService
     public static function publicHeader(int $siteId): string
     {
         $data = self::data($siteId);
-        $pages = self::navPages($siteId);
-
-        $links = '';
-        $cta = '';
-        foreach ($pages as $p) {
-            $href = htmlspecialchars(base_url(ltrim($p['slug'], '/')), ENT_QUOTES, 'UTF-8');
-            $title = htmlspecialchars($p['title'], ENT_QUOTES, 'UTF-8');
-            if ($cta === '' && $p['page_type'] === 'contact') {
-                $cta = '<a class="pp-btn pp-btn--primary pp-site-header__cta" href="' . $href . '">' . $title . '</a>';
-                continue;
-            }
-            $links .= '<a class="pp-site-header__link" href="' . $href . '">' . $title . '</a>';
-        }
+        [$links, $cta] = self::headerNav($siteId, ChromeService::load($siteId));
 
         return '<header class="pp-site-header">'
              . '<div class="pp-site-header__inner">'
@@ -103,6 +91,127 @@ final class BrandService
     }
 
     /**
+     * CHROME-EDITOR — Resuelve los enlaces del menú y el CTA del header.
+     * Si no hay menú configurado, replica EXACTAMENTE el comportamiento
+     * automático histórico (páginas publicadas; la de contacto pasa a CTA).
+     *
+     * @return array{0:string,1:string} [linksHtml, ctaHtml]
+     */
+    private static function headerNav(int $siteId, array $config): array
+    {
+        $menu = $config['header']['menu'] ?? [];
+        $ctaCfg = $config['header']['cta'] ?? ['mode' => 'auto'];
+
+        $links = '';
+        $autoCta = '';
+
+        if (is_array($menu) && $menu !== []) {
+            foreach ($menu as $item) {
+                if (!is_array($item) || (($item['visible'] ?? true) === false)) continue;
+                $links .= self::headerItemHtml($siteId, $item);
+            }
+        } else {
+            // AUTO (histórico): páginas publicadas; la de contacto se vuelve CTA.
+            foreach (self::navPages($siteId) as $p) {
+                $href = htmlspecialchars(base_url(ltrim($p['slug'], '/')), ENT_QUOTES, 'UTF-8');
+                $title = htmlspecialchars($p['title'], ENT_QUOTES, 'UTF-8');
+                if ($autoCta === '' && $p['page_type'] === 'contact') {
+                    $autoCta = '<a class="pp-btn pp-btn--primary pp-site-header__cta" href="' . $href . '">' . $title . '</a>';
+                    continue;
+                }
+                $links .= '<a class="pp-site-header__link" href="' . $href . '">' . $title . '</a>';
+            }
+        }
+
+        $mode = (string) ($ctaCfg['mode'] ?? 'auto');
+        $cta = '';
+        if ($mode === 'custom'
+            && trim((string) ($ctaCfg['label'] ?? '')) !== ''
+            && trim((string) ($ctaCfg['url'] ?? '')) !== ''
+        ) {
+            $style = ((string) ($ctaCfg['style'] ?? 'primary')) === 'ghost' ? 'pp-btn--ghost' : 'pp-btn--primary';
+            $cta = '<a class="pp-btn ' . $style . ' pp-site-header__cta" href="' . self::href((string) $ctaCfg['url'])
+                 . '">' . htmlspecialchars((string) $ctaCfg['label'], ENT_QUOTES, 'UTF-8') . '</a>';
+        } elseif ($mode === 'auto') {
+            $cta = $autoCta; // vacío si se usó un menú personalizado
+        }
+        // mode 'off' => sin CTA
+
+        return [$links, $cta];
+    }
+
+    /** Render de un ítem de menú: página, enlace o desplegable. */
+    private static function headerItemHtml(int $siteId, array $item): string
+    {
+        if ((string) ($item['type'] ?? 'page') === 'dropdown') {
+            $label = htmlspecialchars((string) ($item['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $children = '';
+            foreach ((array) ($item['children'] ?? []) as $c) {
+                if (is_array($c) && (($c['visible'] ?? true) !== false)) {
+                    $children .= self::headerItemHtml($siteId, $c);
+                }
+            }
+            if ($label === '' || $children === '') return '';
+            return '<div class="pp-site-header__dropdown">'
+                 . '<span class="pp-site-header__link pp-site-header__dropdown-toggle">' . $label . '</span>'
+                 . '<div class="pp-site-header__dropdown-menu">' . $children . '</div>'
+                 . '</div>';
+        }
+
+        [$href, $label, $target] = self::resolveItem($siteId, $item);
+        if ($href === '' || $label === '') return '';
+        $t = $target === '_blank' ? ' target="_blank" rel="noopener"' : '';
+        return '<a class="pp-site-header__link" href="' . $href . '"' . $t . '>' . $label . '</a>';
+    }
+
+    /**
+     * Resuelve un ítem (página o enlace) a [href, labelHtml, target].
+     * @return array{0:string,1:string,2:string}
+     */
+    private static function resolveItem(int $siteId, array $item): array
+    {
+        $target = ((string) ($item['target'] ?? '_self')) === '_blank' ? '_blank' : '_self';
+
+        if ((string) ($item['type'] ?? 'page') === 'link') {
+            $url = trim((string) ($item['url'] ?? ''));
+            $label = trim((string) ($item['label'] ?? ''));
+            return [$url !== '' ? self::href($url) : '', htmlspecialchars($label, ENT_QUOTES, 'UTF-8'), $target];
+        }
+
+        $page = self::pageById($siteId, (int) ($item['page_id'] ?? 0));
+        if ($page === null) return ['', '', $target];
+        $label = trim((string) ($item['label'] ?? '')) ?: (string) $page['title'];
+        $href = htmlspecialchars(base_url(ltrim((string) $page['slug'], '/')), ENT_QUOTES, 'UTF-8');
+        return [$href, htmlspecialchars($label, ENT_QUOTES, 'UTF-8'), $target];
+    }
+
+    /** Sanea/normaliza un href de enlace personalizado. */
+    private static function href(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') return '#';
+        if (preg_match('~^(https?://|mailto:|tel:|#|/)~i', $url)) {
+            return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+        }
+        return htmlspecialchars(base_url(ltrim($url, '/')), ENT_QUOTES, 'UTF-8');
+    }
+
+    /** @return array{title:string,slug:string,status:string}|null */
+    private static function pageById(int $siteId, int $id): ?array
+    {
+        if ($id <= 0) return null;
+        try {
+            $r = Database::selectOne(
+                'SELECT title, slug, status FROM pages WHERE id = ? AND site_id = ? LIMIT 1',
+                [$id, $siteId]
+            );
+        } catch (\Throwable $e) {
+            return null;
+        }
+        return $r ?: null;
+    }
+
+    /**
      * E-GDPR G3 — Footer público con enlaces a páginas legales publicadas.
      *
      * Renderiza solo las páginas con `page_type='legal'` que estén `published`.
@@ -112,6 +221,7 @@ final class BrandService
     {
         $name = htmlspecialchars(self::data($siteId)['name'], ENT_QUOTES, 'UTF-8');
         $year = date('Y');
+        $config = ChromeService::load($siteId);
         try {
             $legal = Database::select(
                 "SELECT title, slug FROM pages
@@ -157,6 +267,12 @@ final class BrandService
             // sin memoria → sin tagline
         }
 
+        // CHROME-EDITOR — override del tagline si está configurado.
+        $taglineOverride = trim((string) ($config['footer']['tagline'] ?? ''));
+        if ($taglineOverride !== '') {
+            $tagline = $taglineOverride;
+        }
+
         $navLinks = '';
         foreach (self::navPages($siteId) as $p) {
             $href = htmlspecialchars(base_url(ltrim($p['slug'], '/')), ENT_QUOTES, 'UTF-8');
@@ -175,9 +291,15 @@ final class BrandService
             $cols .= '<nav class="pp-site-footer__col" aria-label="Enlaces legales"><span class="pp-site-footer__col-title">Legal</span>' . $links . $reopenLink . '</nav>';
         }
 
+        // CHROME-EDITOR — override del copyright si está configurado.
+        $copyOverride = trim((string) ($config['footer']['copyright'] ?? ''));
+        $copy = $copyOverride !== ''
+            ? htmlspecialchars($copyOverride, ENT_QUOTES, 'UTF-8')
+            : '© ' . $year . ' · ' . $name;
+
         return '<footer class="pp-site-footer">'
              . '<div class="pp-site-footer__grid">' . $cols . '</div>'
-             . '<div class="pp-site-footer__bottom"><span class="pp-site-footer__copy">© ' . $year . ' · ' . $name . '</span></div>'
+             . '<div class="pp-site-footer__bottom"><span class="pp-site-footer__copy">' . $copy . '</span></div>'
              . '</footer>'
              . $bannerHtml;
     }
