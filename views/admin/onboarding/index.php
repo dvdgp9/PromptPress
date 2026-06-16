@@ -73,13 +73,13 @@ $groups = [
                     <section class="pp-onboarding-autofill" data-memory-autofill>
                         <div>
                             <span>Entrada rápida</span>
-                            <h2>¿Ya tienes un dossier comercial?</h2>
-                            <p>Sube un PDF, DOCX o TXT y la IA intentará rellenar estos campos por ti. Después podrás revisar todo antes de continuar.</p>
+                            <h2>¿Ya tienes documentos del negocio?</h2>
+                            <p>Sube uno o varios PDF, DOCX o TXT y la IA intentará rellenar estos campos cruzando la información. Después podrás revisar todo antes de continuar.</p>
                         </div>
                         <label>
-                            <input type="file" name="dossier" accept=".pdf,.docx,.txt" data-memory-autofill-file>
-                            <strong data-memory-autofill-file-label>Elegir dossier</strong>
-                            <small>PDF, DOCX o TXT. Hasta 10 MB.</small>
+                            <input type="file" name="dossier[]" accept=".pdf,.docx,.txt" multiple data-memory-autofill-file>
+                            <strong data-memory-autofill-file-label>Elegir documentos</strong>
+                            <small>PDF, DOCX o TXT. Puedes seleccionar varios · 10 MB por archivo.</small>
                         </label>
                         <button type="button" class="pp-btn pp-btn--secondary" data-memory-autofill-button>Rellenar con IA</button>
                         <p data-memory-autofill-status></p>

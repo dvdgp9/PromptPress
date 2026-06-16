@@ -47,24 +47,31 @@
         if (!fileInput || !button || !status) return;
 
         fileInput.addEventListener('change', function () {
-            var file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-            if (fileLabel) fileLabel.textContent = file ? file.name : 'Elegir dossier';
-            status.textContent = file ? 'Listo para analizar: ' + formatBytes(file.size) : '';
+            var files = Array.prototype.slice.call(fileInput.files || []);
+            var total = files.reduce(function (sum, file) { return sum + (file.size || 0); }, 0);
+            if (fileLabel) {
+                fileLabel.textContent = files.length === 0
+                    ? 'Elegir documentos'
+                    : (files.length === 1 ? files[0].name : files.length + ' documentos seleccionados');
+            }
+            status.textContent = files.length
+                ? 'Listo para analizar: ' + (files.length === 1 ? formatBytes(total) : files.length + ' documentos · ' + formatBytes(total))
+                : '';
             status.className = '';
         });
 
         button.addEventListener('click', function () {
-            var file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-            if (!file) {
-                status.textContent = 'Elige primero un dossier comercial.';
+            var files = Array.prototype.slice.call(fileInput.files || []);
+            if (!files.length) {
+                status.textContent = 'Elige primero uno o varios documentos del negocio.';
                 status.className = 'is-error';
                 return;
             }
             var data = new FormData();
             data.set('_csrf', csrf);
-            data.set('dossier', file);
-            setBusy(button, true, 'Leyendo dossier…');
-            status.textContent = 'Extrayendo información y preparando memoria inicial.';
+            files.forEach(function (file) { data.append('dossier[]', file); });
+            setBusy(button, true, 'Leyendo documentos…');
+            status.textContent = 'Extrayendo información, cruzando documentos y preparando memoria inicial.';
             status.className = 'is-loading';
             fetch(baseUrl + '/admin/onboarding/autofill-memory', {
                 method: 'POST',
@@ -85,11 +92,12 @@
                 applyMemoryFields(body.fields || {});
                 var msg = 'Campos rellenados. Revisa y ajusta lo que quieras antes de continuar.';
                 if (body.company_name) msg += ' Empresa detectada: ' + body.company_name + '.';
+                if (body.documents && body.documents.length > 1) msg += ' Documentos leídos: ' + body.documents.length + '.';
                 if (body.model) msg += ' Modelo: ' + body.model + '.';
                 status.textContent = msg;
                 status.className = 'is-success';
             }).catch(function (err) {
-                status.textContent = err.message || 'No hemos podido analizar el dossier.';
+                status.textContent = err.message || 'No hemos podido analizar los documentos.';
                 status.className = 'is-error';
             }).finally(function () {
                 setBusy(button, false, 'Rellenar con IA');

@@ -154,15 +154,23 @@ final class OnboardingController
         @set_time_limit(180);
         CSRF::check();
         $siteId = self::requireSiteId();
-        $file = Request::file('dossier');
-        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-            Response::json(['ok' => false, 'error' => 'Sube un PDF, DOCX o TXT para que la IA pueda leerlo.'], 422);
+        $files = self::uploadedFiles('dossier');
+        if ($files === []) {
+            Response::json(['ok' => false, 'error' => 'Sube uno o varios PDF, DOCX o TXT para que la IA pueda leerlos.'], 422);
         }
 
         try {
-            $doc = self::saveExtractedDocument($siteId, $file);
+            $docs = [];
+            foreach ($files as $file) {
+                if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+                $docs[] = self::saveExtractedDocument($siteId, $file);
+            }
+            if ($docs === []) {
+                Response::json(['ok' => false, 'error' => 'No se ha podido leer ningún documento válido.'], 422);
+            }
+
             $result = AIActionRunner::run(Actions::EXTRACT_BUSINESS_PROFILE, [
-                'document_text' => mb_substr($doc['text'], 0, 18000),
+                'document_text' => mb_substr(self::combineDocumentTexts($docs), 0, 22000),
                 'field_schema' => self::memoryFieldSchema(),
             ], $siteId);
             $profile = self::normalizeBusinessProfile((array) ($result['data'] ?? []));
@@ -172,19 +180,19 @@ final class OnboardingController
                 'company_name' => $profile['company_name'],
                 'confidence' => $profile['confidence'],
                 'notes' => $profile['notes'],
-                'document' => [
+                'documents' => array_map(static fn(array $doc): array => [
                     'id' => $doc['id'],
                     'title' => $doc['title'],
-                ],
+                ], $docs),
                 'model' => $result['model'] ?? '',
                 'tokens_in' => $result['tokens_in'] ?? 0,
                 'tokens_out' => $result['tokens_out'] ?? 0,
                 'estimated_cost' => $result['estimated_cost'] ?? 0,
             ]);
         } catch (AIException $e) {
-            Response::json(['ok' => false, 'error' => 'No hemos podido interpretar el dossier con IA: ' . $e->getMessage()], 502);
+            Response::json(['ok' => false, 'error' => 'No hemos podido interpretar los documentos con IA: ' . $e->getMessage()], 502);
         } catch (\Throwable $e) {
-            Response::json(['ok' => false, 'error' => 'No hemos podido leer el dossier: ' . $e->getMessage()], 422);
+            Response::json(['ok' => false, 'error' => 'No hemos podido leer los documentos: ' . $e->getMessage()], 422);
         }
     }
 
@@ -1010,6 +1018,19 @@ final class OnboardingController
             'text' => $text,
             'summary' => $summary,
         ];
+    }
+
+    /** @param array<int,array{id:int,title:string,text:string,summary:string}> $docs */
+    private static function combineDocumentTexts(array $docs): string
+    {
+        $chunks = [];
+        foreach ($docs as $i => $doc) {
+            $chunks[] = "Documento " . ($i + 1) . ': ' . $doc['title']
+                . "\n---\n"
+                . mb_substr((string) $doc['text'], 0, 9000)
+                . "\n---";
+        }
+        return implode("\n\n", $chunks);
     }
 
     private static function saveLogo(int $siteId): void
