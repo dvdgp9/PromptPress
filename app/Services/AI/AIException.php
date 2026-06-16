@@ -13,11 +13,13 @@ use RuntimeException;
  */
 final class AIException extends RuntimeException
 {
-    public function __construct(
-        string $message,
-        private readonly int $httpStatus = 0,
-        private readonly ?string $providerError = null,
-    ) {
+    private int $httpStatus;
+    private ?string $providerError;
+
+    public function __construct(string $message, int $httpStatus = 0, ?string $providerError = null)
+    {
+        $this->httpStatus = $httpStatus;
+        $this->providerError = $providerError;
         parent::__construct($message);
     }
 

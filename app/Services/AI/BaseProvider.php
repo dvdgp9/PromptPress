@@ -11,10 +11,13 @@ use RuntimeException;
  */
 abstract class BaseProvider implements AIProviderInterface
 {
-    public function __construct(
-        protected readonly string $apiKey,
-        protected readonly string $model,
-    ) {
+    protected string $apiKey;
+    protected string $model;
+
+    public function __construct(string $apiKey, string $model)
+    {
+        $this->apiKey = $apiKey;
+        $this->model = $model;
         if (trim($this->apiKey) === '') {
             throw new AIException('API key vacía para el proveedor ' . $this->getName());
         }

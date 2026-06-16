@@ -12,24 +12,42 @@ namespace App\Services\AI;
  */
 final class AIResponse
 {
+    /** Texto generado por el modelo. */
+    public string $content;
+    /** Modelo exacto usado (lo devuelve el API, puede diferir del solicitado). */
+    public string $model;
+    /** Nombre del proveedor ("openai", "anthropic", etc.). */
+    public string $provider;
+    /** Tokens del prompt. */
+    public int $tokensIn;
+    /** Tokens de la respuesta. */
+    public int $tokensOut;
+    /** Razón por la que terminó la generación (stop, length, tool_call, ...). */
+    public ?string $finishReason;
+    /** Latencia aproximada en milisegundos. */
+    public int $latencyMs;
+    /** Respuesta cruda del proveedor (debug). */
+    public ?array $raw;
+
     public function __construct(
-        /** Texto generado por el modelo. */
-        public readonly string $content,
-        /** Modelo exacto usado (lo devuelve el API, puede diferir del solicitado). */
-        public readonly string $model,
-        /** Nombre del proveedor ("openai", "anthropic", etc.). */
-        public readonly string $provider,
-        /** Tokens del prompt. */
-        public readonly int $tokensIn = 0,
-        /** Tokens de la respuesta. */
-        public readonly int $tokensOut = 0,
-        /** Razón por la que terminó la generación (stop, length, tool_call, ...). */
-        public readonly ?string $finishReason = null,
-        /** Latencia aproximada en milisegundos. */
-        public readonly int $latencyMs = 0,
-        /** Respuesta cruda del proveedor (debug). */
-        public readonly ?array $raw = null,
-    ) {}
+        string $content,
+        string $model,
+        string $provider,
+        int $tokensIn = 0,
+        int $tokensOut = 0,
+        ?string $finishReason = null,
+        int $latencyMs = 0,
+        ?array $raw = null
+    ) {
+        $this->content = $content;
+        $this->model = $model;
+        $this->provider = $provider;
+        $this->tokensIn = $tokensIn;
+        $this->tokensOut = $tokensOut;
+        $this->finishReason = $finishReason;
+        $this->latencyMs = $latencyMs;
+        $this->raw = $raw;
+    }
 
     public function toArray(): array
     {
