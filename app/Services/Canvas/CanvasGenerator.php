@@ -30,9 +30,14 @@ final class CanvasGenerator
     {
         $maxAttempts = max(1, min(3, $maxAttempts));
         $lastError = null;
+        $validationFeedback = '';
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
+                $extraContext = (string) ($input['extra_context'] ?? '');
+                if ($validationFeedback !== '') {
+                    $extraContext = trim($extraContext . "\n\nREINTENTO OBLIGATORIO POR VALIDACIÓN INTERNA:\n" . $validationFeedback);
+                }
                 $result = AIActionRunner::run(Actions::COMPOSE_CANVAS_PAGE, [
                     'page_title' => $input['title'],
                     'page_goal' => $input['goal'],
@@ -44,7 +49,7 @@ final class CanvasGenerator
                         ? (string) $input['sections_outline']
                         : '(sin outline: decide tú la estructura óptima, 5-7 secciones)',
                     'available_forms' => self::availableForms($siteId),
-                    'extra_context' => (string) ($input['extra_context'] ?? ''),
+                    'extra_context' => $extraContext,
                     '_images' => $input['reference_images'] ?? [],
                 ], $siteId);
             } catch (AIException $e) {
@@ -64,12 +69,33 @@ final class CanvasGenerator
                 continue;
             }
 
+            $referenceWarnings = self::referenceDriftWarnings(
+                $probe['html'],
+                (string) ($input['sections_outline'] ?? ''),
+                !empty($input['reference_images'])
+            );
+            if ($referenceWarnings !== [] && $attempt < $maxAttempts) {
+                $validationFeedback = "- La generación anterior parecía una plantilla genérica y no una adaptación de las capturas.\n"
+                    . "- Problemas detectados: " . implode('; ', $referenceWarnings) . ".\n"
+                    . "- Rediseña desde la arquitectura visible en las capturas. Elimina secciones no justificadas por la referencia o por datos reales.";
+                $lastError = new AIException('La página canvas derivó hacia una plantilla genérica: ' . implode('; ', $referenceWarnings));
+                continue;
+            }
+            if ($referenceWarnings !== []) {
+                $stripped = self::stripDriftSections($html, $referenceWarnings);
+                if ($stripped !== $html && str_contains($stripped, 'data-pp-section')) {
+                    $html = $stripped;
+                    $probe = CanvasSanitizer::sanitizeHtml($html);
+                    $referenceWarnings[] = 'secciones comodín eliminadas automáticamente';
+                }
+            }
+
             $rationale = is_array($data['rationale'] ?? null) ? $data['rationale'] : [];
             return [
                 'html' => $html,
                 'css' => $css,
                 'rationale' => $rationale,
-                'warnings' => $probe['warnings'],
+                'warnings' => array_merge($probe['warnings'], $referenceWarnings),
                 'model' => $result['model'] ?? null,
                 'provider' => $result['provider'] ?? null,
             ];
@@ -98,5 +124,125 @@ final class CanvasGenerator
                 . '" (página /' . (string) $row['slug'] . ')';
         }
         return implode("\n", $lines);
+    }
+
+    /**
+     * Detecta señales típicas de la antigua receta de landing cuando el usuario
+     * sí ha aportado referencias visuales. No pretende juzgar diseño; solo evita
+     * que el modelo ignore capturas y vuelva a secciones comodín.
+     *
+     * @return string[]
+     */
+    private static function referenceDriftWarnings(string $html, string $outline, bool $hasReferences): array
+    {
+        if (!$hasReferences) return [];
+
+        $text = mb_strtolower(trim(preg_replace('/\s+/', ' ', strip_tags($html)) ?? ''));
+        $markup = mb_strtolower($html);
+        $outlineText = mb_strtolower($outline);
+        $warnings = [];
+
+        $checks = [
+            'testimonios/prueba social' => [
+                'needles' => ['testimon', 'lo que dicen', 'clientes dicen', 'prueba-social', 'social-proof'],
+                'allow' => ['testimon', 'reseña', 'review', 'prueba social', 'social proof'],
+            ],
+            'cita inspiracional inventada' => [
+                'needles' => ['data-pp-section="inspiracional"', 'frase-inspiracional', 'class="lx-quote', '<blockquote'],
+                'allow' => ['cita', 'quote', 'blockquote', 'manifiesto', 'frase destacada'],
+            ],
+            'proceso por fases' => [
+                'needles' => ['data-pp-section="proceso"', 'fase 1', 'fase 2', 'fase 3', 'paso 1', 'paso 2', 'paso 3'],
+                'allow' => ['timeline visual explícito en referencia'],
+            ],
+            'métricas/logos de confianza' => [
+                'needles' => ['data-pp-section="metric', 'data-pp-section="logos', 'logos de clientes', 'más de ', '/5'],
+                'allow' => ['métrica', 'metric', 'logos', 'clientes', 'partners', 'cifras'],
+            ],
+        ];
+
+        foreach ($checks as $label => $check) {
+            $needles = (array) ($check['needles'] ?? []);
+            if (self::outlineAllowsGenericPattern($outlineText, (array) ($check['allow'] ?? []))) {
+                continue;
+            }
+            foreach ($needles as $needle) {
+                if (($text !== '' && str_contains($text, $needle)) || str_contains($markup, $needle)) {
+                    $warnings[] = $label . ' no justificado por la referencia';
+                    break;
+                }
+            }
+        }
+
+        return array_values(array_unique($warnings));
+    }
+
+    /** @param string[] $needles */
+    private static function outlineAllowsGenericPattern(string $outlineText, array $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if ($needle !== '' && str_contains($outlineText, $needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @param string[] $warnings */
+    private static function stripDriftSections(string $html, array $warnings): string
+    {
+        $removeKinds = [];
+        foreach ($warnings as $warning) {
+            if (str_contains($warning, 'testimonios')) $removeKinds[] = 'testimonials';
+            if (str_contains($warning, 'cita inspiracional')) $removeKinds[] = 'quote';
+            if (str_contains($warning, 'proceso por fases')) $removeKinds[] = 'process';
+            if (str_contains($warning, 'métricas/logos')) $removeKinds[] = 'metrics';
+        }
+        $removeKinds = array_values(array_unique($removeKinds));
+        if ($removeKinds === []) return $html;
+
+        $previous = libxml_use_internal_errors(true);
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        $doc->loadHTML('<!doctype html><meta charset="utf-8"><div id="pp-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $root = $doc->getElementById('pp-root');
+        if (!$root) return $html;
+
+        $toRemove = [];
+        $seen = [];
+        foreach ($root->childNodes as $node) {
+            if (!$node instanceof \DOMElement || !$node->hasAttribute('data-pp-section')) continue;
+            $haystack = mb_strtolower(
+                $node->getAttribute('data-pp-section') . ' '
+                . $node->getAttribute('class') . ' '
+                . trim($node->textContent ?? '')
+            );
+            foreach ($removeKinds as $kind) {
+                $matches = false;
+                if ($kind === 'testimonials' && preg_match('/testimon|clientes dicen|lo que dicen|prueba-social|social-proof/u', $haystack)) $matches = true;
+                if ($kind === 'quote' && preg_match('/quote|cita|inspiracional|blockquote|frase destacada/u', $haystack)) $matches = true;
+                if ($kind === 'process' && preg_match('/proceso|process|fase\s*[0-9]|paso\s*[0-9]|step/u', $haystack)) $matches = true;
+                if ($kind === 'metrics' && preg_match('/metric|métrica|logos|partners|\/5|más de/u', $haystack)) $matches = true;
+                if ($matches) {
+                    $hash = spl_object_hash($node);
+                    if (!isset($seen[$hash])) {
+                        $seen[$hash] = true;
+                        $toRemove[] = $node;
+                    }
+                }
+            }
+        }
+
+        foreach ($toRemove as $node) {
+            if ($node->parentNode) $node->parentNode->removeChild($node);
+        }
+
+        $out = '';
+        foreach ($root->childNodes as $child) {
+            $out .= $doc->saveHTML($child);
+        }
+        return trim($out) !== '' ? trim($out) : $html;
     }
 }

@@ -1622,7 +1622,6 @@ final class OnboardingController
         $layout = self::describeReferenceLayout($siteId, $title, $goal, $context, $referenceImages);
         $designLanguage = (string) ($layout['design_language'] ?? '');
         $plan = $layout['plan'];
-        if ($plan === [] && $hasRefs) $plan = self::referenceCustomBlockPlan($type);
         $plan = self::resolvePlanImages($siteId, $plan);
 
         // Outline en texto para el prompt (rol + fondo + imágenes por sección).
@@ -1638,9 +1637,23 @@ final class OnboardingController
             $outline[] = $line;
         }
 
+        if ($hasRefs) {
+            if ($outline === []) {
+                $outline[] = "MODO REFERENCIAS VISUALES DIRECTO:\n"
+                    . "- Hay capturas adjuntas, pero no se pudo convertirlas en un outline previo fiable.\n"
+                    . "- Mira las capturas directamente y replica su arquitectura visual: número aproximado de bloques, orden, tamaño relativo, alineaciones, uso de espacios vacíos, ritmo de fondos y patrón de imágenes.\n"
+                    . "- No uses la plantilla clásica de PromptPress ni una landing genérica. No inventes secciones tipo testimonios, logos, métricas o FAQ si no aparecen claramente en las capturas o en el contexto real del negocio.\n"
+                    . "- El resultado debe verse claramente distinto de una home estándar de bloques.";
+            } else {
+                array_unshift($outline, "MODO REFERENCIAS VISUALES:\n"
+                    . "- Las capturas adjuntas son la fuente principal de estructura. Respeta el outline derivado de ellas y no añadas secciones que no estén justificadas por la referencia.\n"
+                    . "- Testimonios, logos de clientes, métricas, FAQ o carruseles solo si aparecen claramente en la referencia o existen datos reales en el contexto.");
+            }
+        }
+
         // FH6 — sin referencias no hay briefs por sección: ofrecer un pool de
         // fotos genéricas del negocio para que el modelo las reparta.
-        if ($outline === [] || !$hasRefs) {
+        if (!$hasRefs) {
             $pool = self::formatAvailableImages(self::genericBusinessImages($siteId));
             if ($pool !== '') {
                 $outline[] = "IMÁGENES DISPONIBLES (repártelas donde mejor encajen, máximo una vez cada una):\n" . $pool;
@@ -1656,6 +1669,7 @@ final class OnboardingController
             'extra_context' => trim(
                 "Tipo de página: {$type}\n"
               . "Página propuesta por onboarding: " . (string) ($item['reason'] ?? '') . "\n"
+              . ($hasRefs ? "Referencias visuales adjuntas: " . count($referenceImages) . " captura(s). Úsalas como fuente principal de layout.\n" : "Referencias visuales adjuntas: ninguna.\n")
               . $context . "\n"
               . self::heroDifferentiationContext($siteId, $type)
             ),
