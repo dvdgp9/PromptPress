@@ -93,6 +93,36 @@ function pp_run_migrations(PDO $pdo): array
         }
     }
 
+    // 3. Ejecutar las migraciones canónicas del proyecto (`database/migrations/`).
+    //    Es la MISMA fuente que usa el desarrollo (`php database/migrate.php`),
+    //    así una instalación nueva nace con todo: Canvas (`pages.render_mode`,
+    //    `page_canvas`, `page_versions`), SEO y cualquier migración futura, sin
+    //    depender de replicar nada a mano en `schema.sql`. El Migrator es
+    //    idempotente (IF NOT EXISTS, guardas de columna, ignora 1050/1060/1061),
+    //    por lo que es seguro sobre las tablas que el schema base ya creó.
+    $migratorPath = dirname(__DIR__) . '/database/Migrator.php';
+    if (is_file($migratorPath)) {
+        require_once $migratorPath;
+        try {
+            $migrator = new \PromptPress\Database\Migrator(
+                $pdo,
+                dirname(__DIR__) . '/database/migrations'
+            );
+            $result = $migrator->run();
+            foreach ($result['applied'] as $name) {
+                $applied[] = "[migrations] {$name}";
+            }
+            foreach ($result['errors'] as $err) {
+                $errors[] = [
+                    'statement' => '[migrations] ' . ($err['name'] ?? 'desconocida'),
+                    'error'     => (string) ($err['error'] ?? 'error desconocido'),
+                ];
+            }
+        } catch (\Throwable $e) {
+            $errors[] = ['statement' => '[migrations] (arranque del Migrator)', 'error' => $e->getMessage()];
+        }
+    }
+
     return ['applied' => $applied, 'errors' => $errors];
 }
 
