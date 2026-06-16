@@ -49,6 +49,7 @@ final class CanvasGenerator
                         ? (string) $input['sections_outline']
                         : '(sin outline: decide tú la estructura óptima, 5-7 secciones)',
                     'available_forms' => self::availableForms($siteId),
+                    'available_pages' => self::availablePages($siteId),
                     'extra_context' => $extraContext,
                     '_images' => $input['reference_images'] ?? [],
                 ], $siteId);
@@ -90,6 +91,12 @@ final class CanvasGenerator
                 }
             }
 
+            // Red de seguridad: ancla los enlaces internos a páginas reales.
+            // Un CTA hacia una página inexistente (p. ej. "/profesorado" sin esa
+            // página) se redirige a /contacto para evitar 404; los #anclas,
+            // externos, mailto/tel y {{form}} se respetan.
+            $html = self::groundInternalLinks($siteId, $html);
+
             $rationale = is_array($data['rationale'] ?? null) ? $data['rationale'] : [];
             return [
                 'html' => $html,
@@ -124,6 +131,70 @@ final class CanvasGenerator
                 . '" (página /' . (string) $row['slug'] . ')';
         }
         return implode("\n", $lines);
+    }
+
+    /**
+     * Lista de páginas REALES del sitio para anclar CTAs/enlaces y evitar que
+     * el modelo invente destinos. La home se enlaza como "/".
+     */
+    private static function availablePages(int $siteId): string
+    {
+        $rows = Database::select(
+            "SELECT slug, title, page_type, status FROM pages
+             WHERE site_id = ?
+             ORDER BY (page_type = 'home') DESC, tree_sort_order ASC, id ASC
+             LIMIT 40",
+            [$siteId]
+        );
+        if ($rows === []) {
+            return '(aún no hay otras páginas: enlaza SOLO a #anclas internas de esta misma página o a /contacto; NO inventes páginas ni CTAs hacia contenido inexistente)';
+        }
+        $lines = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $type = (string) ($row['page_type'] ?? '');
+            $path = $type === 'home' ? '/' : '/' . ltrim((string) $row['slug'], '/');
+            if (isset($seen[$path])) continue;   // una entrada por ruta (evita ruido de borradores repetidos)
+            $seen[$path] = true;
+            $state = ((string) ($row['status'] ?? '')) === 'published' ? 'publicada' : 'borrador';
+            $lines[] = '- ' . $path . ' — "' . trim((string) ($row['title'] ?? '')) . '" (' . $type . ', ' . $state . ')';
+        }
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Red de seguridad: reescribe los `href` internos que no apunten a una
+     * página real del sitio (ni #ancla, ni externo, ni mailto/tel, ni {{form}})
+     * hacia /contacto, evitando enlaces rotos a páginas inventadas por la IA.
+     */
+    private static function groundInternalLinks(int $siteId, string $html): string
+    {
+        if ($html === '' || stripos($html, 'href') === false) return $html;
+
+        $valid = ['/', '/contacto'];
+        foreach (Database::select('SELECT slug, page_type FROM pages WHERE site_id = ?', [$siteId]) as $r) {
+            $valid[] = ((string) ($r['page_type'] ?? '')) === 'home'
+                ? '/'
+                : '/' . rtrim(ltrim((string) $r['slug'], '/'), '/');
+        }
+        $valid = array_unique($valid);
+
+        $out = preg_replace_callback('/href\s*=\s*"([^"]*)"/i', static function (array $m) use ($valid): string {
+            $href = trim($m[1]);
+            if ($href === '' || $href[0] === '#') return $m[0];                       // ancla interna o vacío
+            if (preg_match('#^(https?:)?//#i', $href)) return $m[0];                  // externo
+            if (preg_match('#^(mailto:|tel:)#i', $href)) return $m[0];                // contacto directo
+            if (str_contains($href, '{{form')) return $m[0];                          // placeholder de formulario
+            if ($href[0] !== '/') return $m[0];                                       // no es ruta interna absoluta
+
+            $path = (string) (parse_url($href, PHP_URL_PATH) ?: $href);
+            $path = $path === '/' ? '/' : '/' . rtrim(ltrim($path, '/'), '/');
+            if (in_array($path, $valid, true)) return $m[0];                          // página real
+
+            return 'href="/contacto"';                                               // destino inexistente → contacto
+        }, $html);
+
+        return $out ?? $html;
     }
 
     /**

@@ -573,6 +573,11 @@ final class Actions
                   . "COMPONENTES FUNCIONALES:\n"
                   . "- Formularios: NUNCA los dibujes. Si la página necesita uno, escribe el placeholder `{{form:REF}}` en su sección (REF = id o slug de los formularios disponibles listados abajo). Si no hay disponibles, usa un CTA a `/contacto`.\n"
                   . "- Botones del sistema disponibles si quieres consistencia: `pp-btn pp-btn--primary pp-btn--lg` y `pp-btn--ghost` (ya estilados por el skin). También puedes diseñar los tuyos con tokens.\n"
+                  . "ENLACES Y CTAs — COHERENCIA CON EL SITIO (regla dura): la página es un TODO dentro de un sitio real, no una pieza aislada.\n"
+                  . "- Cada enlace/CTA debe apuntar SOLO a uno de: (a) una PÁGINA REAL del sitio (lista «PÁGINAS DEL SITIO» abajo, usa su ruta exacta), (b) un ANCLA a una sección REAL de ESTA misma página (`href=\"#slug-de-seccion\"` que exista en tu html), (c) el placeholder `{{form:REF}}`, o (d) `/contacto`.\n"
+                  . "- PROHIBIDO inventar páginas o enlazar a destinos que no existen. Si no aparece en la lista, NO la enlaces.\n"
+                  . "- El TEXTO del botón no puede prometer una página/sección inexistente. No escribas \"Conoce a nuestro profesorado\", \"Ver casos de éxito\", \"Descarga el catálogo\"… si esa página no está en la lista y no es una sección real de esta página. En su lugar: enlaza a una sección real con ancla, reformula el CTA hacia un destino real (p. ej. /contacto), o elimina ese CTA.\n"
+                  . "- Antes de cerrar, revisa que TODOS los href y CTAs de la página resuelven a un destino real de los cuatro tipos anteriores.\n"
                   . "- Iconos: PROHIBIDO usar emojis o pictogramas Unicode en cualquier texto (cero, siempre). Si necesitas iconos, dibuja SVG inline sencillo de trazo (viewBox 24, stroke=\"currentColor\", fill=\"none\", stroke-width 2), estilo lucide, coherentes entre sí.\n"
                   . "- Imágenes: SOLO las URLs de `available_images` (cada una máximo una vez, en su sección indicada), siempre con alt descriptivo. Si una sección no tiene imagen disponible, diséñala sin foto (color, tipografía grande, SVG decorativo).\n\n"
                   . "REFERENCIAS VISUALES ADJUNTAS:\n"
@@ -605,6 +610,7 @@ final class Actions
                   . "LENGUAJE DE DISEÑO DEL SITIO (derivado de la referencia): {design_language}\n\n"
                   . "ESTRUCTURA SUGERIDA (de la referencia; nº y orden de secciones, fondo e imágenes por sección):\n{sections_outline}\n\n"
                   . "FORMULARIOS DISPONIBLES (para {{form:REF}}):\n{available_forms}\n\n"
+                  . "PÁGINAS DEL SITIO (enlaza tus CTAs SOLO a estas rutas, o a #anclas internas de esta página, o a /contacto):\n{available_pages}\n\n"
                   . "{extra_context}",
                 'options'      => [
                     'response_format' => 'json',
