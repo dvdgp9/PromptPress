@@ -56,13 +56,13 @@ final class OnboardingController
             'name' => 'Gemini 3 Flash',
             'badge' => 'Recomendado',
             'summary' => 'Equilibrio fuerte para crear páginas completas con buena velocidad y coste contenido.',
-            'model_light' => 'google/gemini-3.1-flash-lite-preview',
+            'model_light' => 'google/gemini-3.1-flash-lite',
         ],
-        'google/gemini-3.1-pro-preview' => [
-            'name' => 'Gemini 3.1 Pro',
+        'google/gemini-3.5-flash' => [
+            'name' => 'Gemini 3.5 Flash',
             'badge' => 'Más calidad',
-            'summary' => 'Mejor para decisiones de arquitectura, páginas largas y contenido donde importa más la precisión.',
-            'model_light' => 'google/gemini-3.1-flash-lite-preview',
+            'summary' => 'Más capaz para páginas largas y contenido donde importa más la calidad final.',
+            'model_light' => 'google/gemini-3.1-flash-lite',
         ],
     ];
 
@@ -90,6 +90,7 @@ final class OnboardingController
             'swatches' => self::SWATCHES,
             'typographyOptions' => self::TYPOGRAPHY,
             'document' => self::latestDocument($siteId),
+            'documents' => self::latestDocuments($siteId),
             // F22.T22.1 — intent guardado (si el usuario ya pasó por el paso 5).
             'savedIntent' => self::loadSetting($siteId, 'onboarding_intent', ''),
         ]);
@@ -883,9 +884,9 @@ final class OnboardingController
 
         $light = $advanced
             ? trim((string) Request::post('ai_model_light_advanced', ''))
-            : (self::AI_MODELS[$main]['model_light'] ?? 'google/gemini-3.1-flash-lite-preview');
+            : (self::AI_MODELS[$main]['model_light'] ?? 'google/gemini-3.1-flash-lite');
         if ($light !== '' && mb_strlen($light) > 100) {
-            $light = 'google/gemini-3.1-flash-lite-preview';
+            $light = 'google/gemini-3.1-flash-lite';
         }
 
         self::storeSetting($siteId, 'ai_provider', 'openrouter');
@@ -895,8 +896,20 @@ final class OnboardingController
 
     private static function saveDocument(int $siteId): void
     {
-        $file = Request::file('file');
-        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return;
+        $files = self::uploadedFiles('files');
+        if ($files === []) {
+            $single = Request::file('file');
+            if (is_array($single)) $files = [$single];
+        }
+
+        foreach ($files as $file) {
+            self::saveOneDocument($siteId, $file);
+        }
+    }
+
+    private static function saveOneDocument(int $siteId, array $file): void
+    {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return;
         $type = self::detectFileType($file);
         if ($type === null || ($file['size'] ?? 0) > 10 * 1024 * 1024 || !is_uploaded_file($file['tmp_name'])) return;
 
@@ -929,6 +942,30 @@ final class OnboardingController
                 error_log('[Onboarding] Documento fallido: ' . $e->getMessage());
             }
         });
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private static function uploadedFiles(string $key): array
+    {
+        $raw = Request::file($key);
+        if (!is_array($raw)) return [];
+
+        $names = $raw['name'] ?? null;
+        if (!is_array($names)) {
+            return (($raw['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) ? [] : [$raw];
+        }
+
+        $files = [];
+        foreach ($names as $i => $name) {
+            $files[] = [
+                'name' => $name,
+                'type' => $raw['type'][$i] ?? '',
+                'tmp_name' => $raw['tmp_name'][$i] ?? '',
+                'error' => $raw['error'][$i] ?? UPLOAD_ERR_NO_FILE,
+                'size' => $raw['size'][$i] ?? 0,
+            ];
+        }
+        return $files;
     }
 
     /** @return array{id:int,title:string,text:string,summary:string} */
@@ -2152,13 +2189,17 @@ final class OnboardingController
             $map[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
         }
         $main = $map['ai_model'] ?? 'google/gemini-3-flash-preview';
-        if ($main === '' || $main === 'google/gemini-3.1-flash-lite-preview') {
+        if ($main === '' || $main === 'google/gemini-3.1-flash-lite-preview' || $main === 'google/gemini-3.1-flash-lite') {
             $main = 'google/gemini-3-flash-preview';
+        }
+        $light = $map['ai_model_light'] ?? 'google/gemini-3.1-flash-lite';
+        if ($light === 'google/gemini-3.1-flash-lite-preview') {
+            $light = 'google/gemini-3.1-flash-lite';
         }
         return [
             'provider' => $map['ai_provider'] ?? 'openrouter',
             'model' => $main !== '' ? $main : 'google/gemini-3-flash-preview',
-            'model_light' => $map['ai_model_light'] ?? 'google/gemini-3.1-flash-lite-preview',
+            'model_light' => $light,
             'is_recommended' => isset(self::AI_MODELS[$main]),
         ];
     }
@@ -2166,6 +2207,11 @@ final class OnboardingController
     private static function latestDocument(int $siteId): ?array
     {
         return Database::selectOne('SELECT * FROM documents WHERE site_id = ? ORDER BY created_at DESC LIMIT 1', [$siteId]);
+    }
+
+    private static function latestDocuments(int $siteId): array
+    {
+        return Database::select('SELECT * FROM documents WHERE site_id = ? ORDER BY created_at DESC LIMIT 5', [$siteId]);
     }
 
     private static function siteMapContext(int $siteId): string

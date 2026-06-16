@@ -14,6 +14,7 @@
  * @var array $swatches
  * @var array $typographyOptions
  * @var ?array $document
+ * @var array $documents
  */
 \Core\View::extend('admin/layout');
 
@@ -21,7 +22,7 @@ $stepMeta = [
     1 => ['eyebrow' => 'Paso 1 de 5 · Conoce tu negocio', 'title' => 'Cuéntale a la IA quién eres', 'subtitle' => 'Esta información se usa cada vez que la IA escriba algo: páginas, secciones, SEO. Cuanto más concreto, mejor.', 'action' => 'Siguiente'],
     2 => ['eyebrow' => 'Paso 2 de 5 · Identidad visual', 'title' => 'Cómo se ve tu marca', 'subtitle' => 'Nombre, logo y una base visual sencilla para que las primeras páginas no nazcan genéricas.', 'action' => 'Siguiente'],
     3 => ['eyebrow' => 'Paso 3 de 5 · Modelo IA', 'title' => 'Elige el motor que va a crear tu web', 'subtitle' => 'Te proponemos una selección limitada para empezar bien. Después podrás cambiarlo desde Ajustes · IA.', 'action' => 'Siguiente'],
-    4 => ['eyebrow' => 'Paso 4 de 5 · Documento base · opcional', 'title' => '¿Tienes un documento que te describa?', 'subtitle' => 'Brochure, plan de negocio, catálogo… La IA lo lee una vez y lo usa como contexto extra. Si no, sigue sin ello.', 'action' => 'Continuar'],
+    4 => ['eyebrow' => 'Paso 4 de 5 · Documentos base · opcional', 'title' => '¿Tienes documentos que te describan?', 'subtitle' => 'Brochures, plan de negocio, catálogo, tarifas o dosieres. La IA los usa como contexto extra para diseñar y escribir con más criterio.', 'action' => 'Continuar'],
     5 => ['eyebrow' => 'Paso 5 de 5 · Web inicial', 'title' => 'Tu web, paso a paso', 'subtitle' => 'Primero elige qué páginas crear. Después verás un preview de tu estilo, hecho a medida desde tus datos.', 'action' => 'Continuar al estilo'],
 ];
 $groups = [
@@ -249,7 +250,7 @@ $groups = [
                         <?php endforeach; ?>
                     </div>
                     <p class="pp-onboarding-ai-note">
-                        Recomendación inicial: Gemini 3 Flash para crear páginas. Gemini 3.1 Pro si prefieres calidad extra aunque tarde más. Para tareas pequeñas usaremos Gemini Flash Lite.
+                        Recomendación inicial: Gemini 3 Flash para crear páginas. Gemini 3.5 Flash si prefieres calidad extra. Para tareas pequeñas usaremos Gemini 3.1 Flash Lite.
                     </p>
                     <details class="pp-onboarding-advanced-models" <?= empty($aiValues['is_recommended']) ? 'open' : '' ?>>
                         <summary>Más modelos</summary>
@@ -268,7 +269,7 @@ $groups = [
                             </label>
                             <label class="pp-onboarding-field">
                                 <span>Modelo auxiliar</span>
-                                <input type="text" name="ai_model_light_advanced" value="<?= e((string) ($aiValues['model_light'] ?? 'google/gemini-3.1-flash-lite-preview')) ?>" maxlength="100" placeholder="google/gemini-3.1-flash-lite-preview">
+                                <input type="text" name="ai_model_light_advanced" value="<?= e((string) ($aiValues['model_light'] ?? 'google/gemini-3.1-flash-lite')) ?>" maxlength="100" placeholder="google/gemini-3.1-flash-lite">
                             </label>
                         </div>
                     </details>
@@ -277,18 +278,23 @@ $groups = [
             <?php elseif ($step === 4): ?>
                 <form method="POST" enctype="multipart/form-data" action="<?= e(base_url('admin/onboarding/step/4')) ?>" class="pp-onboarding-form" data-onboarding-form>
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                    <?php if ($document): ?>
+                    <?php if (!empty($documents)): ?>
                         <section class="pp-onboarding-doc-current">
-                            <strong>Documento ya cargado</strong>
-                            <p>Ya tenemos <em><?= e((string) $document['original_filename']) ?></em> (estado: <?= e((string) $document['status']) ?>). Puedes mantenerlo o sustituirlo ahora.</p>
+                            <strong>Documentos ya cargados</strong>
+                            <p>La IA usará estos documentos como contexto cuando genere la web. Puedes mantenerlos y añadir más.</p>
+                            <ul>
+                                <?php foreach (array_slice($documents, 0, 5) as $doc): ?>
+                                    <li><em><?= e((string) $doc['original_filename']) ?></em> · <?= e((string) $doc['status']) ?></li>
+                                <?php endforeach; ?>
+                            </ul>
                         </section>
                     <?php endif; ?>
                     <label class="pp-onboarding-dropzone" data-dropzone>
-                        <input type="file" name="file" accept=".pdf,.docx,.txt">
+                        <input type="file" name="files[]" accept=".pdf,.docx,.txt" multiple>
                         <span></span>
-                        <strong><?= $document ? 'Sustituir documento base' : 'Arrastra un archivo aquí o haz click para elegir' ?></strong>
-                        <small>PDF, DOCX o TXT. Hasta 10 MB.</small>
-                        <p data-file-state><?php if ($document): ?><?= e((string) $document['original_filename']) ?> · <?= e((string) $document['status']) ?><?php endif; ?></p>
+                        <strong><?= !empty($documents) ? 'Añadir más documentos' : 'Arrastra archivos aquí o haz click para elegir' ?></strong>
+                        <small>PDF, DOCX o TXT. Puedes seleccionar varios · 10 MB por archivo.</small>
+                        <p data-file-state><?php if ($document): ?>Último: <?= e((string) $document['original_filename']) ?> · <?= e((string) $document['status']) ?><?php endif; ?></p>
                     </label>
                     <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], 'Saltar este paso') ?>
                 </form>

@@ -275,8 +275,17 @@
         var input = root.querySelector('.pp-onboarding-dropzone input[type="file"]');
         var state = root.querySelector('[data-file-state]');
         if (input && state) input.addEventListener('change', function () {
-            var file = input.files && input.files[0] ? input.files[0] : null;
-            state.textContent = file ? file.name + ' · ' + formatBytes(file.size) : '';
+            var files = Array.prototype.slice.call(input.files || []);
+            if (!files.length) {
+                state.textContent = '';
+                return;
+            }
+            var total = files.reduce(function (sum, file) { return sum + (file.size || 0); }, 0);
+            if (files.length === 1) {
+                state.textContent = files[0].name + ' · ' + formatBytes(files[0].size);
+                return;
+            }
+            state.textContent = files.length + ' documentos seleccionados · ' + formatBytes(total);
         });
 
         var logoInput = root.querySelector('[data-logo-dropzone] input[type="file"]');
