@@ -20,7 +20,7 @@ $providers       = AIProviderTester::PROVIDERS;
 $suggestedModels = AIProviderTester::SUGGESTED_MODELS;
 
 $defaults = [
-    'provider' => Request::post('provider') ?? 'openai',
+    'provider' => Request::post('provider') ?? 'openrouter',
     'model'    => Request::post('model') ?? '',
 ];
 
@@ -155,7 +155,7 @@ ob_start();
 
     <div class="pp-field">
         <label for="api_key">API Key</label>
-        <input type="password" id="api_key" name="api_key" required autocomplete="off" placeholder="sk-... / claude-... / mistral-...">
+        <input type="password" id="api_key" name="api_key" required autocomplete="off" placeholder="sk-or-v1-...">
         <small>
             Se almacenará <strong>encriptada</strong> en la base de datos (AES-256-GCM con la clave única de tu instalación).
             Solo el servidor podrá descifrarla.

@@ -19,6 +19,7 @@ final class AIProviderTester
 {
     /** Lista de proveedores soportados. */
     public const PROVIDERS = [
+        'openrouter' => 'OpenRouter',
         'openai'    => 'OpenAI (GPT)',
         'anthropic' => 'Anthropic (Claude)',
         'mistral'   => 'Mistral AI',
@@ -26,6 +27,13 @@ final class AIProviderTester
 
     /** Modelos sugeridos por proveedor (texto libre, el usuario puede personalizar). */
     public const SUGGESTED_MODELS = [
+        'openrouter' => [
+            'google/gemini-2.5-flash',
+            'openai/gpt-4o-mini',
+            'anthropic/claude-3.5-haiku',
+            'meta-llama/llama-3.3-70b-instruct',
+            'mistralai/mistral-small-24b-instruct-2501:free',
+        ],
         'openai'    => ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o1-mini'],
         'anthropic' => ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
         'mistral'   => ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'],
@@ -44,6 +52,7 @@ final class AIProviderTester
         }
 
         return match ($provider) {
+            'openrouter' => self::testOpenRouter($apiKey, $model),
             'openai'    => self::testOpenAI($apiKey, $model),
             'anthropic' => self::testAnthropic($apiKey, $model),
             'mistral'   => self::testMistral($apiKey, $model),
@@ -57,6 +66,20 @@ final class AIProviderTester
             url: 'https://api.openai.com/v1/models',
             headers: ['Authorization: Bearer ' . $apiKey],
             providerLabel: 'OpenAI',
+            expectedModel: $model,
+        );
+    }
+
+    private static function testOpenRouter(string $apiKey, string $model): array
+    {
+        return self::checkKey(
+            url: 'https://openrouter.ai/api/v1/models',
+            headers: [
+                'Authorization: Bearer ' . $apiKey,
+                'HTTP-Referer: https://promptpress.local',
+                'X-Title: PromptPress',
+            ],
+            providerLabel: 'OpenRouter',
             expectedModel: $model,
         );
     }
