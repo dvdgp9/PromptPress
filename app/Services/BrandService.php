@@ -77,9 +77,20 @@ final class BrandService
     public static function publicHeader(int $siteId): string
     {
         $data = self::data($siteId);
-        [$links, $cta] = self::headerNav($siteId, ChromeService::load($siteId));
+        $config = ChromeService::load($siteId);
+        [$links, $cta] = self::headerNav($siteId, $config);
 
-        return '<header class="pp-site-header">'
+        // CHROME-EDITOR — clases de estilo SOLO cuando difieren del defecto, para
+        // que un sitio sin configurar quede con la clase `pp-site-header` exacta.
+        $layout = (array) ($config['header']['layout'] ?? []);
+        $mods = '';
+        if (($layout['sticky'] ?? true) === false)        $mods .= ' pp-site-header--static';
+        if (!empty($layout['transparent_over_hero']))     $mods .= ' pp-site-header--transparent';
+        $density = (string) ($layout['density'] ?? 'regular');
+        if ($density === 'compact' || $density === 'tall') $mods .= ' pp-site-header--density-' . $density;
+        if ((string) ($layout['logo_position'] ?? 'left') === 'center') $mods .= ' pp-site-header--logo-center';
+
+        return '<header class="pp-site-header' . $mods . '">'
              . '<div class="pp-site-header__inner">'
              . '<a class="pp-site-header__brand" href="' . htmlspecialchars(base_url('/'), ENT_QUOTES, 'UTF-8') . '">'
              . self::brandMark($data)
@@ -280,15 +291,36 @@ final class BrandService
                 . htmlspecialchars($p['title'], ENT_QUOTES, 'UTF-8') . '</a>';
         }
 
-        $cols = '<div class="pp-site-footer__brandcol">'
+        // CHROME-EDITOR — columnas por bloque, en el orden configurado.
+        $brandCol = '<div class="pp-site-footer__brandcol">'
               . '<span class="pp-site-footer__name">' . $name . '</span>'
               . ($tagline !== '' ? '<p class="pp-site-footer__tagline">' . htmlspecialchars($tagline, ENT_QUOTES, 'UTF-8') . '</p>' : '')
               . '</div>';
-        if ($navLinks !== '') {
-            $cols .= '<nav class="pp-site-footer__col" aria-label="Navegación"><span class="pp-site-footer__col-title">Explora</span>' . $navLinks . '</nav>';
+        $navCol = $navLinks !== ''
+            ? '<nav class="pp-site-footer__col" aria-label="Navegación"><span class="pp-site-footer__col-title">Explora</span>' . $navLinks . '</nav>'
+            : '';
+        $legalCol = ($links !== '' || $reopenLink !== '')
+            ? '<nav class="pp-site-footer__col" aria-label="Enlaces legales"><span class="pp-site-footer__col-title">Legal</span>' . $links . $reopenLink . '</nav>'
+            : '';
+
+        $colMap = [
+            'brand'      => $brandCol,
+            'nav'        => $navCol,
+            'legal'      => $legalCol,
+            'contact'    => self::footerContactCol($config),
+            'social'     => self::footerSocialCol($config),
+            'newsletter' => self::footerNewsletterCol($config),
+        ];
+
+        $order = array_values(array_filter((array) ($config['footer']['blocks'] ?? []), 'is_string'));
+        if ($order === []) {
+            $order = ['brand', 'nav', 'legal']; // orden histórico (regresión cero)
         }
-        if ($links !== '' || $reopenLink !== '') {
-            $cols .= '<nav class="pp-site-footer__col" aria-label="Enlaces legales"><span class="pp-site-footer__col-title">Legal</span>' . $links . $reopenLink . '</nav>';
+        $cols = '';
+        foreach ($order as $b) {
+            if (isset($colMap[$b]) && $colMap[$b] !== '') {
+                $cols .= $colMap[$b];
+            }
         }
 
         // CHROME-EDITOR — override del copyright si está configurado.
@@ -297,10 +329,62 @@ final class BrandService
             ? htmlspecialchars($copyOverride, ENT_QUOTES, 'UTF-8')
             : '© ' . $year . ' · ' . $name;
 
-        return '<footer class="pp-site-footer">'
+        // CHROME-EDITOR — fondo del footer (defecto 'dark' => sin modificador).
+        $bg = (string) ($config['footer']['style']['background'] ?? 'dark');
+        $footerClass = 'pp-site-footer'
+            . ($bg === 'light' ? ' pp-site-footer--light' : ($bg === 'brand' ? ' pp-site-footer--brand' : ''));
+
+        return '<footer class="' . $footerClass . '">'
              . '<div class="pp-site-footer__grid">' . $cols . '</div>'
              . '<div class="pp-site-footer__bottom"><span class="pp-site-footer__copy">' . $copy . '</span></div>'
              . '</footer>'
              . $bannerHtml;
+    }
+
+    /** Columna de contacto (dirección/teléfono/email/horario). '' si vacía. */
+    private static function footerContactCol(array $config): string
+    {
+        $c = (array) ($config['footer']['contact'] ?? []);
+        $addr  = trim((string) ($c['address'] ?? ''));
+        $phone = trim((string) ($c['phone'] ?? ''));
+        $email = trim((string) ($c['email'] ?? ''));
+        $hours = trim((string) ($c['hours'] ?? ''));
+        $items = '';
+        if ($addr !== '')  $items .= '<span class="pp-site-footer__contact-item">' . nl2br(htmlspecialchars($addr, ENT_QUOTES, 'UTF-8')) . '</span>';
+        if ($phone !== '') $items .= '<a class="pp-site-footer__link" href="tel:' . htmlspecialchars((string) preg_replace('/[^0-9+]/', '', $phone), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') . '</a>';
+        if ($email !== '') $items .= '<a class="pp-site-footer__link" href="mailto:' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '</a>';
+        if ($hours !== '') $items .= '<span class="pp-site-footer__contact-item">' . htmlspecialchars($hours, ENT_QUOTES, 'UTF-8') . '</span>';
+        if ($items === '') return '';
+        return '<div class="pp-site-footer__col pp-site-footer__contact" aria-label="Contacto"><span class="pp-site-footer__col-title">Contacto</span>' . $items . '</div>';
+    }
+
+    /** Columna de redes sociales. '' si no hay. */
+    private static function footerSocialCol(array $config): string
+    {
+        $links = '';
+        foreach ((array) ($config['footer']['social'] ?? []) as $s) {
+            if (!is_array($s)) continue;
+            $url = trim((string) ($s['url'] ?? ''));
+            $net = trim((string) ($s['network'] ?? ''));
+            if ($url === '' || $net === '') continue;
+            $links .= '<a class="pp-site-footer__link pp-site-footer__social-link" href="' . self::href($url)
+                . '" target="_blank" rel="noopener">' . htmlspecialchars(ucfirst($net), ENT_QUOTES, 'UTF-8') . '</a>';
+        }
+        if ($links === '') return '';
+        return '<div class="pp-site-footer__col pp-site-footer__social" aria-label="Redes sociales"><span class="pp-site-footer__col-title">Síguenos</span>' . $links . '</div>';
+    }
+
+    /** Columna de newsletter (titular + CTA). '' si no está activada. */
+    private static function footerNewsletterCol(array $config): string
+    {
+        $n = (array) ($config['footer']['newsletter'] ?? []);
+        if (empty($n['enabled'])) return '';
+        $heading = trim((string) ($n['heading'] ?? '')) ?: 'Suscríbete a nuestra newsletter';
+        $url = trim((string) ($n['form_ref'] ?? '')) !== '' ? self::href((string) $n['form_ref']) : self::href('/contacto');
+        return '<div class="pp-site-footer__col pp-site-footer__newsletter" aria-label="Newsletter">'
+             . '<span class="pp-site-footer__col-title">Newsletter</span>'
+             . '<p class="pp-site-footer__newsletter-text">' . htmlspecialchars($heading, ENT_QUOTES, 'UTF-8') . '</p>'
+             . '<a class="pp-btn pp-btn--primary pp-btn--sm pp-site-footer__newsletter-cta" href="' . $url . '">Suscribirme</a>'
+             . '</div>';
     }
 }

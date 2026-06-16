@@ -1753,6 +1753,40 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 
 /* Generic */
 .pp-generic h2{font-size:clamp(1.5rem, 2.5vw, 2rem)}
+
+/* CHROME-EDITOR — variantes editables de header y footer */
+.pp-site-header--static{position:relative;top:auto}
+.pp-site-header--transparent{position:absolute;left:0;right:0;background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+.pp-site-header--transparent .pp-site-header__link{color:var(--pp-text)}
+.pp-site-header--density-compact .pp-site-header__inner{padding:8px 24px;min-height:0}
+.pp-site-header--density-compact{min-height:52px}
+.pp-site-header--density-tall .pp-site-header__inner{padding:22px 24px}
+.pp-site-header--density-tall{min-height:88px}
+.pp-site-header--logo-center .pp-site-header__inner{position:relative}
+.pp-site-header--logo-center .pp-site-header__brand{position:absolute;left:50%;transform:translateX(-50%)}
+.pp-site-header--logo-center .pp-site-header__nav{margin-left:0;margin-right:auto}
+@media (max-width:720px){.pp-site-header--logo-center .pp-site-header__brand{position:static;transform:none}}
+/* Desplegables del menú */
+.pp-site-header__dropdown{position:relative;display:inline-flex;align-items:center}
+.pp-site-header__dropdown-toggle{cursor:pointer}
+.pp-site-header__dropdown-toggle::after{content:"";display:inline-block;width:.42em;height:.42em;margin-left:.4em;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-1px)}
+.pp-site-header__dropdown-menu{position:absolute;top:100%;left:0;min-width:200px;display:flex;flex-direction:column;gap:2px;padding:10px;background:var(--pp-bg);border:var(--pp-divider);border-radius:var(--pp-radius-md);box-shadow:var(--pp-shadow-lg);opacity:0;visibility:hidden;transform:translateY(6px);transition:opacity .16s ease,transform .16s ease,visibility .16s;z-index:40}
+.pp-site-header__dropdown:hover .pp-site-header__dropdown-menu,.pp-site-header__dropdown:focus-within .pp-site-header__dropdown-menu{opacity:1;visibility:visible;transform:translateY(0)}
+@media (max-width:720px){.pp-site-header__dropdown,.pp-site-header__dropdown-menu{position:static;opacity:1;visibility:visible;transform:none;box-shadow:none;border:0;padding:0;background:transparent}.pp-site-header__dropdown{flex-direction:column;align-items:stretch}}
+/* Footer: fondos alternativos */
+.pp-site-footer--light{background:var(--pp-surface);color:var(--pp-text-muted)}
+.pp-site-footer--light .pp-site-footer__name,.pp-site-footer--light .pp-site-footer__col-title{color:var(--pp-text)}
+.pp-site-footer--light .pp-site-footer__link{color:var(--pp-text-muted)}
+.pp-site-footer--light .pp-site-footer__link:hover{color:var(--pp-text)}
+.pp-site-footer--light .pp-site-footer__bottom{border-top:1px solid color-mix(in srgb,var(--pp-text) 12%,transparent)}
+.pp-site-footer--brand{background:var(--pp-primary);color:color-mix(in srgb,var(--pp-on-primary) 82%,transparent)}
+.pp-site-footer--brand .pp-site-footer__name,.pp-site-footer--brand .pp-site-footer__col-title,.pp-site-footer--brand .pp-site-footer__link:hover{color:var(--pp-on-primary)}
+.pp-site-footer--brand .pp-site-footer__link{color:color-mix(in srgb,var(--pp-on-primary) 82%,transparent)}
+.pp-site-footer--brand .pp-site-footer__bottom{border-top:1px solid color-mix(in srgb,var(--pp-on-primary) 22%,transparent)}
+/* Footer: columnas nuevas (contacto, redes, newsletter) */
+.pp-site-footer__contact-item{display:block;line-height:1.6}
+.pp-site-footer__newsletter-text{margin:0 0 4px;line-height:1.5}
+.pp-site-footer__newsletter-cta{align-self:flex-start;margin-top:6px}
 CSS;
     }
 }
