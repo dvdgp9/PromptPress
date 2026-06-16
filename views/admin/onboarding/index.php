@@ -20,7 +20,7 @@
 
 $stepMeta = [
     1 => ['eyebrow' => 'Paso 1 de 5 · Conoce tu negocio', 'title' => 'Cuéntale a la IA quién eres', 'subtitle' => 'Esta información se usa cada vez que la IA escriba algo: páginas, secciones, SEO. Cuanto más concreto, mejor.', 'action' => 'Siguiente'],
-    2 => ['eyebrow' => 'Paso 2 de 5 · Identidad visual', 'title' => 'Cómo se ve tu marca', 'subtitle' => 'Nombre, logo y una base visual sencilla para que las primeras páginas no nazcan genéricas.', 'action' => 'Siguiente'],
+    2 => ['eyebrow' => 'Paso 2 de 5 · Marca y referencias', 'title' => 'Dale dirección visual a la IA', 'subtitle' => 'Sube el logo y capturas de webs que te gusten. Canvas usará esas referencias como inspiración de estructura, ritmo y composición.', 'action' => 'Siguiente'],
     3 => ['eyebrow' => 'Paso 3 de 5 · Modelo IA', 'title' => 'Elige el motor que va a crear tu web', 'subtitle' => 'Te proponemos una selección limitada para empezar bien. Después podrás cambiarlo desde Ajustes · IA.', 'action' => 'Siguiente'],
     4 => ['eyebrow' => 'Paso 4 de 5 · Documentos base · opcional', 'title' => '¿Tienes documentos que te describan?', 'subtitle' => 'Brochures, plan de negocio, catálogo, tarifas o dosieres. La IA los usa como contexto extra para diseñar y escribir con más criterio.', 'action' => 'Continuar'],
     5 => ['eyebrow' => 'Paso 5 de 5 · Web inicial', 'title' => 'Tu web, paso a paso', 'subtitle' => 'Primero elige qué páginas crear. Después verás un preview de tu estilo, hecho a medida desde tus datos.', 'action' => 'Continuar al estilo'],
@@ -154,6 +154,19 @@ $groups = [
                                 <input type="text" name="site_name" value="<?= e((string) ($brandValues['name'] ?? '')) ?>" maxlength="255" data-brand-name>
                                 <small>Lo usaremos en encabezados, SEO y llamadas a la acción.</small>
                             </label>
+                            <label class="pp-onboarding-reference-field pp-onboarding-reference-field--hero" data-reference-dropzone>
+                                <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
+                                <span aria-hidden="true"></span>
+                                <strong>Inspiración visual para Canvas</strong>
+                                <small>Sube capturas de webs que te gusten. La IA tomará como referencia su estructura, ritmo y composición, siempre adaptadas a tu marca.</small>
+                                <em data-reference-state>
+                                    <?php if (($referenceValues['count'] ?? 0) > 0): ?>
+                                        <?= (int) $referenceValues['count'] ?> referencia<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?> guardada<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?>. Puedes sustituirlas.
+                                    <?php else: ?>
+                                        PNG, JPG o WebP. Hasta 4 imágenes · 8 MB cada una.
+                                    <?php endif; ?>
+                                </em>
+                            </label>
                             <label class="pp-onboarding-logo-field" data-logo-dropzone>
                                 <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg">
                                 <span>
@@ -166,19 +179,6 @@ $groups = [
                                 <strong>Logo opcional</strong>
                                 <small>PNG, JPG, WEBP o SVG. Hasta 2 MB.</small>
                                 <em data-logo-state><?= !empty($brandValues['logo_path']) ? 'Logo actual cargado. Puedes sustituirlo.' : 'No hay logo subido todavía.' ?></em>
-                            </label>
-                            <label class="pp-onboarding-reference-field" data-reference-dropzone>
-                                <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
-                                <span aria-hidden="true"></span>
-                                <strong>Referencias visuales opcionales</strong>
-                                <small>Sube capturas de webs que te gusten. La IA usará su estructura y ritmo, vestidos con tu marca.</small>
-                                <em data-reference-state>
-                                    <?php if (($referenceValues['count'] ?? 0) > 0): ?>
-                                        <?= (int) $referenceValues['count'] ?> referencia<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?> guardada<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?>. Puedes sustituirlas.
-                                    <?php else: ?>
-                                        PNG, JPG o WebP. Hasta 4 imágenes · 8 MB cada una.
-                                    <?php endif; ?>
-                                </em>
                             </label>
                             <?= design_swatches('primary_color', 'Color principal', (string) $designValues['primary_color'], $swatches) ?>
                             <div class="pp-onboarding-field pp-onboarding-palette-field" data-palette-field>
