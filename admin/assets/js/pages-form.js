@@ -206,6 +206,23 @@
         var pageType = document.getElementById('page_type');
         if (!button || !status || !goal || !audience || !details || !pageType) return;
 
+        // Selector de modelo (opcional): muestra el campo libre al elegir "Otro".
+        var modelChoice = document.getElementById('ai_model_choice');
+        var modelCustom = document.getElementById('ai_model_custom');
+        if (modelChoice && modelCustom) {
+            modelChoice.addEventListener('change', function () {
+                var isCustom = modelChoice.value === '__custom__';
+                modelCustom.hidden = !isCustom;
+                if (isCustom) modelCustom.focus();
+            });
+        }
+        function resolveChosenModel() {
+            if (!modelChoice) return '';
+            if (modelChoice.value === '') return '';                 // principal (por defecto)
+            if (modelChoice.value === '__custom__') return modelCustom ? modelCustom.value.trim() : '';
+            return modelChoice.value;                                 // auxiliar u otro listado
+        }
+
         var baseUrl = (form.dataset.baseUrl || '').replace(/\/$/, '');
         var csrf = form.dataset.csrf || (form.querySelector('input[name="_csrf"]') || {}).value || '';
 
@@ -235,6 +252,7 @@
             params.set('ai_page_goal', pageGoal);
             params.set('ai_target_audience', audience.value.trim());
             params.set('ai_extra_context', details.value.trim());
+            params.set('ai_model', resolveChosenModel());
 
             fetchWithTimeout(baseUrl + '/admin/pages/ai-create', {
                 method: 'POST',

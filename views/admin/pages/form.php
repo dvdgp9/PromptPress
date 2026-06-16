@@ -112,6 +112,24 @@ window.PP_PAGES = <?= json_encode(
             </div>
         </div>
 
+        <?php
+            $aiMain  = trim((string) ($aiMeta['model'] ?? ''));
+            $aiLight = trim((string) ($aiMeta['model_light'] ?? ''));
+        ?>
+        <div class="pp-form-group">
+            <label for="ai_model_choice">Modelo de IA para esta página</label>
+            <select id="ai_model_choice" name="ai_model_choice">
+                <option value="" selected>Principal<?= $aiMain !== '' ? ' · ' . e($aiMain) : '' ?> (recomendado)</option>
+                <?php if ($aiLight !== '' && $aiLight !== $aiMain): ?>
+                    <option value="<?= e($aiLight) ?>">Auxiliar · <?= e($aiLight) ?> (más rápido)</option>
+                <?php endif; ?>
+                <option value="__custom__">Otro modelo (escribir ID)…</option>
+            </select>
+            <input type="text" id="ai_model_custom" name="ai_model_custom" hidden
+                   placeholder="Ej: anthropic/claude-3.5-sonnet" maxlength="100" autocomplete="off">
+            <small>Por defecto se usa el modelo principal. Puedes elegir el auxiliar u otro ID compatible solo para esta generación.</small>
+        </div>
+
         <div class="pp-ai-page-builder__status" id="pp-ai-create-page-status" hidden></div>
     </div>
     <?php endif; ?>

@@ -446,6 +446,9 @@ class PageController
         $brief = self::decodePostedBrief((string) Request::post('ai_brief_json', ''));
         $parentId = (int) Request::post('parent_id', 0);
         $architectureContext = trim((string) Request::post('architecture_context', ''));
+        // Modelo elegido por el usuario para ESTA generación (vacío = principal
+        // por defecto). Aplica a todas las llamadas IA de la creación.
+        $chosenModel = trim((string) Request::post('ai_model', ''));
 
         if ($brief !== []) {
             $title = trim((string) ($brief['title'] ?? $title));
@@ -470,6 +473,13 @@ class PageController
         }
         if ($parentId > 0 && !self::pageBelongsToSite($parentId, $siteId)) {
             Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
+        }
+
+        // Modelo elegido por el usuario: override para TODAS las llamadas IA de
+        // esta creación (canvas o clásico). Vacío = modelo principal por defecto.
+        // El override es estático por petición; PHP lo descarta al terminar.
+        if ($chosenModel !== '') {
+            AIProviderFactory::setModelOverride($chosenModel);
         }
 
         // PANEL-CANVAS — Las páginas de marketing se generan con el MISMO motor
@@ -1850,6 +1860,7 @@ class PageController
             'pagesForLinks' => $pagesForLinks,
             'csrf'         => CSRF::token(),
             'compliance'   => $compliance,
+            'aiMeta'       => AIProviderFactory::currentMeta(Auth::siteId() ?? 0),
             // F21.T21.1 — metadatos de entrada solo cuando aplica.
             'isArticle'    => $isArticle,
             'postMeta'     => ($isArticle && $pageId > 0)

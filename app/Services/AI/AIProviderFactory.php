@@ -25,6 +25,27 @@ final class AIProviderFactory
     ];
 
     /**
+     * Override de modelo a nivel de petición. Si está definido, todas las
+     * llamadas IA del request usan ESTE modelo (cualquier tier), en vez del
+     * principal/auxiliar configurado. Lo activa el flujo que deja al usuario
+     * elegir el modelo (p. ej. crear página). Siempre limpiar al terminar.
+     */
+    private static ?string $modelOverride = null;
+
+    /** Fija (o limpia con '' / null) el modelo para todas las llamadas del request. */
+    public static function setModelOverride(?string $model): void
+    {
+        $m = $model !== null ? trim($model) : '';
+        self::$modelOverride = ($m !== '' && mb_strlen($m) <= 100) ? $m : null;
+    }
+
+    /** Quita el override de modelo. Llamar en un finally tras la generación. */
+    public static function clearModelOverride(): void
+    {
+        self::$modelOverride = null;
+    }
+
+    /**
      * Instancia un provider según su nombre.
      *
      * @throws AIException si el nombre no es válido.
@@ -73,6 +94,11 @@ final class AIProviderFactory
         $encKey     = (string) ($map['ai_api_key']['setting_value']     ?? '');
 
         $model = ($tier === Actions::TIER_LIGHT && $modelLight !== '') ? $modelLight : $modelMain;
+
+        // Override elegido por el usuario para esta petición (cualquier tier).
+        if (self::$modelOverride !== null) {
+            $model = self::$modelOverride;
+        }
 
         if ($provider === '' || $model === '' || $encKey === '') {
             return null;
