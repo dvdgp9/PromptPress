@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $model    = trim((string) $defaults['model']);
     $modelLight = trim((string) $defaults['model_light']);
     $apiKey   = (string) (Request::post('api_key') ?? '');
+    $unsplashKey = trim((string) (Request::post('unsplash_key') ?? ''));
 
     if (empty($errors)) {
         if (!array_key_exists($provider, $providers)) {
@@ -91,6 +92,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
+            // Banco de imágenes (Unsplash) — opcional. Se guarda en
+            // config/image_bank.php (gitignored, fuera de config.php). Si la
+            // clave no valida o no se puede escribir, avisamos pero NO
+            // bloqueamos: el sitio puede configurarla/funcionar sin imágenes.
+            if ($unsplashKey !== '') {
+                $check = \App\Services\ImageBankService::validateKey($unsplashKey);
+                if (InstallerApp::writeImageBankFile($unsplashKey)) {
+                    if (!$check['ok']) {
+                        $warning = trim($warning . ' No hemos podido verificar la clave de Unsplash ('
+                            . ($check['error'] ?? 'motivo desconocido')
+                            . '). La hemos guardado igualmente; si no aparecen imágenes, revísala.');
+                    }
+                } else {
+                    $warning = trim($warning . ' No se pudo escribir config/image_bank.php (¿permisos de la carpeta config?). '
+                        . 'Las imágenes de Unsplash quedarán desactivadas hasta crear ese archivo a mano.');
+                }
+            }
+
             // Marcar la instalación como completa: crear flag .installed
             $flagOk = @file_put_contents(PP_INSTALLED_FLAG, "Installed at " . date('c') . "\n", LOCK_EX);
             if ($flagOk === false) {
@@ -115,10 +134,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $csrfToken = CSRF::token();
 ob_start();
 ?>
-<h1 class="pp-step-title">Conexión con tu proveedor de IA</h1>
+<h1 class="pp-step-title">Conexión con la IA y las imágenes</h1>
 <p class="pp-step-intro">
-    PromptPress utiliza una API de IA para generar contenido editorial. Configura tu proveedor y verificaremos
-    que la API key funciona antes de continuar.
+    PromptPress usa una API de IA para generar el contenido y, opcionalmente, Unsplash para las fotos.
+    Configura tu proveedor de IA (verificaremos la API key) y, si quieres, añade tu clave de Unsplash.
 </p>
 
 <?php if (!empty($errors)): ?>
@@ -171,6 +190,20 @@ ob_start();
         <small>
             Se almacenará <strong>encriptada</strong> en la base de datos (AES-256-GCM con la clave única de tu instalación).
             Solo el servidor podrá descifrarla.
+        </small>
+    </div>
+
+    <hr class="pp-sep">
+
+    <div class="pp-field">
+        <label for="unsplash_key">Unsplash Access Key <span style="font-weight:normal;opacity:.7;">(opcional)</span></label>
+        <input type="password" id="unsplash_key" name="unsplash_key" autocomplete="off"
+               value="<?= e((string) (Request::post('unsplash_key') ?? '')) ?>" placeholder="Tu Access Key de Unsplash">
+        <small>
+            Permite que las páginas se generen con fotos reales. Consigue una gratis en
+            <a href="https://unsplash.com/developers" target="_blank" rel="noopener">unsplash.com/developers</a>
+            (crea una app → copia la <em>Access Key</em>; 50 imágenes/hora en modo demo).
+            Si la dejas vacía, podrás añadirla más tarde y, mientras, las páginas se generarán sin imágenes.
         </small>
     </div>
 

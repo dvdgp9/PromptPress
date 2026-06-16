@@ -37,6 +37,20 @@ final class App
             self::$config = [];
         }
 
+        // 3b. Defaults locales fuera de control de versiones. El instalador
+        // regenera `config.php` con solo db/app_key/env, así que valores
+        // compartidos por toda la instalación (p. ej. la Access Key universal
+        // de Unsplash) viven aquí: el instalador NUNCA toca este archivo, por
+        // lo que sobreviven a reinstalaciones, y al estar gitignored no llegan
+        // al repo. `config.php` tiene prioridad si define las mismas claves.
+        $localDefaults = PP_CONFIG . '/image_bank.php';
+        if (is_file($localDefaults)) {
+            $extra = require $localDefaults;
+            if (is_array($extra)) {
+                self::$config = array_replace_recursive($extra, self::$config);
+            }
+        }
+
         // 4. Sesión segura
         Session::start();
 

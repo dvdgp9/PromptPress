@@ -182,6 +182,49 @@ PHP;
         return $content;
     }
 
+    /**
+     * Escribe config/image_bank.php con la Access Key de Unsplash del cliente.
+     *
+     * Archivo aparte (no config.php) porque: (a) `config.php` lo regenera el
+     * instalador y perdería la clave en reinstalaciones; (b) está gitignored,
+     * así la clave nunca llega al repo; (c) `core/App::boot()` lo fusiona bajo
+     * config.php automáticamente. Devuelve false si no se pudo escribir.
+     */
+    public static function writeImageBankFile(string $accessKey): bool
+    {
+        $content = self::buildImageBankContent($accessKey);
+        $path = PP_CONFIG . '/image_bank.php';
+        $bytes = @file_put_contents($path, $content, LOCK_EX);
+        if ($bytes === false) {
+            return false;
+        }
+        @chmod($path, 0640);
+        return true;
+    }
+
+    /** Genera el contenido de config/image_bank.php con la key dada. */
+    public static function buildImageBankContent(string $accessKey): string
+    {
+        $template = <<<'PHP'
+<?php
+/**
+ * PromptPress — Banco de imágenes (Unsplash). Generado por el instalador.
+ * Archivo GITIGNORED: no se sube al repo y el instalador no lo pisa salvo que
+ * vuelvas a introducir una clave. `core/App::boot()` lo fusiona bajo config.php.
+ */
+
+return [
+    'image_bank' => [
+        'provider'   => 'unsplash',
+        'access_key' => %s,
+        'app_name'   => 'promptpress',
+        'cache_ttl'  => 86400,
+    ],
+];
+PHP;
+        return sprintf($template, var_export($accessKey, true));
+    }
+
     private static function isStepAllowed(string $requested, string $maxAllowed): bool
     {
         return self::currentStepIndex($requested) <= self::currentStepIndex($maxAllowed);

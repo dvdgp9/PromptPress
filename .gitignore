@@ -9,6 +9,10 @@
 # Configuración generada por instalador
 /config/config.php
 
+# Secretos locales fuera del repo (p. ej. Access Key universal de Unsplash).
+# La plantilla versionada es config/image_bank.example.php.
+/config/image_bank.php
+
 # Storage runtime
 /storage/uploads/*
 !/storage/uploads/.htaccess

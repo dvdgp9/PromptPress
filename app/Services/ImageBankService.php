@@ -48,6 +48,63 @@ final class ImageBankService
     }
 
     /**
+     * Valida una Access Key arbitraria contra la API de Unsplash (1 petición
+     * ligera). Pensado para el instalador, donde la key aún no está configurada.
+     *
+     * @return array{ok:bool, error:?string}
+     */
+    public static function validateKey(string $key): array
+    {
+        $key = trim($key);
+        if ($key === '') {
+            return ['ok' => false, 'error' => 'La clave está vacía.'];
+        }
+
+        $url = self::SEARCH_ENDPOINT . '?' . http_build_query(['query' => 'office', 'per_page' => 1]);
+        $headers = ['Accept-Version: v1', 'Authorization: Client-ID ' . $key];
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_TIMEOUT        => self::HTTP_TIMEOUT,
+                CURLOPT_FOLLOWLOCATION => false,
+            ]);
+            curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            curl_close($ch);
+            if ($status === 0) {
+                return ['ok' => false, 'error' => 'No se pudo conectar con Unsplash' . ($err !== '' ? ': ' . $err : '.')];
+            }
+        } else {
+            $ctx = stream_context_create(['http' => [
+                'method'        => 'GET',
+                'header'        => implode("\r\n", $headers),
+                'timeout'       => self::HTTP_TIMEOUT,
+                'ignore_errors' => true,
+            ]]);
+            $body = @file_get_contents($url, false, $ctx);
+            if ($body === false) {
+                return ['ok' => false, 'error' => 'No se pudo conectar con Unsplash.'];
+            }
+            $status = 0;
+            foreach (($http_response_header ?? []) as $h) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m)) { $status = (int) $m[1]; }
+            }
+        }
+
+        if ($status === 200) {
+            return ['ok' => true, 'error' => null];
+        }
+        if ($status === 401 || $status === 403) {
+            return ['ok' => false, 'error' => 'Unsplash rechazó la clave (no válida o sin permisos).'];
+        }
+        return ['ok' => false, 'error' => 'Unsplash respondió con un código inesperado (' . $status . ').'];
+    }
+
+    /**
      * Self-healing migration: añade las columnas T18.4 a la tabla `media` si
      * no existen. Idempotente; solo hace trabajo la primera vez. Cacheado por
      * request para no consultar information_schema en cada llamada.
