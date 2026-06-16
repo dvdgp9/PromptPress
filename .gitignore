@@ -1,6 +1,3 @@
-# Dependencias PHP
-/vendor/
-
 # Notas y herramientas locales de desarrollo/agentes
 /cursor/
 /.claude/
