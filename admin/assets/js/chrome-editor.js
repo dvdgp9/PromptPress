@@ -159,14 +159,36 @@
     }
 
     /* ---------- Redes ---------- */
+    var SOCIAL_NETS = [
+        ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['x', 'X'], ['linkedin', 'LinkedIn'],
+        ['youtube', 'YouTube'], ['tiktok', 'TikTok'], ['whatsapp', 'WhatsApp'], ['pinterest', 'Pinterest']
+    ];
     function socialRow(item) {
         item = item || {};
-        var row = el('div', { class: 'pp-chrome-row' });
-        var net = el('input', { type: 'text', class: 'pp-chrome-s-net', placeholder: 'Instagram', maxlength: '40' });
-        net.value = item.network || '';
+        var known = SOCIAL_NETS.some(function (n) { return n[0] === String(item.network || '').toLowerCase(); });
+        var sel = el('select', { class: 'pp-chrome-s-net' });
+        SOCIAL_NETS.forEach(function (n) {
+            var o = el('option', { value: n[0] });
+            o.textContent = n[1];
+            if (n[0] === String(item.network || '').toLowerCase()) o.selected = true;
+            sel.appendChild(o);
+        });
+        var other = el('option', { value: '__other__' });
+        other.textContent = 'Otro…';
+        if (item.network && !known) other.selected = true;
+        sel.appendChild(other);
+
+        var custom = el('input', { type: 'text', class: 'pp-chrome-s-custom', placeholder: 'Nombre de la red', maxlength: '40' });
+        custom.value = (item.network && !known) ? item.network : '';
+        custom.hidden = !(item.network && !known);
+
         var url = el('input', { type: 'text', class: 'pp-chrome-s-url', placeholder: 'https://…', maxlength: '300' });
         url.value = item.url || '';
-        row.appendChild(el('div', { class: 'pp-chrome-row__fields' }, [net, url]));
+
+        sel.addEventListener('change', function () { custom.hidden = sel.value !== '__other__'; if (!custom.hidden) custom.focus(); preview(); });
+
+        var row = el('div', { class: 'pp-chrome-row' });
+        row.appendChild(el('div', { class: 'pp-chrome-row__fields' }, [sel, custom, url]));
         row.appendChild(el('div', { class: 'pp-chrome-row__actions' }, [delBtn(row)]));
         return row;
     }
@@ -198,7 +220,8 @@
         });
         var social = [];
         Array.prototype.forEach.call(socialList.children, function (row) {
-            var net = row.querySelector('.pp-chrome-s-net').value.trim();
+            var sel = row.querySelector('.pp-chrome-s-net');
+            var net = sel.value === '__other__' ? row.querySelector('.pp-chrome-s-custom').value.trim() : sel.value;
             var url = row.querySelector('.pp-chrome-s-url').value.trim();
             if (net && url) social.push({ network: net, url: url });
         });
