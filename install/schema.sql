@@ -391,3 +391,5 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ------------------------------------------------------------
 INSERT INTO migrations (name) VALUES ('0001_initial_schema')
     ON DUPLICATE KEY UPDATE applied_at = applied_at;
+INSERT INTO migrations (name) VALUES ('0002_page_hierarchy')
+    ON DUPLICATE KEY UPDATE applied_at = applied_at;
