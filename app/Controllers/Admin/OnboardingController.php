@@ -180,10 +180,7 @@ final class OnboardingController
                 'company_name' => $profile['company_name'],
                 'confidence' => $profile['confidence'],
                 'notes' => $profile['notes'],
-                'documents' => array_map(static fn(array $doc): array => [
-                    'id' => $doc['id'],
-                    'title' => $doc['title'],
-                ], $docs),
+                'documents' => self::documentResponseList($docs),
                 'model' => $result['model'] ?? '',
                 'tokens_in' => $result['tokens_in'] ?? 0,
                 'tokens_out' => $result['tokens_out'] ?? 0,
@@ -192,7 +189,11 @@ final class OnboardingController
         } catch (AIException $e) {
             Response::json(['ok' => false, 'error' => 'No hemos podido interpretar los documentos con IA: ' . $e->getMessage()], 502);
         } catch (\Throwable $e) {
-            Response::json(['ok' => false, 'error' => 'No hemos podido leer los documentos: ' . $e->getMessage()], 422);
+            Response::json([
+                'ok' => false,
+                'error' => 'No hemos podido leer los documentos: ' . $e->getMessage()
+                    . ' @ ' . basename($e->getFile()) . ':' . $e->getLine(),
+            ], 422);
         }
     }
 
@@ -1018,6 +1019,19 @@ final class OnboardingController
             'text' => $text,
             'summary' => $summary,
         ];
+    }
+
+    /** @param array<int,array{id:int,title:string,text:string,summary:string}> $docs */
+    private static function documentResponseList(array $docs): array
+    {
+        $out = [];
+        foreach ($docs as $doc) {
+            $out[] = [
+                'id' => $doc['id'],
+                'title' => $doc['title'],
+            ];
+        }
+        return $out;
     }
 
     /** @param array<int,array{id:int,title:string,text:string,summary:string}> $docs */
