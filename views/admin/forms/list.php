@@ -11,6 +11,7 @@
 
 <?php \Core\View::start('title'); ?>Formularios<?php \Core\View::end(); ?>
 
+<div class="pp-forms-wrap">
 <div class="pp-page-header">
     <div>
         <h2>Formularios</h2>
@@ -65,3 +66,4 @@
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+</div>

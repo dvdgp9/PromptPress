@@ -198,6 +198,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
 </script>
 <?php \Core\View::end(); ?>
 
+<div class="pp-forms-wrap pp-forms-wrap--editor">
 <div class="pp-page-header">
     <div>
         <a class="pp-back-link" href="<?= e(base_url('admin/formularios')) ?>">← Formularios</a>
@@ -321,6 +322,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
         <a href="<?= e(base_url('admin/formularios')) ?>" class="pp-btn pp-btn--ghost">Cancelar</a>
     </div>
 </form>
+</div>
 
 <template id="pp-fb-template">
     <?= $renderFieldRow(9999, ['label' => '', 'field_type' => 'text', 'required' => '0']) ?>
