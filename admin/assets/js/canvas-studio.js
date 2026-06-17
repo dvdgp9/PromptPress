@@ -617,9 +617,31 @@
   // ----------------------------------------------------------------
   var publishBtn = document.getElementById('studio-publish-btn');
   var statusEl = document.getElementById('studio-status');
-  publishBtn.addEventListener('click', function () {
-    var publishing = body.dataset.published !== '1';
-    publishBtn.disabled = true;
+  var moreWrap = document.getElementById('studio-more');
+  var moreBtn = document.getElementById('studio-more-btn');
+  var moreMenu = document.getElementById('studio-more-menu');
+  var unpublishBtn = document.getElementById('studio-unpublish-btn');
+
+  // Refleja el estado publicado/borrador en toda la barra (sin recargar).
+  function reflectPublished(publishing) {
+    body.dataset.published = publishing ? '1' : '0';
+    // Borrador → botón primario "Publicar"; Publicada → menú discreto "⋯".
+    publishBtn.hidden = publishing;
+    moreWrap.hidden = !publishing;
+    if (!publishing) closeMoreMenu();
+    statusEl.textContent = publishing ? 'Publicada' : 'Borrador';
+    statusEl.classList.toggle('is-live', publishing);
+    // "Ver página": URL pública si está publicada; preview limpio si es borrador.
+    var vlink = document.getElementById('studio-view-link');
+    if (vlink) {
+      vlink.href = publishing ? body.dataset.publicUrl : body.dataset.cleanPreviewUrl;
+      var vt = publishing ? 'Ver página en el sitio' : 'Previsualizar borrador';
+      vlink.title = vt; vlink.setAttribute('aria-label', vt);
+    }
+  }
+
+  function setPublished(publishing, triggerBtn) {
+    if (triggerBtn) triggerBtn.disabled = true;
     var fd = new FormData();
     fd.append('_csrf', csrf);
     fd.append('publish', publishing ? '1' : '0');
@@ -627,28 +649,33 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.ok) return;
-        body.dataset.published = publishing ? '1' : '0';
-        publishBtn.textContent = publishing ? 'Despublicar' : 'Publicar';
-        // Publicada: el botón pasa a acción discreta (ghost); borrador: botón primario llamativo.
-        publishBtn.className = publishing ? 'cvstudio-ghost-btn' : 'cvstudio-primary-btn';
-        publishBtn.title = publishing
-          ? 'Quitar la página del sitio (los cambios se guardan solos)'
-          : 'Publicar la página en el sitio';
-        statusEl.textContent = publishing ? 'Publicada' : 'Borrador';
-        statusEl.classList.toggle('is-live', publishing);
-        // "Ver página": URL pública si está publicada; preview limpio si es borrador.
-        var vlink = document.getElementById('studio-view-link');
-        if (vlink) {
-          vlink.href = publishing ? body.dataset.publicUrl : body.dataset.cleanPreviewUrl;
-          var vt = publishing ? 'Ver página en el sitio' : 'Previsualizar borrador';
-          vlink.title = vt; vlink.setAttribute('aria-label', vt);
-        }
+        reflectPublished(publishing);
         addMsg('assistant', publishing
           ? 'Tu página ya está publicada. <a href="' + body.dataset.publicUrl + '" target="_blank" rel="noopener">Verla en el sitio</a>.'
           : 'La página vuelve a ser un borrador (ya no es visible para tus visitantes).');
       })
-      .finally(function () { publishBtn.disabled = false; });
+      .finally(function () { if (triggerBtn) triggerBtn.disabled = false; });
+  }
+
+  function closeMoreMenu() {
+    moreMenu.hidden = true;
+    moreBtn.setAttribute('aria-expanded', 'false');
+  }
+  moreBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = moreMenu.hidden;
+    moreMenu.hidden = !open;
+    moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
+  document.addEventListener('click', function (e) {
+    if (!moreMenu.hidden && !moreWrap.contains(e.target)) closeMoreMenu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !moreMenu.hidden) closeMoreMenu();
+  });
+
+  publishBtn.addEventListener('click', function () { setPublished(true, publishBtn); });
+  unpublishBtn.addEventListener('click', function () { closeMoreMenu(); setPublished(false, unpublishBtn); });
 
   // ----------------------------------------------------------------
   // FH8 — Ajustes de la página (SEO): meta título, descripción, slug

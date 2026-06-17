@@ -8840,6 +8840,14 @@ body.pp-login-page {
 .cvstudio-primary-btn:hover{filter:brightness(1.08)}
 .cvstudio-primary-btn:active{transform:translateY(1px)}
 .cvstudio-primary-btn:disabled{opacity:.55;cursor:default}
+/* Publicar: menú "⋯" discreto cuando la página ya está publicada */
+.cvstudio-publish{display:inline-flex;align-items:center}
+.cvstudio-menu{position:relative}
+.cvstudio-menu__pop{position:absolute;top:calc(100% + 6px);right:0;min-width:170px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.14);padding:6px;z-index:50}
+.cvstudio-menu__item{display:flex;width:100%;align-items:center;gap:8px;border:0;background:none;border-radius:7px;padding:8px 10px;font-size:.82rem;font-weight:600;color:#374151;cursor:pointer;text-align:left}
+.cvstudio-menu__item:hover{background:#f3f4f6}
+.cvstudio-menu__item.is-danger{color:#b91c1c}
+.cvstudio-menu__item.is-danger:hover{background:#fef2f2}
 
 .cvstudio-main{flex:1;display:flex;min-height:0}
 .cvstudio-stage{flex:1;display:flex;align-items:stretch;justify-content:center;padding:16px;min-width:0}

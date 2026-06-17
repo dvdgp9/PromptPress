@@ -33,6 +33,7 @@ $icon = static function (string $name): string {
         'history'  => '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 2"/>',
         'settings' => '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
         'external' => '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/>',
+        'more'     => '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
         'desktop'  => '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
         'mobile'   => '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
     ];
@@ -100,10 +101,23 @@ $icon = static function (string $name): string {
        title="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"
        aria-label="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"><?= $icon('external') ?></a>
     <span class="cvstudio-divider" aria-hidden="true"></span>
-    <button type="button" class="<?= $isPublished ? 'cvstudio-ghost-btn' : 'cvstudio-primary-btn' ?>" id="studio-publish-btn"
-            title="<?= $isPublished ? 'Quitar la página del sitio (los cambios se guardan solos)' : 'Publicar la página en el sitio' ?>">
-      <?= $isPublished ? 'Despublicar' : 'Publicar' ?>
-    </button>
+    <!-- Publicar: en borrador, acción primaria llamativa. Publicada: menú discreto "⋯". -->
+    <div class="cvstudio-publish" id="studio-publish" data-published="<?= $isPublished ? '1' : '0' ?>">
+      <button type="button" class="cvstudio-primary-btn" id="studio-publish-btn"
+              title="Publicar la página en el sitio"<?= $isPublished ? ' hidden' : '' ?>>
+        Publicar
+      </button>
+      <div class="cvstudio-menu" id="studio-more"<?= $isPublished ? '' : ' hidden' ?>>
+        <button type="button" class="cvstudio-iconbtn" id="studio-more-btn"
+                aria-haspopup="true" aria-expanded="false"
+                title="Más acciones" aria-label="Más acciones"><?= $icon('more') ?></button>
+        <div class="cvstudio-menu__pop" id="studio-more-menu" hidden role="menu">
+          <button type="button" class="cvstudio-menu__item is-danger" id="studio-unpublish-btn" role="menuitem">
+            Despublicar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
