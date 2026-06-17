@@ -172,6 +172,65 @@
   }
 
   // ------------------------------------------------------------------
+  // form files — nombre visible + validación ligera antes de enviar
+  // ------------------------------------------------------------------
+  function formatBytes(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(bytes % 1048576 ? 1 : 0).replace('.', ',') + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(bytes % 1024 ? 1 : 0).replace('.', ',') + ' KB';
+    return bytes + ' B';
+  }
+
+  function initFormFile(field) {
+    if (field.dataset.ppFileReady) return;
+    field.dataset.ppFileReady = '1';
+    var input = field.querySelector('input[type="file"]');
+    var name = field.querySelector('[data-pp-file-name]');
+    var help = field.parentNode ? field.parentNode.querySelector('[data-pp-file-help]') : null;
+    if (!input || !name) return;
+
+    var defaultName = name.textContent || 'Ningún archivo seleccionado';
+    var defaultHelp = help ? (help.getAttribute('data-pp-file-help') || help.textContent || '') : '';
+    function sync() {
+      field.classList.remove('is-invalid');
+      if (help) help.textContent = defaultHelp;
+      var file = input.files && input.files[0] ? input.files[0] : null;
+      if (!file) {
+        name.textContent = defaultName;
+        return true;
+      }
+      name.textContent = file.name + ' · ' + formatBytes(file.size);
+      var max = parseInt(field.getAttribute('data-max-bytes') || '0', 10);
+      if (max > 0 && file.size > max) {
+        field.classList.add('is-invalid');
+        if (help) help.textContent = 'El archivo supera el máximo permitido de ' + formatBytes(max) + '.';
+        return false;
+      }
+      return true;
+    }
+    input.addEventListener('change', sync);
+    var form = input.form;
+    if (form && !form.dataset.ppFileSubmitReady) {
+      form.dataset.ppFileSubmitReady = '1';
+      form.addEventListener('submit', function (e) {
+        var ok = true;
+        all('[data-pp-file-field]', form).forEach(function (fileField) {
+          var fileInput = fileField.querySelector('input[type="file"]');
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            var max = parseInt(fileField.getAttribute('data-max-bytes') || '0', 10);
+            if (max > 0 && fileInput.files[0].size > max) ok = false;
+          }
+        });
+        if (!ok) {
+          e.preventDefault();
+          var invalid = form.querySelector('[data-pp-file-field].is-invalid');
+          if (invalid) invalid.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
+      });
+    }
+    sync();
+  }
+
+  // ------------------------------------------------------------------
   ready(function () {
     all('[data-pp-behavior]').forEach(function (el) {
       switch (el.getAttribute('data-pp-behavior')) {
@@ -182,5 +241,6 @@
       }
     });
     initSiteNav();
+    all('[data-pp-file-field]').forEach(initFormFile);
   });
 })();

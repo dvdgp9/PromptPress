@@ -2702,7 +2702,7 @@ class PageController
             $label = trim((string) ($field['label'] ?? ''));
             if ($label === '') continue;
             $type = (string) ($field['field_type'] ?? 'text');
-            if (!in_array($type, ['text', 'email', 'tel', 'textarea', 'select', 'checkbox'], true)) {
+            if (!in_array($type, ['text', 'email', 'tel', 'textarea', 'select', 'checkbox', 'number', 'date', 'url', 'file'], true)) {
                 $type = 'text';
             }
             $name = preg_replace('/[^a-z0-9_]+/', '_', strtolower(slugify((string) ($field['name'] ?? $label)))) ?: 'campo';

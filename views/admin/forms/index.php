@@ -9,6 +9,18 @@ $fmtDate = function ($d) {
     $ts = strtotime((string) $d);
     return $ts ? date('d/m/Y H:i', $ts) : '—';
 };
+$formatValue = function (mixed $value): string {
+    if (is_array($value) && ($value['type'] ?? '') === 'file') {
+        return (string) ($value['original_name'] ?? 'Archivo adjunto');
+    }
+    if (is_array($value)) {
+        return (string) json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    return (string) $value;
+};
+$formatBytes = function (int $bytes): string {
+    return \App\Services\FormSubmissionService::formatBytes($bytes);
+};
 ?>
 
 <?php \Core\View::start('title'); ?>Mensajes<?php \Core\View::end(); ?>
@@ -32,7 +44,7 @@ $fmtDate = function ($d) {
         $payload = json_decode((string) ($s['payload'] ?? '{}'), true);
         $payload = is_array($payload) ? $payload : [];
         $sender = (string) ($s['sender_name'] ?: $s['sender_email'] ?: $s['sender_phone'] ?: 'Mensaje sin nombre');
-        $previewParts = array_values(array_filter(array_map('strval', array_slice($payload, 0, 3))));
+        $previewParts = array_values(array_filter(array_map($formatValue, array_slice($payload, 0, 3))));
         $preview = trim(implode(' · ', $previewParts));
         if (mb_strlen($preview) > 140) {
             $preview = mb_substr($preview, 0, 137) . '...';
@@ -64,7 +76,18 @@ $fmtDate = function ($d) {
                     <?php foreach ($payload as $label => $value): ?>
                         <div>
                             <dt><?= e((string) $label) ?></dt>
-                            <dd><?= nl2br(e((string) $value), false) ?></dd>
+                            <?php if (is_array($value) && ($value['type'] ?? '') === 'file'): ?>
+                                <?php $downloadKey = (string) ($value['field_name'] ?? $label); ?>
+                                <?php $downloadUrl = base_url('admin/forms/submissions/' . (int) $s['id'] . '/files/' . rawurlencode($downloadKey)); ?>
+                                <dd>
+                                    <a class="pp-submission-file" href="<?= e($downloadUrl) ?>">
+                                        <strong><?= e((string) ($value['original_name'] ?? 'Archivo adjunto')) ?></strong>
+                                        <span><?= e((string) ($value['extension'] ?? 'archivo')) ?> · <?= e($formatBytes((int) ($value['size'] ?? 0))) ?></span>
+                                    </a>
+                                </dd>
+                            <?php else: ?>
+                                <dd><?= nl2br(e($formatValue($value)), false) ?></dd>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
                 </dl>

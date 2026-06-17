@@ -335,7 +335,7 @@ final class SectionSchemas
                         'fields' => [
                             ['key' => 'label',       'label' => 'Etiqueta',    'type' => 'text'],
                             ['key' => 'name',        'label' => 'Nombre (id)', 'type' => 'text', 'help' => 'Solo letras, números, guión bajo. Ej: email, nombre'],
-                            ['key' => 'field_type',  'label' => 'Tipo',        'type' => 'select', 'options' => ['text' => 'Texto', 'email' => 'Email', 'tel' => 'Teléfono', 'textarea' => 'Área de texto', 'select' => 'Selector', 'checkbox' => 'Casilla'], 'default' => 'text'],
+                            ['key' => 'field_type',  'label' => 'Tipo',        'type' => 'select', 'options' => ['text' => 'Texto', 'email' => 'Email', 'tel' => 'Teléfono', 'textarea' => 'Área de texto', 'select' => 'Selector', 'checkbox' => 'Casilla', 'number' => 'Número', 'date' => 'Fecha', 'url' => 'URL', 'file' => 'Archivo'], 'default' => 'text'],
                             ['key' => 'required',    'label' => 'Obligatorio', 'type' => 'select', 'options' => ['0' => 'No', '1' => 'Sí'], 'default' => '0'],
                             ['key' => 'placeholder', 'label' => 'Placeholder', 'type' => 'text'],
                         ],

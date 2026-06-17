@@ -1098,6 +1098,13 @@ span[data-ppb-icon] .pp-icon{display:block}
 .pp-form__control{width:100%;padding:12px 14px;border:1px solid color-mix(in srgb, var(--pp-text) 14%, transparent);border-radius:var(--pp-radius-sm);font:inherit;background:var(--pp-bg);color:var(--pp-text);transition:border-color 150ms ease,box-shadow 150ms ease}
 .pp-form__control:focus{outline:none;border-color:var(--pp-primary);box-shadow:0 0 0 3px color-mix(in srgb, var(--pp-primary) 18%, transparent)}
 .pp-form__check{display:flex;gap:8px;align-items:center}
+.pp-form__file{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:10px;border:1px dashed color-mix(in srgb, var(--pp-text) 22%, transparent);border-radius:var(--pp-radius-sm);background:color-mix(in srgb, var(--pp-bg) 96%, var(--pp-text) 2%);cursor:pointer;transition:border-color 150ms ease,background 150ms ease}
+.pp-form__file:hover,.pp-form__file:focus-within{border-color:var(--pp-primary);background:color-mix(in srgb, var(--pp-primary) 5%, var(--pp-bg))}
+.pp-form__file input[type="file"]{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}
+.pp-form__file-button{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:var(--pp-radius-sm);background:var(--pp-primary);color:var(--pp-on-primary,#fff);font-weight:600;font-size:.9rem;line-height:1.2}
+.pp-form__file-name{min-width:0;color:var(--pp-text-muted);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-form__file.is-invalid{border-color:var(--pp-danger);background:color-mix(in srgb, var(--pp-danger) 8%, var(--pp-bg))}
+.pp-form__help{font-size:.8rem;color:var(--pp-text-muted);line-height:1.45}
 .pp-form__notice{margin:0 0 18px;padding:14px 16px;border-radius:var(--pp-radius-card);font-weight:500}
 .pp-form__notice--success{background:color-mix(in srgb, var(--pp-success) 12%, var(--pp-bg));color:color-mix(in srgb, var(--pp-success) 70%, var(--pp-text));border:1px solid color-mix(in srgb, var(--pp-success) 35%, transparent)}
 .pp-form__notice--error{background:color-mix(in srgb, var(--pp-danger) 10%, var(--pp-bg));color:color-mix(in srgb, var(--pp-danger) 70%, var(--pp-text));border:1px solid color-mix(in srgb, var(--pp-danger) 30%, transparent)}

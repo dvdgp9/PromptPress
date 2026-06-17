@@ -222,6 +222,7 @@ $router->group('/admin', function (\Core\Router $r) {
 
     // Mensajes de formularios públicos
     $r->get('/forms',                              [FormSubmissionController::class, 'index']);
+    $r->get('/forms/submissions/{id}/files/{key}', [FormSubmissionController::class, 'downloadFile']);
     $r->post('/forms/submissions/{id}/read',       [FormSubmissionController::class, 'markRead']);
     $r->post('/forms/submissions/{id}/delete',     [FormSubmissionController::class, 'destroy']);
 

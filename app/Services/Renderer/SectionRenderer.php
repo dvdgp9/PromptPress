@@ -6,6 +6,7 @@ use App\Services\SectionSchemas;
 use Core\CSRF;
 use Core\Database;
 use Core\Request;
+use Core\Session;
 
 /**
  * Renderiza una sección tipada (row de `page_sections`) a HTML semántico.
@@ -338,6 +339,13 @@ final class SectionRenderer
         if ($variant === 'with-side-image' && $img === '') $variant = 'default';
 
         $validFields = array_values(array_filter($fields, fn($f) => is_array($f) && self::str($f, 'label') . self::str($f, 'name') . self::str($f, 'placeholder') !== ''));
+        $hasFile = false;
+        foreach ($validFields as $f) {
+            if (is_array($f) && self::str($f, 'field_type', 'text') === 'file') {
+                $hasFile = true;
+                break;
+            }
+        }
 
         $cls = 'pp-form pp-form--v-' . self::cssSafe($variant) . ' container';
         $html = '<div class="' . $cls . '">';
@@ -365,10 +373,16 @@ final class SectionRenderer
             ];
             $kind = $status === 'ok' ? 'success' : 'error';
             $msg = $messages[$status] ?? $messages['error'];
+            if ($status === 'error') {
+                $detail = Session::flash('form_error_' . $sectionId);
+                if (is_string($detail) && trim($detail) !== '') {
+                    $msg = $detail;
+                }
+            }
             $html .= '<div class="pp-form__notice pp-form__notice--' . $kind . '">' . self::e($msg) . '</div>';
         }
 
-        $html .= '<form class="pp-form__form" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '">';
+        $html .= '<form class="pp-form__form" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '"' . ($hasFile ? ' enctype="multipart/form-data"' : '') . '>';
         $html .= '<input type="hidden" name="_csrf" value="' . self::e(CSRF::token()) . '">';
         $html .= '<input type="hidden" name="_return" value="' . self::e(Request::path()) . '">';
         $html .= '<div class="pp-form__hp" aria-hidden="true"><label>Web<input type="text" name="company_url" tabindex="-1" autocomplete="off"></label></div>';
@@ -379,6 +393,7 @@ final class SectionRenderer
             $ftype       = self::str($f, 'field_type', 'text');
             $required    = self::str($f, 'required', '0') === '1';
             $placeholder = self::str($f, 'placeholder');
+            $options     = is_array($f['options'] ?? null) ? array_values(array_filter(array_map('strval', $f['options']))) : [];
 
             $nameSafe = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $name) ?? ('field_' . $idx);
             $id = 'f_' . $sectionId . '_' . $nameSafe;
@@ -392,11 +407,26 @@ final class SectionRenderer
             if ($ftype === 'textarea') {
                 $html .= '<textarea class="pp-form__control" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" rows="5" placeholder="' . self::e($placeholder) . '"' . $req . '></textarea>';
             } elseif ($ftype === 'select') {
-                $html .= '<select class="pp-form__control" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '"' . $req . '><option value="">' . self::e($placeholder) . '</option></select>';
+                $firstOption = $placeholder !== '' ? $placeholder : 'Selecciona una opción';
+                $html .= '<select class="pp-form__control" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '"' . $req . '><option value="">' . self::e($firstOption) . '</option>';
+                foreach ($options as $option) {
+                    $html .= '<option value="' . self::e($option) . '">' . self::e($option) . '</option>';
+                }
+                $html .= '</select>';
             } elseif ($ftype === 'checkbox') {
                 $html .= '<label class="pp-form__check"><input type="checkbox" name="' . self::e($nameSafe) . '" value="1"' . $req . '> ' . self::e($placeholder) . '</label>';
+            } elseif ($ftype === 'file') {
+                $accept = \App\Services\FormSubmissionService::acceptAttributeForField($f);
+                $maxMb = \App\Services\FormSubmissionService::maxMbForField($f);
+                $help = $placeholder !== '' ? $placeholder : \App\Services\FormSubmissionService::fileHelpForField($f);
+                $html .= '<label class="pp-form__file" data-pp-file-field data-max-bytes="' . (int) ($maxMb * 1024 * 1024) . '">'
+                      . '<input id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" type="file" accept="' . self::e($accept) . '"' . $req . '>'
+                      . '<span class="pp-form__file-button">Seleccionar archivo</span>'
+                      . '<span class="pp-form__file-name" data-pp-file-name>Ningún archivo seleccionado</span>'
+                      . '</label>'
+                      . '<small class="pp-form__help" data-pp-file-help="' . self::e(\App\Services\FormSubmissionService::fileHelpForField($f)) . '">' . self::e($help) . '</small>';
             } else {
-                $inputType = in_array($ftype, ['email', 'tel', 'text'], true) ? $ftype : 'text';
+                $inputType = in_array($ftype, ['email', 'tel', 'text', 'number', 'date', 'url'], true) ? $ftype : 'text';
                 $html .= '<input class="pp-form__control" type="' . $inputType . '" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" placeholder="' . self::e($placeholder) . '"' . $req . '>';
             }
             $html .= '</div>';

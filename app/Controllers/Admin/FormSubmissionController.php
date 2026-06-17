@@ -61,6 +61,15 @@ final class FormSubmissionController
         FormSubmissionService::ensureSchema();
         $id = (int) ($params['id'] ?? 0);
 
+        $row = Database::selectOne(
+            'SELECT payload FROM form_submissions WHERE id = ? AND site_id = ? LIMIT 1',
+            [$id, $siteId]
+        );
+        $payload = json_decode((string) ($row['payload'] ?? '{}'), true);
+        if (is_array($payload)) {
+            FormSubmissionService::deleteFilesFromPayload($payload);
+        }
+
         Database::execute(
             'DELETE FROM form_submissions WHERE id = ? AND site_id = ?',
             [$id, $siteId]
@@ -68,6 +77,51 @@ final class FormSubmissionController
 
         Session::flash('success', 'Mensaje eliminado.');
         Response::redirect(base_url('admin/forms'));
+    }
+
+    public function downloadFile(array $params = []): void
+    {
+        $siteId = $this->requireSiteId();
+        FormSubmissionService::ensureSchema();
+        $id = (int) ($params['id'] ?? 0);
+        $key = (string) ($params['key'] ?? '');
+
+        $row = Database::selectOne(
+            'SELECT payload FROM form_submissions WHERE id = ? AND site_id = ? LIMIT 1',
+            [$id, $siteId]
+        );
+        if ($row === null) {
+            Response::notFound('Archivo no encontrado');
+        }
+
+        $payload = json_decode((string) ($row['payload'] ?? '{}'), true);
+        $payload = is_array($payload) ? $payload : [];
+        $file = $payload[$key] ?? null;
+        if (!is_array($file) || ($file['type'] ?? '') !== 'file') {
+            foreach ($payload as $value) {
+                if (is_array($value) && ($value['type'] ?? '') === 'file' && (string) ($value['field_name'] ?? '') === $key) {
+                    $file = $value;
+                    break;
+                }
+            }
+        }
+        if (!is_array($file) || ($file['type'] ?? '') !== 'file') {
+            Response::notFound('Archivo no encontrado');
+        }
+
+        $path = FormSubmissionService::safeStoredPath((string) ($file['path'] ?? ''));
+        if ($path === null || !is_file($path)) {
+            Response::notFound('Archivo no encontrado');
+        }
+
+        $name = basename((string) ($file['original_name'] ?? 'archivo'));
+        $mime = (string) ($file['mime'] ?? 'application/octet-stream');
+        header('Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
+        header('Content-Length: ' . (string) filesize($path));
+        header('Content-Disposition: attachment; filename="' . addcslashes($name, "\\\"") . '"');
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
     }
 
     private function requireSiteId(): int

@@ -14,17 +14,33 @@ $fieldTypes = [
     'tel'      => 'Teléfono',
     'textarea' => 'Área de texto',
     'checkbox' => 'Casilla',
+    'select'   => 'Selector',
+    'number'   => 'Número',
+    'date'     => 'Fecha',
+    'url'      => 'URL',
+    'file'     => 'Archivo',
+];
+$filePresets = [
+    'documents' => 'Documentos (PDF, DOCX, TXT)',
+    'images'    => 'Imágenes (JPG, PNG, WebP)',
+    'cv'        => 'CV / portfolio (PDF, DOCX)',
+    'custom'    => 'Personalizado',
 ];
 $fields = is_array($form['fields'] ?? null) ? $form['fields'] : [];
 $lawful = (string) ($form['lawful_basis'] ?? 'legitimate_interest');
 $arEnabled = (string) ($form['autoresponder_enabled'] ?? '0') === '1';
 
-$renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
+$renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): string {
     $label = (string) ($f['label'] ?? '');
     $name = (string) ($f['name'] ?? '');
     $type = (string) ($f['field_type'] ?? 'text');
     $req = (string) ($f['required'] ?? '0') === '1';
     $ph = (string) ($f['placeholder'] ?? '');
+    $options = $f['options'] ?? [];
+    $optionsText = is_array($options) ? implode("\n", array_map('strval', $options)) : (string) $options;
+    $fileAccept = (string) ($f['file_accept'] ?? 'documents');
+    $fileMaxMb = (int) ($f['file_max_mb'] ?? 5);
+    $fileCustomExt = (string) ($f['file_custom_ext'] ?? '');
     ob_start(); ?>
     <div class="pp-fb-row" data-fb-row>
         <span class="pp-fb-row__drag" aria-hidden="true">⠿</span>
@@ -41,6 +57,16 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
                 <input type="checkbox" name="fields[<?= $i ?>][required]" value="1" <?= $req ? 'checked' : '' ?>>
                 Obligatorio
             </label>
+            <textarea name="fields[<?= $i ?>][options]" rows="2" placeholder="Opciones del selector, una por línea" data-fb-options <?= $type === 'select' ? '' : 'hidden' ?>><?= e($optionsText) ?></textarea>
+            <div class="pp-fb-row__file" data-fb-file <?= $type === 'file' ? '' : 'hidden' ?>>
+                <select name="fields[<?= $i ?>][file_accept]" aria-label="Tipos de archivo permitidos" data-fb-file-accept>
+                    <?php foreach ($filePresets as $val => $lbl): ?>
+                        <option value="<?= e($val) ?>" <?= $fileAccept === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="number" name="fields[<?= $i ?>][file_max_mb]" value="<?= e((string) max(1, min(10, $fileMaxMb))) ?>" min="1" max="10" step="1" aria-label="Tamaño máximo en MB" placeholder="MB">
+                <input type="text" name="fields[<?= $i ?>][file_custom_ext]" value="<?= e($fileCustomExt) ?>" placeholder="Extensiones: pdf,jpg,png" data-fb-file-custom <?= $fileAccept === 'custom' ? '' : 'hidden' ?>>
+            </div>
         </div>
         <button type="button" class="pp-fb-row__remove" data-fb-remove title="Quitar campo" aria-label="Quitar campo">✕</button>
     </div>
@@ -56,7 +82,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
 (function () {
     var RUN_URL = <?= json_encode(base_url('admin/ai/actions/run')) ?>;
     var CSRF = <?= json_encode($csrf) ?>;
-    var ALLOWED_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox'];
+    var ALLOWED_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox', 'select', 'number', 'date', 'url', 'file'];
 
     var list = document.getElementById('pp-fb-list');
     var addBtn = document.getElementById('pp-fb-add');
@@ -73,16 +99,38 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
     function wireRow(row) {
         var label = row.querySelector('[data-fb-label]');
         var name = row.querySelector('[data-fb-name]');
+        var type = row.querySelector('select');
+        var options = row.querySelector('[data-fb-options]');
+        var fileConfig = row.querySelector('[data-fb-file]');
+        var fileAccept = row.querySelector('[data-fb-file-accept]');
+        var fileCustom = row.querySelector('[data-fb-file-custom]');
         if (label && name) {
             label.addEventListener('input', function () {
                 if (!name.dataset.touched) name.value = slugify(label.value);
             });
+        }
+        if (type && options) {
+            var syncOptions = function () {
+                options.hidden = type.value !== 'select';
+                if (fileConfig) fileConfig.hidden = type.value !== 'file';
+            };
+            type.addEventListener('change', syncOptions);
+            syncOptions();
+        }
+        if (fileAccept && fileCustom) {
+            var syncCustom = function () {
+                fileCustom.hidden = fileAccept.value !== 'custom';
+            };
+            fileAccept.addEventListener('change', syncCustom);
+            syncCustom();
         }
         var rm = row.querySelector('[data-fb-remove]');
         if (rm) rm.addEventListener('click', function () {
             if (list.querySelectorAll('[data-fb-row]').length <= 1) {
                 // No dejar el formulario sin ningún campo: vaciar en vez de borrar.
                 label.value = ''; if (name) name.value = '';
+                if (options) options.value = '';
+                if (fileCustom) fileCustom.value = '';
                 return;
             }
             row.remove();
@@ -100,10 +148,18 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes): string {
             var name = row.querySelector('[data-fb-name]');
             var sel = row.querySelector('select');
             var req = row.querySelector('input[type=checkbox]');
+            var options = row.querySelector('[data-fb-options]');
+            var fileAccept = row.querySelector('[data-fb-file-accept]');
+            var fileMax = row.querySelector('input[type=number]');
+            var fileCustom = row.querySelector('[data-fb-file-custom]');
             if (label) label.value = values.label || '';
             if (name) name.value = slugify(values.label || '');
             if (sel) sel.value = (ALLOWED_TYPES.indexOf(values.field_type) !== -1) ? values.field_type : 'text';
             if (req) req.checked = !!values.required;
+            if (options && Array.isArray(values.options)) options.value = values.options.join('\n');
+            if (fileAccept && values.file_accept) fileAccept.value = values.file_accept;
+            if (fileMax && values.file_max_mb) fileMax.value = values.file_max_mb;
+            if (fileCustom && values.file_custom_ext) fileCustom.value = values.file_custom_ext;
         }
         list.appendChild(row);
         wireRow(row);

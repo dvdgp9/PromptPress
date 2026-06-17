@@ -70,6 +70,7 @@ final class SiteResetService
         }
 
         self::emptyDir(PP_ROOT . '/storage/uploads/' . $siteId);
+        self::emptyDir(PP_ROOT . '/storage/form_uploads/' . $siteId);
         self::emptyDir(PP_ROOT . '/storage/documents/' . $siteId);
         self::emptyDir(PP_ROOT . '/storage/cache/' . $siteId);
 

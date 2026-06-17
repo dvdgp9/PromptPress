@@ -4061,10 +4061,36 @@ form textarea#pp-ai-input-json {
 .pp-fb-row__drag { color:#cbd5e1; cursor:default; font-size:1rem; line-height:2.2; user-select:none; }
 .pp-fb-row__grid {
     display:grid; gap:8px; flex:1; align-items:center;
-    grid-template-columns: 1.3fr 1fr 1.3fr auto;
+    grid-template-columns: 1.4fr 0.9fr 1.4fr auto;
 }
-.pp-fb-row__grid input[type="text"], .pp-fb-row__grid select { width:100%; }
-.pp-fb-row__req { white-space:nowrap; font-size:.82rem; }
+/* Inputs del constructor de campos y de la caja IA: mismo estilo que el resto del panel */
+.pp-fb-row__grid input[type="text"],
+.pp-fb-row__grid input[type="number"],
+.pp-fb-row__grid textarea,
+.pp-fb-row__grid select,
+.pp-form-ai-row input[type="text"] {
+    width:100%;
+    padding:8px 12px;
+    border:1px solid var(--pp-border);
+    border-radius:var(--pp-radius);
+    font-family:var(--pp-font);
+    font-size:.88rem;
+    color:var(--pp-text);
+    background:#fff;
+    transition:border-color .15s, box-shadow .15s;
+}
+.pp-fb-row__grid input[type="text"]:focus,
+.pp-fb-row__grid input[type="number"]:focus,
+.pp-fb-row__grid textarea:focus,
+.pp-fb-row__grid select:focus,
+.pp-form-ai-row input[type="text"]:focus {
+    outline:none;
+    border-color:var(--pp-primary);
+    box-shadow:0 0 0 3px rgba(99,102,241,0.15);
+}
+.pp-fb-row__grid textarea { grid-column:1 / -1; resize:vertical; }
+.pp-fb-row__file { grid-column:1 / -1; display:grid; grid-template-columns:1.2fr .45fr 1fr; gap:8px; }
+.pp-fb-row__req { white-space:nowrap; font-size:.82rem; color:var(--pp-text-muted); }
 .pp-fb-row__remove {
     border:0; background:none; color:#9ca3af; font-size:1rem; cursor:pointer;
     line-height:2.2; padding:0 4px;
@@ -4072,6 +4098,7 @@ form textarea#pp-ai-input-json {
 .pp-fb-row__remove:hover { color:#b91c1c; }
 @media (max-width: 760px) {
     .pp-fb-row__grid { grid-template-columns: 1fr 1fr; }
+    .pp-fb-row__file { grid-template-columns: 1fr; }
     .pp-forms-row { flex-direction:column; align-items:stretch; }
 }
 
@@ -4196,6 +4223,19 @@ form textarea#pp-ai-input-json {
     color: var(--pp-text);
     overflow-wrap: anywhere;
 }
+.pp-submission-file {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    padding:9px 10px;
+    border:1px solid var(--pp-border);
+    border-radius:8px;
+    background:#f8fafc;
+    color:var(--pp-text);
+    text-decoration:none;
+}
+.pp-submission-file:hover { border-color:var(--pp-primary); background:#fff; }
+.pp-submission-file span { color:var(--pp-text-muted); font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; }
 .pp-submission-row__note {
     margin-top: 12px;
     padding: 9px 10px;

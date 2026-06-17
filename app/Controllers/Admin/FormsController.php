@@ -21,7 +21,8 @@ use Core\View;
  */
 class FormsController
 {
-    private const FIELD_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox'];
+    private const FIELD_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox', 'select', 'number', 'date', 'url', 'file'];
+    private const FILE_PRESETS = ['documents', 'images', 'cv', 'custom'];
 
     public function index(): void
     {
@@ -111,13 +112,25 @@ class FormsController
                 $name = strtolower((string) preg_replace('/[^a-zA-Z0-9_\-]/', '_', $name));
                 $type = (string) ($f['field_type'] ?? 'text');
                 if (!in_array($type, self::FIELD_TYPES, true)) $type = 'text';
-                $fields[] = [
+                $field = [
                     'label'       => mb_substr($label, 0, 120),
                     'name'        => mb_substr($name, 0, 60),
                     'field_type'  => $type,
                     'required'    => ((string) ($f['required'] ?? '0')) === '1' ? '1' : '0',
                     'placeholder' => mb_substr(trim((string) ($f['placeholder'] ?? '')), 0, 160),
                 ];
+                if ($type === 'select') {
+                    $field['options'] = $this->normalizeOptions($f['options'] ?? '');
+                }
+                if ($type === 'file') {
+                    $preset = (string) ($f['file_accept'] ?? 'documents');
+                    $field['file_accept'] = in_array($preset, self::FILE_PRESETS, true) ? $preset : 'documents';
+                    $field['file_max_mb'] = $this->normalizeFileMaxMb($f['file_max_mb'] ?? 5);
+                    $field['file_custom_ext'] = $field['file_accept'] === 'custom'
+                        ? implode(',', $this->normalizeExtensions($f['file_custom_ext'] ?? ''))
+                        : '';
+                }
+                $fields[] = $field;
             }
         }
 
@@ -147,6 +160,21 @@ class FormsController
         if (!is_array($c['fields']) || count($c['fields']) === 0) {
             $errors[] = 'Añade al menos un campo al formulario.';
         }
+        foreach ((array) $c['fields'] as $f) {
+            if (($f['field_type'] ?? '') === 'select' && empty($f['options'])) {
+                $errors[] = 'Los campos de tipo Selector necesitan al menos una opción.';
+                break;
+            }
+        }
+        foreach ((array) $c['fields'] as $f) {
+            if (($f['field_type'] ?? '') === 'file'
+                && ($f['file_accept'] ?? '') === 'custom'
+                && trim((string) ($f['file_custom_ext'] ?? '')) === ''
+            ) {
+                $errors[] = 'Los campos de archivo personalizados necesitan extensiones permitidas.';
+                break;
+            }
+        }
         if ((string) $c['notify_email'] !== '' && !filter_var($c['notify_email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'El email de aviso no es válido.';
         }
@@ -160,6 +188,54 @@ class FormsController
             }
         }
         return $errors;
+    }
+
+    /**
+     * @param mixed $raw
+     * @return array<int,string>
+     */
+    private function normalizeOptions(mixed $raw): array
+    {
+        $lines = is_array($raw)
+            ? array_map('strval', $raw)
+            : preg_split('/\R/', (string) $raw);
+        $options = [];
+        foreach ($lines ?: [] as $line) {
+            $option = mb_substr(trim((string) $line), 0, 120);
+            if ($option === '' || in_array($option, $options, true)) {
+                continue;
+            }
+            $options[] = $option;
+            if (count($options) >= 30) {
+                break;
+            }
+        }
+        return $options;
+    }
+
+    private function normalizeFileMaxMb(mixed $raw): int
+    {
+        $n = (int) $raw;
+        return max(1, min(10, $n));
+    }
+
+    /**
+     * @param mixed $raw
+     * @return array<int,string>
+     */
+    private function normalizeExtensions(mixed $raw): array
+    {
+        $items = preg_split('/[\s,;]+/', strtolower((string) $raw)) ?: [];
+        $allowed = ['pdf','doc','docx','txt','rtf','odt','jpg','jpeg','png','webp','gif'];
+        $out = [];
+        foreach ($items as $item) {
+            $ext = ltrim(trim($item), '.');
+            if ($ext === '' || !in_array($ext, $allowed, true) || in_array($ext, $out, true)) {
+                continue;
+            }
+            $out[] = $ext;
+        }
+        return array_slice($out, 0, 12);
     }
 
     /**

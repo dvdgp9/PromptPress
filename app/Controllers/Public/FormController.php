@@ -11,6 +11,7 @@ use Core\CSRF;
 use Core\Database;
 use Core\Request;
 use Core\Response;
+use Core\Session;
 
 final class FormController
 {
@@ -41,9 +42,11 @@ final class FormController
         $content = json_decode((string) ($section['content'] ?? '{}'), true);
         $content = is_array($content) ? $content : [];
         $fields = is_array($content['fields'] ?? null) ? $content['fields'] : [];
-        [$payload, $errors, $sender] = $this->collectPayload($fields);
+        [$payload, $errors, $sender] = $this->collectPayload($fields, (int) $section['site_id'], $sectionId);
 
         if ($errors !== []) {
+            FormSubmissionService::deleteFilesFromPayload($payload);
+            Session::flash('form_error_' . $sectionId, implode(' ', array_slice($errors, 0, 2)));
             Response::redirect($target . '?form_status=error&form_section=' . $sectionId . '#sec-' . $sectionId);
         }
 
@@ -154,7 +157,7 @@ final class FormController
      * @param array<int,mixed> $fields
      * @return array{0:array<string,string>,1:string[],2:array{name:string,email:string,phone:string}}
      */
-    private function collectPayload(array $fields): array
+    private function collectPayload(array $fields, int $siteId, int $sectionId): array
     {
         $payload = [];
         $errors = [];
@@ -166,6 +169,22 @@ final class FormController
             $name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', (string) ($field['name'] ?? 'field_' . $idx)) ?: ('field_' . $idx);
             $type = (string) ($field['field_type'] ?? 'text');
             $required = (string) ($field['required'] ?? '0') === '1';
+            if ($type === 'file') {
+                $file = Request::file($name);
+                if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    if ($required) {
+                        $errors[] = $label;
+                    }
+                    continue;
+                }
+                $stored = FormSubmissionService::storeUploadedFile($file, $field, $siteId, $sectionId, $name);
+                if (!$stored['ok']) {
+                    $errors[] = $label . ': ' . (string) ($stored['error'] ?? 'archivo no válido');
+                    continue;
+                }
+                $payload[$label] = $stored['file'] ?? [];
+                continue;
+            }
             $value = Request::post($name, '');
             $value = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
             $value = trim(mb_substr($value, 0, 5000));
@@ -177,6 +196,25 @@ final class FormController
             if ($value !== '' && $type === 'email' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
                 $errors[] = $label;
                 continue;
+            }
+            if ($value !== '' && $type === 'url' && !filter_var($value, FILTER_VALIDATE_URL)) {
+                $errors[] = $label;
+                continue;
+            }
+            if ($value !== '' && $type === 'number' && !is_numeric($value)) {
+                $errors[] = $label;
+                continue;
+            }
+            if ($value !== '' && $type === 'date' && !$this->isValidDate($value)) {
+                $errors[] = $label;
+                continue;
+            }
+            if ($value !== '' && $type === 'select') {
+                $options = is_array($field['options'] ?? null) ? array_map('strval', $field['options']) : [];
+                if ($options !== [] && !in_array($value, $options, true)) {
+                    $errors[] = $label;
+                    continue;
+                }
             }
 
             if ($value !== '') {
@@ -194,6 +232,12 @@ final class FormController
         }
 
         return [$payload, $errors, $sender];
+    }
+
+    private function isValidDate(string $value): bool
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        return $date instanceof \DateTimeImmutable && $date->format('Y-m-d') === $value;
     }
 
     private function redirectTarget(int $sectionId): string
