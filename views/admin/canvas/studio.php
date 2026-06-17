@@ -100,7 +100,8 @@ $icon = static function (string $name): string {
        title="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"
        aria-label="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"><?= $icon('external') ?></a>
     <span class="cvstudio-divider" aria-hidden="true"></span>
-    <button type="button" class="cvstudio-primary-btn" id="studio-publish-btn">
+    <button type="button" class="<?= $isPublished ? 'cvstudio-ghost-btn' : 'cvstudio-primary-btn' ?>" id="studio-publish-btn"
+            title="<?= $isPublished ? 'Quitar la página del sitio (los cambios se guardan solos)' : 'Publicar la página en el sitio' ?>">
       <?= $isPublished ? 'Despublicar' : 'Publicar' ?>
     </button>
   </div>

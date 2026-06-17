@@ -629,6 +629,11 @@
         if (!data.ok) return;
         body.dataset.published = publishing ? '1' : '0';
         publishBtn.textContent = publishing ? 'Despublicar' : 'Publicar';
+        // Publicada: el botón pasa a acción discreta (ghost); borrador: botón primario llamativo.
+        publishBtn.className = publishing ? 'cvstudio-ghost-btn' : 'cvstudio-primary-btn';
+        publishBtn.title = publishing
+          ? 'Quitar la página del sitio (los cambios se guardan solos)'
+          : 'Publicar la página en el sitio';
         statusEl.textContent = publishing ? 'Publicada' : 'Borrador';
         statusEl.classList.toggle('is-live', publishing);
         // "Ver página": URL pública si está publicada; preview limpio si es borrador.
