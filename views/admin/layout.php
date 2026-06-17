@@ -34,6 +34,7 @@
                 ['url' => 'admin/pages',      'icon' => 'pages',     'label' => 'Páginas',        'match' => '/admin/pages'],
                 ['url' => 'admin/posts',      'icon' => 'posts',     'label' => 'Entradas',       'match' => '/admin/posts'],
                 ['url' => 'admin/media',      'icon' => 'media',     'label' => 'Medios',         'match' => '/admin/media'],
+                ['url' => 'admin/formularios','icon' => 'forms',     'label' => 'Formularios',    'match' => '/admin/formularios'],
                 ['url' => 'admin/forms',      'icon' => 'messages',  'label' => 'Mensajes',       'match' => '/admin/forms'],
                 ['url' => 'admin/memory',     'icon' => 'memory',    'label' => 'Conocimiento',   'match' => '/admin/memory'],
                 ['url' => 'admin/documents',  'icon' => 'documents', 'label' => 'Documentos',     'match' => '/admin/documents'],
@@ -45,8 +46,13 @@
                 ['url' => 'admin/settings',   'icon' => 'settings',  'label' => 'Ajustes',        'match' => '/admin/settings'],
             ];
             foreach ($navItems as $item):
-                $isActive = ($item['match'] === '/admin' && ($currentPath === '/admin' || $currentPath === '/admin/'))
-                    || ($item['match'] !== '/admin' && str_starts_with($currentPath, $item['match']));
+                // Match por segmento: '/admin/forms' NO debe activar '/admin/formularios'
+                // (el carácter tras el prefijo ha de ser '/' o el fin de la ruta).
+                $m = $item['match'];
+                $segmentMatch = $currentPath === $m
+                    || str_starts_with($currentPath, $m . '/');
+                $isActive = ($m === '/admin' && ($currentPath === '/admin' || $currentPath === '/admin/'))
+                    || ($m !== '/admin' && $segmentMatch);
                 $activeClass = $isActive ? ' is-active' : '';
             ?>
             <a href="<?= e(base_url($item['url'])) ?>" class="pp-nav-item<?= $activeClass ?>">

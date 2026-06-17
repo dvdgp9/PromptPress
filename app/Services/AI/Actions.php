@@ -43,6 +43,8 @@ final class Actions
     public const EDIT_CANVAS_SECTION = 'edit_canvas_section';
     public const EDIT_CANVAS_PAGE = 'edit_canvas_page';
     public const DESCRIBE_REFERENCE_LAYOUT  = 'describe_reference_layout';
+    public const DESIGN_FORM                = 'design_form';                 // FORMS F4
+    public const DRAFT_FORM_AUTORESPONDER   = 'draft_form_autoresponder';    // FORMS F4
 
     /**
      * FH2 — Principios POSITIVOS de diseño (la otra cara del anti-slop):
@@ -173,6 +175,64 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.7,
                     'max_tokens'      => 1500,
+                ],
+            ],
+
+            // FORMS F4 — Diseñar un formulario a partir de una descripción en
+            // lenguaje natural. Devuelve título + campos + borrador de
+            // autorrespuesta. Los campos usan SOLO los tipos soportados.
+            self::DESIGN_FORM => [
+                'label'        => 'Diseñar formulario',
+                'output'       => 'json',
+                'required'     => ['description'],
+                'instruction'  =>
+                    "Diseñas formularios web sencillos y usables a partir de lo que pide el usuario.\n"
+                  . "Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes/después, sin markdown) con este schema:\n"
+                  . "{\n"
+                  . "  \"heading\": \"título del formulario (≤60 chars)\",\n"
+                  . "  \"description\": \"una línea opcional que invite a rellenarlo (≤160 chars, puede ir vacía)\",\n"
+                  . "  \"submit_text\": \"texto del botón (≤30 chars, ej. Enviar / Inscribirme)\",\n"
+                  . "  \"success_message\": \"mensaje tras enviar (≤140 chars)\",\n"
+                  . "  \"fields\": [ {\"label\":\"Etiqueta visible\",\"field_type\":\"text|email|tel|textarea|checkbox\",\"required\":true|false} ],\n"
+                  . "  \"autoresponder_subject\": \"asunto del acuse al visitante (≤80 chars)\",\n"
+                  . "  \"autoresponder_body\": \"cuerpo del acuse; puedes usar {name_token} y {site_token}\"\n"
+                  . "}\n\n"
+                  . "REGLAS:\n"
+                  . "- Tipos de campo permitidos EXACTOS: text, email, tel, textarea, checkbox. Nada más.\n"
+                  . "- Incluye SIEMPRE un campo de tipo email (es a dónde se responde). Pon como obligatorios solo los imprescindibles.\n"
+                  . "- 2 a 6 campos. Etiquetas en el idioma del sitio, claras y cortas. No inventes 'name'/id: se generan solos.\n"
+                  . "- success_message y autorrespuesta con la voz de la marca (memoria del sitio). Texto plano, sin HTML ni markdown.\n"
+                  . "- El cuerpo de la autorrespuesta: 2-4 frases, cordial y concreto; empieza por \"Hola {name_token}:\" cuando haya campo de nombre.",
+                'user_template' =>
+                    "Crea el formulario que describe el usuario:\n\"{description}\"\n{extra_context}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.5,
+                    'max_tokens'      => 900,
+                ],
+            ],
+
+            // FORMS F4 — Redactar SOLO la autorrespuesta de un formulario ya
+            // definido (botón "Redáctalo con IA").
+            self::DRAFT_FORM_AUTORESPONDER => [
+                'label'        => 'Redactar autorrespuesta',
+                'output'       => 'json',
+                'required'     => ['form_summary'],
+                'instruction'  =>
+                    "Redactas el correo automático de acuse que recibe quien rellena un formulario.\n"
+                  . "Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes/después, sin markdown):\n"
+                  . "{ \"subject\": \"asunto (≤80 chars)\", \"body\": \"cuerpo en texto plano\" }\n\n"
+                  . "REGLAS:\n"
+                  . "- Tono cordial y profesional, con la voz de la marca (memoria del sitio).\n"
+                  . "- 2-4 frases. Confirma la recepción y di que se responderá pronto; concreto, sin promesas vacías.\n"
+                  . "- Puedes usar {name_token} y {site_token} (se sustituyen al enviar). Si hay campo de nombre, empieza por \"Hola {name_token}:\".\n"
+                  . "- Texto plano, sin HTML ni markdown.",
+                'user_template' =>
+                    "Formulario:\n{form_summary}\n{extra_context}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.6,
+                    'max_tokens'      => 400,
                 ],
             ],
 

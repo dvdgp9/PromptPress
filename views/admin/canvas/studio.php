@@ -50,6 +50,7 @@ $icon = static function (string $name): string {
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
       data-publish-url="<?= e(base_url('admin/canvas/' . $pageId . '/publish')) ?>"
       data-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/section')) ?>"
+      data-insert-form-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-form')) ?>"
       data-media-url="<?= e(base_url('admin/media/library')) ?>"
       data-undo-url="<?= e(base_url('admin/canvas/' . $pageId . '/undo')) ?>"
       data-redo-url="<?= e(base_url('admin/canvas/' . $pageId . '/redo')) ?>"
@@ -140,6 +141,23 @@ $icon = static function (string $name): string {
     </div>
 
     <div class="cvstudio-chat__composer">
+      <!-- FORMS F5 — insertar un formulario existente como {{form:id}} -->
+      <div class="cvstudio-insert" id="studio-insert-form">
+        <button type="button" class="cvstudio-ghost-btn cvstudio-insert__btn" id="studio-insert-btn"
+                aria-haspopup="true" aria-expanded="false">+ Insertar formulario</button>
+        <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="menu">
+          <?php if (empty($forms)): ?>
+            <div class="cvstudio-insert__empty">
+              No tienes formularios todavía.
+              <a href="<?= e(base_url('admin/formularios')) ?>" target="_blank" rel="noopener">Crear uno</a>
+            </div>
+          <?php else: foreach ($forms as $f): ?>
+            <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>" role="menuitem">
+              <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= (int) $f['field_count'] ?> campos</span>
+            </button>
+          <?php endforeach; endif; ?>
+        </div>
+      </div>
       <div class="cvstudio-context" id="chat-context" hidden>
         <span>Cambiando: <strong id="chat-context-label"></strong></span>
         <button type="button" id="chat-context-clear" title="Quitar selección — el cambio afectará a toda la página">✕</button>

@@ -678,6 +678,45 @@
   unpublishBtn.addEventListener('click', function () { closeMoreMenu(); setPublished(false, unpublishBtn); });
 
   // ----------------------------------------------------------------
+  // FORMS F5 — Insertar formulario existente ({{form:id}})
+  // ----------------------------------------------------------------
+  var insertWrap = document.getElementById('studio-insert-form');
+  if (insertWrap) {
+    var insertBtn = document.getElementById('studio-insert-btn');
+    var insertMenu = document.getElementById('studio-insert-menu');
+    function closeInsertMenu() { insertMenu.hidden = true; insertBtn.setAttribute('aria-expanded', 'false'); }
+    insertBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = insertMenu.hidden;
+      insertMenu.hidden = !open;
+      insertBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+      if (!insertMenu.hidden && !insertWrap.contains(e.target)) closeInsertMenu();
+    });
+    insertMenu.querySelectorAll('button[data-form-id]').forEach(function (item) {
+      item.addEventListener('click', function () {
+        var formId = item.dataset.formId;
+        closeInsertMenu();
+        var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> Insertando el formulario…');
+        var fd = new FormData();
+        fd.append('_csrf', csrf);
+        fd.append('form_id', formId);
+        fetch(body.dataset.insertFormUrl, { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+          .then(function (data) {
+            thinking.remove();
+            if (!data.ok) { addMsg('assistant pp-chat-msg--error', esc(data.error || 'No se pudo insertar.')); return; }
+            addMsg('assistant', esc(data.reply || 'Formulario insertado.'));
+            applyHistory(data.history);
+            reloadPreview();
+          })
+          .catch(function () { thinking.remove(); addMsg('assistant pp-chat-msg--error', 'No hay conexión ahora mismo.'); });
+      });
+    });
+  }
+
+  // ----------------------------------------------------------------
   // FH8 — Ajustes de la página (SEO): meta título, descripción, slug
   // ----------------------------------------------------------------
   var setModal = document.getElementById('settings-modal');

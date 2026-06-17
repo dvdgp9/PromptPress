@@ -18,6 +18,7 @@ use App\Controllers\Admin\MailSettingsController;
 use App\Services\DesignSystem;
 use App\Controllers\Admin\DocumentController;
 use App\Controllers\Admin\FormSubmissionController;
+use App\Controllers\Admin\FormsController;
 use App\Controllers\Admin\MediaController;
 use App\Controllers\Admin\MemoryController;
 use App\Controllers\Admin\OnboardingController;
@@ -152,6 +153,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/canvas/{id}/preview',   [CanvasController::class, 'preview']);
     $r->post('/canvas/{id}/chat',     [CanvasController::class, 'chat']);
     $r->post('/canvas/{id}/section',  [CanvasController::class, 'updateSection']); // FH4 edición directa
+    $r->post('/canvas/{id}/insert-form', [CanvasController::class, 'insertForm']); // FORMS F5
     $r->get('/canvas/{id}/versions',  [CanvasController::class, 'versions']);
     $r->post('/canvas/{id}/restore',  [CanvasController::class, 'restore']);
     $r->post('/canvas/{id}/undo',     [CanvasController::class, 'undo']);
@@ -210,6 +212,13 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/media/bank',               [MediaController::class, 'bankIndex']);
     $r->get('/media/bank/search',        [MediaController::class, 'bankSearch']);
     $r->post('/media/bank/import',       [MediaController::class, 'bankImport']);
+
+    // Formularios (FORMS F2/F3) — apartado de creación/edición
+    $r->get('/formularios',              [FormsController::class, 'index']);
+    $r->post('/formularios/create',      [FormsController::class, 'create']);
+    $r->get('/formularios/{id}',         [FormsController::class, 'edit']);
+    $r->post('/formularios/{id}',        [FormsController::class, 'update']);
+    $r->post('/formularios/{id}/delete', [FormsController::class, 'destroy']);
 
     // Mensajes de formularios públicos
     $r->get('/forms',                              [FormSubmissionController::class, 'index']);

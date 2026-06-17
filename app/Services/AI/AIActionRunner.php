@@ -77,6 +77,14 @@ final class AIActionRunner
             $extras['variants_by_type'] = implode("\n", $map);
         }
 
+        if ($action === Actions::DESIGN_FORM || $action === Actions::DRAFT_FORM_AUTORESPONDER) {
+            // Tokens literales que el modelo debe emitir tal cual en la autorrespuesta.
+            // Se pasan como variables para que sobrevivan a la plantilla {key} de PromptBuilder
+            // (si los pusiéramos como {{nombre}} en la instrucción, el motor los vaciaría).
+            $extras['name_token'] = '{{nombre}}';
+            $extras['site_token'] = '{{sitio}}';
+        }
+
         $built = PromptBuilder::forAction($action, $input, $siteId, $extras);
 
         // Visión (MBv1): si el input trae imágenes, se hilan a las options para que

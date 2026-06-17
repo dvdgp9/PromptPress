@@ -309,6 +309,11 @@ input[name="model"], input[name="model_light"], input#pp-ai-model {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z'/%3E%3Cpath d='M8 9h8'/%3E%3Cpath d='M8 13h5'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z'/%3E%3Cpath d='M8 9h8'/%3E%3Cpath d='M8 13h5'/%3E%3C/svg%3E");
 }
+/* Forms (builder) */
+.pp-icon--forms {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='18' rx='2'/%3E%3Cpath d='M8 8h8'/%3E%3Cpath d='M8 12h8'/%3E%3Cpath d='M8 16h4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='18' rx='2'/%3E%3Cpath d='M8 8h8'/%3E%3Cpath d='M8 12h8'/%3E%3Cpath d='M8 16h4'/%3E%3C/svg%3E");
+}
 /* Memory / Knowledge */
 .pp-icon--memory {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z'/%3E%3C/svg%3E");
@@ -4019,6 +4024,56 @@ form textarea#pp-ai-input-json {
     .pp-mail-log__row { grid-template-columns: auto 1fr; }
     .pp-mail-log__subject, .pp-mail-log__date { grid-column: 1 / -1; white-space: normal; }
 }
+
+/* ============================================================
+   Formularios (FORMS F2/F3 — hub y editor)
+   ============================================================ */
+.pp-back-link { display:inline-block; font-size:.85rem; color:#6b7280; text-decoration:none; margin-bottom:6px; }
+.pp-back-link:hover { color:#111827; }
+
+.pp-forms-list { display:grid; gap:10px; max-width:920px; }
+.pp-forms-row {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    border:1px solid var(--pp-border); border-radius:10px; background:#fff;
+    padding:14px 16px; box-shadow:0 8px 18px rgba(15,23,42,0.035);
+}
+.pp-forms-row__main { display:flex; flex-direction:column; gap:2px; text-decoration:none; flex:1; min-width:0; }
+.pp-forms-row__title { font-weight:700; color:#111827; }
+.pp-forms-row__meta { font-size:.8rem; color:#6b7280; }
+.pp-forms-row__actions { display:flex; align-items:center; gap:8px; flex:none; }
+
+/* Constructor de campos */
+.pp-fb-list { display:grid; gap:10px; margin-bottom:14px; }
+.pp-fb-row {
+    display:flex; align-items:flex-start; gap:10px;
+    border:1px solid var(--pp-border); border-radius:10px; background:#fafafa; padding:10px 12px;
+}
+.pp-fb-row__drag { color:#cbd5e1; cursor:default; font-size:1rem; line-height:2.2; user-select:none; }
+.pp-fb-row__grid {
+    display:grid; gap:8px; flex:1; align-items:center;
+    grid-template-columns: 1.3fr 1fr 1.3fr auto;
+}
+.pp-fb-row__grid input[type="text"], .pp-fb-row__grid select { width:100%; }
+.pp-fb-row__req { white-space:nowrap; font-size:.82rem; }
+.pp-fb-row__remove {
+    border:0; background:none; color:#9ca3af; font-size:1rem; cursor:pointer;
+    line-height:2.2; padding:0 4px;
+}
+.pp-fb-row__remove:hover { color:#b91c1c; }
+@media (max-width: 760px) {
+    .pp-fb-row__grid { grid-template-columns: 1fr 1fr; }
+    .pp-forms-row { flex-direction:column; align-items:stretch; }
+}
+
+/* Panel "Crear con IA" del editor de formularios */
+.pp-form-ai-box { background:linear-gradient(180deg,#faf5ff,#fff); border-color:#e9d5ff; }
+.pp-form-ai-row { display:flex; gap:8px; align-items:center; }
+.pp-form-ai-row input[type="text"] { flex:1; }
+.pp-design-hint.is-error { color:#b91c1c; }
+
+.pp-forms-legal > summary { cursor:pointer; font-size:.9rem; color:#374151; list-style:none; }
+.pp-forms-legal > summary::-webkit-details-marker { display:none; }
+.pp-forms-legal[open] > summary { margin-bottom:12px; }
 
 /* ============================================================
    Form Submissions
@@ -8897,6 +8952,13 @@ body.pp-login-page {
 .cvstudio-menu__item:hover{background:#f3f4f6}
 .cvstudio-menu__item.is-danger{color:#b91c1c}
 .cvstudio-menu__item.is-danger:hover{background:#fef2f2}
+/* FORMS F5 — control "Insertar formulario" en el composer del Studio */
+.cvstudio-insert{position:relative;margin-bottom:8px}
+.cvstudio-insert__btn{width:100%;justify-content:center;font-size:.8rem}
+.cvstudio-insert__pop{top:auto;bottom:calc(100% + 6px);left:0;right:0;max-height:240px;overflow:auto}
+.cvstudio-insert__meta{margin-left:auto;color:#9ca3af;font-size:.72rem;font-weight:500}
+.cvstudio-insert__empty{padding:10px;font-size:.82rem;color:#6b7280}
+.cvstudio-insert .cvstudio-menu__item{justify-content:flex-start;gap:8px}
 
 .cvstudio-main{flex:1;display:flex;min-height:0}
 .cvstudio-stage{flex:1;display:flex;align-items:stretch;justify-content:center;padding:16px;min-width:0}

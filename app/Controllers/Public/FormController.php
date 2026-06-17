@@ -51,7 +51,12 @@ final class FormController
         // en sustitución del antiguo @mail(). Si el correo no está configurado,
         // se marca 'skipped' (la respuesta queda guardada igualmente).
         $siteId = (int) $section['site_id'];
-        $recipient = FormSubmissionService::recipientForSite($siteId);
+        // FORMS F6 — destino del aviso: el del propio formulario si está definido,
+        // si no, el del sitio.
+        $formNotify = trim((string) ($content['notify_email'] ?? ''));
+        $recipient = filter_var($formNotify, FILTER_VALIDATE_EMAIL)
+            ? $formNotify
+            : FormSubmissionService::recipientForSite($siteId);
         $emailStatus = 'skipped';
         $emailError = null;
         if ($recipient !== null && MailService::isConfigured($siteId)) {
@@ -98,6 +103,24 @@ final class FormController
                 date('Y-m-d H:i:s'),
             ]
         );
+
+        // FORMS F6 — autorrespuesta al visitante (absorbe E6). Texto fijo del
+        // formulario con placeholders {{nombre}}/{{sitio}} sustituidos (sin IA).
+        $arEnabled = (string) ($content['autoresponder_enabled'] ?? '0') === '1';
+        $visitorEmail = (string) ($sender['email'] ?? '');
+        if ($arEnabled && $visitorEmail !== '' && MailService::isConfigured($siteId)) {
+            $site = Database::selectOne('SELECT name FROM sites WHERE id = ? LIMIT 1', [$siteId]);
+            $repl = [
+                '{{nombre}}' => (string) ($sender['name'] ?? ''),
+                '{{sitio}}'  => (string) ($site['name'] ?? ''),
+            ];
+            $subject = strtr((string) ($content['autoresponder_subject'] ?? 'Hemos recibido tu mensaje'), $repl);
+            $bodyText = strtr((string) ($content['autoresponder_body'] ?? ''), $repl);
+            if (trim($bodyText) !== '') {
+                $arMsg = new MailMessage($visitorEmail, $subject !== '' ? $subject : 'Hemos recibido tu mensaje', $bodyText);
+                MailService::send($siteId, $arMsg, 'autoresponder');
+            }
+        }
 
         Response::redirect($target . '?form_status=ok&form_section=' . $sectionId . '#sec-' . $sectionId);
     }
