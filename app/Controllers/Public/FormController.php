@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controllers\Public;
 
 use App\Services\FormSubmissionService;
+use App\Services\Mail\MailMessage;
+use App\Services\Mail\MailService;
 use Core\CSRF;
 use Core\Database;
 use Core\Request;
@@ -45,25 +47,31 @@ final class FormController
             Response::redirect($target . '?form_status=error&form_section=' . $sectionId . '#sec-' . $sectionId);
         }
 
-        $recipient = FormSubmissionService::recipientForSite((int) $section['site_id']);
+        // E5 — notificación por correo vía MailService (SMTP configurable),
+        // en sustitución del antiguo @mail(). Si el correo no está configurado,
+        // se marca 'skipped' (la respuesta queda guardada igualmente).
+        $siteId = (int) $section['site_id'];
+        $recipient = FormSubmissionService::recipientForSite($siteId);
         $emailStatus = 'skipped';
         $emailError = null;
-        if ($recipient !== null) {
+        if ($recipient !== null && MailService::isConfigured($siteId)) {
             $subject = 'Nuevo mensaje desde ' . (string) ($section['page_title'] ?? 'PromptPress');
             $body = FormSubmissionService::emailBody([
                 'page_title' => (string) ($section['page_title'] ?? ''),
                 'section_heading' => (string) ($content['heading'] ?? 'Formulario'),
             ], $payload);
-            $headers = [
-                'From: PromptPress <no-reply@promptpress.local>',
-                'Content-Type: text/plain; charset=UTF-8',
-            ];
-            if (($sender['email'] ?? '') !== '') {
-                $headers[] = 'Reply-To: ' . $sender['email'];
-            }
-            $sent = @mail($recipient, $subject, $body, implode("\r\n", $headers));
-            $emailStatus = $sent ? 'sent' : 'failed';
-            $emailError = $sent ? null : 'mail() devolvió false o no está configurado en este entorno.';
+            $message = new MailMessage(
+                $recipient,
+                $subject,
+                $body,
+                '',
+                '',
+                ($sender['email'] ?? '') !== '' ? $sender['email'] : null, // Reply-To: responder va al visitante
+                ($sender['name'] ?? '') !== '' ? $sender['name'] : null
+            );
+            $result = MailService::send($siteId, $message, 'form_submission');
+            $emailStatus = $result->ok ? 'sent' : 'failed';
+            $emailError = $result->ok ? null : mb_substr((string) $result->error, 0, 500);
         }
 
         Database::execute(

@@ -14,6 +14,7 @@ use App\Controllers\Admin\DashboardController;
 use App\Controllers\Admin\ChromeController;
 use App\Controllers\Admin\DesignController;
 use App\Controllers\Admin\SettingsAIController;
+use App\Controllers\Admin\MailSettingsController;
 use App\Services\DesignSystem;
 use App\Controllers\Admin\DocumentController;
 use App\Controllers\Admin\FormSubmissionController;
@@ -269,6 +270,9 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
     $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install
+    $r->get('/settings/mail',  [MailSettingsController::class, 'index']);  // EMAIL E4 — envío de correo
+    $r->post('/settings/mail', [MailSettingsController::class, 'update']);
+    $r->post('/settings/mail/test', [MailSettingsController::class, 'test']);
     $r->get('/chrome',          [ChromeController::class, 'index']);   // Editor Header y pie
     $r->post('/chrome',         [ChromeController::class, 'save']);
     $r->post('/chrome/preview', [ChromeController::class, 'preview']);

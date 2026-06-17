@@ -3972,6 +3972,55 @@ form textarea#pp-ai-input-json {
 }
 
 /* ============================================================
+   Ajustes · Correo (EMAIL E4)
+   ============================================================ */
+.pp-form-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 640px) {
+    .pp-form-grid-2 { grid-template-columns: 1fr; }
+}
+.pp-mail-log {
+    display: grid;
+    gap: 8px;
+}
+.pp-mail-log__row {
+    display: grid;
+    grid-template-columns: auto 1fr 1.4fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--pp-border);
+    border-radius: 8px;
+    background: #fff;
+    font-size: .85rem;
+}
+.pp-mail-log__badge {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.pp-mail-log__badge.is-ok { background: #dcfce7; color: #15803d; }
+.pp-mail-log__badge.is-fail { background: #fee2e2; color: #b91c1c; }
+.pp-mail-log__to { font-weight: 600; color: #374151; }
+.pp-mail-log__subject { color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-mail-log__date { color: #9ca3af; font-size: .78rem; white-space: nowrap; }
+.pp-mail-log__error {
+    grid-column: 1 / -1;
+    color: #b91c1c;
+    font-size: .8rem;
+    padding-top: 2px;
+}
+@media (max-width: 640px) {
+    .pp-mail-log__row { grid-template-columns: auto 1fr; }
+    .pp-mail-log__subject, .pp-mail-log__date { grid-column: 1 / -1; white-space: normal; }
+}
+
+/* ============================================================
    Form Submissions
    ============================================================ */
 .pp-submissions-list {

@@ -22,6 +22,7 @@
 <nav class="pp-settings-tabs" aria-label="Secciones de ajustes">
     <a href="<?= e(base_url('admin/settings')) ?>" class="is-active">General</a>
     <a href="<?= e(base_url('admin/settings/ai')) ?>">IA</a>
+    <a href="<?= e(base_url('admin/settings/mail')) ?>">Correo</a>
 </nav>
 
 <p class="pp-page-intro">
