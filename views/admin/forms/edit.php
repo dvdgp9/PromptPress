@@ -41,34 +41,68 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     $fileAccept = (string) ($f['file_accept'] ?? 'documents');
     $fileMaxMb = (int) ($f['file_max_mb'] ?? 5);
     $fileCustomExt = (string) ($f['file_custom_ext'] ?? '');
+    $typeLabel = (string) ($fieldTypes[$type] ?? $fieldTypes['text']);
     ob_start(); ?>
     <div class="pp-fb-row" data-fb-row>
-        <span class="pp-fb-row__drag" aria-hidden="true">⠿</span>
+        <div class="pp-fb-row__head">
+            <span class="pp-fb-row__drag" aria-hidden="true">⠿</span>
+            <div class="pp-fb-row__identity">
+                <strong data-fb-title><?= e($label !== '' ? $label : 'Campo sin título') ?></strong>
+                <span><b data-fb-type-label><?= e($typeLabel) ?></b><i data-fb-required><?= $req ? 'Obligatorio' : 'Opcional' ?></i></span>
+            </div>
+            <button type="button" class="pp-fb-row__remove" data-fb-remove title="Quitar campo" aria-label="Quitar campo">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
         <div class="pp-fb-row__grid">
-            <input type="text" name="fields[<?= $i ?>][label]" value="<?= e($label) ?>" placeholder="Etiqueta (ej. Nombre)" data-fb-label required>
-            <select name="fields[<?= $i ?>][field_type]" aria-label="Tipo de campo">
-                <?php foreach ($fieldTypes as $val => $lbl): ?>
-                    <option value="<?= e($val) ?>" <?= $type === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <input type="text" name="fields[<?= $i ?>][placeholder]" value="<?= e($ph) ?>" placeholder="Texto de ayuda (opcional)">
-            <input type="hidden" name="fields[<?= $i ?>][name]" value="<?= e($name) ?>" data-fb-name>
-            <label class="pp-checkbox-label pp-fb-row__req">
-                <input type="checkbox" name="fields[<?= $i ?>][required]" value="1" <?= $req ? 'checked' : '' ?>>
-                Obligatorio
+            <label class="pp-fb-control">
+                <span>Etiqueta visible</span>
+                <input type="text" name="fields[<?= $i ?>][label]" value="<?= e($label) ?>" placeholder="Nombre, email, CV..." data-fb-label required>
             </label>
-            <textarea name="fields[<?= $i ?>][options]" rows="2" placeholder="Opciones del selector, una por línea" data-fb-options <?= $type === 'select' ? '' : 'hidden' ?>><?= e($optionsText) ?></textarea>
-            <div class="pp-fb-row__file" data-fb-file <?= $type === 'file' ? '' : 'hidden' ?>>
-                <select name="fields[<?= $i ?>][file_accept]" aria-label="Tipos de archivo permitidos" data-fb-file-accept>
-                    <?php foreach ($filePresets as $val => $lbl): ?>
-                        <option value="<?= e($val) ?>" <?= $fileAccept === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
+            <label class="pp-fb-control">
+                <span>Tipo de campo</span>
+                <select name="fields[<?= $i ?>][field_type]" aria-label="Tipo de campo" data-fb-type>
+                    <?php foreach ($fieldTypes as $val => $lbl): ?>
+                        <option value="<?= e($val) ?>" <?= $type === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <input type="number" name="fields[<?= $i ?>][file_max_mb]" value="<?= e((string) max(1, min(10, $fileMaxMb))) ?>" min="1" max="10" step="1" aria-label="Tamaño máximo en MB" placeholder="MB">
-                <input type="text" name="fields[<?= $i ?>][file_custom_ext]" value="<?= e($fileCustomExt) ?>" placeholder="Extensiones: pdf,jpg,png" data-fb-file-custom <?= $fileAccept === 'custom' ? '' : 'hidden' ?>>
+            </label>
+            <label class="pp-fb-control pp-fb-control--wide">
+                <span>Ayuda para el visitante</span>
+                <input type="text" name="fields[<?= $i ?>][placeholder]" value="<?= e($ph) ?>" placeholder="Ej. Cuéntanos qué necesitas">
+            </label>
+            <input type="hidden" name="fields[<?= $i ?>][name]" value="<?= e($name) ?>" data-fb-name>
+            <label class="pp-fb-switch pp-fb-row__req">
+                <input type="checkbox" name="fields[<?= $i ?>][required]" value="1" <?= $req ? 'checked' : '' ?>>
+                <span>Obligatorio</span>
+            </label>
+            <label class="pp-fb-control pp-fb-row__options" data-fb-options-wrap <?= $type === 'select' ? '' : 'hidden' ?>>
+                <span>Opciones del selector</span>
+                <textarea name="fields[<?= $i ?>][options]" rows="3" placeholder="Una opción por línea&#10;Ej. Consultoría&#10;Soporte&#10;Presupuesto" data-fb-options><?= e($optionsText) ?></textarea>
+            </label>
+            <div class="pp-fb-row__file" data-fb-file <?= $type === 'file' ? '' : 'hidden' ?>>
+                <div class="pp-fb-row__file-head">
+                    <strong>Subida de archivo</strong>
+                    <span>Define qué puede adjuntar el visitante. Los archivos se guardan seguros y se descargan desde Mensajes.</span>
+                </div>
+                <label class="pp-fb-control">
+                    <span>Formatos permitidos</span>
+                    <select name="fields[<?= $i ?>][file_accept]" aria-label="Tipos de archivo permitidos" data-fb-file-accept>
+                        <?php foreach ($filePresets as $val => $lbl): ?>
+                            <option value="<?= e($val) ?>" <?= $fileAccept === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="pp-fb-control">
+                    <span>Tamaño máximo</span>
+                    <input type="number" name="fields[<?= $i ?>][file_max_mb]" value="<?= e((string) max(1, min(10, $fileMaxMb))) ?>" min="1" max="10" step="1" aria-label="Tamaño máximo en MB" placeholder="MB">
+                </label>
+                <label class="pp-fb-control pp-fb-control--wide" data-fb-file-custom-wrap <?= $fileAccept === 'custom' ? '' : 'hidden' ?>>
+                    <span>Extensiones personalizadas</span>
+                    <input type="text" name="fields[<?= $i ?>][file_custom_ext]" value="<?= e($fileCustomExt) ?>" placeholder="pdf,jpg,png" data-fb-file-custom>
+                </label>
             </div>
         </div>
-        <button type="button" class="pp-fb-row__remove" data-fb-remove title="Quitar campo" aria-label="Quitar campo">✕</button>
     </div>
     <?php
     return (string) ob_get_clean();
@@ -95,35 +129,71 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     }
 
+    function selectedText(select) {
+        return select && select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex].text : '';
+    }
+
     // Auto-genera el id (name) a partir de la etiqueta, salvo que el usuario lo haya tocado a mano.
     function wireRow(row) {
         var label = row.querySelector('[data-fb-label]');
         var name = row.querySelector('[data-fb-name]');
-        var type = row.querySelector('select');
+        var type = row.querySelector('[data-fb-type]');
+        var title = row.querySelector('[data-fb-title]');
+        var typeLabel = row.querySelector('[data-fb-type-label]');
+        var requiredLabel = row.querySelector('[data-fb-required]');
+        var requiredInput = row.querySelector('.pp-fb-row__req input[type=checkbox]');
         var options = row.querySelector('[data-fb-options]');
+        var optionsWrap = row.querySelector('[data-fb-options-wrap]');
         var fileConfig = row.querySelector('[data-fb-file]');
         var fileAccept = row.querySelector('[data-fb-file-accept]');
         var fileCustom = row.querySelector('[data-fb-file-custom]');
+        var fileCustomWrap = row.querySelector('[data-fb-file-custom-wrap]');
+        var drag = row.querySelector('.pp-fb-row__drag');
+        function syncSummary() {
+            if (title) title.textContent = (label && label.value.trim()) ? label.value.trim() : 'Campo sin título';
+            if (typeLabel) typeLabel.textContent = selectedText(type) || 'Texto';
+            if (requiredLabel) requiredLabel.textContent = requiredInput && requiredInput.checked ? 'Obligatorio' : 'Opcional';
+        }
+        if (drag) {
+            drag.addEventListener('mousedown', function () { row.draggable = true; });
+            drag.addEventListener('touchstart', function () { row.draggable = true; }, { passive: true });
+        }
+        row.addEventListener('dragstart', function (e) {
+            if (!row.draggable) { e.preventDefault(); return; }
+            row.classList.add('is-dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', '');
+            }
+        });
+        row.addEventListener('dragend', function () {
+            row.classList.remove('is-dragging');
+            row.draggable = false;
+        });
         if (label && name) {
             label.addEventListener('input', function () {
                 if (!name.dataset.touched) name.value = slugify(label.value);
+                syncSummary();
             });
         }
         if (type && options) {
             var syncOptions = function () {
-                options.hidden = type.value !== 'select';
+                if (optionsWrap) optionsWrap.hidden = type.value !== 'select';
                 if (fileConfig) fileConfig.hidden = type.value !== 'file';
+                syncSummary();
             };
             type.addEventListener('change', syncOptions);
             syncOptions();
         }
+        if (requiredInput) requiredInput.addEventListener('change', syncSummary);
         if (fileAccept && fileCustom) {
             var syncCustom = function () {
-                fileCustom.hidden = fileAccept.value !== 'custom';
+                if (fileCustomWrap) fileCustomWrap.hidden = fileAccept.value !== 'custom';
             };
             fileAccept.addEventListener('change', syncCustom);
             syncCustom();
         }
+        syncSummary();
         var rm = row.querySelector('[data-fb-remove]');
         if (rm) rm.addEventListener('click', function () {
             if (list.querySelectorAll('[data-fb-row]').length <= 1) {
@@ -131,6 +201,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
                 label.value = ''; if (name) name.value = '';
                 if (options) options.value = '';
                 if (fileCustom) fileCustom.value = '';
+                syncSummary();
                 return;
             }
             row.remove();
@@ -146,8 +217,8 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         if (values) {
             var label = row.querySelector('[data-fb-label]');
             var name = row.querySelector('[data-fb-name]');
-            var sel = row.querySelector('select');
-            var req = row.querySelector('input[type=checkbox]');
+            var sel = row.querySelector('[data-fb-type]');
+            var req = row.querySelector('.pp-fb-row__req input[type=checkbox]');
             var options = row.querySelector('[data-fb-options]');
             var fileAccept = row.querySelector('[data-fb-file-accept]');
             var fileMax = row.querySelector('input[type=number]');
@@ -167,6 +238,17 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
 
     Array.prototype.forEach.call(list.querySelectorAll('[data-fb-row]'), wireRow);
+
+    list.addEventListener('dragover', function (e) {
+        var dragged = list.querySelector('.is-dragging');
+        if (!dragged) return;
+        e.preventDefault();
+        var target = e.target.closest('[data-fb-row]');
+        if (!target || target === dragged) return;
+        var rect = target.getBoundingClientRect();
+        if ((e.clientY - rect.top) > rect.height / 2) target.after(dragged);
+        else target.before(dragged);
+    });
 
     addBtn.addEventListener('click', function () {
         var row = makeRow(null);
