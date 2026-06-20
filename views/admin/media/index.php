@@ -37,15 +37,19 @@ $flashError   = \Core\Session::flash('error');
 <?php endif; ?>
 
 <form method="POST" action="<?= e(base_url('admin/media')) ?>"
-      enctype="multipart/form-data" class="pp-form" style="margin-bottom:24px">
+      enctype="multipart/form-data" class="pp-form pp-media-upload">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
-    <div class="pp-form-row" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-        <div style="flex:1 1 280px">
+    <div class="pp-form-row pp-media-upload__row">
+        <div class="pp-media-upload__field--file">
             <label class="pp-label" for="pp-media-file">Archivo</label>
-            <input type="file" id="pp-media-file" name="file" accept="<?= e($accept) ?>" required>
+            <label class="pp-file-input" id="pp-media-file-wrap">
+                <input type="file" id="pp-media-file" name="file" accept="<?= e($accept) ?>" required>
+                <span class="pp-file-input__btn">Seleccionar imagen</span>
+                <span class="pp-file-input__name">Ningún archivo seleccionado</span>
+            </label>
         </div>
-        <div style="flex:2 1 320px">
+        <div class="pp-media-upload__field--alt">
             <label class="pp-label" for="pp-media-alt">Texto alternativo (opcional)</label>
             <input type="text" id="pp-media-alt" name="alt_text" maxlength="500"
                    placeholder="Describe la imagen para accesibilidad">
@@ -64,38 +68,56 @@ $flashError   = \Core\Session::flash('error');
         </div>
     </div>
 <?php else: ?>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">
+    <div class="pp-media-grid">
         <?php foreach ($items as $m):
             $url = base_url(ltrim((string) $m['path'], '/'));
             $sizeKb = max(1, (int) round(((int) $m['file_size']) / 1024));
             $dims = ($m['width'] && $m['height']) ? ((int) $m['width']) . '×' . ((int) $m['height']) : '—';
         ?>
-        <div class="pp-card" style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;background:var(--pp-surface);display:flex;flex-direction:column">
-            <a href="<?= e($url) ?>" target="_blank" rel="noopener" style="display:block;background:#f1f5f9;aspect-ratio:4/3;overflow:hidden">
-                <img src="<?= e($url) ?>" alt="<?= e((string) ($m['alt_text'] ?? '')) ?>"
-                     style="width:100%;height:100%;object-fit:cover;display:block">
+        <div class="pp-media-card">
+            <a href="<?= e($url) ?>" target="_blank" rel="noopener" class="pp-media-card__thumb">
+                <img src="<?= e($url) ?>" alt="<?= e((string) ($m['alt_text'] ?? '')) ?>">
             </a>
-            <div style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;flex:1">
-                <div style="font-size:.8rem;color:var(--pp-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= e((string) $m['original_name']) ?>">
+            <div class="pp-media-card__body">
+                <div class="pp-media-card__name" title="<?= e((string) $m['original_name']) ?>">
                     <?= e((string) $m['original_name']) ?>
                 </div>
-                <div style="font-size:.75rem;color:var(--pp-text-muted)">
+                <div class="pp-media-card__meta">
                     <?= e($dims) ?> · <?= e($sizeKb) ?> KB · <?= e(strtoupper((string) explode('/', (string) $m['mime_type'])[1] ?? '')) ?>
                 </div>
-                <form method="POST" action="<?= e(base_url('admin/media/' . (int) $m['id'] . '/alt')) ?>" class="pp-form" style="margin-top:auto">
+                <form method="POST" action="<?= e(base_url('admin/media/' . (int) $m['id'] . '/alt')) ?>" class="pp-media-card__alt-form">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="text" name="alt_text" value="<?= e((string) ($m['alt_text'] ?? '')) ?>"
-                           maxlength="500" placeholder="Texto alternativo"
-                           style="width:100%;font-size:.85rem;padding:6px 8px;border:1px solid var(--pp-border);border-radius:4px;margin-bottom:6px">
-                    <button type="submit" class="pp-btn pp-btn--ghost" style="font-size:.8rem;padding:6px 10px;width:100%">Guardar alt</button>
+                           maxlength="500" placeholder="Texto alternativo" class="pp-media-card__alt-input">
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Guardar</button>
                 </form>
                 <form method="POST" action="<?= e(base_url('admin/media/' . (int) $m['id'] . '/delete')) ?>"
-                      style="margin:6px 0 0" onsubmit="return confirm('¿Borrar esta imagen?');">
+                      class="pp-media-card__delete-form" onsubmit="return confirm('¿Borrar esta imagen?');">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                    <button type="submit" class="pp-btn pp-btn--ghost" style="font-size:.8rem;padding:6px 10px;width:100%;color:#b91c1c">Borrar</button>
+                    <button type="submit" class="pp-btn pp-btn--ghost pp-btn--danger-text">Borrar</button>
                 </form>
             </div>
         </div>
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+
+<?php \Core\View::start('scripts'); ?>
+<script>
+(function () {
+    var input = document.getElementById('pp-media-file');
+    if (!input) return;
+    var wrap = document.getElementById('pp-media-file-wrap');
+    var name = wrap.querySelector('.pp-file-input__name');
+    input.addEventListener('change', function () {
+        if (input.files && input.files.length) {
+            name.textContent = input.files[0].name;
+            wrap.classList.add('has-file');
+        } else {
+            name.textContent = 'Ningún archivo seleccionado';
+            wrap.classList.remove('has-file');
+        }
+    });
+})();
+</script>
+<?php \Core\View::end(); ?>

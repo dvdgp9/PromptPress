@@ -76,8 +76,6 @@
                 <span class="pp-hamburger"></span>
             </button>
 
-            <h1 class="pp-topbar__title"><?= e(\Core\View::section('title', 'Panel')) ?></h1>
-
             <div class="pp-topbar__actions">
                 <?php if (isset($siteName)): ?>
                 <a href="<?= e(base_url('/')) ?>" class="pp-topbar__site" target="_blank" title="Ver sitio">
