@@ -599,17 +599,13 @@ input[name="model"], input[name="model_light"], input#pp-ai-model {
 
 /* ---- Dashboard widget de cumplimiento (G6) ---- */
 .pp-compliance-widget {
-    background: #fff;
+    background: var(--pp-surface);
     border: 1px solid var(--pp-border);
-    border-radius: 14px;
+    border-radius: var(--pp-radius-lg);
     padding: 18px 22px;
     margin: 20px 0 24px;
-    border-left: 4px solid #ca8a04;
-    box-shadow: 0 4px 12px -8px rgba(15,23,42,0.1);
+    box-shadow: var(--pp-shadow-sm);
 }
-.pp-compliance-widget--orange { border-left-color: #ea580c; background: linear-gradient(180deg, #fff7ed 0%, #fff 30%); }
-.pp-compliance-widget--red    { border-left-color: #dc2626; background: linear-gradient(180deg, #fef2f2 0%, #fff 30%); }
-.pp-compliance-widget--yellow { border-left-color: #ca8a04; background: linear-gradient(180deg, #fefce8 0%, #fff 30%); }
 
 .pp-compliance-widget__head {
     display: flex;
