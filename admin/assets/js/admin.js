@@ -62,26 +62,60 @@
         });
     }
 
-    // Mensajes: filtros avanzados progresivos y fechas personalizadas.
-    var inboxFilterToggle = document.querySelector('[data-inbox-filter-toggle]');
-    var inboxAdvanced = document.querySelector('[data-inbox-advanced]');
-    if (inboxFilterToggle && inboxAdvanced) {
-        inboxFilterToggle.addEventListener('click', function () {
-            var willOpen = inboxAdvanced.hidden;
-            inboxAdvanced.hidden = !willOpen;
-            inboxFilterToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    // Mensajes: filtros AJAX con URL compartible y fallback GET sin JavaScript.
+    var inboxRequest = null;
+    var loadInbox = function (url, pushState) {
+        var inbox = document.querySelector('.pp-inbox');
+        if (!inbox) return;
+        if (inboxRequest) inboxRequest.abort();
+        inboxRequest = new AbortController();
+        inbox.classList.add('is-loading');
+
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: inboxRequest.signal
+        }).then(function (response) {
+            if (!response.ok) throw new Error('No se pudieron cargar los mensajes.');
+            return response.text();
+        }).then(function (html) {
+            var page = new DOMParser().parseFromString(html, 'text/html');
+            var nextInbox = page.querySelector('.pp-inbox');
+            if (!nextInbox) throw new Error('Respuesta de mensajes no válida.');
+            inbox.replaceWith(nextInbox);
+            if (pushState) window.history.pushState({ inbox: true }, '', url);
+        }).catch(function (error) {
+            if (error.name !== 'AbortError') window.location.assign(url);
+        }).finally(function () {
+            inboxRequest = null;
         });
-    }
-    var inboxPeriod = document.querySelector('[data-inbox-period]');
-    var inboxCustomDates = document.querySelector('[data-inbox-custom-dates]');
-    if (inboxPeriod && inboxCustomDates) {
-        var syncInboxDates = function () {
-            inboxCustomDates.hidden = inboxPeriod.value !== 'custom';
-            inboxCustomDates.querySelectorAll('input').forEach(function (input) {
-                input.disabled = inboxPeriod.value !== 'custom';
-            });
-        };
-        inboxPeriod.addEventListener('change', syncInboxDates);
-        syncInboxDates();
-    }
+    };
+
+    document.addEventListener('submit', function (event) {
+        var form = event.target.closest('[data-inbox-filters]');
+        if (!form) return;
+        event.preventDefault();
+        var query = new URLSearchParams(new FormData(form));
+        query.delete('page');
+        Array.from(query.entries()).forEach(function (entry) {
+            if (entry[1] === '' || entry[1] === '0') query.delete(entry[0]);
+        });
+        loadInbox(form.action + (query.toString() ? '?' + query.toString() : ''), true);
+    });
+
+    document.addEventListener('change', function (event) {
+        var form = event.target.closest('[data-inbox-filters]');
+        if (!form || (!event.target.matches('select') && !event.target.matches('input[type="date"]'))) return;
+        form.requestSubmit();
+    });
+
+    document.addEventListener('click', function (event) {
+        var link = event.target.closest('.pp-inbox-status a, .pp-inbox-clear, .pp-inbox .pp-pagination a, .pp-inbox-empty a');
+        if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        loadInbox(link.href, true);
+    });
+
+    window.addEventListener('popstate', function () {
+        if (document.querySelector('.pp-inbox')) loadInbox(window.location.href, false);
+    });
 })();
