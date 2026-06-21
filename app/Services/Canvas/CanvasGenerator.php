@@ -48,6 +48,12 @@ final class CanvasGenerator
                     'sections_outline' => trim((string) ($input['sections_outline'] ?? '')) !== ''
                         ? (string) $input['sections_outline']
                         : '(sin outline: decide tú la estructura óptima, 5-7 secciones)',
+                    'base_design' => trim((string) ($input['base_design'] ?? '')) !== ''
+                        ? (string) $input['base_design']
+                        : '(sin semilla concreta: mantén la coherencia por los tokens de marca y un aire sobrio del sitio)',
+                    'source_content' => trim((string) ($input['source_content'] ?? '')) !== ''
+                        ? (string) $input['source_content']
+                        : '(el usuario no aportó contenido propio: redacta tú el contenido para el negocio, sin inventar datos concretos como precios, nombres, cifras o contacto)',
                     'available_forms' => self::availableForms($siteId),
                     'available_pages' => self::availablePages($siteId),
                     'extra_context' => $extraContext,

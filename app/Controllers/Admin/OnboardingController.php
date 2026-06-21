@@ -1649,14 +1649,18 @@ final class OnboardingController
      *
      * @return array{id:int,title:string,edit_url:string,sections_count:int,template:string}
      */
-    public static function generateCanvasPageForPanel(int $siteId, string $title, string $type, string $goal, string $context, int $parentId = 0): array
+    public static function generateCanvasPageForPanel(int $siteId, string $title, string $type, string $goal, string $context, int $parentId = 0, array $options = []): array
     {
-        $referenceImages = self::loadReferenceImagesForVision($siteId);
+        // PAGE-FROM-REF — si el caller aporta referencias propias (subidas al
+        // vuelo), se usan ESAS; si no, se reutilizan las guardadas del onboarding.
+        $referenceImages = !empty($options['reference_images']) && is_array($options['reference_images'])
+            ? $options['reference_images']
+            : self::loadReferenceImagesForVision($siteId);
         $item = ['reason' => $context !== '' ? $context : $goal];
-        return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages);
+        return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages, $options);
     }
 
-    private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages): array
+    private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages, array $options = []): array
     {
         $hasRefs = $referenceImages !== [];
         $layout = self::describeReferenceLayout($siteId, $title, $goal, $context, $referenceImages);
@@ -1706,6 +1710,8 @@ final class OnboardingController
             'language' => 'es',
             'design_language' => $designLanguage,
             'sections_outline' => implode("\n", $outline),
+            'base_design' => (string) ($options['base_design'] ?? ''),
+            'source_content' => (string) ($options['source_content'] ?? ''),
             'extra_context' => trim(
                 "Tipo de página: {$type}\n"
               . "Página propuesta por onboarding: " . (string) ($item['reason'] ?? '') . "\n"

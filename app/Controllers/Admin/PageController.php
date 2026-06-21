@@ -171,6 +171,19 @@ class PageController
         $data['pageTypes'] = self::PAGE_TYPES;
         $data['aiMeta'] = AIProviderFactory::currentMeta($siteId);
         $data['pages'] = self::loadExistingPages($siteId);
+        // PAGE-FROM-REF — semillas de coherencia (páginas canvas del sitio, la
+        // home primero) y documentos listos para usar como contenido aportado
+        // en "Desde una referencia".
+        $data['seedPages'] = Database::select(
+            "SELECT id, title, page_type FROM pages
+             WHERE site_id = ? AND render_mode = 'canvas'
+             ORDER BY (page_type = 'home') DESC, id ASC",
+            [$siteId]
+        );
+        $data['documents'] = Database::select(
+            "SELECT id, title FROM documents WHERE site_id = ? AND status = 'ready' ORDER BY id DESC LIMIT 50",
+            [$siteId]
+        );
         $data['visualStyleCards'] = VisualStyleService::cardsForSite($siteId);
         $data['selectedVisualStyle'] = VisualStyleService::selectedForSite($siteId);
         $templates = PageTemplateService::all();
@@ -694,23 +707,32 @@ class PageController
         CSRF::check();
         $siteId = self::requireSiteId();
 
-        $title    = trim((string) Request::post('title', ''));
-        $pageType = (string) Request::post('page_type', 'landing');
-        $goal     = trim((string) Request::post('ai_page_goal', ''));
-        $audience = trim((string) Request::post('ai_target_audience', ''));
-        $details  = trim((string) Request::post('ai_extra_context', ''));
+        $title       = trim((string) Request::post('title', ''));
+        $pageType    = (string) Request::post('page_type', 'landing');
+        $goal        = trim((string) Request::post('ai_page_goal', ''));
+        $audience    = trim((string) Request::post('ai_target_audience', ''));
+        $details     = trim((string) Request::post('ai_extra_context', ''));
+        $parentId    = (int) Request::post('parent_id', 0);
+        $chosenModel = trim((string) Request::post('ai_model', ''));
+        $seedPageId  = (int) Request::post('seed_page_id', 0);
+        $documentId  = (int) Request::post('document_id', 0);
+        $sourceText  = trim((string) Request::post('source_content', ''));
 
         if ($title === '') {
             Response::json(['ok' => false, 'error' => 'Añade un título para tu página.'], 422);
         }
-        if (!isset(self::PAGE_TYPES[$pageType])) {
+        // La referencia SIEMPRE genera una página canvas de marketing (sin bloques).
+        if (!self::isCanvasMarketingType($pageType)) {
             $pageType = 'landing';
         }
         if ($goal === '') {
             Response::json(['ok' => false, 'error' => 'Describe el objetivo de tu página.'], 422);
         }
+        if ($parentId > 0 && !self::pageBelongsToSite($parentId, $siteId)) {
+            Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
+        }
 
-        // Procesar las imágenes de referencia subidas.
+        // Referencia visual: obligatoria (es el insumo que define la estructura).
         [$images, $imgError] = self::readReferenceImages();
         if ($imgError !== null) {
             Response::json(['ok' => false, 'error' => $imgError], 422);
@@ -719,126 +741,81 @@ class PageController
             Response::json(['ok' => false, 'error' => 'Sube al menos una captura de referencia.'], 422);
         }
 
-        $extraContext = trim(
-            ($audience !== '' ? "Público objetivo específico: {$audience}\n" : '')
-          . ($details !== '' ? "Detalles adicionales: {$details}" : '')
+        // Contenido aportado por el usuario: texto escrito y/o documento subido.
+        $sourceContent = self::resolveSourceContent($siteId, $sourceText, $documentId);
+
+        // Semilla de coherencia: ADN visual de una página canvas existente del sitio.
+        $baseDesign = '';
+        if ($seedPageId > 0 && self::pageBelongsToSite($seedPageId, $siteId)) {
+            $baseDesign = \App\Services\Canvas\CanvasService::designSeed($seedPageId);
+        }
+
+        // Modelo elegido para esta generación (vacío = principal). Estático por petición.
+        if ($chosenModel !== '') {
+            AIProviderFactory::setModelOverride($chosenModel);
+        }
+
+        $context = trim(
+            ($audience !== '' ? "Público objetivo: {$audience}\n" : '')
+          . ($details !== '' ? $details : '')
         );
 
+        // Mismo motor canvas que el onboarding (HTML libre + Studio), ahora con
+        // semilla de coherencia y contenido aportado. Sin fallback a bloques: si
+        // falla, devolvemos un error claro para reintentar.
         try {
-            $aiUsage = self::emptyAiUsage();
-
-            // DMB-F3.5 — Enfoque definitivo: la referencia no se mapea a un
-            // catálogo cerrado de variantes. Cada bloque se escribe en
-            // PromptPress-friendly HTML y se valida con CustomBlockSanitizer.
-            $generatedSections = [];
-            $blockPlan = self::referenceCustomBlockPlan($pageType);
-            foreach ($blockPlan as $index => $block) {
-                $sectionContext = trim(
-                    "Objetivo de la página: {$goal}\n"
-                  . ($audience !== '' ? "Público objetivo: {$audience}\n" : '')
-                  . "Posición: " . ($index + 1) . " de " . count($blockPlan) . "\n"
-                  . "Mantén coherencia entre bloques: ritmo, aire y criterio inspirados en la misma referencia.\n"
-                  . $details
-                );
-
-                $blockResult = CustomBlockGenerator::generate($siteId, [
-                    'page_title' => $title,
-                    'block_goal' => (string) ($block['goal'] ?? $goal),
-                    'section_role' => (string) ($block['role'] ?? ''),
-                    'language' => 'es',
-                    'available_images' => '',
-                    'extra_context' => $sectionContext,
-                    'is_first_section' => $index === 0,
-                    '_images' => $images,
-                ]);
-                self::addAiUsage($aiUsage, $blockResult);
-
-                $generatedSections[] = [
-                    'type'    => 'custom_block',
-                    'variant' => 'default',
-                    'content' => (array) ($blockResult['content'] ?? []),
-                ];
-            }
-        } catch (AIException $e) {
-            Response::json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'http_status' => $e->getHttpStatus(),
-            ], $e->getHttpStatus() >= 400 && $e->getHttpStatus() < 600 ? $e->getHttpStatus() : 422);
-        }
-
-        if ($generatedSections === []) {
-            Response::json(['ok' => false, 'error' => 'No se pudo generar contenido para las secciones.'], 422);
-        }
-
-        // 3) SEO (no bloqueante).
-        $pageContent = self::textFromGeneratedSections($generatedSections);
-        $seo = ['seo_title' => '', 'meta_description' => '', 'slug' => slugify($title)];
-        try {
-            $seoResult = AIActionRunner::run(Actions::IMPROVE_SEO, [
-                'page_title' => $title,
-                'page_type' => self::PAGE_TYPES[$pageType],
-                'current_slug' => slugify($title),
-                'current_meta_title' => '',
-                'current_meta_description' => '',
-                'page_content' => $pageContent,
-            ], $siteId);
-            if (is_array($seoResult['data'] ?? null)) {
-                $seo = array_merge($seo, $seoResult['data']);
-            }
-            self::addAiUsage($aiUsage, $seoResult);
-        } catch (AIException) {}
-
-        // 4) Persistir página + secciones.
-        $slug = self::uniqueSlug($siteId, (string) ($seo['slug'] ?? slugify($title)));
-        $now  = date('Y-m-d H:i:s');
-        try {
-            $pdo = Database::connection();
-            $pdo->beginTransaction();
-
-            Database::execute(
-                'INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
-                     status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            $result = OnboardingController::generateCanvasPageForPanel(
+                $siteId, $title, $pageType, $goal, $context, $parentId,
                 [
-                    $siteId, $title, $slug, $pageType, null, null,
-                    trim((string) ($seo['seo_title'] ?? '')) ?: null,
-                    trim((string) ($seo['meta_description'] ?? '')) ?: null,
-                    'draft', 0, self::nextTreeOrder($siteId, null),
-                    Auth::id(), $now, $now, null,
+                    'reference_images' => $images,
+                    'source_content'   => $sourceContent,
+                    'base_design'      => $baseDesign,
                 ]
             );
-            $pageId = (int) Database::lastInsertId();
-
-            foreach ($generatedSections as $pos => $section) {
-                $variant = SectionSchemas::normalizeVariant((string) $section['type'], (string) ($section['variant'] ?? 'default'));
-                Database::execute(
-                    'INSERT INTO page_sections
-                        (page_id, section_type, sort_order, content, style, status, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    [
-                        $pageId, $section['type'], $pos,
-                        json_encode($section['content'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                        $variant !== 'default' ? json_encode(['variant' => $variant], JSON_UNESCAPED_UNICODE) : null,
-                        'editable', $now, $now,
-                    ]
-                );
-            }
-            $pdo->commit();
         } catch (\Throwable $e) {
-            if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-            Response::json(['ok' => false, 'error' => 'Error guardando la página: ' . $e->getMessage()], 500);
+            error_log('[aiCreateFromReference] canvas falló: ' . get_class($e) . ': ' . $e->getMessage());
+            Response::json([
+                'ok' => false,
+                'error' => 'No se pudo generar la página desde la referencia. Inténtalo de nuevo o prueba con otro modelo.',
+            ], 422);
         }
 
-        Session::flash('success', 'Página diseñada desde tu referencia. Revísala antes de publicar.');
+        Session::flash('success', 'Página generada desde tu referencia. Revísala en el Studio antes de publicar.');
         Response::json([
             'ok' => true,
-            'page_id' => $pageId,
-            'edit_url' => base_url('admin/pages/' . $pageId . '/edit'),
-            'sections_count' => count($generatedSections),
-            'ai_usage' => $aiUsage ?? self::emptyAiUsage(),
+            'page_id' => $result['id'],
+            'edit_url' => base_url('admin/canvas/' . $result['id']),
+            'sections_count' => $result['sections_count'] ?? 1,
+            'ai_usage' => self::emptyAiUsage(),
         ]);
+    }
+
+    /**
+     * PAGE-FROM-REF — Compone el contenido aportado por el usuario para la
+     * generación: el texto escrito y/o el texto extraído de un documento ya
+     * subido (status 'ready' y del mismo sitio). Acotado para controlar tokens.
+     */
+    private static function resolveSourceContent(int $siteId, string $text, int $documentId): string
+    {
+        $parts = [];
+        if ($text !== '') {
+            $parts[] = $text;
+        }
+        if ($documentId > 0) {
+            $doc = Database::selectOne(
+                'SELECT title, extracted_text FROM documents WHERE id = ? AND site_id = ? AND status = "ready"',
+                [$documentId, $siteId]
+            );
+            $docText = trim((string) ($doc['extracted_text'] ?? ''));
+            if ($docText !== '') {
+                $parts[] = 'Documento "' . trim((string) ($doc['title'] ?? 'documento')) . "\":\n" . $docText;
+            }
+        }
+        $joined = trim(implode("\n\n", $parts));
+        if (mb_strlen($joined) > 12000) {
+            $joined = mb_substr($joined, 0, 12000) . "\n…(contenido recortado)";
+        }
+        return $joined;
     }
 
     /**
@@ -882,47 +859,6 @@ class PageController
             $out[] = $normalized;
         }
         return [$out, null];
-    }
-
-    /**
-     * Plan mínimo para Studio "Desde una referencia" usando PP-friendly HTML.
-     * Es deliberadamente corto: prueba el enfoque flexible sin crear todavía
-     * el lenguaje de sitio completo que vivirá en onboarding.
-     *
-     * @return array<int,array{role:string,goal:string}>
-     */
-    private static function referenceCustomBlockPlan(string $pageType): array
-    {
-        $middle = match ($pageType) {
-            'service' => [
-                'role' => 'Bloque central de servicios, proceso o beneficios con 3 puntos claros.',
-                'goal' => 'Explicar el valor del servicio con estructura clara, argumentos concretos y señales de confianza.',
-            ],
-            'product' => [
-                'role' => 'Bloque central de producto con beneficios, prueba y detalles de decisión.',
-                'goal' => 'Presentar el producto de forma comprensible y orientar la decisión sin inventar precios ni claims.',
-            ],
-            'contact' => [
-                'role' => 'Bloque central de confianza y motivos para contactar.',
-                'goal' => 'Reducir fricción antes del contacto y aclarar qué puede esperar el visitante.',
-            ],
-            default => [
-                'role' => 'Bloque central de beneficios, método o argumentos principales.',
-                'goal' => 'Desarrollar la propuesta de valor con puntos escaneables y una jerarquía visual clara.',
-            ],
-        };
-
-        return [
-            [
-                'role' => 'Primer bloque/hero de la página, inspirado en la composición superior de la referencia.',
-                'goal' => 'Captar atención, explicar la promesa principal y dirigir hacia la acción más importante.',
-            ],
-            $middle,
-            [
-                'role' => 'Bloque final de cierre o llamada a la acción, coherente con el aire de la referencia.',
-                'goal' => 'Cerrar la página con una acción clara y una razón convincente para dar el siguiente paso.',
-            ],
-        ];
     }
 
     /**

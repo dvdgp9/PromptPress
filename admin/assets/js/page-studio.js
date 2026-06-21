@@ -541,6 +541,21 @@
         });
         dz.addEventListener('drop', function (e) { if (e.dataTransfer) addFiles(e.dataTransfer.files); });
 
+        // Conmutador del origen de contenido (escribir / desde un documento).
+        form.querySelectorAll('[data-ref-source]').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var src = tab.getAttribute('data-ref-source');
+                form.querySelectorAll('[data-ref-source]').forEach(function (b) {
+                    var on = b === tab;
+                    b.classList.toggle('is-active', on);
+                    b.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+                form.querySelectorAll('[data-ref-source-panel]').forEach(function (p) {
+                    p.hidden = p.getAttribute('data-ref-source-panel') !== src;
+                });
+            });
+        });
+
         titleEl.addEventListener('input', updateSubmit);
         goalEl.addEventListener('input', updateSubmit);
 
@@ -562,15 +577,24 @@
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             if (submit.disabled) return;
-            setButtonBusy(submit, true, 'Diseñando');
-            setStatus('Subiendo tu referencia…');
+            setButtonBusy(submit, true, 'Generando');
+            setStatus('Generando tu página…');
             progress.hidden = false;
             startReferenceProgress();
+
+            var typeEl    = form.querySelector('[name="page_type"]');
+            var contentEl = form.querySelector('[name="source_content"]');
+            var docEl     = form.querySelector('[name="document_id"]');
+            var seedEl    = form.querySelector('[name="seed_page_id"]');
 
             var fd = new FormData();
             fd.set('_csrf', form.querySelector('[name="_csrf"]').value);
             fd.set('title', titleEl.value.trim());
+            fd.set('page_type', typeEl ? typeEl.value : 'landing');
             fd.set('ai_page_goal', goalEl.value.trim());
+            fd.set('source_content', contentEl ? contentEl.value.trim() : '');
+            fd.set('document_id', (docEl && docEl.value) ? docEl.value : '');
+            fd.set('seed_page_id', (seedEl && seedEl.value) ? seedEl.value : '');
             fd.set('ai_target_audience', audEl ? audEl.value.trim() : '');
             fd.set('ai_extra_context', detEl ? detEl.value.trim() : '');
             files.forEach(function (f) { fd.append('references[]', f); });
@@ -583,12 +607,12 @@
                     return body;
                 });
             }).then(function (body) {
-                setStatus('Página diseñada. Abriendo el editor…', 'ok');
+                setStatus('Página generada. Abriendo el Studio…', 'ok');
                 window.location.href = body.edit_url;
             }).catch(function (err) {
                 progress.hidden = true;
-                setStatus(err.message || 'No se pudo diseñar la página.', 'err');
-                setButtonBusy(submit, false, 'Diseñar desde la referencia');
+                setStatus(err.message || 'No se pudo generar la página.', 'err');
+                setButtonBusy(submit, false, 'Generar página');
                 updateSubmit();
             });
         });

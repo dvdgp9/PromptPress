@@ -8,6 +8,8 @@
  * @var array $templateCards
  * @var array $visualStyleCards
  * @var string $selectedVisualStyle
+ * @var array $seedPages
+ * @var array $documents
  */
 \Core\View::extend('admin/layout');
 ?>
@@ -16,7 +18,8 @@
 <?php \Core\View::start('bodyClass'); ?>pp-studio-mode<?php \Core\View::end(); ?>
 
 <?php \Core\View::start('scripts'); ?>
-<script src="<?= e(base_url('admin/assets/js/page-studio.js')) ?>"></script>
+<?php $jsPath = PP_ROOT . '/admin/assets/js/page-studio.js'; $jsVer = file_exists($jsPath) ? filemtime($jsPath) : (defined('PP_VERSION') ? PP_VERSION : '1'); ?>
+<script src="<?= e(base_url('admin/assets/js/page-studio.js')) ?>?v=<?= e($jsVer) ?>"></script>
 <?php \Core\View::end(); ?>
 
 <section class="pp-page-studio"
@@ -93,98 +96,118 @@
         <main class="pp-page-studio__main">
             <section class="pp-studio-mode-switch" role="tablist" aria-label="Modo de creación">
                 <button type="button" class="is-active" data-studio-mode="idea" role="tab" aria-selected="true">Desde idea</button>
-                <button type="button" data-studio-mode="template" role="tab" aria-selected="false">Desde estilo</button>
                 <button type="button" data-studio-mode="reference" role="tab" aria-selected="false">Desde una referencia</button>
             </section>
 
             <section class="pp-studio-panel" data-studio-mode-panel="reference" hidden>
                 <div class="pp-studio-panel__head">
                     <div>
-                        <h3>Diseña una página a partir de una referencia</h3>
-                        <p>Sube la captura de una página que te guste. La IA verá su estructura y creará secciones editables inspiradas en ella, con el contenido escrito para tu negocio.</p>
+                        <h3>Crea una página desde una referencia</h3>
+                        <p>Tú pones el contenido y una captura de la estructura que te gusta. PromptPress la construye con el estilo de tu web —tomando una página tuya como base— y la deja lista para revisar en el Studio.</p>
                     </div>
                 </div>
 
                 <form class="pp-studio-template-form pp-studio-reference-form" id="pp-studio-reference-form">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
-                    <div class="pp-dropzone" id="pp-reference-dropzone" tabindex="0" role="button"
-                         aria-label="Subir capturas de referencia">
-                        <input type="file" id="pp-reference-input" name="references[]" accept="image/png,image/jpeg,image/webp" multiple hidden>
-                        <div class="pp-dropzone__empty" id="pp-reference-empty">
-                            <span class="pp-dropzone__icon" aria-hidden="true">🖼️</span>
-                            <strong>Arrastra una captura aquí o haz clic para elegir</strong>
-                            <small>PNG, JPG o WebP · hasta 4 imágenes · máx. 8 MB cada una</small>
-                        </div>
-                        <div class="pp-dropzone__previews" id="pp-reference-previews" hidden></div>
-                    </div>
+                    <!-- Paso 1 — Contenido -->
+                    <fieldset class="pp-ref-step">
+                        <legend class="pp-ref-step__head"><span class="pp-ref-step__num">1</span> Tu contenido</legend>
 
-                    <label>Título de tu página<input type="text" name="title" id="pp-reference-title" required maxlength="200" placeholder="Ej. Clínica Dental Sonrisa"></label>
-                    <label>Objetivo<textarea name="ai_page_goal" id="pp-reference-goal" rows="2" required placeholder="Ej. captar solicitudes de cita"></textarea></label>
-                    <label>Público (opcional)<input type="text" name="ai_target_audience" placeholder="Ej. familias de la zona"></label>
-                    <label>Detalles (opcional)<textarea name="ai_extra_context" rows="2" placeholder="Servicios, tono o requisitos que deba respetar la IA…"></textarea></label>
+                        <div class="pp-ref-grid">
+                            <label>Título de la página<input type="text" name="title" id="pp-reference-title" required maxlength="200" placeholder="Ej. Implantes dentales"></label>
+                            <label>Tipo de página
+                                <select name="page_type" id="pp-reference-type">
+                                    <?php foreach (['landing' => 'Landing', 'service' => 'Servicio', 'product' => 'Producto', 'contact' => 'Contacto'] as $tv => $tl): ?>
+                                        <option value="<?= e($tv) ?>"><?= e($tl) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                        </div>
+
+                        <label>Objetivo<textarea name="ai_page_goal" id="pp-reference-goal" rows="2" required placeholder="Ej. captar solicitudes de cita"></textarea></label>
+
+                        <div class="pp-ref-source">
+                            <div class="pp-ref-source__tabs" role="tablist" aria-label="Origen del contenido">
+                                <button type="button" class="is-active" data-ref-source="write" role="tab" aria-selected="true">Escribir</button>
+                                <?php if (!empty($documents)): ?>
+                                    <button type="button" data-ref-source="doc" role="tab" aria-selected="false">Desde un documento</button>
+                                <?php endif; ?>
+                            </div>
+
+                            <div data-ref-source-panel="write">
+                                <label class="pp-ref-source__label">Contenido de la página
+                                    <textarea name="source_content" id="pp-reference-content" rows="6" placeholder="Pega o escribe aquí el texto real: servicios, descripciones, datos, precios… PromptPress lo maqueta y no inventa datos."></textarea>
+                                </label>
+                            </div>
+
+                            <?php if (!empty($documents)): ?>
+                                <div data-ref-source-panel="doc" hidden>
+                                    <label class="pp-ref-source__label">Elige un documento ya subido
+                                        <select name="document_id" id="pp-reference-doc">
+                                            <option value="">— Selecciona un documento —</option>
+                                            <?php foreach ($documents as $d): ?>
+                                                <option value="<?= (int) $d['id'] ?>"><?= e($d['title']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </label>
+                                    <p class="pp-ref-hint">Usaremos el texto extraído de ese documento como contenido. <a href="<?= e(base_url('admin/documents')) ?>" target="_blank" rel="noopener">Gestionar documentos</a></p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </fieldset>
+
+                    <!-- Paso 2 — Referencia y base -->
+                    <fieldset class="pp-ref-step">
+                        <legend class="pp-ref-step__head"><span class="pp-ref-step__num">2</span> Referencia visual y base</legend>
+
+                        <div class="pp-dropzone" id="pp-reference-dropzone" tabindex="0" role="button"
+                             aria-label="Subir capturas de referencia">
+                            <input type="file" id="pp-reference-input" name="references[]" accept="image/png,image/jpeg,image/webp" multiple hidden>
+                            <div class="pp-dropzone__empty" id="pp-reference-empty">
+                                <span class="pp-dropzone__icon" aria-hidden="true">🖼️</span>
+                                <strong>Arrastra una captura de la estructura que te gusta</strong>
+                                <small>PNG, JPG o WebP · hasta 4 imágenes · máx. 8 MB cada una</small>
+                            </div>
+                            <div class="pp-dropzone__previews" id="pp-reference-previews" hidden></div>
+                        </div>
+
+                        <label>Página base (coherencia con tu web)
+                            <select name="seed_page_id" id="pp-reference-seed">
+                                <?php if (empty($seedPages)): ?>
+                                    <option value="">Estilo de marca (aún no hay páginas previas)</option>
+                                <?php else: ?>
+                                    <?php foreach ($seedPages as $sp): ?>
+                                        <?php $isHome = ($sp['page_type'] ?? '') === 'home'; $homeSuffix = ($isHome && mb_strtolower(trim((string) $sp['title'])) !== 'inicio') ? ' · Inicio' : ''; ?>
+                                        <option value="<?= (int) $sp['id'] ?>"><?= e($sp['title']) ?><?= $homeSuffix ?></option>
+                                    <?php endforeach; ?>
+                                    <option value="">Solo estilo de marca (sin página base)</option>
+                                <?php endif; ?>
+                            </select>
+                        </label>
+                        <p class="pp-ref-hint">La página nueva heredará el estilo de la página base; la captura solo aporta la estructura.</p>
+
+                        <details class="pp-ref-advanced">
+                            <summary>Opciones avanzadas</summary>
+                            <label>Público (opcional)<input type="text" name="ai_target_audience" placeholder="Ej. familias de la zona"></label>
+                            <label>Detalles (opcional)<textarea name="ai_extra_context" rows="2" placeholder="Tono, requisitos o matices que deba respetar la IA…"></textarea></label>
+                        </details>
+                    </fieldset>
 
                     <div class="pp-studio-template-form__actions pp-studio-reference-form__actions">
                         <p id="pp-reference-status" class="pp-studio-status" aria-live="polite"></p>
-                        <button type="submit" class="pp-btn pp-btn--primary" id="pp-reference-submit" disabled>Diseñar desde la referencia</button>
+                        <button type="submit" class="pp-btn pp-btn--primary" id="pp-reference-submit" disabled>Generar página</button>
                     </div>
 
                     <div class="pp-studio-progress pp-studio-reference-progress" id="pp-reference-progress" aria-live="polite" hidden>
                         <div class="pp-studio-progress__bar"><span></span></div>
                         <ol>
                             <li class="is-active">Analizando tu referencia</li>
-                            <li>Traduciendo el estilo a bloques editables</li>
-                            <li>Redactando contenido para tu marca</li>
-                            <li>Optimizando el SEO</li>
+                            <li>Tomando el estilo de tu página base</li>
+                            <li>Maquetando tu contenido</li>
+                            <li>Afinando el diseño</li>
                             <li>Casi listo…</li>
                         </ol>
-                    </div>
-                </form>
-            </section>
-
-            <section class="pp-studio-panel" data-studio-mode-panel="template" hidden>
-                <div class="pp-studio-panel__head">
-                    <div>
-                        <h3>Elige dirección visual</h3>
-                        <p>Estos estilos se adaptan a tus colores y fuentes. La estructura sigue siendo inteligente, no sectorial.</p>
-                    </div>
-                </div>
-                <div class="pp-studio-template-grid pp-studio-style-grid" id="pp-studio-template-grid">
-                    <?php foreach ($visualStyleCards as $i => $style): ?>
-                        <?php $isActive = ($style['slug'] ?? '') === ($selectedVisualStyle ?? ''); ?>
-                        <article class="pp-studio-template-card pp-studio-style-card<?= $isActive || ($i === 0 && empty($selectedVisualStyle)) ? ' is-active' : '' ?>"
-                                 data-template-slug="<?= e($style['template_slug']) ?>"
-                                 data-template-label="<?= e($style['label']) ?>"
-                                 data-visual-style="<?= e($style['slug']) ?>"
-                                 data-template-preview="<?= e($style['preview_url']) ?>">
-                            <div class="pp-studio-template-card__preview">
-                                <iframe src="<?= e($style['preview_url']) ?>" loading="lazy" title="Preview <?= e($style['label']) ?>"></iframe>
-                            </div>
-                            <div class="pp-studio-template-card__body">
-                                <strong><?= e($style['label']) ?></strong>
-                                <p><?= e($style['description']) ?></p>
-                                <small><?= e($style['heading_font']) ?> + <?= e($style['body_font']) ?></small>
-                                <span class="pp-studio-style-card__swatches" aria-hidden="true">
-                                    <i style="background:<?= e($style['palette']['bg'] ?? '#fff') ?>"></i>
-                                    <i style="background:<?= e($style['palette']['text'] ?? '#111') ?>"></i>
-                                    <i style="background:<?= e($style['palette']['accent'] ?? '#ea580c') ?>"></i>
-                                    <i style="background:<?= e($style['palette']['accent_2'] ?? '#f5f5f5') ?>"></i>
-                                </span>
-                            </div>
-                        </article>
-                    <?php endforeach; ?>
-                </div>
-                <form class="pp-studio-template-form" id="pp-studio-template-form">
-                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                    <input type="hidden" name="template_slug" id="pp-studio-template-slug" value="<?= e($visualStyleCards[0]['template_slug'] ?? ($templateCards[0]['slug'] ?? '')) ?>">
-                    <input type="hidden" name="visual_style" id="pp-studio-visual-style" value="<?= e($selectedVisualStyle ?: ($visualStyleCards[0]['slug'] ?? '')) ?>">
-                    <label>Título<input type="text" name="title" id="pp-studio-template-title" required maxlength="200" placeholder="Ej. Diseño web para clínicas dentales"></label>
-                    <label>Objetivo<textarea name="goal" id="pp-studio-template-goal" rows="2" required placeholder="Ej. captar solicitudes de presupuesto"></textarea></label>
-                    <label>Público (opcional)<input type="text" name="audience" placeholder="Ej. directores de clínicas"></label>
-                    <label>Detalles (opcional)<textarea name="details" rows="2" placeholder="Servicios concretos, tono o requisitos que deba respetar la IA…"></textarea></label>
-                    <div class="pp-studio-template-form__actions">
-                        <p id="pp-studio-template-status" aria-live="polite"></p>
-                        <button type="submit" class="pp-btn pp-btn--primary" id="pp-studio-template-submit">Crear con este estilo</button>
                     </div>
                 </form>
             </section>

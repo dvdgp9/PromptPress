@@ -394,6 +394,45 @@ final class CanvasService
     }
 
     /**
+     * PAGE-FROM-REF — Resume el "ADN visual" de una página canvas existente para
+     * usarla como SEMILLA de coherencia al generar una página nueva: la secuencia
+     * de secciones + su CSS (recortado a un presupuesto). El modelo NO copia este
+     * CSS; lo usa como referencia de TRATAMIENTO (espaciados, radios, sombras,
+     * tipografía, estilo de tarjetas/botones). Cadena vacía si la página no es
+     * canvas o no tiene contenido.
+     */
+    public static function designSeed(int $pageId, int $cssBudget = 2600): string
+    {
+        $canvas = self::get($pageId);
+        if ($canvas === null) {
+            return '';
+        }
+
+        $roles = [];
+        foreach (self::listSections($canvas['html']) as $section) {
+            $slug = trim((string) ($section['id'] ?? ''));
+            if ($slug !== '') {
+                $roles[] = $slug;
+            }
+        }
+
+        $css = trim($canvas['css']);
+        if (mb_strlen($css) > $cssBudget) {
+            $css = mb_substr($css, 0, $cssBudget) . "\n/* …CSS recortado… */";
+        }
+
+        $parts = [];
+        if ($roles !== []) {
+            $parts[] = 'Secuencia de secciones de la semilla: ' . implode(' → ', $roles) . '.';
+        }
+        if ($css !== '') {
+            $parts[] = "CSS de la semilla (úsalo como referencia de TRATAMIENTO —escala de espaciados, radios, sombras, tipografía, estilo de tarjetas y botones—; NO lo copies literal, escribe tu propio CSS coherente con él):\n" . $css;
+        }
+
+        return trim(implode("\n\n", $parts));
+    }
+
+    /**
      * FH4 — Normaliza una sección que vuelve del editor en vivo:
      *  - los embeds expandidos ([data-pp-placeholder]) vuelven a ser {{form:x}}
      *    o {{posts:recent|limit=3|variant=featured-first}}
