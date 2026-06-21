@@ -64,7 +64,7 @@ $renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge
                  data-page-order="<?= (int) ($node['tree_sort_order'] ?? 0) ?>"
                  data-page-edit="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>"
                  data-page-preview="<?= e(base_url('admin/pages/' . $id . '/preview')) ?>"
-                 data-page-structure="<?= e(base_url('admin/pages/' . $id . '/structure')) ?>">
+                 data-page-structure="<?= e('/admin/pages/' . $id . '/structure') ?>">
             <div class="pp-map-card__main">
                 <div class="pp-map-card__top">
                     <span class="pp-map-card__mark" aria-hidden="true"><?= e($typeInitial($node)) ?></span>
