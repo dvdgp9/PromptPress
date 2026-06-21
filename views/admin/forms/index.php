@@ -21,6 +21,15 @@ $formatValue = function (mixed $value): string {
 $formatBytes = function (int $bytes): string {
     return \App\Services\FormSubmissionService::formatBytes($bytes);
 };
+$mailLabel = static function (string $status, bool $visitor): string {
+    $labels = $visitor
+        ? ['unknown' => 'Sin datos', 'disabled' => 'Desactivada', 'skipped' => 'No enviada', 'sent' => 'Enviada', 'failed' => 'Error']
+        : ['skipped' => 'No configurado', 'sent' => 'Enviado', 'failed' => 'Error'];
+    return $labels[$status] ?? 'Sin datos';
+};
+$mailBadge = static function (string $status): string {
+    return $status === 'sent' ? 'pp-badge--success' : ($status === 'failed' ? 'pp-badge--danger' : 'pp-badge--muted');
+};
 ?>
 
 <?php \Core\View::start('title'); ?>Mensajes<?php \Core\View::end(); ?>
@@ -65,8 +74,12 @@ $formatBytes = function (int $bytes): string {
                     <span class="pp-badge <?= $s['status'] === 'unread' ? 'pp-badge--warning' : 'pp-badge--muted' ?>">
                         <?= $s['status'] === 'unread' ? 'Nuevo' : 'Leído' ?>
                     </span>
-                    <span class="pp-badge <?= $s['email_status'] === 'sent' ? 'pp-badge--success' : ($s['email_status'] === 'failed' ? 'pp-badge--danger' : 'pp-badge--muted') ?>">
-                        Email: <?= e((string) $s['email_status']) ?>
+                    <span class="pp-badge <?= e($mailBadge((string) $s['email_status'])) ?>" title="Correo de aviso enviado a la dirección configurada para administrar el formulario">
+                        Aviso al administrador: <?= e($mailLabel((string) $s['email_status'], false)) ?>
+                    </span>
+                    <?php $arStatus = (string) ($s['autoresponder_status'] ?? 'unknown'); ?>
+                    <span class="pp-badge <?= e($mailBadge($arStatus)) ?>" title="Correo automático enviado a la persona que rellenó el formulario">
+                        Respuesta al visitante: <?= e($mailLabel($arStatus, true)) ?>
                     </span>
                 </div>
             </summary>
@@ -93,7 +106,10 @@ $formatBytes = function (int $bytes): string {
                 </dl>
 
                 <?php if (!empty($s['email_error'])): ?>
-                    <div class="pp-submission-row__note"><?= e((string) $s['email_error']) ?></div>
+                    <div class="pp-submission-row__note"><strong>Aviso al administrador:</strong> <?= e((string) $s['email_error']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($s['autoresponder_error'])): ?>
+                    <div class="pp-submission-row__note"><strong>Respuesta al visitante:</strong> <?= e((string) $s['autoresponder_error']) ?></div>
                 <?php endif; ?>
 
                 <div class="pp-submission-row__actions">

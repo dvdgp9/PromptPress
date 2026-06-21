@@ -65,6 +65,10 @@ final class FormController
         // en sustitución del antiguo @mail(). Si el correo no está configurado,
         // se marca 'skipped' (la respuesta queda guardada igualmente).
         $siteId = (int) $section['site_id'];
+        $arEnabled = (string) ($content['autoresponder_enabled'] ?? '0') === '1';
+        $visitorEmail = (string) ($sender['email'] ?? '');
+        $arStatus = $arEnabled ? 'skipped' : 'disabled';
+        $arError = $arEnabled ? 'La autorrespuesta no llegó a enviarse.' : null;
         // FORMS F6 — destino del aviso: el del propio formulario si está definido,
         // si no, el del sitio.
         $formNotify = trim((string) ($content['notify_email'] ?? ''));
@@ -97,8 +101,8 @@ final class FormController
             'INSERT INTO form_submissions
                 (site_id, page_id, section_id, page_title, section_heading,
                  sender_name, sender_email, sender_phone, payload, ip_hash, user_agent,
-                 status, email_status, email_error, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 status, email_status, email_error, autoresponder_status, autoresponder_error, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $section['site_id'],
                 (int) $section['page_id'],
@@ -114,6 +118,8 @@ final class FormController
                 'unread',
                 $emailStatus,
                 $emailError,
+                $arStatus,
+                $arError,
                 date('Y-m-d H:i:s'),
             ]
         );
@@ -121,9 +127,11 @@ final class FormController
 
         // FORMS F6 — autorrespuesta al visitante (absorbe E6). Texto fijo del
         // formulario con placeholders {{nombre}}/{{sitio}} sustituidos (sin IA).
-        $arEnabled = (string) ($content['autoresponder_enabled'] ?? '0') === '1';
-        $visitorEmail = (string) ($sender['email'] ?? '');
-        if ($arEnabled && $visitorEmail !== '' && MailService::isConfigured($siteId)) {
+        if ($arEnabled && $visitorEmail === '') {
+            $arError = 'El formulario no recibió una dirección de email del visitante.';
+        } elseif ($arEnabled && !MailService::isConfigured($siteId)) {
+            $arError = 'El correo saliente no está configurado.';
+        } elseif ($arEnabled) {
             $site = Database::selectOne('SELECT name FROM sites WHERE id = ? LIMIT 1', [$siteId]);
             $repl = [
                 '{{nombre}}' => (string) ($sender['name'] ?? ''),
@@ -133,9 +141,20 @@ final class FormController
             $bodyText = strtr((string) ($content['autoresponder_body'] ?? ''), $repl);
             if (trim($bodyText) !== '') {
                 $arMsg = new MailMessage($visitorEmail, $subject !== '' ? $subject : 'Hemos recibido tu mensaje', $bodyText);
-                MailService::send($siteId, $arMsg, 'autoresponder');
+                $arResult = MailService::send($siteId, $arMsg, 'autoresponder');
+                $arStatus = $arResult->ok ? 'sent' : 'failed';
+                $arError = $arResult->ok ? null : mb_substr((string) $arResult->error, 0, 500);
+            } else {
+                $arError = 'La autorrespuesta está activa, pero el mensaje está vacío.';
             }
         }
+        if ($arEnabled && $arStatus === 'skipped' && $arError === null) {
+            $arError = 'La autorrespuesta no llegó a enviarse.';
+        }
+        Database::execute(
+            'UPDATE form_submissions SET autoresponder_status = ?, autoresponder_error = ? WHERE id = ?',
+            [$arStatus, $arError, $submissionId]
+        );
 
         $this->respond($target, $sectionId, 'ok', $successMessage, 200, $submissionId);
     }

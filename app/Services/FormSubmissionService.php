@@ -50,6 +50,8 @@ final class FormSubmissionService
                 status ENUM('unread','read') NOT NULL DEFAULT 'unread',
                 email_status ENUM('skipped','sent','failed') NOT NULL DEFAULT 'skipped',
                 email_error VARCHAR(500) DEFAULT NULL,
+                autoresponder_status ENUM('unknown','disabled','skipped','sent','failed') NOT NULL DEFAULT 'unknown',
+                autoresponder_error VARCHAR(500) DEFAULT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 read_at DATETIME DEFAULT NULL,
                 INDEX idx_form_submissions_site_date (site_id, created_at),
