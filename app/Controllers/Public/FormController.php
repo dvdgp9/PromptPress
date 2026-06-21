@@ -22,32 +22,43 @@ final class FormController
         $sectionId = (int) ($params['sectionId'] ?? 0);
         $section = $this->findSection($sectionId);
         if ($section === null) {
+            if ($this->wantsJson()) {
+                Response::json(['ok' => false, 'status' => 'not_found', 'message' => 'Formulario no encontrado.'], 404);
+            }
             Response::notFound('Formulario no encontrado');
         }
 
         $target = $this->redirectTarget($sectionId);
+        $content = json_decode((string) ($section['content'] ?? '{}'), true);
+        $content = is_array($content) ? $content : [];
+        $successMessage = trim((string) ($content['success_message'] ?? '')) ?: 'Gracias, hemos recibido tu mensaje.';
         if (!CSRF::validate(is_string(Request::post('_csrf')) ? Request::post('_csrf') : null)) {
-            Response::redirect($target . '?form_status=error&form_section=' . $sectionId . '#sec-' . $sectionId);
+            $this->respond($target, $sectionId, 'error', 'La sesión ha caducado. Recarga la página e inténtalo de nuevo.', 419);
         }
 
         if (trim((string) Request::post('company_url', '')) !== '') {
-            Response::redirect($target . '?form_status=ok&form_section=' . $sectionId . '#sec-' . $sectionId);
+            $this->respond($target, $sectionId, 'ok', $successMessage);
         }
 
         $ipHash = FormSubmissionService::ipHash(Request::ip());
         if (FormSubmissionService::isRateLimited($sectionId, $ipHash)) {
-            Response::redirect($target . '?form_status=rate_limited&form_section=' . $sectionId . '#sec-' . $sectionId);
+            $this->respond(
+                $target,
+                $sectionId,
+                'rate_limited',
+                'Hemos recibido varios envíos seguidos. Espera unos minutos antes de volver a intentarlo.',
+                429
+            );
         }
 
-        $content = json_decode((string) ($section['content'] ?? '{}'), true);
-        $content = is_array($content) ? $content : [];
         $fields = is_array($content['fields'] ?? null) ? $content['fields'] : [];
         [$payload, $errors, $sender] = $this->collectPayload($fields, (int) $section['site_id'], $sectionId);
 
         if ($errors !== []) {
             FormSubmissionService::deleteFilesFromPayload($payload);
-            Session::flash('form_error_' . $sectionId, implode(' ', array_slice($errors, 0, 2)));
-            Response::redirect($target . '?form_status=error&form_section=' . $sectionId . '#sec-' . $sectionId);
+            $detail = 'Revisa estos campos: ' . implode(', ', array_slice($errors, 0, 2)) . '.';
+            if (!$this->wantsJson()) Session::flash('form_error_' . $sectionId, $detail);
+            $this->respond($target, $sectionId, 'error', $detail, 422);
         }
 
         // E5 — notificación por correo vía MailService (SMTP configurable),
@@ -106,6 +117,7 @@ final class FormController
                 date('Y-m-d H:i:s'),
             ]
         );
+        $submissionId = (int) Database::lastInsertId();
 
         // FORMS F6 — autorrespuesta al visitante (absorbe E6). Texto fijo del
         // formulario con placeholders {{nombre}}/{{sitio}} sustituidos (sin IA).
@@ -125,7 +137,37 @@ final class FormController
             }
         }
 
-        Response::redirect($target . '?form_status=ok&form_section=' . $sectionId . '#sec-' . $sectionId);
+        $this->respond($target, $sectionId, 'ok', $successMessage, 200, $submissionId);
+    }
+
+    private function wantsJson(): bool
+    {
+        return stripos((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
+            || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+    }
+
+    private function respond(
+        string $target,
+        int $sectionId,
+        string $status,
+        string $message,
+        int $httpStatus = 200,
+        ?int $submissionId = null
+    ): never {
+        if ($this->wantsJson()) {
+            $payload = [
+                'ok' => $status === 'ok',
+                'status' => $status,
+                'message' => $message,
+                'section_id' => $sectionId,
+            ];
+            if ($submissionId !== null) $payload['submission_id'] = $submissionId;
+            Response::json($payload, $httpStatus);
+        }
+
+        Response::redirect(
+            $target . '?form_status=' . rawurlencode($status) . '&form_section=' . $sectionId . '#sec-' . $sectionId
+        );
     }
 
     private function findSection(int $sectionId): ?array

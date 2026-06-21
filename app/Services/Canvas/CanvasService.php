@@ -6,6 +6,8 @@ namespace App\Services\Canvas;
 
 use App\Services\CacheService;
 use App\Services\FormPlacementStore;
+use App\Services\FormStore;
+use App\Services\FormTemplates;
 use App\Services\Renderer\SectionRenderer;
 use Core\Database;
 
@@ -42,6 +44,7 @@ final class CanvasService
         // Placeholders a forma canónica ({{form:x}} sin espacios) para que la
         // detección por LIKE del endpoint de formularios sea fiable.
         $html = self::canonicalizePlaceholders($html);
+        $html = self::materializeFormIntents($pageId, $html);
 
         $clean = CanvasSanitizer::sanitizeHtml($html);
         // El CSS embebido en <style> del HTML se suma al canal CSS. Se guarda
@@ -73,6 +76,28 @@ final class CanvasService
         self::invalidateCache($pageId);
 
         return ['html' => $clean['html'], 'css' => $cleanCss, 'warnings' => $clean['warnings']];
+    }
+
+    /**
+     * FORMS-R T4 — convierte {{form:contact}} (y demas tipos del catalogo)
+     * en un ID real. Reutiliza por form_type para no duplicar definiciones.
+     */
+    private static function materializeFormIntents(int $pageId, string $html): string
+    {
+        $page = Database::selectOne('SELECT site_id FROM pages WHERE id = ? LIMIT 1', [$pageId]);
+        $siteId = (int) ($page['site_id'] ?? 0);
+        if ($siteId <= 0) return $html;
+
+        $types = array_fill_keys(FormTemplates::keys(), true);
+        return preg_replace_callback(
+            '/\{\{form:([a-z][a-z0-9_-]*)\}\}/i',
+            static function (array $match) use ($siteId, $types): string {
+                $type = strtolower((string) $match[1]);
+                if (!isset($types[$type])) return (string) $match[0];
+                return '{{form:' . FormStore::findOrCreateByType($siteId, $type) . '}}';
+            },
+            $html
+        ) ?? $html;
     }
 
     /** Puntero de versión actual (o la última si el puntero está sin fijar). */

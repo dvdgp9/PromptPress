@@ -633,7 +633,7 @@ final class Actions
                   . "- Tonos derivados SIEMPRE con color-mix(in srgb, var(--pp-primary) N%, ...) o transparencias. PROHIBIDO inventar colores hex/rgb propios (única excepción: blanco/negro puros en overlays sobre fotografía).\n"
                   . "- La referencia NUNCA aporta color ni tipografía: solo estructura, composición y aire.\n\n"
                   . "COMPONENTES FUNCIONALES:\n"
-                  . "- Formularios: NUNCA los dibujes. Si la página necesita uno, escribe el placeholder `{{form:REF}}` en su sección (REF = id o slug de los formularios disponibles listados abajo). Si no hay disponibles, usa un CTA a `/contacto`.\n"
+                  . "- Formularios: NUNCA los dibujes. Si la página necesita uno, escribe `{{form:TIPO}}` usando SOLO contact, newsletter, quote, booking o job; el sistema lo crea y deduplica. También puedes usar el ID de un formulario ya creado que encaje exactamente.\n"
                   . "- Botones del sistema disponibles si quieres consistencia: `pp-btn pp-btn--primary pp-btn--lg` y `pp-btn--ghost` (ya estilados por el skin). También puedes diseñar los tuyos con tokens.\n"
                   . "ENLACES Y CTAs — COHERENCIA CON EL SITIO (regla dura): la página es un TODO dentro de un sitio real, no una pieza aislada.\n"
                   . "- Cada enlace/CTA debe apuntar SOLO a uno de: (a) una PÁGINA REAL del sitio (lista «PÁGINAS DEL SITIO» abajo, usa su ruta exacta), (b) un ANCLA a una sección REAL de ESTA misma página (`href=\"#slug-de-seccion\"` que exista en tu html), (c) el placeholder `{{form:REF}}`, o (d) `/contacto`.\n"

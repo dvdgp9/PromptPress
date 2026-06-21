@@ -7,6 +7,7 @@ namespace App\Services\Canvas;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
+use App\Services\FormTemplates;
 use Core\Database;
 
 /**
@@ -117,20 +118,24 @@ final class CanvasGenerator
         throw $lastError ?? new AIException('No se pudo generar la página canvas.');
     }
 
-    /** Lista de formularios reales del sitio para el placeholder {{form:REF}}. */
+    /** Lista de formularios reales + intenciones que el runtime materializa. */
     private static function availableForms(int $siteId): string
     {
         $rows = Database::select(
             "SELECT ps.id, ps.content, p.slug
              FROM page_sections ps JOIN pages p ON p.id = ps.page_id
-             WHERE p.site_id = ? AND ps.section_type = 'form'
+             WHERE p.site_id = ? AND ps.section_type = 'form' AND ps.status != 'deleted'
              ORDER BY ps.id ASC LIMIT 6",
             [$siteId]
         );
-        if ($rows === []) {
-            return '(ninguno — NO pongas formulario; usa un CTA a /contacto)';
+        $lines = [
+            'INTENCIONES DISPONIBLES (se crean automaticamente si no existen):',
+        ];
+        foreach (FormTemplates::catalog() as $key => $template) {
+            $lines[] = '- {{form:' . $key . '}} — ' . $template['label'] . ': ' . $template['description'];
         }
-        $lines = [];
+        $lines[] = 'FORMULARIOS YA CREADOS (prefiere el ID si encaja exactamente):';
+        if ($rows === []) $lines[] = '- ninguno todavia';
         foreach ($rows as $row) {
             $content = json_decode((string) $row['content'], true) ?: [];
             $lines[] = '- {{form:' . (int) $row['id'] . '}} — "' . trim((string) ($content['heading'] ?? 'Formulario'))

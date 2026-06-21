@@ -98,6 +98,35 @@ final class FormStore
         return $content;
     }
 
+    /** Busca el primer formulario activo de un tipo de plantilla. */
+    public static function findByType(int $siteId, string $formType): ?array
+    {
+        if (!FormTemplates::exists($formType)) return null;
+        $pageId = self::containerPageId($siteId);
+        $rows = Database::select(
+            "SELECT id, content FROM page_sections
+             WHERE page_id = ? AND section_type = 'form' AND status != 'deleted'
+             ORDER BY id ASC",
+            [$pageId]
+        );
+        foreach ($rows as $row) {
+            $content = json_decode((string) $row['content'], true);
+            if (!is_array($content) || ($content['form_type'] ?? '') !== $formType) continue;
+            $content['id'] = (int) $row['id'];
+            return $content;
+        }
+        return null;
+    }
+
+    /** Reutiliza el formulario del tipo o crea uno desde su plantilla. */
+    public static function findOrCreateByType(int $siteId, string $formType): int
+    {
+        $existing = self::findByType($siteId, $formType);
+        return $existing !== null
+            ? (int) $existing['id']
+            : self::createFromTemplate($siteId, $formType);
+    }
+
     /**
      * Crea un formulario desde una plantilla tipada del catálogo
      * (`FormTemplates`). Devuelve su id. Si la clave no existe, cae a contacto.

@@ -382,7 +382,7 @@ final class SectionRenderer
             $html .= '<div class="pp-form__notice pp-form__notice--' . $kind . '">' . self::e($msg) . '</div>';
         }
 
-        $html .= '<form class="pp-form__form" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '"' . ($hasFile ? ' enctype="multipart/form-data"' : '') . '>';
+        $html .= '<form class="pp-form__form" data-pp-form-id="' . $sectionId . '" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '"' . ($hasFile ? ' enctype="multipart/form-data"' : '') . '>';
         $html .= '<input type="hidden" name="_csrf" value="' . self::e(CSRF::token()) . '">';
         $html .= '<input type="hidden" name="_return" value="' . self::e(Request::path()) . '">';
         $html .= '<div class="pp-form__hp" aria-hidden="true"><label>Web<input type="text" name="company_url" tabindex="-1" autocomplete="off"></label></div>';

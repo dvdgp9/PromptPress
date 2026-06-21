@@ -231,6 +231,73 @@
   }
 
   // ------------------------------------------------------------------
+  // formularios — envío AJAX progresivo; sin JS conserva POST + redirect
+  // ------------------------------------------------------------------
+  function formNotice(form, message, success) {
+    var panel = form.closest('.pp-form__panel') || form.parentNode;
+    var notice = panel ? panel.querySelector('.pp-form__notice[data-pp-ajax-notice]') : null;
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.setAttribute('data-pp-ajax-notice', '1');
+      notice.setAttribute('role', success ? 'status' : 'alert');
+      if (panel) panel.insertBefore(notice, form);
+    }
+    notice.className = 'pp-form__notice pp-form__notice--' + (success ? 'success' : 'error');
+    notice.textContent = message;
+    notice.setAttribute('role', success ? 'status' : 'alert');
+    return notice;
+  }
+
+  function initAjaxForm(form) {
+    if (form.dataset.ppAjaxReady || !window.fetch || !window.FormData) return;
+    form.dataset.ppAjaxReady = '1';
+    form.addEventListener('submit', function (e) {
+      if (e.defaultPrevented || form.dataset.ppSubmitting === '1') return;
+      e.preventDefault();
+      form.dataset.ppSubmitting = '1';
+      form.setAttribute('aria-busy', 'true');
+      var submit = form.querySelector('[type="submit"]');
+      if (submit) submit.disabled = true;
+
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      }).then(function (response) {
+        return response.json().catch(function () {
+          return { ok: false, message: 'No se pudo procesar la respuesta del servidor.' };
+        }).then(function (data) {
+          data.httpOk = response.ok;
+          return data;
+        });
+      }).then(function (data) {
+        var ok = !!data.ok && !!data.httpOk;
+        var notice = formNotice(form, data.message || (ok
+          ? 'Gracias, hemos recibido tu mensaje.'
+          : 'No se pudo enviar el formulario. Revisa los campos e inténtalo de nuevo.'), ok);
+        notice.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+        if (ok) {
+          form.reset();
+          all('[data-pp-file-field]', form).forEach(function (field) {
+            var input = field.querySelector('input[type="file"]');
+            if (input) input.dispatchEvent(new Event('change'));
+          });
+          document.dispatchEvent(new CustomEvent('pp:form-success', {
+            detail: { formId: parseInt(form.dataset.ppFormId || '0', 10), response: data }
+          }));
+        }
+      }).catch(function () {
+        formNotice(form, 'No hay conexión ahora mismo. Comprueba tu conexión e inténtalo de nuevo.', false);
+      }).finally(function () {
+        delete form.dataset.ppSubmitting;
+        form.removeAttribute('aria-busy');
+        if (submit) submit.disabled = false;
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
   ready(function () {
     all('[data-pp-behavior]').forEach(function (el) {
       switch (el.getAttribute('data-pp-behavior')) {
@@ -242,5 +309,6 @@
     });
     initSiteNav();
     all('[data-pp-file-field]').forEach(initFormFile);
+    all('.pp-form__form[data-pp-form-id]').forEach(initAjaxForm);
   });
 })();

@@ -1115,6 +1115,8 @@ span[data-ppb-icon] .pp-icon{display:block}
 .pp-form__row--consent input[type="checkbox"]{margin-top:3px;flex-shrink:0}
 .pp-form__privacy{font-size:.78rem;color:var(--pp-text-muted,#64748b);line-height:1.5;margin:14px 0 0;text-align:left;max-width:60ch}
 .pp-form__privacy a{color:var(--pp-primary);text-decoration:underline;text-underline-offset:3px}
+.pp-form__form[aria-busy="true"]{opacity:.72;pointer-events:none}
+.pp-form__form[aria-busy="true"] [type="submit"]{cursor:wait}
 
 /* inline-card — formulario en tarjeta elevada */
 .pp-form--v-inline-card{max-width:48em}
