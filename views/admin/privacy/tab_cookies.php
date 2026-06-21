@@ -22,6 +22,9 @@ $cookiesFormAction  = $cookiesFormAction  ?? base_url('admin/privacy/cookies');
 $cookiesSubmitLabel = $cookiesSubmitLabel ?? 'Guardar cambios';
 $hideCookiesSubmit  = $hideCookiesSubmit  ?? false;
 $hideBannerSection  = $hideBannerSection  ?? false;
+// El panel de Privacidad standalone delega las integraciones a Marketing; el
+// wizard de onboarding (que NO marca esto) sigue mostrando las tarjetas inline.
+$hideTrackingSection = $hideTrackingSection ?? false;
 ?>
 
 <div class="pp-privacy-cookies">
@@ -38,68 +41,24 @@ $hideBannerSection  = $hideBannerSection  ?? false;
     <?php endif; ?>
 
     <!-- Integraciones -->
+    <?php if ($hideTrackingSection): ?>
+    <section class="pp-privacy-section">
+        <header class="pp-privacy-section__head">
+            <h3>Integraciones de tracking</h3>
+            <p>Los píxeles y herramientas de medición (Google Analytics, Meta Pixel, etc.) se gestionan ahora desde el panel de Marketing. El banner se enciende solo cuando activas alguno.</p>
+        </header>
+        <p><a class="pp-btn pp-btn--secondary" href="<?= e(base_url('admin/marketing')) ?>">Ir a Marketing →</a></p>
+    </section>
+    <?php else: ?>
     <section class="pp-privacy-section">
         <header class="pp-privacy-section__head">
             <h3>Integraciones de tracking</h3>
             <p>Activa solo los servicios que realmente uses. Cada uno cargará su script únicamente cuando el visitante haya aceptado su categoría.</p>
         </header>
 
-        <form method="POST" action="<?= e($cookiesFormAction) ?>" class="pp-tracking-form">
-            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-
-            <?php foreach ($trackingCatalog as $key => $def):
-                $state = $serviceState[$key] ?? null;
-                $enabled = !empty($state['enabled']);
-                $config  = (array) ($state['config'] ?? []);
-                $catLabel = $trackingCategories[$def['category']]['label'] ?? $def['category'];
-            ?>
-            <article class="pp-tracking-card" data-tracking-key="<?= e($key) ?>">
-                <div class="pp-tracking-card__main">
-                    <label class="pp-tracking-card__toggle">
-                        <input type="checkbox" name="enabled_<?= e($key) ?>" value="1" <?= $enabled ? 'checked' : '' ?>
-                               data-toggle-tracking>
-                        <span class="pp-tracking-card__switch" aria-hidden="true"></span>
-                    </label>
-                    <div class="pp-tracking-card__info">
-                        <div class="pp-tracking-card__title-row">
-                            <h4><?= e($def['name']) ?></h4>
-                            <span class="pp-tracking-card__category">Categoría: <?= e($catLabel) ?></span>
-                        </div>
-                        <p class="pp-tracking-card__desc"><?= e($def['short_description']) ?></p>
-                        <p class="pp-tracking-card__processor">
-                            Proveedor: <?= e($def['processor']) ?>
-                            <?php if ($def['transfer_outside_eea']): ?>· transferencia fuera del EEE<?php endif; ?>
-                        </p>
-                    </div>
-                </div>
-
-                <div class="pp-tracking-card__config" <?= !$enabled ? 'hidden' : '' ?>>
-                    <?php foreach ($def['config_fields'] as $fieldKey => $fieldDef):
-                        $value = (string) ($config[$fieldKey] ?? '');
-                    ?>
-                    <div class="pp-form-group">
-                        <label for="config_<?= e($key) ?>_<?= e($fieldKey) ?>"><?= e($fieldDef['label']) ?></label>
-                        <input type="text"
-                               id="config_<?= e($key) ?>_<?= e($fieldKey) ?>"
-                               name="config_<?= e($key) ?>_<?= e($fieldKey) ?>"
-                               value="<?= e($value) ?>"
-                               placeholder="<?= e($fieldDef['placeholder']) ?>">
-                        <?php if (!empty($fieldDef['help'])): ?>
-                            <small><?= e($fieldDef['help']) ?></small>
-                        <?php endif; ?>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            </article>
-            <?php endforeach; ?>
-
-            <?php if (!$hideCookiesSubmit): ?>
-            <div class="pp-form-actions">
-                <button type="submit" class="pp-btn pp-btn--primary"><?= e($cookiesSubmitLabel) ?></button>
-            </div>
-            <?php endif; ?>
-        </form>
+        <?php include __DIR__ . '/_tracking_cards.php'; ?>
     </section>
+    <?php endif; ?>
 
     <!-- Banner textos -->
     <?php if (!$hideBannerSection): ?>
@@ -154,19 +113,3 @@ $hideBannerSection  = $hideBannerSection  ?? false;
     <?php endif; ?>
 
 </div>
-
-<script>
-(function() {
-    // Mostrar/ocultar el bloque de config al togglear el checkbox.
-    document.querySelectorAll('.pp-tracking-card').forEach(function(card) {
-        var toggle = card.querySelector('[data-toggle-tracking]');
-        var config = card.querySelector('.pp-tracking-card__config');
-        if (!toggle || !config) return;
-        toggle.addEventListener('change', function() {
-            config.hidden = !toggle.checked;
-            card.classList.toggle('is-enabled', toggle.checked);
-        });
-        if (toggle.checked) card.classList.add('is-enabled');
-    });
-})();
-</script>

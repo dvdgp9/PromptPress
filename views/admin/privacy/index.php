@@ -64,6 +64,9 @@ $levelInfo = $levelLabels[$status['level']] ?? $levelLabels['yellow'];
             include __DIR__ . '/tab_pages.php';
             break;
         case 'cookies':
+            // Las integraciones de tracking se gestionan en Marketing; aquí solo
+            // banner + estado. El wizard mantiene las tarjetas inline.
+            $hideTrackingSection = true;
             include __DIR__ . '/tab_cookies.php';
             break;
         case 'forms':

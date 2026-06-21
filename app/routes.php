@@ -30,6 +30,7 @@ use App\Controllers\Admin\SectionController;
 use App\Controllers\Admin\SeoController;
 use App\Controllers\Admin\PrivacyController;
 use App\Controllers\Admin\PrivacyWizardController;
+use App\Controllers\Admin\MarketingController;
 use App\Controllers\Admin\SettingsController;
 use App\Controllers\Public\FormController as PublicFormController;
 use App\Controllers\Public\PageController as PublicPageController;
@@ -271,6 +272,12 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/privacy/wizard/finish', [PrivacyWizardController::class, 'finish']);
     $r->post('/privacy/cookies',         [PrivacyController::class, 'saveCookies']);
     $r->post('/privacy/banner',          [PrivacyController::class, 'saveBanner']);
+
+    // Marketing — integraciones de tracking + código personalizado (MKT)
+    $r->get('/marketing',                 [MarketingController::class, 'index']);
+    $r->post('/marketing/integrations',   [MarketingController::class, 'saveIntegrations']);
+    $r->post('/marketing/custom',         [MarketingController::class, 'saveCustom']);
+    $r->post('/marketing/custom/delete',  [MarketingController::class, 'deleteCustom']);
 
     $r->get('/settings',      [SettingsController::class, 'index']);
     $r->post('/settings',     [SettingsController::class, 'update']);

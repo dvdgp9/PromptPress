@@ -41,6 +41,7 @@
                 ['url' => 'admin/design',     'icon' => 'design',    'label' => 'Diseño',         'match' => '/admin/design'],
                 ['url' => 'admin/chrome',     'icon' => 'chrome',    'label' => 'Header y pie',   'match' => '/admin/chrome'],
                 ['url' => 'admin/seo',        'icon' => 'seo',       'label' => 'SEO',            'match' => '/admin/seo'],
+                ['url' => 'admin/marketing',  'icon' => 'marketing', 'label' => 'Marketing',      'match' => '/admin/marketing'],
                 ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => 'IA',             'match' => '/admin/ai'],
                 ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => 'Privacidad',     'match' => '/admin/privacy'],
                 ['url' => 'admin/settings',   'icon' => 'settings',  'label' => 'Ajustes',        'match' => '/admin/settings'],

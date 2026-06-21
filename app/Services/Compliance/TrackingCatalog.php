@@ -77,6 +77,66 @@ final class TrackingCatalog
                     ],
                 ],
             ],
+            'gtm' => [
+                'name'                 => 'Google Tag Manager',
+                'category'             => 'analytics',
+                'processor'            => 'Google LLC',
+                'transfer_outside_eea' => true,
+                'short_description'    => 'Contenedor de etiquetas: gestiona varios píxeles y eventos desde un solo sitio.',
+                'config_fields'        => [
+                    'container_id' => [
+                        'label'       => 'ID de contenedor',
+                        'placeholder' => 'GTM-XXXXXXX',
+                        'help'        => 'Lo encuentras en Google Tag Manager, arriba junto al nombre del contenedor.',
+                        'pattern'     => '^GTM-[A-Z0-9]{4,}$',
+                    ],
+                ],
+            ],
+            'google_ads' => [
+                'name'                 => 'Google Ads',
+                'category'             => 'advertising',
+                'processor'            => 'Google LLC',
+                'transfer_outside_eea' => true,
+                'short_description'    => 'Seguimiento de conversiones y remarketing de campañas de Google Ads.',
+                'config_fields'        => [
+                    'conversion_id' => [
+                        'label'       => 'ID de conversión',
+                        'placeholder' => 'AW-123456789',
+                        'help'        => 'Empieza por "AW-". Está en Google Ads → Herramientas → Conversiones.',
+                        'pattern'     => '^AW-[0-9]{6,}$',
+                    ],
+                ],
+            ],
+            'tiktok_pixel' => [
+                'name'                 => 'TikTok Pixel',
+                'category'             => 'advertising',
+                'processor'            => 'TikTok Technology Ltd.',
+                'transfer_outside_eea' => true,
+                'short_description'    => 'Píxel de TikTok para medir conversiones y optimizar anuncios.',
+                'config_fields'        => [
+                    'pixel_id' => [
+                        'label'       => 'ID de Pixel',
+                        'placeholder' => 'CXXXXXXXXXXXXXXXXXXX',
+                        'help'        => 'Lo encuentras en el Administrador de Eventos de TikTok → Píxeles web.',
+                        'pattern'     => '^[A-Z0-9]{15,30}$',
+                    ],
+                ],
+            ],
+            'linkedin' => [
+                'name'                 => 'LinkedIn Insight Tag',
+                'category'             => 'advertising',
+                'processor'            => 'LinkedIn Ireland Unlimited Company',
+                'transfer_outside_eea' => true,
+                'short_description'    => 'Etiqueta de LinkedIn para seguimiento de conversiones B2B y remarketing.',
+                'config_fields'        => [
+                    'partner_id' => [
+                        'label'       => 'ID de partner',
+                        'placeholder' => '1234567',
+                        'help'        => 'Número que aparece en LinkedIn Campaign Manager → Insight Tag.',
+                        'pattern'     => '^[0-9]{5,12}$',
+                    ],
+                ],
+            ],
             'recaptcha' => [
                 'name'                 => 'Google reCAPTCHA',
                 'category'             => 'necessary',
@@ -118,7 +178,8 @@ final class TrackingCatalog
 
     /**
      * Categorías que están "vivas" en el manifest = al menos un servicio
-     * habilitado en esa categoría. La categoría `necessary` siempre cuenta.
+     * (de catálogo o snippet personalizado) habilitado en esa categoría.
+     * La categoría `necessary` siempre cuenta.
      */
     public static function activeCategories(array $manifest): array
     {
@@ -130,6 +191,11 @@ final class TrackingCatalog
             $key = (string) ($s['key'] ?? '');
             if (!isset($catalog[$key])) continue;
             $cat = $catalog[$key]['category'];
+            if (!in_array($cat, $active, true)) $active[] = $cat;
+        }
+        // Snippets de código personalizado: cada uno declara su categoría.
+        foreach (self::customForPublic($manifest) as $snippet) {
+            $cat = $snippet['category'];
             if (!in_array($cat, $active, true)) $active[] = $cat;
         }
         return $active;
@@ -168,6 +234,52 @@ final class TrackingCatalog
                 'name'     => $catalog[$key]['name'],
                 'category' => $catalog[$key]['category'],
                 'config'   => (array) ($s['config'] ?? []),
+            ];
+        }
+        return $out;
+    }
+
+    /** Ubicaciones válidas donde inyectar un snippet personalizado. */
+    public const PLACEMENTS = [
+        'head'     => 'En el <head> (carga temprana)',
+        'body_end' => 'Antes de cerrar </body> (carga tardía)',
+    ];
+
+    /** Categorías que el usuario puede elegir para un snippet personalizado. */
+    public static function customCategoryChoices(): array
+    {
+        $out = [];
+        foreach (self::CATEGORIES as $key => $def) {
+            $out[$key] = $def['label'];
+        }
+        return $out;
+    }
+
+    /**
+     * Snippets de código personalizado habilitados, normalizados para el
+     * frontend (consent gating). Descarta entradas sin código o categoría
+     * inválida.
+     *
+     * @return array<int,array{id:string,label:string,category:string,placement:string,code:string}>
+     */
+    public static function customForPublic(array $manifest): array
+    {
+        $out = [];
+        $custom = (array) ($manifest['tracking']['custom'] ?? []);
+        foreach ($custom as $c) {
+            if (empty($c['enabled'])) continue;
+            $code = trim((string) ($c['code'] ?? ''));
+            if ($code === '') continue;
+            $category = (string) ($c['category'] ?? '');
+            if (!isset(self::CATEGORIES[$category])) continue;
+            $placement = (string) ($c['placement'] ?? 'body_end');
+            if (!isset(self::PLACEMENTS[$placement])) $placement = 'body_end';
+            $out[] = [
+                'id'        => (string) ($c['id'] ?? ''),
+                'label'     => (string) ($c['label'] ?? 'Snippet'),
+                'category'  => $category,
+                'placement' => $placement,
+                'code'      => $code,
             ];
         }
         return $out;
