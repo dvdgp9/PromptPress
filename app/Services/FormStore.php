@@ -57,7 +57,7 @@ final class FormStore
         $pageId = self::containerPageId($siteId);
         $rows = Database::select(
             "SELECT id, content, updated_at FROM page_sections
-             WHERE page_id = ? AND section_type = 'form'
+             WHERE page_id = ? AND section_type = 'form' AND status != 'deleted'
              ORDER BY sort_order ASC, id ASC",
             [$pageId]
         );
@@ -86,7 +86,7 @@ final class FormStore
         $pageId = self::containerPageId($siteId);
         $row = Database::selectOne(
             "SELECT id, content FROM page_sections
-             WHERE id = ? AND page_id = ? AND section_type = 'form' LIMIT 1",
+             WHERE id = ? AND page_id = ? AND section_type = 'form' AND status != 'deleted' LIMIT 1",
             [$formId, $pageId]
         );
         if ($row === null) {
@@ -96,6 +96,15 @@ final class FormStore
         $content = is_array($content) ? $content : [];
         $content['id'] = (int) $row['id'];
         return $content;
+    }
+
+    /**
+     * Crea un formulario desde una plantilla tipada del catálogo
+     * (`FormTemplates`). Devuelve su id. Si la clave no existe, cae a contacto.
+     */
+    public static function createFromTemplate(int $siteId, string $templateKey): int
+    {
+        return self::create($siteId, FormTemplates::content($templateKey));
     }
 
     /**
@@ -145,42 +154,31 @@ final class FormStore
         return $affected >= 0;
     }
 
+    /**
+     * Borrado SUAVE (FORMS-R T2): marca el formulario como `deleted` en vez de
+     * eliminar la fila. Así sus respuestas (`form_submissions`, con FK
+     * ON DELETE CASCADE a `page_sections`) se conservan. Desaparece del panel y
+     * deja de renderizar/aceptar envíos en la web pública.
+     */
     public static function delete(int $siteId, int $formId): bool
     {
         $pageId = self::containerPageId($siteId);
         $affected = Database::execute(
-            "DELETE FROM page_sections WHERE id = ? AND page_id = ? AND section_type = 'form'",
-            [$formId, $pageId]
+            "UPDATE page_sections SET status = 'deleted', updated_at = ?
+             WHERE id = ? AND page_id = ? AND section_type = 'form' AND status != 'deleted'",
+            [date('Y-m-d H:i:s'), $formId, $pageId]
         );
         return $affected > 0;
     }
 
     /**
      * Plantilla por defecto: un formulario de contacto sencillo y correcto en RGPD.
+     * Delega en el catálogo tipado (`FormTemplates`) para no duplicar el schema.
      *
      * @return array<string,mixed>
      */
     public static function defaultContact(): array
     {
-        return [
-            'heading'         => 'Contacta con nosotros',
-            'description'     => '',
-            'submit_text'     => 'Enviar',
-            'success_message' => 'Gracias, te contactaremos pronto.',
-            'fields'          => [
-                ['label' => 'Nombre',  'name' => 'nombre',  'field_type' => 'text',     'required' => '1', 'placeholder' => ''],
-                ['label' => 'Email',   'name' => 'email',   'field_type' => 'email',    'required' => '1', 'placeholder' => ''],
-                ['label' => 'Mensaje', 'name' => 'mensaje', 'field_type' => 'textarea', 'required' => '1', 'placeholder' => ''],
-            ],
-            // RGPD (misma semántica que la sección form clásica).
-            'lawful_basis'     => 'legitimate_interest',
-            'retention_period' => '12 meses tras la última comunicación',
-            'marketing_opt_in' => '0',
-            // Autorrespuesta + aviso (FORMS / E6 absorbido).
-            'autoresponder_enabled' => '0',
-            'autoresponder_subject' => 'Hemos recibido tu mensaje',
-            'autoresponder_body'    => "Hola {{nombre}}:\n\nGracias por escribirnos. Hemos recibido tu mensaje y te responderemos lo antes posible.\n\nUn saludo,\n{{sitio}}",
-            'notify_email'          => '',
-        ];
+        return FormTemplates::content('contact');
     }
 }

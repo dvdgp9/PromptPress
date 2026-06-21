@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Canvas;
 
 use App\Services\CacheService;
+use App\Services\FormPlacementStore;
 use App\Services\Renderer\SectionRenderer;
 use Core\Database;
 
@@ -66,6 +67,7 @@ final class CanvasService
              ON DUPLICATE KEY UPDATE html = VALUES(html), css = VALUES(css), current_version_id = VALUES(current_version_id)',
             [$pageId, $clean['html'], $cleanCss, $newVersionId]
         );
+        FormPlacementStore::syncPage($pageId, $clean['html']);
 
         self::pruneVersions($pageId);
         self::invalidateCache($pageId);
@@ -157,6 +159,7 @@ final class CanvasService
                 'UPDATE page_canvas SET html = ?, css = ?, current_version_id = ? WHERE page_id = ?',
                 [(string) $version['html'], (string) $version['css'], $versionId, $pageId]
             );
+            FormPlacementStore::syncPage($pageId, (string) $version['html']);
             self::invalidateCache($pageId);
         }
         return self::historyState($pageId);
@@ -319,7 +322,7 @@ final class CanvasService
             return Database::selectOne(
                 "SELECT ps.* FROM page_sections ps
                  JOIN pages p ON p.id = ps.page_id
-                 WHERE ps.id = ? AND ps.section_type = 'form' AND p.site_id = ?
+                 WHERE ps.id = ? AND ps.section_type = 'form' AND ps.status != 'deleted' AND p.site_id = ?
                  LIMIT 1",
                 [(int) $ref, $siteId]
             );
@@ -327,7 +330,7 @@ final class CanvasService
         return Database::selectOne(
             "SELECT ps.* FROM page_sections ps
              JOIN pages p ON p.id = ps.page_id
-             WHERE p.site_id = ? AND p.slug = ? AND ps.section_type = 'form'
+             WHERE p.site_id = ? AND p.slug = ? AND ps.section_type = 'form' AND ps.status != 'deleted'
              ORDER BY ps.sort_order ASC LIMIT 1",
             [$siteId, $ref]
         );
@@ -391,6 +394,36 @@ final class CanvasService
             }
         }
         return $out;
+    }
+
+    /** Inserta HTML despues de una seccion top-level; sin seleccion, al final. */
+    public static function insertAfterSection(string $pageHtml, string $insertHtml, string $sectionId = ''): string
+    {
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        [, $insertRoot] = self::domFromHtml($insertHtml);
+        if (!$root || !$insertRoot) return $pageHtml . "\n" . $insertHtml;
+
+        $nodes = [];
+        foreach ($insertRoot->childNodes as $node) {
+            if ($node instanceof \DOMElement) $nodes[] = $doc->importNode($node, true);
+        }
+        if ($nodes === []) return $pageHtml;
+
+        $anchor = null;
+        if ($sectionId !== '') {
+            foreach ($root->childNodes as $node) {
+                if ($node instanceof \DOMElement && $node->getAttribute('data-pp-section') === $sectionId) {
+                    $anchor = $node;
+                    break;
+                }
+            }
+        }
+        $before = $anchor?->nextSibling;
+        foreach ($nodes as $node) $root->insertBefore($node, $before);
+
+        $out = '';
+        foreach ($root->childNodes as $child) $out .= $doc->saveHTML($child);
+        return trim($out);
     }
 
     /**

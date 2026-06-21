@@ -10,6 +10,8 @@ use App\Services\BrandService;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
 use App\Services\FormStore;
+use App\Services\FormPlacementStore;
+use App\Services\FormTemplates;
 use App\Services\SeoIndexingService;
 use App\Services\SeoRedirectService;
 use App\Services\VisualStyleService;
@@ -54,6 +56,7 @@ final class CanvasController
             ),
             // FORMS F5 — formularios disponibles para insertar en el Studio.
             'forms' => FormStore::all($siteId),
+            'formTemplates' => FormTemplates::catalog(),
         ]);
     }
 
@@ -133,11 +136,7 @@ final class CanvasController
         ]);
     }
 
-    /**
-     * FORMS F5 — Inserta un formulario existente en la página canvas.
-     * Inserción DETERMINISTA (sin IA): añade el placeholder {{form:ID}} al
-     * final del contenido. Valida que el formulario pertenece al sitio.
-     */
+    /** FORMS-R T3 — Inserta uno existente o lo crea desde plantilla. */
     public function insertForm(array $params = []): void
     {
         $siteId = self::requireSiteId();
@@ -146,6 +145,13 @@ final class CanvasController
 
         CSRF::check();
         $formId = (int) Request::post('form_id', 0);
+        $template = trim((string) Request::post('template', ''));
+        if ($formId <= 0 && $template !== '') {
+            if (!FormTemplates::exists($template)) {
+                Response::json(['ok' => false, 'error' => 'Plantilla de formulario no valida.'], 422);
+            }
+            $formId = FormStore::createFromTemplate($siteId, $template);
+        }
         $form = FormStore::find($siteId, $formId);
         if ($form === null) {
             Response::json(['ok' => false, 'error' => 'Formulario no encontrado.'], 404);
@@ -156,14 +162,20 @@ final class CanvasController
             Response::json(['ok' => false, 'error' => 'Esta página aún no tiene contenido canvas.'], 404);
         }
 
+        $sectionId = trim((string) Request::post('section', ''));
+        $sourceLabel = trim((string) Request::post('source_label', ''));
         $heading = (string) ($form['heading'] ?? 'Formulario');
-        $embed = "\n<section class=\"pp-canvas-form-embed\">{{form:" . $formId . "}}</section>\n";
-        $html = $canvas['html'] . $embed;
+        $embedId = 'form-' . $formId . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+        $embed = '<section data-pp-section="' . $embedId . '" data-pp-label="' . e($heading)
+            . '" class="pp-canvas-form-embed">{{form:' . $formId . '}}</section>';
+        $html = CanvasService::insertAfterSection($canvas['html'], $embed, $sectionId);
         $saved = CanvasService::save($pageId, $html, $canvas['css'], 'insert', 'Formulario insertado: ' . $heading);
+        FormPlacementStore::record($formId, $pageId, $sourceLabel !== '' ? $sourceLabel : $sectionId);
 
         Response::json([
             'ok'       => true,
-            'reply'    => 'He añadido el formulario «' . $heading . '» al final de la página. Si quieres moverlo, dímelo en el chat.',
+            'reply'    => 'He añadido el formulario «' . $heading . '»' . ($sectionId !== '' ? ' en el punto seleccionado.' : ' al final de la pagina.'),
+            'form'     => ['id' => $formId, 'heading' => $heading],
             'history'  => CanvasService::historyState($pageId),
             'sections' => CanvasService::listSections($saved['html']),
         ]);

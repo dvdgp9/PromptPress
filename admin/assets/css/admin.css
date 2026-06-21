@@ -4233,6 +4233,29 @@ form textarea#pp-ai-input-json {
 .pp-forms-wrap--editor .pp-form { max-width: none; }
 .pp-forms-wrap .pp-page-intro { max-width: 60ch; }
 
+/* FORMS-R T1 — crear desde plantilla */
+.pp-form-create { display:flex; align-items:center; gap:10px; }
+.pp-form-create__label { font-size:0.85rem; color:#64748b; }
+.pp-form-create__select {
+    padding:8px 10px; border:1px solid var(--pp-border); border-radius:8px;
+    background:#fff; font-size:0.9rem;
+}
+.pp-form-templates {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+    gap:12px; margin-top:8px; text-align:left;
+}
+.pp-form-template-card { margin:0; }
+.pp-form-template-card__btn {
+    display:flex; flex-direction:column; gap:4px; width:100%; height:100%;
+    padding:14px 16px; border:1px solid var(--pp-border); border-radius:12px;
+    background:#fff; cursor:pointer; text-align:left;
+    transition:border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+}
+.pp-form-template-card__btn:hover { border-color:#c7d2fe; background:linear-gradient(180deg,#f5f7ff 0%,#fff 100%); }
+.pp-form-template-card__btn:active { transform:translateY(1px); }
+.pp-form-template-card__title { font-weight:600; color:var(--pp-text,#1e293b); }
+.pp-form-template-card__desc { font-size:0.82rem; color:#64748b; line-height:1.4; }
+
 .pp-forms-list { display:grid; gap:10px; }
 .pp-forms-row {
     display:flex; align-items:center; justify-content:space-between; gap:16px;
@@ -9301,6 +9324,15 @@ body.pp-login-page {
 .cvstudio-chat__composer textarea{resize:none;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font:inherit;font-size:.88rem;line-height:1.45;outline:none}
 .cvstudio-chat__composer textarea:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
 .cvstudio-chat__composer .cvstudio-primary-btn{align-self:flex-end}
+.cvstudio-insert{position:relative}
+.cvstudio-insert__pop{left:0;right:0;width:auto;max-height:min(520px,60dvh);overflow:auto;padding:8px}
+.cvstudio-insert__title{display:block;padding:8px 10px 5px;color:#6b7280;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase}
+.cvstudio-insert__pop .cvstudio-menu__item{width:100%;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:left}
+.cvstudio-insert__meta{color:#6b7280;font-size:.7rem;font-weight:400;text-align:right;max-width:190px}
+.cvstudio-insert__empty,.cvstudio-insert__hint{margin:0;padding:7px 10px;color:#6b7280;font-size:.74rem}
+.cvstudio-insert__source{display:flex;flex-direction:column;gap:5px;margin:8px 6px 0;padding-top:10px;border-top:1px solid #e5e7eb;color:#4b5563;font-size:.72rem;font-weight:600}
+.cvstudio-insert__source input{border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font:inherit;font-size:.78rem;font-weight:400;outline:none}
+.cvstudio-insert__source input:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
 
 .cvstudio-modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:grid;place-items:center;z-index:50}
 .cvstudio-modal__panel{width:min(440px,92vw);max-height:78dvh;overflow:auto;background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 24px 60px rgba(17,24,39,.25)}

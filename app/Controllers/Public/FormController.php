@@ -137,7 +137,7 @@ final class FormController
             "SELECT s.*, p.id AS page_id, p.site_id, p.title AS page_title, p.slug
              FROM page_sections s
              JOIN pages p ON p.id = s.page_id
-             WHERE s.id = ? AND s.section_type = 'form'
+             WHERE s.id = ? AND s.section_type = 'form' AND s.status != 'deleted'
                AND (
                     p.status = 'published'
                     OR EXISTS (

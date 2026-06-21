@@ -141,21 +141,31 @@ $icon = static function (string $name): string {
     </div>
 
     <div class="cvstudio-chat__composer">
-      <!-- FORMS F5 — insertar un formulario existente como {{form:id}} -->
+      <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
       <div class="cvstudio-insert" id="studio-insert-form">
         <button type="button" class="cvstudio-ghost-btn cvstudio-insert__btn" id="studio-insert-btn"
                 aria-haspopup="true" aria-expanded="false">+ Insertar formulario</button>
         <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="menu">
-          <?php if (empty($forms)): ?>
-            <div class="cvstudio-insert__empty">
-              No tienes formularios todavía.
-              <a href="<?= e(base_url('admin/formularios')) ?>" target="_blank" rel="noopener">Crear uno</a>
-            </div>
-          <?php else: foreach ($forms as $f): ?>
+          <strong class="cvstudio-insert__title">Usar uno existente</strong>
+          <div id="studio-existing-forms">
+          <?php if (empty($forms)): ?><p class="cvstudio-insert__empty">Todavia no tienes formularios.</p><?php else: foreach ($forms as $f): ?>
             <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>" role="menuitem">
               <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= (int) $f['field_count'] ?> campos</span>
             </button>
           <?php endforeach; endif; ?>
+          </div>
+          <strong class="cvstudio-insert__title">Crear desde plantilla</strong>
+          <?php foreach (($formTemplates ?? []) as $key => $template): ?>
+            <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>" role="menuitem">
+              <?= e((string) ($template['label'] ?? $key)) ?>
+              <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
+            </button>
+          <?php endforeach; ?>
+          <label class="cvstudio-insert__source">
+            <span>Etiqueta de origen (opcional)</span>
+            <input type="text" id="studio-form-source" maxlength="160" placeholder="Ej.: Contacto desde servicios">
+          </label>
+          <p class="cvstudio-insert__hint" id="studio-insert-hint">Selecciona una parte de la pagina para insertarlo justo despues.</p>
         </div>
       </div>
       <div class="cvstudio-context" id="chat-context" hidden>

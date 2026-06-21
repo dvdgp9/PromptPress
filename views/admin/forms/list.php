@@ -1,11 +1,13 @@
 <?php
 /**
- * @var array   $forms   [{id,heading,field_count,updated_at}]
- * @var array   $usage   formId => nº páginas donde se usa
+ * @var array   $forms     [{id,heading,field_count,updated_at}]
+ * @var array   $usage     formId => nº páginas donde se usa
+ * @var array   $templates key => [label, description, content]
  * @var ?string $notice
  * @var ?string $error
  * @var string  $csrf
  */
+$templates = $templates ?? [];
 \Core\View::extend('admin/layout');
 ?>
 
@@ -19,8 +21,14 @@
             Crea formularios (contacto, inscripción…) y luego insértalos en tus páginas. Las respuestas que recibas aparecen en <a href="<?= e(base_url('admin/forms')) ?>">Mensajes</a>.
         </p>
     </div>
-    <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>">
+    <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>" class="pp-form-create">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+        <label class="pp-form-create__label" for="form-template">Plantilla</label>
+        <select id="form-template" name="template" class="pp-form-create__select">
+            <?php foreach ($templates as $key => $tpl): ?>
+            <option value="<?= e($key) ?>"><?= e($tpl['label']) ?></option>
+            <?php endforeach; ?>
+        </select>
         <button type="submit" class="pp-btn pp-btn--primary">+ Nuevo formulario</button>
     </form>
 </div>
@@ -31,11 +39,19 @@
 <?php if (empty($forms)): ?>
     <div class="pp-empty-state">
         <p><strong>Aún no tienes formularios.</strong></p>
-        <p>Crea el primero y la IA te ayudará a definir los campos en segundos.</p>
-        <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>">
-            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <button type="submit" class="pp-btn pp-btn--primary">+ Crear mi primer formulario</button>
-        </form>
+        <p>Empieza desde una plantilla. Luego puedes ajustar los campos a tu gusto.</p>
+        <div class="pp-form-templates">
+            <?php foreach ($templates as $key => $tpl): ?>
+            <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>" class="pp-form-template-card">
+                <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                <input type="hidden" name="template" value="<?= e($key) ?>">
+                <button type="submit" class="pp-form-template-card__btn">
+                    <span class="pp-form-template-card__title"><?= e($tpl['label']) ?></span>
+                    <span class="pp-form-template-card__desc"><?= e($tpl['description']) ?></span>
+                </button>
+            </form>
+            <?php endforeach; ?>
+        </div>
     </div>
 <?php else: ?>
     <div class="pp-forms-list">

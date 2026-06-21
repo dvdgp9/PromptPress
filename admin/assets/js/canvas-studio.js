@@ -678,7 +678,7 @@
   unpublishBtn.addEventListener('click', function () { closeMoreMenu(); setPublished(false, unpublishBtn); });
 
   // ----------------------------------------------------------------
-  // FORMS F5 — Insertar formulario existente ({{form:id}})
+  // FORMS-R T3 — Insertar existente o crear desde plantilla en el punto activo.
   // ----------------------------------------------------------------
   var insertWrap = document.getElementById('studio-insert-form');
   if (insertWrap) {
@@ -694,14 +694,19 @@
     document.addEventListener('click', function (e) {
       if (!insertMenu.hidden && !insertWrap.contains(e.target)) closeInsertMenu();
     });
-    insertMenu.querySelectorAll('button[data-form-id]').forEach(function (item) {
+    function insertFormItem(item) {
       item.addEventListener('click', function () {
         var formId = item.dataset.formId;
+        var template = item.dataset.formTemplate;
         closeInsertMenu();
         var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> Insertando el formulario…');
         var fd = new FormData();
         fd.append('_csrf', csrf);
-        fd.append('form_id', formId);
+        if (formId) fd.append('form_id', formId);
+        if (template) fd.append('template', template);
+        if (selectedSection) fd.append('section', selectedSection);
+        var source = document.getElementById('studio-form-source');
+        if (source && source.value.trim()) fd.append('source_label', source.value.trim());
         fetch(body.dataset.insertFormUrl, { method: 'POST', body: fd })
           .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
           .then(function (data) {
@@ -710,10 +715,12 @@
             addMsg('assistant', esc(data.reply || 'Formulario insertado.'));
             applyHistory(data.history);
             reloadPreview();
+            if (source) source.value = '';
           })
           .catch(function () { thinking.remove(); addMsg('assistant pp-chat-msg--error', 'No hay conexión ahora mismo.'); });
       });
-    });
+    }
+    insertMenu.querySelectorAll('button[data-form-id],button[data-form-template]').forEach(insertFormItem);
   }
 
   // ----------------------------------------------------------------

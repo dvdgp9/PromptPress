@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\FormStore;
+use App\Services\FormTemplates;
+use App\Services\FormPlacementStore;
 use Core\Auth;
 use Core\CSRF;
 use Core\Database;
@@ -30,11 +32,12 @@ class FormsController
         View::send('admin/forms/list', array_merge(
             DashboardController::getCommonData(),
             [
-                'forms'  => FormStore::all($siteId),
-                'usage'  => $this->usageMap($siteId),
-                'notice' => Session::flash('notice'),
-                'error'  => Session::flash('error'),
-                'csrf'   => CSRF::token(),
+                'forms'     => FormStore::all($siteId),
+                'usage'     => $this->usageMap($siteId),
+                'templates' => FormTemplates::catalog(),
+                'notice'    => Session::flash('notice'),
+                'error'     => Session::flash('error'),
+                'csrf'      => CSRF::token(),
             ]
         ));
     }
@@ -43,8 +46,11 @@ class FormsController
     {
         CSRF::check();
         $siteId = $this->requireSiteId();
-        $id = FormStore::create($siteId);
-        Session::flash('notice', 'Formulario creado. Ajústalo a tu gusto.');
+        $template = (string) Request::post('template', 'contact');
+        $id = FormTemplates::exists($template)
+            ? FormStore::createFromTemplate($siteId, $template)
+            : FormStore::create($siteId);
+        Session::flash('notice', 'Formulario «' . FormTemplates::label($template) . '» creado. Ajústalo a tu gusto.');
         Response::redirect(base_url('admin/formularios/' . $id));
     }
 
@@ -72,6 +78,9 @@ class FormsController
         }
 
         $content = $this->collectInput();
+        // El tipo no se edita en el form; se preserva el de la plantilla original
+        // (lo necesitan dedup y los eventos de conversión).
+        $content['form_type'] = (string) ($existing['form_type'] ?? 'contact');
         $errors = $this->validate($content);
         if ($errors !== []) {
             $this->renderEditor($siteId, $id, array_merge($content, ['id' => $id]), $errors);
@@ -246,24 +255,7 @@ class FormsController
      */
     private function usageMap(int $siteId): array
     {
-        $rows = Database::select(
-            "SELECT pc.html FROM page_canvas pc
-             JOIN pages p ON p.id = pc.page_id
-             WHERE p.site_id = ? AND p.status = 'published'",
-            [$siteId]
-        );
-        $map = [];
-        foreach (FormStore::all($siteId) as $form) {
-            $id = (int) $form['id'];
-            $count = 0;
-            foreach ($rows as $r) {
-                if (str_contains((string) $r['html'], '{{form:' . $id . '}}')) {
-                    $count++;
-                }
-            }
-            $map[$id] = $count;
-        }
-        return $map;
+        return FormPlacementStore::usageMap($siteId);
     }
 
     /** @param array<string,mixed> $form @param array<int,string> $errors */
