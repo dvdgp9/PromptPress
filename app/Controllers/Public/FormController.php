@@ -65,6 +65,7 @@ final class FormController
         // en sustitución del antiguo @mail(). Si el correo no está configurado,
         // se marca 'skipped' (la respuesta queda guardada igualmente).
         $siteId = (int) $section['site_id'];
+        $originPage = $this->resolveOriginPage($siteId, $target, $section);
         $arEnabled = (string) ($content['autoresponder_enabled'] ?? '0') === '1';
         $visitorEmail = (string) ($sender['email'] ?? '');
         $arStatus = $arEnabled ? 'skipped' : 'disabled';
@@ -105,9 +106,9 @@ final class FormController
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $section['site_id'],
-                (int) $section['page_id'],
+                (int) $originPage['id'],
                 $sectionId,
-                (string) $section['page_title'],
+                (string) $originPage['title'],
                 (string) ($content['heading'] ?? 'Formulario'),
                 $sender['name'] ?: null,
                 $sender['email'] ?: null,
@@ -313,5 +314,27 @@ final class FormController
         $path = (string) ($parts['path'] ?? '/');
         if ($path === '') $path = '/';
         return $path;
+    }
+
+    /** Resuelve la pagina publica desde la ruta de retorno del formulario. */
+    private function resolveOriginPage(int $siteId, string $target, array $fallback): array
+    {
+        $path = '/' . ltrim((string) (parse_url($target, PHP_URL_PATH) ?: '/'), '/');
+        if ($path === '/') {
+            $page = Database::selectOne(
+                "SELECT id, title, slug FROM pages WHERE site_id = ? AND page_type = 'home' AND status = 'published' ORDER BY id ASC LIMIT 1",
+                [$siteId]
+            );
+        } else {
+            $page = Database::selectOne(
+                'SELECT id, title, slug FROM pages WHERE site_id = ? AND slug = ? AND status = ? LIMIT 1',
+                [$siteId, trim($path, '/'), 'published']
+            );
+        }
+        return $page ?? [
+            'id' => (int) ($fallback['page_id'] ?? 0),
+            'title' => (string) ($fallback['page_title'] ?? 'Formulario'),
+            'slug' => (string) ($fallback['slug'] ?? ''),
+        ];
     }
 }
