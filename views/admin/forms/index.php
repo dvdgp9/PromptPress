@@ -23,6 +23,31 @@ $queryUrl = static function (int $targetPage) use ($filters): string {
     return base_url('admin/forms?' . http_build_query($query));
 };
 $hasFilters = count(array_filter($filters, static fn($v) => $v !== '' && $v !== 0)) > 0;
+$urlWith = static function (array $changes) use ($filters): string {
+    $query = array_merge($filters, $changes, ['page' => 1]);
+    $query = array_filter($query, static fn($v) => $v !== '' && $v !== 0 && $v !== null);
+    return base_url('admin/forms' . ($query ? '?' . http_build_query($query) : ''));
+};
+$effectivePeriod = (string) ($filters['period'] ?? '');
+if ($effectivePeriod === '' && (($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '')) $effectivePeriod = 'custom';
+$advancedCount = 0;
+if (($filters['form_id'] ?? 0) > 0) $advancedCount++;
+if (($filters['page_id'] ?? 0) > 0) $advancedCount++;
+if ($effectivePeriod !== '') $advancedCount++;
+if (($filters['delivery'] ?? '') !== '' || ($filters['email_status'] ?? '') !== '' || ($filters['autoresponder_status'] ?? '') !== '') $advancedCount++;
+$formNames = array_column($forms, 'heading', 'id');
+$pageNames = array_column($originPages, 'title', 'id');
+$periodLabels = ['7' => 'Últimos 7 días', '30' => 'Últimos 30 días', '90' => 'Últimos 90 días', 'custom' => 'Fechas personalizadas'];
+$deliveryLabels = ['issues' => 'Con incidencias', 'sent' => 'Todo enviado', 'autoresponder_off' => 'Autorrespuesta desactivada'];
+$chips = [];
+if (($filters['q'] ?? '') !== '') $chips[] = ['label' => 'Búsqueda: ' . $filters['q'], 'remove' => ['q' => '']];
+if (($filters['form_id'] ?? 0) > 0) $chips[] = ['label' => 'Formulario: ' . ($formNames[(int) $filters['form_id']] ?? '#' . (int) $filters['form_id']), 'remove' => ['form_id' => 0]];
+if (($filters['page_id'] ?? 0) > 0) $chips[] = ['label' => 'Página: ' . ($pageNames[(int) $filters['page_id']] ?? '#' . (int) $filters['page_id']), 'remove' => ['page_id' => 0]];
+if (($filters['period'] ?? '') !== '') $chips[] = ['label' => $periodLabels[$filters['period']] ?? 'Periodo', 'remove' => ['period' => '', 'date_from' => '', 'date_to' => '']];
+elseif (($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '') $chips[] = ['label' => 'Fechas personalizadas', 'remove' => ['date_from' => '', 'date_to' => '']];
+if (($filters['delivery'] ?? '') !== '') $chips[] = ['label' => 'Entrega: ' . ($deliveryLabels[$filters['delivery']] ?? 'Filtrada'), 'remove' => ['delivery' => '']];
+if (($filters['email_status'] ?? '') !== '') $chips[] = ['label' => 'Aviso: ' . $mailLabel($filters['email_status'], false), 'remove' => ['email_status' => '']];
+if (($filters['autoresponder_status'] ?? '') !== '') $chips[] = ['label' => 'Respuesta: ' . $mailLabel($filters['autoresponder_status'], true), 'remove' => ['autoresponder_status' => '']];
 ?>
 
 <?php \Core\View::start('title'); ?>Mensajes<?php \Core\View::end(); ?>
@@ -44,45 +69,49 @@ $hasFilters = count(array_filter($filters, static fn($v) => $v !== '' && $v !== 
         <div><strong><?= (int) ($metrics['total'] ?? 0) ?></strong><span>Total histórico</span></div>
     </div>
 
-    <form class="pp-inbox-filters" method="GET" action="<?= e(base_url('admin/forms')) ?>">
+    <form class="pp-inbox-toolbar" method="GET" action="<?= e(base_url('admin/forms')) ?>">
+        <input type="hidden" name="status" value="<?= e((string) ($filters['status'] ?? '')) ?>">
         <label class="pp-inbox-search">
-            <span>Buscar</span>
+            <span class="pp-visually-hidden">Buscar mensajes</span>
             <input type="search" name="q" value="<?= e((string) ($filters['q'] ?? '')) ?>" placeholder="Nombre, email, teléfono o contenido">
         </label>
-        <label><span>Estado</span><select name="status">
-            <option value="">Todos</option>
-            <option value="unread" <?= ($filters['status'] ?? '') === 'unread' ? 'selected' : '' ?>>Nuevos</option>
-            <option value="read" <?= ($filters['status'] ?? '') === 'read' ? 'selected' : '' ?>>Leídos</option>
-        </select></label>
-        <label><span>Formulario</span><select name="form_id">
-            <option value="0">Todos</option>
-            <?php foreach ($forms as $form): ?><option value="<?= (int) $form['id'] ?>" <?= (int) ($filters['form_id'] ?? 0) === (int) $form['id'] ? 'selected' : '' ?>><?= e((string) $form['heading']) ?></option><?php endforeach; ?>
-        </select></label>
-        <label><span>Página de origen</span><select name="page_id">
-            <option value="0">Todas</option>
-            <?php foreach ($originPages as $origin): ?><option value="<?= (int) $origin['id'] ?>" <?= (int) ($filters['page_id'] ?? 0) === (int) $origin['id'] ? 'selected' : '' ?>><?= e((string) $origin['title']) ?></option><?php endforeach; ?>
-        </select></label>
-        <label><span>Aviso al administrador</span><select name="email_status">
-            <option value="">Todos</option>
-            <option value="sent" <?= ($filters['email_status'] ?? '') === 'sent' ? 'selected' : '' ?>>Enviado</option>
-            <option value="failed" <?= ($filters['email_status'] ?? '') === 'failed' ? 'selected' : '' ?>>Con error</option>
-            <option value="skipped" <?= ($filters['email_status'] ?? '') === 'skipped' ? 'selected' : '' ?>>No configurado</option>
-        </select></label>
-        <label><span>Respuesta al visitante</span><select name="autoresponder_status">
-            <option value="">Todas</option>
-            <option value="sent" <?= ($filters['autoresponder_status'] ?? '') === 'sent' ? 'selected' : '' ?>>Enviada</option>
-            <option value="failed" <?= ($filters['autoresponder_status'] ?? '') === 'failed' ? 'selected' : '' ?>>Con error</option>
-            <option value="skipped" <?= ($filters['autoresponder_status'] ?? '') === 'skipped' ? 'selected' : '' ?>>No enviada</option>
-            <option value="disabled" <?= ($filters['autoresponder_status'] ?? '') === 'disabled' ? 'selected' : '' ?>>Desactivada</option>
-            <option value="unknown" <?= ($filters['autoresponder_status'] ?? '') === 'unknown' ? 'selected' : '' ?>>Sin datos históricos</option>
-        </select></label>
-        <label><span>Desde</span><input type="date" name="date_from" value="<?= e((string) ($filters['date_from'] ?? '')) ?>"></label>
-        <label><span>Hasta</span><input type="date" name="date_to" value="<?= e((string) ($filters['date_to'] ?? '')) ?>"></label>
-        <div class="pp-inbox-filters__actions">
-            <?php if ($hasFilters): ?><a href="<?= e(base_url('admin/forms')) ?>">Limpiar</a><?php endif; ?>
-            <button class="pp-btn pp-btn--primary pp-btn--sm" type="submit">Aplicar filtros</button>
-        </div>
+        <button class="pp-inbox-search__submit" type="submit">Buscar</button>
+        <?php foreach (['form_id','page_id','period','delivery','date_from','date_to','email_status','autoresponder_status'] as $key): ?>
+            <?php if (($filters[$key] ?? '') !== '' && ($filters[$key] ?? 0) !== 0): ?><input type="hidden" name="<?= e($key) ?>" value="<?= e((string) $filters[$key]) ?>"><?php endif; ?>
+        <?php endforeach; ?>
+        <nav class="pp-inbox-status" aria-label="Estado de lectura">
+            <a class="<?= ($filters['status'] ?? '') === '' ? 'is-active' : '' ?>" href="<?= e($urlWith(['status' => ''])) ?>">Todos</a>
+            <a class="<?= ($filters['status'] ?? '') === 'unread' ? 'is-active' : '' ?>" href="<?= e($urlWith(['status' => 'unread'])) ?>">Nuevos</a>
+            <a class="<?= ($filters['status'] ?? '') === 'read' ? 'is-active' : '' ?>" href="<?= e($urlWith(['status' => 'read'])) ?>">Leídos</a>
+        </nav>
+        <button class="pp-inbox-filter-toggle <?= $advancedCount > 0 ? 'is-active' : '' ?>" type="button" data-inbox-filter-toggle aria-expanded="<?= $advancedCount > 0 ? 'true' : 'false' ?>" aria-controls="inbox-advanced-filters">
+            Filtros<?= $advancedCount > 0 ? ' · ' . $advancedCount : '' ?>
+        </button>
     </form>
+
+    <form class="pp-inbox-advanced" id="inbox-advanced-filters" method="GET" action="<?= e(base_url('admin/forms')) ?>" <?= $advancedCount > 0 ? '' : 'hidden' ?> data-inbox-advanced>
+        <input type="hidden" name="q" value="<?= e((string) ($filters['q'] ?? '')) ?>">
+        <input type="hidden" name="status" value="<?= e((string) ($filters['status'] ?? '')) ?>">
+        <label><span>Formulario</span><select name="form_id"><option value="0">Todos los formularios</option><?php foreach ($forms as $form): ?><option value="<?= (int) $form['id'] ?>" <?= (int) ($filters['form_id'] ?? 0) === (int) $form['id'] ? 'selected' : '' ?>><?= e((string) $form['heading']) ?></option><?php endforeach; ?></select></label>
+        <label><span>Página de origen</span><select name="page_id"><option value="0">Todas las páginas</option><?php foreach ($originPages as $origin): ?><option value="<?= (int) $origin['id'] ?>" <?= (int) ($filters['page_id'] ?? 0) === (int) $origin['id'] ? 'selected' : '' ?>><?= e((string) $origin['title']) ?></option><?php endforeach; ?></select></label>
+        <label><span>Periodo</span><select name="period" data-inbox-period><option value="">Cualquier fecha</option><?php foreach ($periodLabels as $value => $label): ?><option value="<?= e((string) $value) ?>" <?= $effectivePeriod === (string) $value ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
+        <label><span>Entrega de correos</span><select name="delivery"><option value="">Cualquier estado</option><?php foreach ($deliveryLabels as $value => $label): ?><option value="<?= e($value) ?>" <?= ($filters['delivery'] ?? '') === $value ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
+        <div class="pp-inbox-custom-dates" data-inbox-custom-dates <?= $effectivePeriod === 'custom' ? '' : 'hidden' ?>>
+            <label><span>Desde</span><input type="date" name="date_from" value="<?= e((string) ($filters['date_from'] ?? '')) ?>"></label>
+            <label><span>Hasta</span><input type="date" name="date_to" value="<?= e((string) ($filters['date_to'] ?? '')) ?>"></label>
+        </div>
+        <?php if (($filters['email_status'] ?? '') !== ''): ?><input type="hidden" name="email_status" value="<?= e((string) $filters['email_status']) ?>"><?php endif; ?>
+        <?php if (($filters['autoresponder_status'] ?? '') !== ''): ?><input type="hidden" name="autoresponder_status" value="<?= e((string) $filters['autoresponder_status']) ?>"><?php endif; ?>
+        <div class="pp-inbox-advanced__actions"><button class="pp-btn pp-btn--primary pp-btn--sm" type="submit">Ver resultados</button></div>
+    </form>
+
+    <?php if ($chips !== [] || ($filters['status'] ?? '') !== ''): ?>
+    <div class="pp-inbox-active" aria-label="Filtros activos">
+        <?php if (($filters['status'] ?? '') !== ''): ?><a href="<?= e($urlWith(['status' => ''])) ?>"><?= ($filters['status'] ?? '') === 'unread' ? 'Nuevos' : 'Leídos' ?><span aria-hidden="true">×</span></a><?php endif; ?>
+        <?php foreach ($chips as $chip): ?><a href="<?= e($urlWith($chip['remove'])) ?>"><?= e($chip['label']) ?><span aria-hidden="true">×</span></a><?php endforeach; ?>
+        <a class="pp-inbox-active__clear" href="<?= e(base_url('admin/forms')) ?>">Limpiar todo</a>
+    </div>
+    <?php endif; ?>
 
     <div class="pp-inbox-results">
         <span><?= (int) $total ?> <?= (int) $total === 1 ? 'mensaje' : 'mensajes' ?></span>

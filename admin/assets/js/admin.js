@@ -61,4 +61,27 @@
                 document.body.classList.contains('pp-sidebar-collapsed') ? '1' : '0');
         });
     }
+
+    // Mensajes: filtros avanzados progresivos y fechas personalizadas.
+    var inboxFilterToggle = document.querySelector('[data-inbox-filter-toggle]');
+    var inboxAdvanced = document.querySelector('[data-inbox-advanced]');
+    if (inboxFilterToggle && inboxAdvanced) {
+        inboxFilterToggle.addEventListener('click', function () {
+            var willOpen = inboxAdvanced.hidden;
+            inboxAdvanced.hidden = !willOpen;
+            inboxFilterToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+    }
+    var inboxPeriod = document.querySelector('[data-inbox-period]');
+    var inboxCustomDates = document.querySelector('[data-inbox-custom-dates]');
+    if (inboxPeriod && inboxCustomDates) {
+        var syncInboxDates = function () {
+            inboxCustomDates.hidden = inboxPeriod.value !== 'custom';
+            inboxCustomDates.querySelectorAll('input').forEach(function (input) {
+                input.disabled = inboxPeriod.value !== 'custom';
+            });
+        };
+        inboxPeriod.addEventListener('change', syncInboxDates);
+        syncInboxDates();
+    }
 })();

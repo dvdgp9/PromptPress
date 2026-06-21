@@ -27,6 +27,8 @@ final class FormSubmissionController
             'status' => (string) Request::get('status', ''),
             'form_id' => max(0, (int) Request::get('form_id', 0)),
             'page_id' => max(0, (int) Request::get('page_id', 0)),
+            'period' => (string) Request::get('period', ''),
+            'delivery' => (string) Request::get('delivery', ''),
             'email_status' => (string) Request::get('email_status', ''),
             'autoresponder_status' => (string) Request::get('autoresponder_status', ''),
             'date_from' => (string) Request::get('date_from', ''),
@@ -48,17 +50,33 @@ final class FormSubmissionController
         if ($filters['page_id'] > 0) {
             $where[] = 'fs.page_id = ?'; $queryParams[] = $filters['page_id'];
         }
-        if (in_array($filters['email_status'], ['skipped', 'sent', 'failed'], true)) {
-            $where[] = 'fs.email_status = ?'; $queryParams[] = $filters['email_status'];
+        if (in_array($filters['delivery'], ['issues', 'sent', 'autoresponder_off'], true)) {
+            if ($filters['delivery'] === 'issues') {
+                $where[] = "(fs.email_status = 'failed' OR fs.autoresponder_status = 'failed')";
+            } elseif ($filters['delivery'] === 'sent') {
+                $where[] = "(fs.email_status = 'sent' AND fs.autoresponder_status = 'sent')";
+            } else {
+                $where[] = "fs.autoresponder_status = 'disabled'";
+            }
+        } else {
+            // Compatibilidad con URLs anteriores al filtro semantico.
+            if (in_array($filters['email_status'], ['skipped', 'sent', 'failed'], true)) {
+                $where[] = 'fs.email_status = ?'; $queryParams[] = $filters['email_status'];
+            }
+            if (in_array($filters['autoresponder_status'], ['unknown', 'disabled', 'skipped', 'sent', 'failed'], true)) {
+                $where[] = 'fs.autoresponder_status = ?'; $queryParams[] = $filters['autoresponder_status'];
+            }
         }
-        if (in_array($filters['autoresponder_status'], ['unknown', 'disabled', 'skipped', 'sent', 'failed'], true)) {
-            $where[] = 'fs.autoresponder_status = ?'; $queryParams[] = $filters['autoresponder_status'];
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
-            $where[] = 'fs.created_at >= ?'; $queryParams[] = $filters['date_from'] . ' 00:00:00';
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
-            $where[] = 'fs.created_at <= ?'; $queryParams[] = $filters['date_to'] . ' 23:59:59';
+        if (in_array($filters['period'], ['7', '30', '90'], true)) {
+            $where[] = 'fs.created_at >= DATE_SUB(NOW(), INTERVAL ' . (int) $filters['period'] . ' DAY)';
+        } else {
+            // period=custom y URLs legacy usan las fechas explicitas.
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
+                $where[] = 'fs.created_at >= ?'; $queryParams[] = $filters['date_from'] . ' 00:00:00';
+            }
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
+                $where[] = 'fs.created_at <= ?'; $queryParams[] = $filters['date_to'] . ' 23:59:59';
+            }
         }
         $whereSql = implode(' AND ', $where);
         $total = (int) (Database::selectOne(
