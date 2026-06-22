@@ -700,11 +700,12 @@ final class Actions
                     "Eres el diseñador de confianza de un cliente NO técnico. Te pide un cambio sobre UNA sección de su página web. Aplica EXACTAMENTE lo que pide (interpretando su intención con criterio profesional) y no toques nada que no haya pedido.\n"
                   . "Devuelve ÚNICAMENTE JSON válido:\n"
                   . "{\n"
-                  . "  \"html\": \"<section data-pp-section=\\\"...\\\">...</section>\",   // la sección COMPLETA reescrita, mismo data-pp-section\n"
+                  . "  \"html\": \"<section data-pp-section=\\\"...\\\">...</section>\",   // la sección COMPLETA reescrita, mismo data-pp-section; CADENA VACÍA si el cambio es solo de estilo\n"
                   . "  \"css_append\": \"/* solo reglas NUEVAS o modificadas */\",          // se añade al CSS de la página; cadena vacía si no hace falta\n"
                   . "  \"reply\": \"frase corta en español, tono cercano, explicando qué has cambiado\"  // p. ej. \"Listo, he puesto el titular más grande y el botón en verde.\"\n"
                   . "}\n\n"
                   . "REGLAS:\n"
+                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto (color, tamaño de letra, esquinas/border-radius, espaciado, fondo, sombra, alineación…) y NO cambian textos ni estructura, devuelve \"html\":\"\" (vacío) y expresa TODO el cambio en `css_append`, apuntando a las clases existentes del elemento. NO reescribas el HTML en ese caso: reescribirlo entero es lento, puede truncarse y puede destrozar ilustraciones SVG o contenido que no debes tocar. Devuelve HTML solo si de verdad cambian el texto, el orden o la estructura.\n"
                   . "- Cambia lo MÍNIMO necesario para cumplir la petición. Conserva textos, imágenes y estructura que el cliente no ha mencionado.\n"
                   . "- El HTML cumple el contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed. Formularios solo vía {{form:REF}}.\n"
                   . "- `css_append`: solo reglas nuevas o que SOBRESCRIBEN a las existentes (van después en la cascada). Reutiliza los nombres de clase existentes cuando modificas algo; usa tokens de marca (var(--pp-*)) para colores/tipos.\n"
@@ -723,7 +724,7 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.4,
-                    'max_tokens'      => 9000,
+                    'max_tokens'      => 16000,
                 ],
             ],
 
@@ -737,11 +738,12 @@ final class Actions
                     "Eres el diseñador de confianza de un cliente NO técnico. Te pide un cambio GLOBAL sobre su página web. Aplica lo que pide con criterio profesional, tocando lo mínimo necesario.\n"
                   . "Devuelve ÚNICAMENTE JSON válido:\n"
                   . "{\n"
-                  . "  \"html\": \"...página completa (secuencia de <section data-pp-section>)...\",\n"
+                  . "  \"html\": \"...página completa (secuencia de <section data-pp-section>)...\",   // CADENA VACÍA si el cambio es solo de estilo\n"
                   . "  \"css\": \"...CSS completo actualizado de la página...\",\n"
                   . "  \"reply\": \"frase corta en español explicando qué has cambiado\"\n"
                   . "}\n\n"
                   . "REGLAS:\n"
+                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto global (colores, tipografías, espaciados, esquinas, sombras…) y NO cambian textos ni estructura ni orden, devuelve \"html\":\"\" (vacío) y entrega solo el `css` actualizado. Reescribir todo el HTML es lento y puede truncarse o destrozar contenido. Devuelve HTML solo si cambian textos, el orden de secciones o la estructura.\n"
                   . "- Conserva los `data-pp-section` existentes (puedes reordenar secciones si lo piden, manteniendo sus ids). Conserva todo contenido no mencionado.\n"
                   . "- Contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed; formularios solo vía {{form:REF}}; tokens de marca para color/tipo; responsive intacto; cero emojis.\n"
                   . "- Si pide una imagen nueva, usa solo `available_images`.\n"

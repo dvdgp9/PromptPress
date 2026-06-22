@@ -431,9 +431,17 @@ final class CanvasController
         ], $siteId);
 
         $data = (array) ($result['data'] ?? []);
-        $newHtml = CanvasService::replaceSection($canvas['html'], $sectionId, (string) ($data['html'] ?? ''));
-        if ($newHtml === null) {
-            throw new \RuntimeException('No se pudo integrar la sección editada.');
+        // Cambio solo de estilo: el modelo deja "html" vacío y manda únicamente
+        // css_append. Conservamos la sección original intacta (no reescribir el
+        // HTML protege ilustraciones SVG y evita truncados en secciones grandes).
+        $newSectionHtml = trim((string) ($data['html'] ?? ''));
+        if ($newSectionHtml === '') {
+            $newHtml = $canvas['html'];
+        } else {
+            $newHtml = CanvasService::replaceSection($canvas['html'], $sectionId, $newSectionHtml);
+            if ($newHtml === null) {
+                throw new \RuntimeException('No se pudo integrar la sección editada.');
+            }
         }
 
         $cssAppend = trim((string) ($data['css_append'] ?? ''));
@@ -455,8 +463,11 @@ final class CanvasController
         ], $siteId);
 
         $data = (array) ($result['data'] ?? []);
+        // Cambio global solo de estilo: si el modelo deja "html" vacío, conservamos
+        // el HTML actual de la página y aplicamos únicamente el CSS devuelto.
+        $newPageHtml = trim((string) ($data['html'] ?? ''));
         return [
-            'html' => (string) ($data['html'] ?? ''),
+            'html' => $newPageHtml !== '' ? (string) $data['html'] : $canvas['html'],
             'css' => trim((string) ($data['css'] ?? '')) !== '' ? (string) $data['css'] : $canvas['css'],
             'reply' => self::reply($data),
         ];

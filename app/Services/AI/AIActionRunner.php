@@ -193,14 +193,22 @@ final class AIActionRunner
         };
     }
 
-    /** FH3 — shape mínimo de una edición conversacional canvas. */
+    /**
+     * FH3 — shape mínimo de una edición conversacional canvas.
+     *
+     * Una edición es válida si trae HTML reescrito O bien CSS (cambio solo de
+     * estilo). Forzar HTML siempre obligaba al modelo a reescribir secciones
+     * enteras —caro, propenso a truncado y a destrozar ilustraciones SVG—.
+     * Permitir "html" vacío con css/css_append deja que un cambio puramente de
+     * estilo se exprese solo en CSS, conservando el HTML original intacto.
+     */
     private static function validateCanvasEdit(array $data): array
     {
-        if (trim((string) ($data['html'] ?? '')) === '') {
-            throw new AIException('La edición no contiene "html".');
-        }
-        if (trim((string) ($data['reply'] ?? '')) === '') {
-            $data['reply'] = 'Hecho.';
+        $hasHtml = trim((string) ($data['html'] ?? '')) !== '';
+        $hasCss  = trim((string) ($data['css_append'] ?? '')) !== ''
+                || trim((string) ($data['css'] ?? '')) !== '';
+        if (!$hasHtml && !$hasCss) {
+            throw new AIException('La edición no contiene ni "html" ni "css".');
         }
         return [];
     }

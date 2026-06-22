@@ -37,3 +37,36 @@ Se solicita prueba manual en producción de generación durante fallo de Unsplas
 - No representar errores del proveedor como una lista vacía sin conservar el motivo.
 - En comandos `php -r` bajo shell, usar nombres PHP con una sola barra invertida dentro de comillas simples; duplicarlas produce un error de parseo.
 - Las expresiones regulares en español deben cubrir explícitamente `imágenes` con tilde; `imagen(?:es)?` no lo hace.
+
+---
+
+# [2026-06-22] Studio: chat IA rechaza cambios + panel tapa el chat
+
+## Background and Motivation (nuevo)
+Dos problemas en el Studio (editor canvas en vivo):
+1. El panel contextual de edición (commit 599cace añadió controles "Bloque" con 4 inputs de radio por esquina) crece tanto que aplasta el chat: "el chat casi no se ve".
+2. Al pedir por chat un cambio de estilo (ej. border-top-left-radius 46px en la tarjeta "100% adaptado a LOMLOE") falla con "La IA no devolvió un cambio válido. Tu página no ha cambiado."
+
+## Key Challenges and Analysis (nuevo)
+- La acción `edit_canvas_section` obliga al modelo a devolver la SECCIÓN HTML COMPLETA reescrita, y `AIActionRunner::validateCanvasEdit` EXIGE `html` no vacío (lanza AIException si falta). El controlador mapea cualquier AIException sin status 401/403/429/5xx al mensaje genérico "no devolvió un cambio válido".
+- Reproducción local: en una sección Hero grande con SVG (7.2 KB), el modelo devolvió `html` de solo 2.9 KB → reescribió y RECORTÓ la ilustración SVG, además de `css_append` correcto. En secciones muy grandes esto provoca o truncado (JSON inválido → AIException) o destrozo del SVG. Para un cambio SOLO de estilo, el modelo no necesita devolver HTML; basta `css_append`. Pero el validador lo rechaza si `html` viene vacío.
+- Causa raíz problema 2: forzar reescritura completa del HTML para cambios de estilo. Solución: permitir ediciones SOLO-CSS (html vacío = sección sin cambios), instruir al modelo a no reescribir el HTML en cambios de estilo, y subir max_tokens como defensa.
+- Problema 1: `.cvstudio-panel{max-height:62%}` + chat `flex:1`. Bajar el tope del panel y garantizar altura mínima del chat.
+
+## High-level Task Breakdown (nuevo)
+- T1: `validateCanvasEdit` acepta edición solo-CSS (html vacío con css/css_append presente). Éxito: no lanza si hay css.
+- T2: `applySectionEdit` con html vacío conserva la sección original y aplica solo css_append. `applyPageEdit` con html vacío conserva el html original. Éxito: cambio solo-CSS se guarda sin tocar HTML.
+- T3: Prompts `edit_canvas_section`/`edit_canvas_page`: permitir `"html":""` para cambios solo de estilo; subir max_tokens sección 9000→16000. Éxito: el modelo devuelve html vacío + css_append en pruebas.
+- T4: CSS layout: bajar tope del panel y min-height del chat. Éxito: con panel "Bloque" abierto, el chat sigue legible.
+- T5: Reproducción/regresión con prompts nuevos y test canvas. Éxito: cambio de border-radius vía chat se aplica sin romper HTML.
+
+## Project Status Board (Studio chat/panel) — Executor
+- [x] T1 validateCanvasEdit acepta solo-CSS (`AIActionRunner.php`). Test reflexión OK.
+- [x] T2 applySectionEdit/applyPageEdit: html vacío conserva original (`CanvasController.php`). Verificado: SVG intacto.
+- [x] T3 prompts edit_canvas_section/page "PREFIERE SOLO CSS" + max_tokens sección 9000→16000 (`Actions.php`).
+- [x] T4 CSS: `.cvstudio-panel` max-height 62%→50%; `.cvstudio-chat__messages` min-height:96px (`admin.css`).
+- [x] T5 Regresión: API real → IA devuelve html:"" + css_append con border-top-left-radius:46px; cambio de texto sigue devolviendo HTML; tests canvas_runtime/box_editor/settings PASS; preview verificado (panel 50% + chat legible), sin errores de consola.
+
+## Lessons (Studio chat/panel)
+- El mensaje "La IA no devolvió un cambio válido" es genérico: cualquier AIException sin status 401/403/429/5xx cae ahí (CanvasController match por httpStatus, no por mensaje). Engaña al diagnosticar.
+- Forzar al modelo a reescribir la SECCIÓN/PÁGINA HTML completa en cambios de estilo es la causa raíz: trunca en secciones grandes y recorta/destroza SVG. Permitir html:"" + css_append es más robusto, rápido y seguro.
