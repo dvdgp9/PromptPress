@@ -78,6 +78,101 @@ class DesignController
         Response::redirect(base_url('admin/design'));
     }
 
+    public function updateLogo(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $file = Request::file('logo');
+        $error = self::validateLogoUpload($file);
+        if ($error !== null) {
+            Session::flash('error', $error);
+            Response::redirect(base_url('admin/design'));
+        }
+
+        $tmp = (string) $file['tmp_name'];
+        $mime = (string) mime_content_type($tmp);
+        $ext = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'][$mime];
+        $dir = PP_ROOT . '/storage/uploads/' . $siteId . '/brand';
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            Session::flash('error', 'No se pudo crear la carpeta del logo.');
+            Response::redirect(base_url('admin/design'));
+        }
+
+        $filename = 'logo-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $absolute = $dir . '/' . $filename;
+        if (!move_uploaded_file($tmp, $absolute)) {
+            Session::flash('error', 'No se pudo guardar el logo.');
+            Response::redirect(base_url('admin/design'));
+        }
+
+        $size = @getimagesize($absolute);
+        $relative = 'storage/uploads/' . $siteId . '/brand/' . $filename;
+        try {
+            Database::execute(
+                'INSERT INTO media (site_id, filename, original_name, mime_type, file_size, path, alt_text, width, height, uploaded_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$siteId, $filename, mb_substr((string) $file['name'], 0, 255), $mime, (int) $file['size'], $relative, 'Logo', (int) ($size[0] ?? 0) ?: null, (int) ($size[1] ?? 0) ?: null, Auth::id()]
+            );
+            self::storeSiteSetting($siteId, 'site_logo_path', $relative);
+            self::storeSiteSetting($siteId, 'site_logo_media_id', (string) Database::lastInsertId());
+        } catch (\Throwable $e) {
+            @unlink($absolute);
+            error_log('[design logo] site=' . $siteId . ' save failed: ' . $e->getMessage());
+            Session::flash('error', 'No se pudo registrar el logo.');
+            Response::redirect(base_url('admin/design'));
+        }
+
+        CacheService::flush($siteId);
+        Session::flash('success', 'Logo actualizado.');
+        Response::redirect(base_url('admin/design'));
+    }
+
+    public function deleteLogo(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $settings = Database::select(
+            "SELECT setting_key, setting_value FROM settings WHERE site_id = ? AND setting_key IN ('site_logo_path', 'site_logo_media_id')",
+            [$siteId]
+        );
+        $current = [];
+        foreach ($settings as $setting) $current[(string) $setting['setting_key']] = (string) $setting['setting_value'];
+        Database::execute("DELETE FROM settings WHERE site_id = ? AND setting_key IN ('site_logo_path', 'site_logo_media_id')", [$siteId]);
+        if ((int) ($current['site_logo_media_id'] ?? 0) > 0) {
+            Database::execute('DELETE FROM media WHERE id = ? AND site_id = ?', [(int) $current['site_logo_media_id'], $siteId]);
+        }
+        $relative = (string) ($current['site_logo_path'] ?? '');
+        $brandPrefix = 'storage/uploads/' . $siteId . '/brand/';
+        if ($relative !== '' && str_starts_with($relative, $brandPrefix)) {
+            $absolute = PP_ROOT . '/' . $relative;
+            if (is_file($absolute)) @unlink($absolute);
+        }
+        CacheService::flush($siteId);
+        Session::flash('success', 'Logo eliminado. La cabecera mostrará el nombre del sitio.');
+        Response::redirect(base_url('admin/design'));
+    }
+
+    private static function validateLogoUpload(mixed $file): ?string
+    {
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return 'Selecciona un archivo de logo.';
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) return 'La subida del logo no se completó.';
+        if (($file['size'] ?? 0) <= 0 || (int) $file['size'] > 2 * 1024 * 1024) return 'El logo debe pesar menos de 2 MB.';
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) return 'El archivo recibido no es una subida válida.';
+        $mime = (string) mime_content_type($tmp);
+        if (!in_array($mime, ['image/png', 'image/jpeg', 'image/webp'], true)) return 'El logo debe ser PNG, JPG o WebP.';
+        return @getimagesize($tmp) === false ? 'El archivo no contiene una imagen válida.' : null;
+    }
+
+    private static function storeSiteSetting(int $siteId, string $key, string $value): void
+    {
+        Database::execute(
+            'INSERT INTO settings (site_id, setting_key, setting_value, is_encrypted) VALUES (?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_encrypted = 0',
+            [$siteId, $key, $value]
+        );
+    }
+
     // ----------------------------------------------------------------------
     // POST /admin/design/reset — vuelve a los defaults
     // ----------------------------------------------------------------------
@@ -184,6 +279,10 @@ class DesignController
             // Cierre Fase 19 — dirección visual del sitio.
             'visualStyleCurrent' => VisualStyleService::selectedForSite($siteId),
             'visualStyleCards'   => VisualStyleService::cardsForSite($siteId),
+            'logoPath' => (string) ((Database::selectOne(
+                'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ?',
+                [$siteId, 'site_logo_path']
+            )['setting_value'] ?? '')),
         ]);
         View::send('admin/design/index', $data);
     }

@@ -62,6 +62,31 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
     y se generarán como variables CSS para las páginas públicas.
 </p>
 
+<section class="pp-design-logo-card" aria-labelledby="pp-design-logo-title">
+    <div class="pp-design-logo-preview">
+        <?php if ($logoPath !== ''): ?>
+            <img src="<?= e(base_url($logoPath)) ?>" alt="Logo actual">
+        <?php else: ?>
+            <span>Sin logo</span>
+        <?php endif; ?>
+    </div>
+    <div class="pp-design-logo-content">
+        <h3 id="pp-design-logo-title">Logo de la empresa</h3>
+        <p>Se utiliza en la cabecera pública y en el panel. PNG, JPG o WebP, hasta 2 MB.</p>
+        <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-design-logo-form">
+            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+            <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required>
+            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= $logoPath !== '' ? 'Sustituir logo' : 'Subir logo' ?></button>
+        </form>
+        <?php if ($logoPath !== ''): ?>
+        <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>" onsubmit="return confirm('¿Eliminar el logo actual?');">
+            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+            <button type="submit" class="pp-btn pp-btn--danger pp-btn--sm">Eliminar logo</button>
+        </form>
+        <?php endif; ?>
+    </div>
+</section>
+
 <?php $flashSuccess = \Core\Session::flash('success'); $flashError = \Core\Session::flash('error'); ?>
 <?php if ($flashSuccess): ?><div class="pp-alert pp-alert--success"><?= e($flashSuccess) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="pp-alert pp-alert--error"><?= e($flashError) ?></div><?php endif; ?>

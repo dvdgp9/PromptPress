@@ -238,6 +238,8 @@ $router->group('/admin', function (\Core\Router $r) {
     // Design system
     $r->get('/design',        [DesignController::class, 'index']);
     $r->post('/design',       [DesignController::class, 'update']);
+    $r->post('/design/logo',  [DesignController::class, 'updateLogo']);
+    $r->post('/design/logo/delete', [DesignController::class, 'deleteLogo']);
     $r->post('/design/reset', [DesignController::class, 'reset']);
     $r->post('/design/regenerate', [DesignController::class, 'regenerate']);
     // Solo dev: showcase de los 8 skin anchors curados.
