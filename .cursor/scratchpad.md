@@ -70,3 +70,7 @@ Dos problemas en el Studio (editor canvas en vivo):
 ## Lessons (Studio chat/panel)
 - El mensaje "La IA no devolvió un cambio válido" es genérico: cualquier AIException sin status 401/403/429/5xx cae ahí (CanvasController match por httpStatus, no por mensaje). Engaña al diagnosticar.
 - Forzar al modelo a reescribir la SECCIÓN/PÁGINA HTML completa en cambios de estilo es la causa raíz: trunca en secciones grandes y recorta/destroza SVG. Permitir html:"" + css_append es más robusto, rápido y seguro.
+
+## [2026-06-22] Seguimiento: petición de imágenes falla con "no devolvió un cambio válido"
+- Arreglado bug propio: la directiva "prefiere solo CSS" podía hacer que una imagen se pusiera como background-image en CSS con html:"" → la verificación `imageCount` solo mira el HTML de la sección → rechazo. Ahora, si `$requiresImages`, se añade directiva que OBLIGA a devolver HTML con <img>; `applyPageEdit` también recibe `$effectiveInstruction`. Verificado: 4/4 runs devuelven <img> en HTML. tests canvas_image_requests/runtime/box_editor PASS.
+- NO se pudo reproducir el AIException exacto del usuario en local con el código nuevo. Hipótesis pendiente de confirmar con el usuario: (a) están probando en un entorno SIN los cambios desplegados (prod) → código viejo (max_tokens 9000, validador exige html) y en una sección Hero enorme con SVG + petición de imagen + elemento seleccionado (que fuerza preservar el SVG) → truncado → JSON inválido → AIException; o (b) revisar ai_logs/php-errors.log del servidor donde prueban para ver la causa real.

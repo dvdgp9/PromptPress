@@ -128,12 +128,18 @@ final class CanvasController
         if ($sectionId !== '' && $elementContext !== '') {
             $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
         }
+        // Las peticiones de imagen necesitan SIEMPRE el HTML (con <img>): el modelo
+        // no debe optar por la vía "solo CSS" aquí, porque la verificación posterior
+        // exige que la imagen aparezca en el HTML de la sección/página.
+        if ($requiresImages) {
+            $effectiveInstruction .= "\n\nIMPORTANTE: esta petición añade o cambia imágenes. DEVUELVE el HTML completo con las etiquetas <img src=\"…\"> de las imágenes disponibles ya colocadas. No uses solo CSS ni dejes \"html\" vacío para esta petición.";
+        }
 
         try {
             if ($sectionId !== '') {
                 $result = self::applySectionEdit($siteId, $pageId, $page, $canvas, $sectionId, $effectiveInstruction);
             } else {
-                $result = self::applyPageEdit($siteId, $page, $canvas, $instruction);
+                $result = self::applyPageEdit($siteId, $page, $canvas, $effectiveInstruction);
             }
         } catch (AIException $e) {
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
