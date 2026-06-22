@@ -76,8 +76,12 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
         <?php if ($logoMissing): ?><p class="pp-design-logo-warning">El archivo del logo anterior ya no existe en el servidor. Vuelve a subirlo.</p><?php endif; ?>
         <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-design-logo-form">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required>
-            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= $logoUrl !== '' ? 'Sustituir logo' : 'Subir logo' ?></button>
+            <label class="pp-design-logo-picker">
+                <span>Elegir archivo</span>
+                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required data-logo-file>
+            </label>
+            <span class="pp-design-logo-filename" data-logo-filename>Ningún archivo seleccionado</span>
+            <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-logo-submit disabled><?= $logoUrl !== '' ? 'Subir nuevo logo' : 'Subir logo' ?></button>
         </form>
         <?php if ($logoUrl !== ''): ?>
         <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>" onsubmit="return confirm('¿Eliminar el logo actual?');">
@@ -240,6 +244,7 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
             <?php $first = false; endforeach; ?>
 
             <div class="pp-form-actions pp-design-actions">
+                <span>Colores, tipografías, botones y espacios</span>
                 <button type="submit" class="pp-btn pp-btn--primary">
                     <span class="pp-icon pp-icon--check"></span>
                     Guardar diseño

@@ -12,6 +12,17 @@
     var frame   = document.getElementById('pp-design-preview-frame');
     if (!form || !preview) return;
 
+    var logoFile = document.querySelector('[data-logo-file]');
+    var logoName = document.querySelector('[data-logo-filename]');
+    var logoSubmit = document.querySelector('[data-logo-submit]');
+    if (logoFile && logoName && logoSubmit) {
+        logoFile.addEventListener('change', function () {
+            var file = logoFile.files && logoFile.files[0];
+            logoName.textContent = file ? file.name : 'Ningún archivo seleccionado';
+            logoSubmit.disabled = !file;
+        });
+    }
+
     // Reset scroll of preview frame to top on load
     if (frame) {
         requestAnimationFrame(function () { frame.scrollTop = 0; });

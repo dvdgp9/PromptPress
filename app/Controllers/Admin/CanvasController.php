@@ -6,6 +6,7 @@ namespace App\Controllers\Admin;
 
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
+use App\Services\AI\AIException;
 use App\Services\BrandService;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
@@ -102,6 +103,7 @@ final class CanvasController
         CSRF::check();
         $instruction = trim((string) Request::post('instruction', ''));
         $sectionId = trim((string) Request::post('section', ''));
+        $elementContext = trim((string) Request::post('element_context', ''));
         if ($instruction === '' || mb_strlen($instruction) > 1200) {
             Response::json(['ok' => false, 'error' => 'Cuéntame el cambio en unas pocas frases.'], 422);
         }
@@ -122,12 +124,27 @@ final class CanvasController
             }
         }
 
+        $effectiveInstruction = $instruction;
+        if ($sectionId !== '' && $elementContext !== '') {
+            $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
+        }
+
         try {
             if ($sectionId !== '') {
-                $result = self::applySectionEdit($siteId, $pageId, $page, $canvas, $sectionId, $instruction);
+                $result = self::applySectionEdit($siteId, $pageId, $page, $canvas, $sectionId, $effectiveInstruction);
             } else {
                 $result = self::applyPageEdit($siteId, $page, $canvas, $instruction);
             }
+        } catch (AIException $e) {
+            $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
+            error_log('[canvas chat] error_id=' . $errorId . ' page=' . $pageId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            $message = match (true) {
+                in_array($e->getHttpStatus(), [401, 403], true) => 'La configuración del proveedor de IA no es válida. Revisa Ajustes de IA.',
+                $e->getHttpStatus() === 429 => 'El proveedor de IA ha alcanzado temporalmente su límite. Espera un momento y vuelve a intentarlo.',
+                $e->getHttpStatus() >= 500 => 'El proveedor de IA no está disponible ahora mismo. Tu página no ha cambiado.',
+                default => 'La IA no devolvió un cambio válido. Tu página no ha cambiado.',
+            };
+            Response::json(['ok' => false, 'error' => $message, 'error_id' => $errorId], 502);
         } catch (\Throwable $e) {
             error_log('[canvas chat] page=' . $pageId . ' ' . get_class($e) . ': ' . $e->getMessage());
             Response::json([
@@ -530,6 +547,7 @@ final class CanvasController
   [data-pp-section].pp-studio-selected{outline:3px solid var(--pp-primary);outline-offset:-3px}
   .pp-studio-tag{position:absolute;z-index:9999;background:var(--pp-primary);color:var(--pp-on-primary,#fff);font:600 12px/1 var(--pp-font-body,sans-serif);padding:6px 10px;border-radius:6px;pointer-events:none;transform:translateY(-100%)}
   .pp-studio-text-hover{outline:1.5px dashed color-mix(in srgb, var(--pp-primary) 55%, transparent);outline-offset:3px;cursor:text;border-radius:2px}
+  .pp-studio-box-hover{outline:2px solid color-mix(in srgb, var(--pp-primary) 65%, transparent);outline-offset:3px;cursor:pointer}
   .pp-studio-editing{outline:2px solid var(--pp-primary);outline-offset:3px;border-radius:2px;cursor:text}
   [data-pp-section] img:not([data-pp-no-edit]):hover{outline:2.5px solid var(--pp-primary);outline-offset:2px;cursor:pointer;filter:brightness(.92)}
   [data-pp-placeholder]{cursor:pointer}
@@ -569,8 +587,9 @@ final class CanvasController
   function serializeAndSave(sec){
     var clone = sec.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(function(n){ n.removeAttribute('contenteditable'); });
-    clone.querySelectorAll('.pp-studio-editing,.pp-studio-text-hover,.pp-studio-hover,.pp-studio-selected').forEach(function(n){
-      n.classList.remove('pp-studio-editing','pp-studio-text-hover','pp-studio-hover','pp-studio-selected');
+    clone.querySelectorAll('[data-pp-edit-box]').forEach(function(n){ n.removeAttribute('data-pp-edit-box'); });
+    clone.querySelectorAll('.pp-studio-editing,.pp-studio-text-hover,.pp-studio-box-hover,.pp-studio-hover,.pp-studio-selected').forEach(function(n){
+      n.classList.remove('pp-studio-editing','pp-studio-text-hover','pp-studio-box-hover','pp-studio-hover','pp-studio-selected');
       if(!n.getAttribute('class')) n.removeAttribute('class');
     });
     clone.classList.remove('pp-studio-hover','pp-studio-selected');
@@ -585,8 +604,23 @@ final class CanvasController
     if(!el) return null;
     if(el.tagName === 'IMG') return 'image';
     if(el.tagName === 'A' || el.tagName === 'BUTTON') return 'link';
+    if(el.matches && el.matches('[data-pp-edit-box]')) return 'box';
     if(el.matches && el.matches('h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,span')) return 'text';
     if(el.matches && el.matches('[data-pp-section]')) return 'section';
+    return null;
+  }
+
+  function visualBoxFrom(el){
+    var sec = sectionOf(el); var cur = el;
+    while(cur && cur !== sec){
+      if(cur.matches && cur.matches('div,span,strong,small,article,aside')){
+        var cs = getComputedStyle(cur); var text = (cur.textContent || '').trim();
+        var bg = cs.backgroundColor && cs.backgroundColor !== 'transparent' && cs.backgroundColor !== 'rgba(0, 0, 0, 0)';
+        var shaped = parseFloat(cs.borderRadius) > 0 || parseFloat(cs.paddingLeft) > 6 || parseFloat(cs.paddingTop) > 4;
+        if(text && text.length <= 240 && (bg || shaped)) return cur;
+      }
+      cur = cur.parentElement;
+    }
     return null;
   }
 
@@ -619,12 +653,20 @@ final class CanvasController
   function describe(el, kind){
     var cs = el ? getComputedStyle(el) : null;
     var p = { kind: kind };
-    if(kind === 'text' || kind === 'link'){
+    if(kind === 'text' || kind === 'link' || kind === 'box'){
       p.fontSize = cs ? Math.round(parseFloat(cs.fontSize)) : null;
       p.bold = cs ? (parseInt(cs.fontWeight,10) >= 600) : false;
       p.italic = cs ? (cs.fontStyle === 'italic') : false;
       p.align = el.style.textAlign || (cs ? cs.textAlign : '');
       p.color = cs ? cs.color : '';
+      p.text = (el.textContent || '').trim();
+    }
+    if(kind === 'box' && cs){
+      p.fill = cs.backgroundColor;
+      p.radiusTopLeft = Math.round(parseFloat(cs.borderTopLeftRadius)) || 0;
+      p.radiusTopRight = Math.round(parseFloat(cs.borderTopRightRadius)) || 0;
+      p.radiusBottomRight = Math.round(parseFloat(cs.borderBottomRightRadius)) || 0;
+      p.radiusBottomLeft = Math.round(parseFloat(cs.borderBottomLeftRadius)) || 0;
     }
     if(kind === 'link'){
       p.href = el.getAttribute('href') || '';
@@ -701,6 +743,11 @@ final class CanvasController
     else if(msg.op === 'radius'){
       if(msg.value === 'reset') el.style.removeProperty('border-radius');
       else el.style.borderRadius = RADIUS_PRESETS[msg.value] || msg.value;
+    }
+    else if(msg.op === 'corner-radius' && msg.value){
+      var cornerMap = {'top-left':'border-top-left-radius','top-right':'border-top-right-radius','bottom-right':'border-bottom-right-radius','bottom-left':'border-bottom-left-radius'};
+      var prop = cornerMap[msg.value.corner];
+      if(prop) el.style.setProperty(prop, Math.max(0, Math.min(200, parseInt(msg.value.px,10) || 0)) + 'px');
     }
     else if(msg.op === 'link'){ if(msg.value) el.setAttribute('href', msg.value); }
     else if(msg.op === 'newtab'){
@@ -807,6 +854,16 @@ final class CanvasController
       return;
     }
 
+    var box = visualBoxFrom(t);
+    if(box && !inEmbed(box)){
+      e.preventDefault(); e.stopPropagation();
+      document.querySelectorAll('[data-pp-edit-box]').forEach(function(n){ n.removeAttribute('data-pp-edit-box'); });
+      box.setAttribute('data-pp-edit-box','1');
+      selectSection(sectionOf(box), false);
+      reportSelection(box);
+      return;
+    }
+
     var s = sectionOf(t);
     if(!s) return;
     e.preventDefault(); e.stopPropagation();
@@ -831,11 +888,13 @@ final class CanvasController
     var s = sectionOf(e.target);
     document.querySelectorAll('.pp-studio-hover').forEach(function(x){ x.classList.remove('pp-studio-hover'); });
     document.querySelectorAll('.pp-studio-text-hover').forEach(function(x){ x.classList.remove('pp-studio-text-hover'); });
+    document.querySelectorAll('.pp-studio-box-hover').forEach(function(x){ x.classList.remove('pp-studio-box-hover'); });
     if(!s){ hideTag(); return; }
     s.classList.add('pp-studio-hover'); showTag(s);
     if(!inEmbed(e.target)){
       var txt = e.target.closest(EDITABLE);
       if(txt && txt !== editing && sectionOf(txt)) txt.classList.add('pp-studio-text-hover');
+      else { var box = visualBoxFrom(e.target); if(box) box.classList.add('pp-studio-box-hover'); }
     }
   });
 

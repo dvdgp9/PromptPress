@@ -23,6 +23,7 @@
   var ctxClear = document.getElementById('chat-context-clear');
 
   var selectedSection = null;
+  var selectedElementContext = '';
   var busy = false;
   var lastScrollY = 0;
 
@@ -74,8 +75,11 @@
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
     if (d.type === 'image-clicked') openMediaModal();
-    if (d.type === 'element-selected') openPanel(d);
-    if (d.type === 'element-deselected') closePanel();
+    if (d.type === 'element-selected') {
+      selectedElementContext = (d.kind || 'elemento') + (d.props && d.props.text ? ' con texto "' + d.props.text.slice(0, 180) + '"' : '');
+      openPanel(d);
+    }
+    if (d.type === 'element-deselected') { selectedElementContext = ''; closePanel(); }
     if (d.type === 'ready') {
       if (d.palette) brandPalette = d.palette;
       if (lastScrollY > 0) {
@@ -182,6 +186,26 @@
     + '</div></div>';
   }
 
+  function cornerFields(props) {
+    var fields = [
+      ['top-left', 'Superior izquierda', props.radiusTopLeft],
+      ['top-right', 'Superior derecha', props.radiusTopRight],
+      ['bottom-right', 'Inferior derecha', props.radiusBottomRight],
+      ['bottom-left', 'Inferior izquierda', props.radiusBottomLeft]
+    ];
+    return '<div class="cvstudio-field"><label>Radio de cada esquina (px)</label><div class="cvstudio-corners">'
+      + fields.map(function (f) {
+        return '<label><span>' + f[1] + '</span><input type="number" min="0" max="200" step="1" value="' + (f[2] || 0) + '" data-corner="' + f[0] + '"></label>';
+      }).join('') + '</div></div>';
+  }
+
+  function boxControls(props) {
+    return textControls(props)
+      + colorField('Relleno', 'fill', { none: true, current: props.fill })
+      + radiusField()
+      + cornerFields(props);
+  }
+
   function linkControls(props) {
     var opts = '<option value="">— Elige una página —</option>'
       + LINKS.map(function (l) {
@@ -235,8 +259,9 @@
 
   function openPanel(d) {
     var p = d.props || {};
-    var titles = { text: 'Texto', link: 'Botón / enlace', image: 'Imagen', section: 'Sección' };
+    var titles = { text: 'Texto', box: 'Bloque', link: 'Botón / enlace', image: 'Imagen', section: 'Sección' };
     var bodyHtml = d.kind === 'text' ? textControls(p)
+      : d.kind === 'box' ? boxControls(p)
       : d.kind === 'link' ? linkControls(p)
       : d.kind === 'image' ? imageControls(p)
       : sectionControls(p);
@@ -273,6 +298,12 @@
         var on = !btn.classList.contains('is-on');
         btn.classList.toggle('is-on', on);
         applyOp(btn.dataset.toggle, on);
+        showSaved('Guardado');
+      });
+    });
+    panel.querySelectorAll('[data-corner]').forEach(function (field) {
+      field.addEventListener('change', function () {
+        applyOp('corner-radius', { corner: field.dataset.corner, px: field.value });
         showSaved('Guardado');
       });
     });
@@ -332,6 +363,7 @@
 
   function clearSelection(notifyIframe) {
     selectedSection = null;
+    selectedElementContext = '';
     ctxBox.hidden = true;
     input.placeholder = 'Ej.: pon el titular más grande y el botón en otro color';
     if (notifyIframe !== false && iframe.contentWindow) {
@@ -362,6 +394,7 @@
     fd.append('_csrf', csrf);
     fd.append('instruction', text);
     if (selectedSection) fd.append('section', selectedSection);
+    if (selectedElementContext) fd.append('element_context', selectedElementContext);
 
     fetch(body.dataset.chatUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
