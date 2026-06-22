@@ -100,7 +100,7 @@ class DesignController
 
         $filename = 'logo-' . bin2hex(random_bytes(8)) . '.' . $ext;
         $absolute = $dir . '/' . $filename;
-        if (!move_uploaded_file($tmp, $absolute)) {
+        if (!move_uploaded_file($tmp, $absolute) || !is_file($absolute) || !is_readable($absolute)) {
             Session::flash('error', 'No se pudo guardar el logo.');
             Response::redirect(base_url('admin/design'));
         }
@@ -267,6 +267,10 @@ class DesignController
     private function render(array $ctx): void
     {
         $siteId = self::requireSiteId();
+        $ctxLogoPath = (string) ((Database::selectOne(
+            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ?',
+            [$siteId, 'site_logo_path']
+        )['setting_value'] ?? ''));
         $data = DashboardController::getCommonData();
         $data = array_merge($data, [
             'schema'       => DesignSystem::schema(),
@@ -279,11 +283,9 @@ class DesignController
             // Cierre Fase 19 — dirección visual del sitio.
             'visualStyleCurrent' => VisualStyleService::selectedForSite($siteId),
             'visualStyleCards'   => VisualStyleService::cardsForSite($siteId),
-            'logoPath' => (string) ((Database::selectOne(
-                'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ?',
-                [$siteId, 'site_logo_path']
-            )['setting_value'] ?? '')),
+            'logoPath' => $ctxLogoPath,
             'logoUrl' => \App\Services\BrandService::logoUrl($siteId),
+            'logoMissing' => $ctxLogoPath !== '' && !is_file(PP_ROOT . '/' . ltrim($ctxLogoPath, '/')),
         ]);
         View::send('admin/design/index', $data);
     }

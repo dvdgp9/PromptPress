@@ -64,7 +64,7 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
 
 <section class="pp-design-logo-card" aria-labelledby="pp-design-logo-title">
     <div class="pp-design-logo-preview">
-        <?php if ($logoPath !== ''): ?>
+        <?php if ($logoUrl !== ''): ?>
             <img src="<?= e($logoUrl) ?>" alt="Logo actual">
         <?php else: ?>
             <span>Sin logo</span>
@@ -73,12 +73,13 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
     <div class="pp-design-logo-content">
         <h3 id="pp-design-logo-title">Logo de la empresa</h3>
         <p>Se utiliza en la cabecera pública y en el panel. PNG, JPG o WebP, hasta 2 MB.</p>
+        <?php if ($logoMissing): ?><p class="pp-design-logo-warning">El archivo del logo anterior ya no existe en el servidor. Vuelve a subirlo.</p><?php endif; ?>
         <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-design-logo-form">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
             <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required>
-            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= $logoPath !== '' ? 'Sustituir logo' : 'Subir logo' ?></button>
+            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= $logoUrl !== '' ? 'Sustituir logo' : 'Subir logo' ?></button>
         </form>
-        <?php if ($logoPath !== ''): ?>
+        <?php if ($logoUrl !== ''): ?>
         <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>" onsubmit="return confirm('¿Eliminar el logo actual?');">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
             <button type="submit" class="pp-btn pp-btn--danger pp-btn--sm">Eliminar logo</button>

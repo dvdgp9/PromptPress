@@ -9679,6 +9679,7 @@ body.pp-login-page {
 .pp-design-logo-content{display:flex;flex:1;flex-wrap:wrap;align-items:center;gap:10px 14px}
 .pp-design-logo-content h3,.pp-design-logo-content p{width:100%;margin:0}
 .pp-design-logo-content p{color:var(--pp-text-muted,#6b7280);font-size:.9rem}
+.pp-design-logo-content .pp-design-logo-warning{color:var(--pp-danger,#dc2626);font-weight:600}
 .pp-design-logo-form{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
 @media (max-width:640px){
     .pp-design-logo-card{align-items:stretch;flex-direction:column}
