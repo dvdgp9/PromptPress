@@ -349,7 +349,7 @@
                     return body;
                 });
             }).then(function (body) {
-                if (templateStatus) templateStatus.textContent = 'Página creada. Redirigiendo al editor…';
+                if (templateStatus) templateStatus.textContent = body.image_warning || 'Página creada. Redirigiendo al editor…';
                 window.location.href = body.edit_url;
             }).catch(function (err) {
                 if (templateStatus) templateStatus.textContent = err.message || 'No se pudo crear la página.';

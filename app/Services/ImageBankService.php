@@ -31,6 +31,9 @@ final class ImageBankService
     /** @var bool|null cache estática del estado del schema */
     private static ?bool $schemaReady = null;
 
+    /** Último fallo de búsqueda durante la petición actual. */
+    private static ?array $lastSearchFailure = null;
+
     // ======================================================================
     // Estado / configuración
     // ======================================================================
@@ -45,6 +48,17 @@ final class ImageBankService
     public static function isAvailable(): bool
     {
         return self::accessKey() !== '';
+    }
+
+    public static function resetDiagnostics(): void
+    {
+        self::$lastSearchFailure = null;
+    }
+
+    /** @return array{ok:bool,status:string,message:?string,http_status:?int,rate_limit_remaining:?int,items:array}|null */
+    public static function lastSearchFailure(): ?array
+    {
+        return self::$lastSearchFailure;
     }
 
     /**
@@ -223,8 +237,20 @@ PHP;
      */
     public static function search(string $query, int $perPage = 12, string $orientation = 'landscape'): array
     {
+        return self::searchDetailed($query, $perPage, $orientation)['items'];
+    }
+
+    /**
+     * Variante observable de search(): conserva el motivo cuando Unsplash no
+     * puede responder. Los consumidores interactivos deben usar este método.
+     *
+     * @return array{ok:bool,status:string,message:?string,http_status:?int,rate_limit_remaining:?int,items:array}
+     */
+    public static function searchDetailed(string $query, int $perPage = 12, string $orientation = 'landscape'): array
+    {
         $query = trim($query);
-        if ($query === '' || !self::isAvailable()) return [];
+        if ($query === '') return self::searchResult(false, 'invalid_query', 'La búsqueda de imágenes está vacía.');
+        if (!self::isAvailable()) return self::searchResult(false, 'not_configured', 'Unsplash no está configurado.');
 
         $perPage = max(1, min(30, $perPage));
         $orientation = in_array($orientation, ['landscape', 'portrait', 'squarish'], true) ? $orientation : '';
@@ -232,27 +258,27 @@ PHP;
         // Cache hit
         $cacheKey = self::cacheKey($query, $perPage, $orientation);
         $cached = self::readCache($cacheKey);
-        if ($cached !== null) return $cached;
+        if ($cached !== null) return self::searchResult(true, 'cached', null, null, null, $cached);
 
         // Llamada a la API
         $params = ['query' => $query, 'per_page' => $perPage, 'content_filter' => 'high'];
         if ($orientation !== '') $params['orientation'] = $orientation;
 
         $url = self::SEARCH_ENDPOINT . '?' . http_build_query($params);
-        $response = self::httpGet($url, [
+        $response = self::httpRequest($url, [
             'Accept-Version: v1',
             'Authorization: Client-ID ' . self::accessKey(),
         ], self::HTTP_TIMEOUT);
-
-        if ($response === null) {
-            error_log('[ImageBankService] search HTTP error for query: ' . $query);
-            return [];
+        $classified = self::classifySearchResponse($response['status'], $response['body'], $response['error'], $response['headers']);
+        if (!$classified['ok']) {
+            self::$lastSearchFailure = $classified;
+            error_log('[ImageBankService] provider=unsplash operation=search status=' . $classified['status']
+                . ' http_status=' . ($classified['http_status'] ?? 0)
+                . ' rate_remaining=' . ($classified['rate_limit_remaining'] ?? 'unknown')
+                . ' query=' . json_encode($query, JSON_UNESCAPED_UNICODE));
+            return $classified;
         }
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded) || !isset($decoded['results']) || !is_array($decoded['results'])) {
-            error_log('[ImageBankService] search response no válido para query: ' . $query);
-            return [];
-        }
+        $decoded = json_decode((string) $response['body'], true);
 
         $items = [];
         foreach ($decoded['results'] as $r) {
@@ -261,7 +287,28 @@ PHP;
         }
 
         self::writeCache($cacheKey, $items);
-        return $items;
+        return self::searchResult(true, $items === [] ? 'no_results' : 'ok', null, $response['status'], $classified['rate_limit_remaining'], $items);
+    }
+
+    /** @return array{ok:bool,status:string,message:?string,http_status:?int,rate_limit_remaining:?int,items:array} */
+    public static function classifySearchResponse(int $httpStatus, ?string $body, ?string $networkError = null, array $headers = []): array
+    {
+        $remaining = isset($headers['x-ratelimit-remaining']) ? (int) $headers['x-ratelimit-remaining'] : null;
+        if ($httpStatus === 0 || $networkError !== null) return self::searchResult(false, 'network_error', 'No se pudo conectar con Unsplash.', $httpStatus ?: null, $remaining);
+        if ($httpStatus === 401 || $httpStatus === 403) return self::searchResult(false, 'authentication_error', 'Unsplash rechazó la configuración de acceso.', $httpStatus, $remaining);
+        if ($httpStatus === 429) return self::searchResult(false, 'rate_limited', 'Unsplash ha alcanzado temporalmente su límite de solicitudes.', $httpStatus, $remaining);
+        if ($httpStatus >= 500) return self::searchResult(false, 'provider_error', 'Unsplash no está disponible temporalmente.', $httpStatus, $remaining);
+        if ($httpStatus < 200 || $httpStatus >= 300) return self::searchResult(false, 'http_error', 'Unsplash devolvió una respuesta inesperada.', $httpStatus, $remaining);
+        $decoded = json_decode((string) $body, true);
+        if (!is_array($decoded) || !isset($decoded['results']) || !is_array($decoded['results'])) {
+            return self::searchResult(false, 'invalid_response', 'Unsplash devolvió una respuesta no válida.', $httpStatus, $remaining);
+        }
+        return self::searchResult(true, $decoded['results'] === [] ? 'no_results' : 'ok', null, $httpStatus, $remaining);
+    }
+
+    private static function searchResult(bool $ok, string $status, ?string $message = null, ?int $httpStatus = null, ?int $remaining = null, array $items = []): array
+    {
+        return ['ok' => $ok, 'status' => $status, 'message' => $message, 'http_status' => $httpStatus, 'rate_limit_remaining' => $remaining, 'items' => $items];
     }
 
     /**
@@ -532,6 +579,17 @@ PHP;
      */
     private static function httpGet(string $url, array $headers = [], int $timeoutSec = 8, bool $binary = false): ?string
     {
+        $response = self::httpRequest($url, $headers, $timeoutSec);
+        if ($response['error'] !== null || $response['status'] >= 400) {
+            error_log('[ImageBankService] HTTP ' . $response['status'] . ' ' . $url . ($response['error'] ? ' err=' . $response['error'] : ''));
+            return null;
+        }
+        return $response['body'];
+    }
+
+    /** @return array{status:int,body:?string,error:?string,headers:array<string,string>} */
+    private static function httpRequest(string $url, array $headers = [], int $timeoutSec = 8): array
+    {
         if (!function_exists('curl_init')) {
             // Fallback file_get_contents
             $opts = ['http' => [
@@ -542,7 +600,13 @@ PHP;
             ]];
             $ctx = stream_context_create($opts);
             $body = @file_get_contents($url, false, $ctx);
-            return $body === false ? null : $body;
+            $status = 0;
+            $responseHeaders = [];
+            foreach (($http_response_header ?? []) as $header) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $m)) $status = (int) $m[1];
+                elseif (str_contains($header, ':')) { [$name, $value] = explode(':', $header, 2); $responseHeaders[strtolower(trim($name))] = trim($value); }
+            }
+            return ['status' => $status, 'body' => $body === false ? null : $body, 'error' => $body === false ? 'request_failed' : null, 'headers' => $responseHeaders];
         }
 
         $ch = curl_init($url);
@@ -553,17 +617,18 @@ PHP;
             CURLOPT_CONNECTTIMEOUT => min(5, $timeoutSec),
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_USERAGENT      => 'PromptPress/1.0 (+https://promptpress.local)',
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $header) use (&$responseHeaders): int {
+                if (str_contains($header, ':')) { [$name, $value] = explode(':', $header, 2); $responseHeaders[strtolower(trim($name))] = trim($value); }
+                return strlen($header);
+            },
         ]);
+        $responseHeaders = [];
         $body = curl_exec($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err  = curl_error($ch);
         curl_close($ch);
 
-        if ($body === false || $code >= 400) {
-            error_log('[ImageBankService] HTTP ' . $code . ' ' . $url . ($err ? ' err=' . $err : ''));
-            return null;
-        }
-        return is_string($body) ? $body : null;
+        return ['status' => $code, 'body' => is_string($body) ? $body : null, 'error' => $body === false ? ($err !== '' ? $err : 'request_failed') : null, 'headers' => $responseHeaders];
     }
 
     /** Detecta MIME de imagen por magic bytes. */

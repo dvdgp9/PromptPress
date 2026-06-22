@@ -97,8 +97,11 @@ class FormsController
         CSRF::check();
         $siteId = $this->requireSiteId();
         $id = (int) ($params['id'] ?? 0);
-        FormStore::delete($siteId, $id);
-        Session::flash('notice', 'Formulario eliminado.');
+        if (FormStore::delete($siteId, $id)) {
+            Session::flash('notice', 'Formulario eliminado.');
+        } else {
+            Session::flash('error', 'No se pudo eliminar el formulario. Revisa que la migración de borrado seguro esté aplicada.');
+        }
         Response::redirect(base_url('admin/formularios'));
     }
 

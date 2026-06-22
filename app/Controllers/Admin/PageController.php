@@ -511,12 +511,14 @@ class PageController
                     $siteId, $title, $pageType, $goal, $canvasContext, $parentId
                 );
                 Session::flash('success', 'Página generada con IA. Revísala en el Studio antes de publicar.');
+                if (!empty($result['image_warning'])) Session::flash('warning', (string) $result['image_warning']);
                 Response::json([
                     'ok' => true,
                     'page_id' => $result['id'],
                     'edit_url' => $result['edit_url'],
                     'sections_count' => $result['sections_count'],
                     'ai_usage' => self::emptyAiUsage(),
+                    'image_warning' => $result['image_warning'] ?? null,
                 ]);
             } catch (\Throwable $e) {
                 error_log('[aiCreate] canvas falló, fallback a bloques: ' . get_class($e) . ': ' . $e->getMessage());
@@ -781,12 +783,14 @@ class PageController
         }
 
         Session::flash('success', 'Página generada desde tu referencia. Revísala en el Studio antes de publicar.');
+        if (!empty($result['image_warning'])) Session::flash('warning', (string) $result['image_warning']);
         Response::json([
             'ok' => true,
             'page_id' => $result['id'],
             'edit_url' => base_url('admin/canvas/' . $result['id']),
             'sections_count' => $result['sections_count'] ?? 1,
             'ai_usage' => self::emptyAiUsage(),
+            'image_warning' => $result['image_warning'] ?? null,
         ]);
     }
 
@@ -1094,12 +1098,14 @@ class PageController
         }
 
         Session::flash('success', 'Página creada desde plantilla "' . ($result['template_label'] ?? '') . '". Revísala antes de publicar.');
+        if (!empty($result['image_warning'])) Session::flash('warning', (string) $result['image_warning']);
         Response::json([
             'ok'              => true,
             'page_id'         => $result['page_id'],
             'edit_url'        => $result['edit_url'],
             'sections_count'  => $result['sections_count'],
             'images_applied'  => $result['images_applied'],
+            'image_warning'   => $result['image_warning'],
             'ai_usage'        => $result['ai_usage'],
         ]);
     }
@@ -1129,6 +1135,7 @@ class PageController
         string $details = '',
         int $parentId = 0
     ): array {
+        ImageBankService::resetDiagnostics();
         $template = $slug !== '' ? PageTemplateService::get($slug) : null;
         if (!$template) {
             throw new \InvalidArgumentException('Plantilla no encontrada.');
@@ -1301,9 +1308,17 @@ class PageController
             'edit_url'        => base_url('admin/pages/' . $pageId . '/edit'),
             'sections_count'  => count($generated),
             'images_applied'  => $imagesApplied,
+            'image_warning'   => self::imageGenerationWarning(),
             'ai_usage'        => $aiUsage,
             'template_label'  => (string) ($template['label'] ?? $slug),
         ];
+    }
+
+    private static function imageGenerationWarning(): ?string
+    {
+        $failure = ImageBankService::lastSearchFailure();
+        if ($failure === null) return null;
+        return 'No se pudieron obtener algunas imágenes de Unsplash. La página se ha creado igualmente y puedes añadirlas más tarde desde el Studio.';
     }
 
     // ----------------------------------------------------------------------

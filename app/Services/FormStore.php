@@ -192,12 +192,17 @@ final class FormStore
     public static function delete(int $siteId, int $formId): bool
     {
         $pageId = self::containerPageId($siteId);
-        $affected = Database::execute(
+        Database::execute(
             "UPDATE page_sections SET status = 'deleted', updated_at = ?
              WHERE id = ? AND page_id = ? AND section_type = 'form' AND status != 'deleted'",
             [date('Y-m-d H:i:s'), $formId, $pageId]
         );
-        return $affected > 0;
+        $row = Database::selectOne(
+            "SELECT status FROM page_sections
+             WHERE id = ? AND page_id = ? AND section_type = 'form' LIMIT 1",
+            [$formId, $pageId]
+        );
+        return ($row['status'] ?? null) === 'deleted';
     }
 
     /**

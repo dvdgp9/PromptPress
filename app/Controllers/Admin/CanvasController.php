@@ -12,6 +12,7 @@ use App\Services\DesignSystem;
 use App\Services\FormStore;
 use App\Services\FormPlacementStore;
 use App\Services\FormTemplates;
+use App\Services\ImageBankService;
 use App\Services\SeoIndexingService;
 use App\Services\SeoRedirectService;
 use App\Services\VisualStyleService;
@@ -110,6 +111,17 @@ final class CanvasController
             Response::json(['ok' => false, 'error' => 'Esta página aún no tiene contenido canvas.'], 404);
         }
 
+        $requiresImages = self::requestsImages($instruction);
+        $beforeImageCount = 0;
+        if ($requiresImages) {
+            $scopeHtml = $sectionId !== '' ? CanvasService::extractSection($canvas['html'], $sectionId) : $canvas['html'];
+            $beforeImageCount = self::imageCount((string) $scopeHtml);
+            $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
+            if (!$prepared['ok']) {
+                Response::json(['ok' => false, 'error' => $prepared['error']], 503);
+            }
+        }
+
         try {
             if ($sectionId !== '') {
                 $result = self::applySectionEdit($siteId, $pageId, $page, $canvas, $sectionId, $instruction);
@@ -122,6 +134,17 @@ final class CanvasController
                 'ok' => false,
                 'error' => 'No he podido aplicar ese cambio. Prueba a pedirlo de otra forma, o un cambio más concreto.',
             ], 502);
+        }
+
+        if ($requiresImages) {
+            $resultScope = $sectionId !== '' ? CanvasService::extractSection($result['html'], $sectionId) : $result['html'];
+            if (self::imageCount((string) $resultScope) <= $beforeImageCount) {
+                error_log('[canvas chat] page=' . $pageId . ' image_request_not_applied section=' . ($sectionId !== '' ? $sectionId : 'page'));
+                Response::json([
+                    'ok' => false,
+                    'error' => 'No he podido incorporar ninguna imagen, así que no he guardado el cambio. Prueba de nuevo cuando el servicio de imágenes esté disponible.',
+                ], 422);
+            }
         }
 
         $scope = $sectionId !== '' ? self::sectionLabel($sectionId) : 'Toda la página';
@@ -426,6 +449,48 @@ final class CanvasController
     {
         $reply = trim((string) ($data['reply'] ?? ''));
         return $reply !== '' ? mb_substr($reply, 0, 400) : 'Hecho, cambio aplicado.';
+    }
+
+    private static function requestsImages(string $instruction): bool
+    {
+        return preg_match('/\b(imagen|imagenes|imágenes|foto(?:s)?|fotograf(?:ía|ia|ías|ias))\b/iu', $instruction) === 1;
+    }
+
+    /** @return array{ok:bool,error:?string} */
+    private static function prepareRequestedImages(int $siteId, string $pageTitle, string $instruction): array
+    {
+        if (!ImageBankService::isAvailable()) {
+            return ['ok' => false, 'error' => 'No se pueden añadir imágenes porque Unsplash no está configurado.'];
+        }
+
+        ImageBankService::resetDiagnostics();
+        $query = trim($pageTitle . ' ' . preg_replace('/\s+/', ' ', mb_substr($instruction, 0, 100)));
+        $search = ImageBankService::searchDetailed($query, 6, 'landscape');
+        if (!$search['ok']) {
+            return ['ok' => false, 'error' => (string) ($search['message'] ?? 'Unsplash no está disponible temporalmente.')];
+        }
+        if ($search['items'] === []) {
+            return ['ok' => false, 'error' => 'Unsplash no encontró imágenes adecuadas para esta petición. Prueba a describir el tipo de foto que necesitas.'];
+        }
+
+        $imported = 0;
+        foreach (array_slice($search['items'], 0, 3) as $item) {
+            try {
+                ImageBankService::downloadToMedia($item, $siteId, \Core\Auth::id(), $pageTitle);
+                $imported++;
+            } catch (\Throwable $e) {
+                error_log('[canvas chat] provider=unsplash operation=download site=' . $siteId . ' error=' . get_class($e) . ': ' . $e->getMessage());
+            }
+        }
+        return $imported > 0
+            ? ['ok' => true, 'error' => null]
+            : ['ok' => false, 'error' => 'Unsplash respondió, pero no se pudieron descargar las imágenes. No se ha modificado la página.'];
+    }
+
+    private static function imageCount(string $html): int
+    {
+        preg_match_all('/<img\b|background-image\s*:|<picture\b/iu', $html, $matches);
+        return count($matches[0]);
     }
 
     /** Últimas imágenes de la biblioteca del sitio, para "cambia la foto". */

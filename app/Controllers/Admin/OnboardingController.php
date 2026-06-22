@@ -1651,13 +1651,18 @@ final class OnboardingController
      */
     public static function generateCanvasPageForPanel(int $siteId, string $title, string $type, string $goal, string $context, int $parentId = 0, array $options = []): array
     {
+        ImageBankService::resetDiagnostics();
         // PAGE-FROM-REF — si el caller aporta referencias propias (subidas al
         // vuelo), se usan ESAS; si no, se reutilizan las guardadas del onboarding.
         $referenceImages = !empty($options['reference_images']) && is_array($options['reference_images'])
             ? $options['reference_images']
             : self::loadReferenceImagesForVision($siteId);
         $item = ['reason' => $context !== '' ? $context : $goal];
-        return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages, $options);
+        $result = self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages, $options);
+        $result['image_warning'] = ImageBankService::lastSearchFailure() !== null
+            ? 'No se pudieron obtener algunas imágenes de Unsplash. La página se ha creado igualmente y puedes añadirlas más tarde desde el Studio.'
+            : null;
+        return $result;
     }
 
     private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages, array $options = []): array

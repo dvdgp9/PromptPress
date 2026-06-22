@@ -234,8 +234,9 @@
                 }
                 status.innerHTML = '✓ Página creada con ' + data.sections_count + ' secciones'
                     + (data.images_applied ? ' y ' + data.images_applied + ' imágenes del banco' : '')
+                    + (data.image_warning ? '. Aviso: ' + data.image_warning : '')
                     + '. Redirigiendo…';
-                setTimeout(() => { window.location = data.edit_url; }, 800);
+                setTimeout(() => { window.location = data.edit_url; }, data.image_warning ? 1800 : 800);
             })
             .catch(err => {
                 submit.disabled = false;
