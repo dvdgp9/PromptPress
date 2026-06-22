@@ -55,7 +55,7 @@ final class BrandService
         $path = ltrim(trim($path), '/');
         $prefix = 'storage/uploads/' . $siteId . '/brand/';
         if ($path === '' || !str_starts_with($path, $prefix)) return '';
-        return base_url('brand-assets/' . $siteId . '/' . rawurlencode(basename($path)));
+        return base_url('brand-assets/' . $siteId . '/logo');
     }
 
     /**

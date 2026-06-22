@@ -54,7 +54,7 @@ $router->get('/design.css', function () {
 $router->get('/', [PublicPageController::class, 'home']);
 $router->get('/sitemap.xml', [PublicSeoController::class, 'sitemap']);
 $router->get('/robots.txt', [PublicSeoController::class, 'robots']);
-$router->get('/brand-assets/{site}/{filename}', [BrandAssetController::class, 'logo']);
+$router->get('/brand-assets/{site}/logo', [BrandAssetController::class, 'logo']);
 
 // Home pública (fallback demo) — conservado para instalación nueva sin home
 $router->get('/__demo', function () {

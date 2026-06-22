@@ -12,17 +12,16 @@ final class BrandAssetController
     public function logo(array $params = []): void
     {
         $siteId = (int) ($params['site'] ?? 0);
-        $filename = (string) ($params['filename'] ?? '');
-        if ($siteId <= 0 || preg_match('/^logo-[a-f0-9]{16}\.(?:png|jpg|webp)$/', $filename) !== 1) {
-            Response::notFound();
-        }
-
-        $relative = 'storage/uploads/' . $siteId . '/brand/' . $filename;
+        if ($siteId <= 0) Response::notFound();
         $setting = Database::selectOne(
             'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
             [$siteId, 'site_logo_path']
         );
-        if ((string) ($setting['setting_value'] ?? '') !== $relative) Response::notFound();
+        $relative = ltrim((string) ($setting['setting_value'] ?? ''), '/');
+        $prefix = 'storage/uploads/' . $siteId . '/brand/';
+        if (!str_starts_with($relative, $prefix)) Response::notFound();
+        $filename = basename($relative);
+        if (preg_match('/^logo-[a-f0-9]{16}\.(?:png|jpg|webp)$/', $filename) !== 1) Response::notFound();
 
         $absolute = PP_ROOT . '/' . $relative;
         if (!is_file($absolute)) Response::notFound();
@@ -31,7 +30,7 @@ final class BrandAssetController
 
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . (string) filesize($absolute));
-        header('Cache-Control: public, max-age=86400, immutable');
+        header('Cache-Control: no-cache, must-revalidate');
         header('X-Content-Type-Options: nosniff');
         readfile($absolute);
         exit;

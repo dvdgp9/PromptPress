@@ -401,7 +401,6 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
                                             data-src="<?= e($card['preview_url']) ?>"
                                             loading="lazy"
                                             title="Preview de <?= e($card['label']) ?>"
-                                            sandbox="allow-same-origin allow-scripts"
                                             tabindex="-1"></iframe>
                                 </span>
                             </span>
