@@ -283,6 +283,7 @@ class DesignController
                 'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ?',
                 [$siteId, 'site_logo_path']
             )['setting_value'] ?? '')),
+            'logoUrl' => \App\Services\BrandService::logoUrl($siteId),
         ]);
         View::send('admin/design/index', $data);
     }

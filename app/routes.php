@@ -35,6 +35,7 @@ use App\Controllers\Admin\SettingsController;
 use App\Controllers\Public\FormController as PublicFormController;
 use App\Controllers\Public\PageController as PublicPageController;
 use App\Controllers\Public\SeoController as PublicSeoController;
+use App\Controllers\Public\BrandAssetController;
 
 // Hoja de estilos pública generada desde el design system (T5.3)
 $router->get('/design.css', function () {
@@ -53,6 +54,7 @@ $router->get('/design.css', function () {
 $router->get('/', [PublicPageController::class, 'home']);
 $router->get('/sitemap.xml', [PublicSeoController::class, 'sitemap']);
 $router->get('/robots.txt', [PublicSeoController::class, 'robots']);
+$router->get('/brand-assets/{site}/{filename}', [BrandAssetController::class, 'logo']);
 
 // Home pública (fallback demo) — conservado para instalación nueva sin home
 $router->get('/__demo', function () {

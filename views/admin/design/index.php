@@ -65,7 +65,7 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
 <section class="pp-design-logo-card" aria-labelledby="pp-design-logo-title">
     <div class="pp-design-logo-preview">
         <?php if ($logoPath !== ''): ?>
-            <img src="<?= e(base_url($logoPath)) ?>" alt="Logo actual">
+            <img src="<?= e($logoUrl) ?>" alt="Logo actual">
         <?php else: ?>
             <span>Sin logo</span>
         <?php endif; ?>
@@ -401,7 +401,7 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
                                             data-src="<?= e($card['preview_url']) ?>"
                                             loading="lazy"
                                             title="Preview de <?= e($card['label']) ?>"
-                                            sandbox="allow-same-origin"
+                                            sandbox="allow-same-origin allow-scripts"
                                             tabindex="-1"></iframe>
                                 </span>
                             </span>

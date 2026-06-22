@@ -171,7 +171,7 @@ $groups = [
                                 <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg">
                                 <span>
                                     <?php if (!empty($brandValues['logo_path'])): ?>
-                                        <img src="<?= e(base_url((string) $brandValues['logo_path'])) ?>" alt="">
+                                        <img src="<?= e((string) $brandValues['logo_url']) ?>" alt="">
                                     <?php else: ?>
                                         <b></b>
                                     <?php endif; ?>
@@ -218,7 +218,7 @@ $groups = [
                         <aside class="pp-onboarding-preview" data-design-preview>
                             <span class="pp-onboarding-preview-brand">
                                 <?php if (!empty($brandValues['logo_path'])): ?>
-                                    <img src="<?= e(base_url((string) $brandValues['logo_path'])) ?>" alt="" data-preview-logo>
+                                    <img src="<?= e((string) $brandValues['logo_url']) ?>" alt="" data-preview-logo>
                                 <?php else: ?>
                                     <b data-preview-logo-fallback></b>
                                 <?php endif; ?>

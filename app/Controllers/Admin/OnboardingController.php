@@ -2219,6 +2219,7 @@ final class OnboardingController
         return [
             'name' => (string) ($site['name'] ?? ''),
             'logo_path' => (string) ($logo['setting_value'] ?? ''),
+            'logo_url' => \App\Services\BrandService::publicLogoUrl($siteId, (string) ($logo['setting_value'] ?? '')),
         ];
     }
 

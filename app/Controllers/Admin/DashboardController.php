@@ -139,13 +139,7 @@ class DashboardController
                     if ($site) {
                         $siteName = $site['name'];
                     }
-                    $logo = Database::selectOne(
-                        'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
-                        [$siteId, 'site_logo_path']
-                    );
-                    if (!empty($logo['setting_value'])) {
-                        $siteLogoUrl = base_url((string) $logo['setting_value']);
-                    }
+                    $siteLogoUrl = \App\Services\BrandService::logoUrl((int) $siteId);
                 }
             } catch (\Throwable $e) {
                 // Silently fall back to defaults

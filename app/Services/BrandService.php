@@ -38,6 +38,7 @@ final class BrandService
         );
 
         return [
+            'site_id' => $siteId,
             'name' => trim((string) ($site['name'] ?? 'PromptPress')) ?: 'PromptPress',
             'logo_path' => trim((string) ($logo['setting_value'] ?? '')),
         ];
@@ -46,7 +47,15 @@ final class BrandService
     public static function logoUrl(int $siteId): string
     {
         $data = self::data($siteId);
-        return $data['logo_path'] !== '' ? base_url($data['logo_path']) : '';
+        return self::publicLogoUrl($siteId, $data['logo_path']);
+    }
+
+    public static function publicLogoUrl(int $siteId, string $path): string
+    {
+        $path = ltrim(trim($path), '/');
+        $prefix = 'storage/uploads/' . $siteId . '/brand/';
+        if ($path === '' || !str_starts_with($path, $prefix)) return '';
+        return base_url('brand-assets/' . $siteId . '/' . rawurlencode(basename($path)));
     }
 
     /**
@@ -58,7 +67,7 @@ final class BrandService
         $name = htmlspecialchars($data['name'], ENT_QUOTES, 'UTF-8');
         $path = ltrim($data['logo_path'], '/');
         if ($path !== '' && is_file(PP_ROOT . '/' . $path)) {
-            return '<img class="pp-site-header__logo-img" src="' . htmlspecialchars(base_url($path), ENT_QUOTES, 'UTF-8') . '" alt="' . $name . '">';
+            return '<img class="pp-site-header__logo-img" src="' . htmlspecialchars(self::publicLogoUrl((int) ($data['site_id'] ?? 0), $path), ENT_QUOTES, 'UTF-8') . '" alt="' . $name . '">';
         }
         return '<span class="pp-site-header__logo-fallback" aria-hidden="true">'
              . htmlspecialchars(mb_strtoupper(mb_substr($data['name'], 0, 1)), ENT_QUOTES, 'UTF-8')
