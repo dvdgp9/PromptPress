@@ -74,3 +74,13 @@ Dos problemas en el Studio (editor canvas en vivo):
 ## [2026-06-22] Seguimiento: petición de imágenes falla con "no devolvió un cambio válido"
 - Arreglado bug propio: la directiva "prefiere solo CSS" podía hacer que una imagen se pusiera como background-image en CSS con html:"" → la verificación `imageCount` solo mira el HTML de la sección → rechazo. Ahora, si `$requiresImages`, se añade directiva que OBLIGA a devolver HTML con <img>; `applyPageEdit` también recibe `$effectiveInstruction`. Verificado: 4/4 runs devuelven <img> en HTML. tests canvas_image_requests/runtime/box_editor PASS.
 - NO se pudo reproducir el AIException exacto del usuario en local con el código nuevo. Hipótesis pendiente de confirmar con el usuario: (a) están probando en un entorno SIN los cambios desplegados (prod) → código viejo (max_tokens 9000, validador exige html) y en una sección Hero enorme con SVG + petición de imagen + elemento seleccionado (que fuerza preservar el SVG) → truncado → JSON inválido → AIException; o (b) revisar ai_logs/php-errors.log del servidor donde prueban para ver la causa real.
+
+## [2026-06-22] Confirmado: truncado por reescribir SVG enorme en peticiones de imagen
+- Usuario en PROD (centroformacionfedericogarcialorca.com/admin/canvas/9), cambios desplegados. "Ponle imagen de fondo en Hero" y "Pon imágenes en la página" → "no devolvió un cambio válido". Pista: "antes rápido, ahora piensa bastante" = truncado al reescribir el Hero (SVG grande).
+- Causa: mi directiva previa forzaba HTML para TODA imagen → el modelo reescribía el SVG entero (18.9s en repro con sección de 6.4KB) → en su Hero real trunca → AIException.
+- Fix definitivo:
+  - Directiva por tipo: imagen de FONDO → CSS (`background-image`, html:"") sin tocar el SVG; imagen de CONTENIDO → <img> en HTML. (CanvasController + prompts section/page).
+  - `applyPageEdit` recibe `$effectiveInstruction` (antes raw).
+  - Verificación de imágenes ahora cuenta imágenes en HTML Y en CSS (background-image), antes/después; acepta fondos solo-CSS.
+- Repro nueva: "Ponle imagen de fondo en Hero" → html:"" + css_append con background-image+url, SVG intacto, verificación pasa (before 0 → after 1), ~12-14s. Page-level "pon imágenes" → 4.5s, pasa. Tests canvas_image_requests/runtime/box_editor PASS.
+- PENDIENTE usuario: desplegar estos cambios nuevos (commit+push+pull en prod) y reprobar.

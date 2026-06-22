@@ -117,7 +117,9 @@ final class CanvasController
         $beforeImageCount = 0;
         if ($requiresImages) {
             $scopeHtml = $sectionId !== '' ? CanvasService::extractSection($canvas['html'], $sectionId) : $canvas['html'];
-            $beforeImageCount = self::imageCount((string) $scopeHtml);
+            // Contamos imágenes tanto en el HTML como en el CSS (background-image),
+            // para aceptar imágenes de fondo añadidas solo por CSS.
+            $beforeImageCount = self::imageCount((string) $scopeHtml) + self::imageCount((string) $canvas['css']);
             $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
             if (!$prepared['ok']) {
                 Response::json(['ok' => false, 'error' => $prepared['error']], 503);
@@ -128,11 +130,12 @@ final class CanvasController
         if ($sectionId !== '' && $elementContext !== '') {
             $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
         }
-        // Las peticiones de imagen necesitan SIEMPRE el HTML (con <img>): el modelo
-        // no debe optar por la vía "solo CSS" aquí, porque la verificación posterior
-        // exige que la imagen aparezca en el HTML de la sección/página.
+        // Peticiones de imagen: distinguimos fondo (CSS, sin reescribir HTML) de
+        // contenido (<img> en el HTML). Reescribir secciones con ilustraciones SVG
+        // grandes solo para una imagen de FONDO es lento y trunca: con CSS es
+        // instantáneo. La verificación posterior cuenta imágenes en HTML y en CSS.
         if ($requiresImages) {
-            $effectiveInstruction .= "\n\nIMPORTANTE: esta petición añade o cambia imágenes. DEVUELVE el HTML completo con las etiquetas <img src=\"…\"> de las imágenes disponibles ya colocadas. No uses solo CSS ni dejes \"html\" vacío para esta petición.";
+            $effectiveInstruction .= "\n\nHay imágenes disponibles para esta petición. Si es una imagen de FONDO, aplícala con CSS (`background-image: url(...)` apuntando a una ruta de las imágenes disponibles) sobre la sección o el elemento, y deja \"html\":\"\" (NO reescribas el HTML, sobre todo si hay ilustraciones o SVG). Si la imagen forma parte del CONTENIDO (una foto dentro del texto), devuelve el HTML con la etiqueta <img>.";
         }
 
         try {
@@ -161,7 +164,8 @@ final class CanvasController
 
         if ($requiresImages) {
             $resultScope = $sectionId !== '' ? CanvasService::extractSection($result['html'], $sectionId) : $result['html'];
-            if (self::imageCount((string) $resultScope) <= $beforeImageCount) {
+            $afterImageCount = self::imageCount((string) $resultScope) + self::imageCount((string) $result['css']);
+            if ($afterImageCount <= $beforeImageCount) {
                 error_log('[canvas chat] page=' . $pageId . ' image_request_not_applied section=' . ($sectionId !== '' ? $sectionId : 'page'));
                 Response::json([
                     'ok' => false,
