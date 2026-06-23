@@ -136,9 +136,18 @@ final class CanvasController
             }
         }
 
+        // Añadir/insertar una sección NUEVA es un cambio estructural de PÁGINA,
+        // no de una sección: el editor de sección solo reemplaza la sección
+        // elegida (descartaría la nueva → "no creó nada"). Se enruta a página,
+        // usando la sección seleccionada como referencia de posición.
+        $wantsNewSection = self::requestsNewSection($instruction);
+
         $effectiveInstruction = $instruction;
-        if ($sectionId !== '' && $elementContext !== '') {
+        if (!$wantsNewSection && $sectionId !== '' && $elementContext !== '') {
             $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
+        }
+        if ($wantsNewSection && $sectionId !== '') {
+            $effectiveInstruction .= "\n\nUbica el cambio respecto a la sección de referencia \"" . self::sectionLabel($sectionId) . "\" (data-pp-section=\"" . $sectionId . "\"). A la sección NUEVA dale un data-pp-section único y descriptivo; conserva intactas todas las demás secciones.";
         }
         // Peticiones de imagen: distinguimos fondo (CSS, sin reescribir HTML) de
         // contenido (<img> en el HTML). Reescribir secciones con ilustraciones SVG
@@ -149,7 +158,7 @@ final class CanvasController
         }
 
         try {
-            if ($sectionId !== '') {
+            if ($sectionId !== '' && !$wantsNewSection) {
                 $result = self::applySectionEdit($siteId, $pageId, $page, $canvas, $sectionId, $effectiveInstruction);
             } else {
                 $result = self::applyPageEdit($siteId, $page, $canvas, $effectiveInstruction);
@@ -501,6 +510,30 @@ final class CanvasController
     {
         $reply = trim((string) ($data['reply'] ?? ''));
         return $reply !== '' ? mb_substr($reply, 0, 400) : 'Hecho, cambio aplicado.';
+    }
+
+    /**
+     * ¿La petición pide AÑADIR/INSERTAR una sección NUEVA? Es un cambio de
+     * estructura de página (no de una sección): hay que enrutarlo al editor de
+     * página, porque la edición de sección solo reemplaza la sección elegida y
+     * descartaría la nueva. Distingue "mete una sección nueva" de "añade un
+     * botón a esta sección" (eso es editar la sección actual): exige que el
+     * sustantivo de sección sea el OBJETO nuevo (una/otra/nueva sección…).
+     */
+    private static function requestsNewSection(string $instruction): bool
+    {
+        $t = ' ' . mb_strtolower($instruction) . ' ';
+        $noun = 'secci[óo]n|secciones|franja|banda|apartado|bloque';
+        // Duplicar una sección también crea una nueva (cambio estructural).
+        if (preg_match('/\bduplic\w*\b[^.]{0,20}?\b(?:' . $noun . ')\b/u', $t)) {
+            return true;
+        }
+        $verb = 'añad\w*|agreg\w*|met[eaéo]\w*|insert\w*|cre[ae]\w*|incorpor\w*';
+        if (!preg_match('/\b(?:' . $verb . ')\b/u', $t)) {
+            return false;
+        }
+        return preg_match('/\b(?:una|otra|un|nueva|nuevo)\s+(?:' . $noun . ')\b/u', $t) === 1
+            || preg_match('/\b(?:' . $noun . ')\s+nuevas?\b/u', $t) === 1;
     }
 
     /**
