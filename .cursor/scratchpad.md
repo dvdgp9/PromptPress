@@ -104,3 +104,41 @@ Dos problemas en el Studio (editor canvas en vivo):
 - Bug C (control estricto): al MOVER una imagen de contenido a fondo, el total no aumenta (1→1) → el control `after>before` rechazaba un cambio válido. Cambiado a rechazar solo si `after===0` (el resultado se queda sin ninguna imagen). Reproducido hero "foto de fondo + CTA centrado": IA aplica background-image CSS usando imagen de biblioteca, control ACEPTA.
 - Nota: el Unsplash de PROD está mal configurado (auth 401/403). El usuario debe revisar la access key si quiere imágenes nuevas de Unsplash; mientras, las de su biblioteca funcionan.
 - PENDIENTE usuario: desplegar y reprobar; arreglar credenciales Unsplash en prod.
+
+## [2026-06-23] PLAN — Limpieza del flujo obsoleto "plantillas-bloque"
+Contexto: tras quitar el botón "Crear desde plantilla" del header de /admin/pages, el flujo de CREACIÓN por plantillas-bloque quedó sin entrada viva. PERO las plantillas siguen vivas como sustrato de las PREVIEWS de estilo visual (/admin/design). Limpieza quirúrgica, no borrado total.
+
+### CONSERVAR (no tocar — está vivo)
+- `PageTemplateService` (servicio): `all()`, `get()`, `placeholderContent()`. Usos vivos: editor de bloques (SectionController:428), variaciones de layout (PageController:2821 variationPreviewHtml), y la preview.
+- `aiTemplatePreview()` + ruta `GET /pages/ai/templates/{slug}/preview`. VIVO: previews de estilo visual en /admin/design (VisualStyleService::cardsForSite → preview_url).
+- `config/page_templates/*.json` (los necesita la preview).
+- `filterSectionContent()` (flujo clásico de secciones para artículos/legales — vivo).
+- VisualStyleService, views/admin/design/index.php.
+
+### BORRAR (muerto; sin entrada viva)
+1. Galería: `PageController::aiTemplatesGallery()` + ruta `GET /pages/ai/templates` + vista `views/admin/pages/templates.php`.
+2. Crear-desde-plantilla: `PageController::aiCreateFromTemplate()` + ruta `POST /pages/ai-create-from-template`.
+3. `PageController::generatePageFromTemplate()` + helper exclusivo `applyImagesToSection()` (solo lo llama generatePageFromTemplate).
+4. Onboarding: rama muerta en `createAiPage()` (~1292-1311) + cómputo vestigial `suggested_templates`/`default_template` (~602-628) → luego `PageTemplateService::suggestForPage()` queda sin uso → borrar.
+5. page-studio.js: `bindTemplateFlow()` + vars `templateGrid/templateForm/templateSlug/templateTitle/templateGoal/templateStatus/templateSubmit` + su invocación (inerte: los ids no existen en studio.php).
+6. Preparación de datos del studio: quitar `$data['templateCards']` en `PageController::studio()` (189-199) y el `@var $templateCards` del docblock de studio.php. (visualStyleCards en studio.php tb es vestigial — confirmar y quitar el docblock; NO tocar cardsForSite, que /admin/design sí usa.)
+
+### ORDEN (hojas→raíz, verificando tras cada paso)
+1. page-studio.js: quitar template-flow muerto. Verif: studio crea OK.
+2. Vista templates.php + ruta gallery + aiTemplatesGallery().
+3. Ruta create-from-template + aiCreateFromTemplate() + generatePageFromTemplate() + applyImagesToSection().
+4. Onboarding: rama muerta + cómputo suggested_templates; luego suggestForPage() del service.
+5. studio(): quitar templateCards (+ docblocks vestigiales).
+6. Verif final: `php -l` en tocados, `node --check` JS, tests canvas_*; navegador: /admin/pages (crear con IA), /admin/design (previews de estilo cargan), onboarding (crea canvas).
+
+### RIESGOS
+- NO borrar aiTemplatePreview, los JSON de plantillas, placeholderContent ni filterSectionContent (romperían /admin/design o el editor de bloques).
+- Antes de borrar applyImagesToSection/suggestForPage, re-grep para confirmar 0 usos nuevos.
+- PageController es grande; ir por pasos. Estimación: ~6 ediciones, ~300-400 líneas muertas retiradas.
+- No hay tests que referencien los métodos muertos (verificado).
+
+## [2026-06-23] EJECUTADO — Limpieza flujo plantillas-bloque (Executor)
+Hecho por pasos con verificación. BORRADO (muerto): bindTemplateFlow + vars en page-studio.js; vista templates.php; ruta GET /pages/ai/templates + aiTemplatesGallery(); ruta POST /pages/ai-create-from-template + aiCreateFromTemplate() + generatePageFromTemplate() + imageGenerationWarning() + applyImagesToSection() + fetchAndApply(); onboarding: enrichWithTemplates() + rama plantilla muerta de createAiPage() + guard $templateSlug; PageTemplateService::suggestForPage() + imageHungrySections(); $data['templateCards'/'visualStyleCards'/'selectedVisualStyle'] en PageController::studio() + sus @var en studio.php; imports huérfanos (ImageBankService en PageController, PageTemplateService en OnboardingController).
+CONSERVADO (vivo): aiTemplatePreview() + ruta /pages/ai/templates/{slug}/preview (lo usan las visual style cards de /admin/design); PageTemplateService (all/get/placeholderContent); config/page_templates/*.json; filterSectionContent; variantContentHint (caller vivo en 557); aiVariations/applyVariation.
+VERIFICADO: lint PHP/JS OK; 22/22 tests OK; navegador: /admin/pages (header sin "Crear desde plantilla": [+ Nueva página con IA | Analizar sitio | Revisar enlaces | Crear manualmente]), /admin/pages/studio 200, /admin/design 200 con 18 visual style cards y sus iframes de preview funcionando (200, HTML real), galería /pages/ai/templates → 404, sin errores de consola.
+PENDIENTE usuario: desplegar (commit+push+pull).

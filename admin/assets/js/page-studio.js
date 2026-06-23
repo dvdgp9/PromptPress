@@ -15,14 +15,6 @@
     var briefWrap = document.getElementById('pp-studio-brief');
     var currentBrief = null;
     var currentIdea = '';
-    var templateGrid = document.getElementById('pp-studio-template-grid');
-    var templateForm = document.getElementById('pp-studio-template-form');
-    var templateSlug = document.getElementById('pp-studio-template-slug');
-    var visualStyle = document.getElementById('pp-studio-visual-style');
-    var templateTitle = document.getElementById('pp-studio-template-title');
-    var templateGoal = document.getElementById('pp-studio-template-goal');
-    var templateStatus = document.getElementById('pp-studio-template-status');
-    var templateSubmit = document.getElementById('pp-studio-template-submit');
 
     if (!configured) {
         renderOpportunitiesError('Configura el proveedor de IA para detectar oportunidades.');
@@ -49,7 +41,6 @@
         });
     });
     bindStudioModes();
-    bindTemplateFlow();
     bindReferenceFlow();
 
     loadOpportunities(false);
@@ -313,50 +304,6 @@
         });
     }
 
-    function bindTemplateFlow() {
-        if (!templateGrid || !templateForm || !templateSlug) return;
-        templateGrid.querySelectorAll('[data-template-slug]').forEach(function (card) {
-            card.addEventListener('click', function () {
-                templateGrid.querySelectorAll('.pp-studio-template-card').forEach(function (c) {
-                    c.classList.toggle('is-active', c === card);
-                });
-                templateSlug.value = card.getAttribute('data-template-slug') || '';
-                if (visualStyle) {
-                    visualStyle.value = card.getAttribute('data-visual-style') || '';
-                }
-                if (templateTitle && !templateTitle.value.trim()) {
-                    templateTitle.value = 'Nueva página';
-                }
-                if (templateGoal && !templateGoal.value.trim()) {
-                    templateGoal.value = 'Crear una página completa orientada a conversión usando la dirección visual ' + (card.getAttribute('data-template-label') || 'seleccionada') + '.';
-                }
-            });
-        });
-
-        templateForm.addEventListener('submit', function (event) {
-            event.preventDefault();
-            if (!templateTitle || !templateGoal || !templateTitle.value.trim() || !templateGoal.value.trim()) return;
-            setButtonBusy(templateSubmit, true, 'Creando');
-            if (templateStatus) templateStatus.textContent = 'Generando página con IA…';
-            var fd = new FormData(templateForm);
-            fetch(baseUrl + '/admin/pages/ai-create-from-template', {
-                method: 'POST',
-                body: fd,
-                credentials: 'same-origin'
-            }).then(function (res) {
-                return res.json().then(function (body) {
-                    if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
-                    return body;
-                });
-            }).then(function (body) {
-                if (templateStatus) templateStatus.textContent = body.image_warning || 'Página creada. Redirigiendo al editor…';
-                window.location.href = body.edit_url;
-            }).catch(function (err) {
-                if (templateStatus) templateStatus.textContent = err.message || 'No se pudo crear la página.';
-                setButtonBusy(templateSubmit, false, 'Crear con este estilo');
-            });
-        });
-    }
 
     function metricBlock(label, value) {
         return '<div><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';

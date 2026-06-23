@@ -5,9 +5,6 @@
  * @var array $pageTypes
  * @var array $aiMeta
  * @var array $pages
- * @var array $templateCards
- * @var array $visualStyleCards
- * @var string $selectedVisualStyle
  * @var array $seedPages
  * @var array $documents
  */

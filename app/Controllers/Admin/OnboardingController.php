@@ -9,7 +9,6 @@ use App\Services\CacheService;
 use App\Services\DesignSystem;
 use App\Services\DocumentSummarizer;
 use App\Services\ImageBankService;
-use App\Services\PageTemplateService;
 use App\Services\PalettePresets;
 use App\Services\Renderer\CustomBlockGenerator;
 use App\Services\SectionSchemas;
@@ -522,7 +521,7 @@ final class OnboardingController
                 'ok' => true,
                 'cached' => false,
                 'intent' => $intent,
-                'architecture' => self::enrichWithTemplates(self::normalizeArchitecture((array) ($result['data'] ?? []), $intent)),
+                'architecture' => self::normalizeArchitecture((array) ($result['data'] ?? []), $intent),
                 'model' => $result['model'] ?? '',
                 'tokens_in' => $result['tokens_in'] ?? 0,
                 'tokens_out' => $result['tokens_out'] ?? 0,
@@ -533,7 +532,7 @@ final class OnboardingController
                 'ok' => true,
                 'fallback' => true,
                 'intent' => $intent,
-                'architecture' => self::enrichWithTemplates(self::fallbackArchitecture($intent)),
+                'architecture' => self::fallbackArchitecture($intent),
                 'error_note' => $e->getMessage(),
             ]);
         }
@@ -590,44 +589,6 @@ final class OnboardingController
                 "OBJETIVO DEL USUARIO: No especificado.\n"
               . "Propón una estructura equilibrada y razonable para el negocio descrito en la memoria.",
         };
-    }
-
-    /**
-     * T18.8 — Para cada página propuesta, añade un campo `suggested_templates`
-     * con hasta 3 plantillas que encajan (sin coste IA extra: heurística pura).
-     * El front renderiza chips de selección y permite preview por click.
-     */
-    private static function enrichWithTemplates(array $architecture): array
-    {
-        $all = PageTemplateService::all();
-        if (empty($all)) return $architecture;
-
-        $pages = $architecture['missing_pages'] ?? [];
-        foreach ($pages as &$p) {
-            if (!is_array($p)) continue;
-            $slugs = PageTemplateService::suggestForPage(
-                (string) ($p['page_type'] ?? 'landing'),
-                (string) ($p['title'] ?? ''),
-                (string) ($p['reason'] ?? $p['goal'] ?? ''),
-                3
-            );
-            $tpls = [];
-            foreach ($slugs as $slug) {
-                if (!isset($all[$slug])) continue;
-                $tpls[] = [
-                    'slug'        => $slug,
-                    'label'       => (string) ($all[$slug]['label'] ?? $slug),
-                    'description' => (string) ($all[$slug]['description'] ?? ''),
-                    'preview_url' => base_url('admin/pages/ai/templates/' . $slug . '/preview'),
-                ];
-            }
-            $p['suggested_templates'] = $tpls;
-            $p['default_template']    = $tpls[0]['slug'] ?? '';
-        }
-        unset($p);
-        $architecture['missing_pages'] = $pages;
-        $architecture['visual_styles'] = VisualStyleService::cardsForSite(self::requireSiteId());
-        return $architecture;
     }
 
     public function createPages(): void
@@ -1267,14 +1228,13 @@ final class OnboardingController
         }
 
         $referenceImages = self::loadReferenceImagesForVision($siteId);
-        $templateSlug = trim((string) ($item['template_slug'] ?? ''));
 
         // FH2/FH6 — CANVAS es el camino por defecto para páginas de marketing,
-        // CON o SIN referencias visuales. Excepciones: artículos (editorial) y
-        // plantilla clásica elegida explícitamente por el usuario. Si canvas
-        // falla, degradamos: con referencias → bloques PP-friendly; sin ellas
-        // → flujo clásico de secciones (más abajo).
-        if ($type !== 'article' && $templateSlug === '') {
+        // CON o SIN referencias visuales. Excepción: artículos (editorial), que
+        // usan el editor estructurado. Si canvas falla, degradamos: con
+        // referencias → bloques PP-friendly; sin ellas → flujo clásico de
+        // secciones (más abajo).
+        if ($type !== 'article') {
             try {
                 return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages);
             } catch (\Throwable $e) {
@@ -1284,30 +1244,6 @@ final class OnboardingController
                 }
                 // sin referencias: continúa hacia el flujo clásico de secciones
             }
-        }
-
-        // T18.8 — si el front eligió una plantilla, delegamos al flujo de plantillas
-        // (mismo path que "/admin/pages > Crear desde plantilla"). Aplica variantes,
-        // descarga imágenes del banco y guarda con `style.variant` correcto.
-        if ($templateSlug !== '' && PageTemplateService::get($templateSlug) !== null) {
-            $result = PageController::generatePageFromTemplate(
-                $siteId,
-                Auth::id(),
-                $templateSlug,
-                $title,
-                $goal,
-                /* audience */ '',
-                /* details  */ $context,
-                /* parentId */ $parentId
-            );
-            return [
-                'id'             => $result['page_id'],
-                'title'          => $title,
-                'edit_url'       => $result['edit_url'],
-                'sections_count' => $result['sections_count'],
-                'images_applied' => $result['images_applied'],
-                'template'       => $templateSlug,
-            ];
         }
 
         // Fallback: flujo libre (sin plantilla) — comportamiento histórico.

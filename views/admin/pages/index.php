@@ -130,8 +130,8 @@ $pageMapPayload = array_map(fn($p) => [
             <p class="pp-page-intro">Organiza la web como una estructura viva: páginas reales, ramas, huecos y próximas páginas sugeridas por IA.</p>
         </div>
         <div class="pp-page-header__actions">
-            <a href="<?= e(base_url('admin/pages/ai/templates')) ?>" class="pp-btn pp-btn--primary">Crear desde plantilla</a>
-            <a href="<?= e(base_url('admin/pages/studio')) ?>" class="pp-btn pp-btn--secondary">Nueva página con IA</a>
+            <a href="<?= e(base_url('admin/pages/studio')) ?>" class="pp-btn pp-btn--primary">+ Nueva página con IA</a>
+            <span class="pp-map-header__sep" aria-hidden="true"></span>
             <button type="button" class="pp-btn pp-btn--secondary" id="pp-architect-run">Analizar sitio</button>
             <a href="<?= e(base_url('admin/links')) ?>" class="pp-btn pp-btn--secondary">Revisar enlaces</a>
             <a href="<?= e(base_url('admin/pages/create')) ?>" class="pp-link pp-map-header__manual">Crear manualmente</a>

@@ -4567,6 +4567,13 @@ body.pp-pages-map-mode .pp-content {
 .pp-map-header {
     align-items: flex-end;
 }
+.pp-map-header__sep {
+    align-self: center;
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+    background: var(--pp-border);
+}
 .pp-map-header__manual {
     align-self: center;
     margin-left: 4px;

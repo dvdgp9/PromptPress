@@ -145,10 +145,11 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/pages/ai-from-reference', [PageController::class, 'aiCreateFromReference']); // D-MB: recrear desde captura
     $r->post('/pages/{id}/ai-variations', [PageController::class, 'aiVariations']);
     $r->post('/pages/{id}/ai-variations/apply', [PageController::class, 'applyVariation']);
-    // T18.6 — generación desde plantilla
-    $r->get('/pages/ai/templates',                 [PageController::class, 'aiTemplatesGallery']);
+    // Preview de plantilla: la usan las previews de estilo visual en /admin/design
+    // (VisualStyleService::cardsForSite). El flujo de creación desde plantilla
+    // (galería + ai-create-from-template) se retiró por obsoleto: hoy todo se crea
+    // en modo canvas (studio / onboarding).
     $r->get('/pages/ai/templates/{slug}/preview',  [PageController::class, 'aiTemplatePreview']);
-    $r->post('/pages/ai-create-from-template',     [PageController::class, 'aiCreateFromTemplate']);
     $r->get('/pages/{id}/edit',      [PageController::class, 'edit']);
 
     // FH3 — Studio Live (páginas canvas: edición conversacional)
