@@ -97,3 +97,10 @@ Dos problemas en el Studio (editor canvas en vivo):
 - Verificado en navegador (preview): sección sin fondo → "Poner imagen de fondo"; elegir imagen → background-image inline cover/center, guardado en HTML; reselección detecta el fondo CSS → "Cambiar/Atenuar"; "Atenuar Medio" → velo rgba(255,255,255,.6) conservando url; "Quitar" → none; camino <img> del hero intacto (marca el <img>); sin errores de consola. Tests canvas_* PASS.
 - Unificado: un fondo puesto por IA (css_append) también queda detectable/editable por el panel.
 - PENDIENTE usuario: desplegar (commit+push+pull) y probar a mano "Poner imagen de fondo" en el hero.
+
+## [2026-06-23] Falsos positivos de "petición de imagen" + control demasiado estricto
+- Bug A (social proof): `requestsImages()` disparaba con cualquier mención de foto/imagen → "Ponle menos anchura a la caja de foto+texto" lanzaba Unsplash + control de imagen sin que el usuario pidiera tocar imágenes. Reescrito para distinguir petición real (verbo+imagen, "imagen de fondo") de mención descriptiva ("de foto/imagen") o de eliminación. 12 casos + 4 tests nuevos PASS (incluye las 2 frases del usuario).
+- Bug B (hero "Unsplash rechazó la configuración de acceso"): si Unsplash falla se bloqueaba TODA edición con imagen. Ahora: si la biblioteca del sitio tiene imágenes, no se bloquea (la IA usa available_images). Nuevo helper `hasLibraryImages`.
+- Bug C (control estricto): al MOVER una imagen de contenido a fondo, el total no aumenta (1→1) → el control `after>before` rechazaba un cambio válido. Cambiado a rechazar solo si `after===0` (el resultado se queda sin ninguna imagen). Reproducido hero "foto de fondo + CTA centrado": IA aplica background-image CSS usando imagen de biblioteca, control ACEPTA.
+- Nota: el Unsplash de PROD está mal configurado (auth 401/403). El usuario debe revisar la access key si quiere imágenes nuevas de Unsplash; mientras, las de su biblioteca funcionan.
+- PENDIENTE usuario: desplegar y reprobar; arreglar credenciales Unsplash en prod.

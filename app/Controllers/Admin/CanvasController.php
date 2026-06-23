@@ -114,14 +114,12 @@ final class CanvasController
         }
 
         $requiresImages = self::requestsImages($instruction);
-        $beforeImageCount = 0;
         if ($requiresImages) {
-            $scopeHtml = $sectionId !== '' ? CanvasService::extractSection($canvas['html'], $sectionId) : $canvas['html'];
-            // Contamos imágenes tanto en el HTML como en el CSS (background-image),
-            // para aceptar imágenes de fondo añadidas solo por CSS.
-            $beforeImageCount = self::imageCount((string) $scopeHtml) + self::imageCount((string) $canvas['css']);
             $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
-            if (!$prepared['ok']) {
+            // Si Unsplash falla pero el sitio YA tiene imágenes en su biblioteca,
+            // no bloqueamos: la IA puede usar esas (van en `available_images`).
+            // Solo bloqueamos si no hay ninguna imagen utilizable en absoluto.
+            if (!$prepared['ok'] && !self::hasLibraryImages($siteId)) {
                 Response::json(['ok' => false, 'error' => $prepared['error']], 503);
             }
         }
@@ -163,9 +161,13 @@ final class CanvasController
         }
 
         if ($requiresImages) {
+            // Rechazamos solo si el resultado se queda SIN ninguna imagen (la IA
+            // ignoró la petición). No exigimos que aumente el número: mover una
+            // imagen de contenido a fondo, o reemplazarla, mantiene el total y es
+            // un cambio válido. Contamos en HTML y en CSS (background-image).
             $resultScope = $sectionId !== '' ? CanvasService::extractSection($result['html'], $sectionId) : $result['html'];
             $afterImageCount = self::imageCount((string) $resultScope) + self::imageCount((string) $result['css']);
-            if ($afterImageCount <= $beforeImageCount) {
+            if ($afterImageCount === 0) {
                 error_log('[canvas chat] page=' . $pageId . ' image_request_not_applied section=' . ($sectionId !== '' ? $sectionId : 'page'));
                 Response::json([
                     'ok' => false,
@@ -489,9 +491,32 @@ final class CanvasController
         return $reply !== '' ? mb_substr($reply, 0, 400) : 'Hecho, cambio aplicado.';
     }
 
+    /**
+     * ¿La petición pide AÑADIR/CAMBIAR una imagen (y por tanto conviene buscar
+     * en el banco de imágenes)? Debe distinguir una petición real ("pon una
+     * foto", "imagen de fondo") de una simple MENCIÓN de un elemento que
+     * contiene imágenes ("dale menos ancho a la caja de foto+texto") o de un
+     * cambio de layout que no toca la imagen. Un falso positivo aquí lanzaba
+     * Unsplash y el control de "no se añadió ninguna imagen" sin motivo.
+     */
     private static function requestsImages(string $instruction): bool
     {
-        return preg_match('/\b(imagen|imagenes|imágenes|foto(?:s)?|fotograf(?:ía|ia|ías|ias))\b/iu', $instruction) === 1;
+        $t = ' ' . mb_strtolower($instruction) . ' ';
+        $img = 'imagen|imagenes|imágenes|foto|fotos|fotograf[íi]a|fotograf[íi]as';
+
+        // Quitar/ocultar una imagen no requiere buscar una nueva.
+        if (preg_match('/\b(?:quita\w*|elimina\w*|borra\w*|oculta\w*|sin)\b[^.]{0,30}?\b(?:' . $img . '|fondo)\b/u', $t)) {
+            return false;
+        }
+        // "imagen/foto de fondo" → siempre es una petición de imagen.
+        if (preg_match('/\b(?:' . $img . ')\s+de\s+fondo\b/u', $t)) {
+            return true;
+        }
+        // Referencia descriptiva "… de (la) imagen/foto" (p. ej. "caja de
+        // foto+texto", "bloque de imágenes"): no se pide cambiar la imagen.
+        $t = preg_replace('/\bde\s+(?:la|el|las|los|una|un)?\s*(?:' . $img . ')\b/u', ' ', $t) ?? $t;
+        // Si AÚN queda una palabra de imagen, es el objeto de la acción → petición.
+        return preg_match('/\b(?:' . $img . ')\b/u', $t) === 1;
     }
 
     /** @return array{ok:bool,error:?string} */
@@ -529,6 +554,16 @@ final class CanvasController
     {
         preg_match_all('/<img\b|background-image\s*:|<picture\b/iu', $html, $matches);
         return count($matches[0]);
+    }
+
+    /** ¿El sitio tiene al menos una imagen en su biblioteca de medios? */
+    private static function hasLibraryImages(int $siteId): bool
+    {
+        $row = Database::selectOne(
+            "SELECT 1 FROM media WHERE site_id = ? AND mime_type LIKE 'image/%' LIMIT 1",
+            [$siteId]
+        );
+        return $row !== null;
     }
 
     /** Últimas imágenes de la biblioteca del sitio, para "cambia la foto". */

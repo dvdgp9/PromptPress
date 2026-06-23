@@ -23,6 +23,11 @@ $count = new ReflectionMethod(CanvasController::class, 'imageCount');
 check_canvas_image('detect_images_es', $intent->invoke(null, 'Añade imágenes que no hay') === true);
 check_canvas_image('detect_photo_es', $intent->invoke(null, 'Pon una fotografía del equipo') === true);
 check_canvas_image('ignore_visual_word', $intent->invoke(null, 'Haz la sección más visual') === false);
+// Mención de un elemento que CONTIENE imágenes ≠ petición de imagen (layout).
+check_canvas_image('ignore_ref_box_photo', $intent->invoke(null, 'Ponle menos anchura a la caja de foto+texto para que los otros elementos tengan más espacio') === false);
+check_canvas_image('ignore_ref_image_block', $intent->invoke(null, 'Hazme el bloque de imágenes más grande') === false);
+check_canvas_image('detect_bg_photo', $intent->invoke(null, 'Cambia la estructura por foto de fondo y CTA centrado') === true);
+check_canvas_image('ignore_remove_bg', $intent->invoke(null, 'Quita la imagen de fondo') === false);
 check_canvas_image('count_img_and_background', $count->invoke(null, '<img src="/a.jpg"><div style="background-image:url(/b.jpg)"></div>') === 2);
 check_canvas_image('count_no_images', $count->invoke(null, '<section><h2>Texto</h2></section>') === 0);
 
