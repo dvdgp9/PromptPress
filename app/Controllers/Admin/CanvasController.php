@@ -609,6 +609,8 @@ final class CanvasController
     var clone = sec.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(function(n){ n.removeAttribute('contenteditable'); });
     clone.querySelectorAll('[data-pp-edit-box]').forEach(function(n){ n.removeAttribute('data-pp-edit-box'); });
+    clone.querySelectorAll('[data-pp-img-edit],[data-pp-bg-edit]').forEach(function(n){ n.removeAttribute('data-pp-img-edit'); n.removeAttribute('data-pp-bg-edit'); });
+    if(sec.matches('[data-pp-bg-edit]')) clone.removeAttribute('data-pp-bg-edit');
     clone.querySelectorAll('.pp-studio-editing,.pp-studio-text-hover,.pp-studio-box-hover,.pp-studio-hover,.pp-studio-selected').forEach(function(n){
       n.classList.remove('pp-studio-editing','pp-studio-text-hover','pp-studio-box-hover','pp-studio-hover','pp-studio-selected');
       if(!n.getAttribute('class')) n.removeAttribute('class');
@@ -670,6 +672,16 @@ final class CanvasController
     return null;
   }
 
+  // Fondo aplicado por CSS (`background-image: url(...)`), inline o por hoja de
+  // estilos. Devuelve la URL de la imagen (ignora capas linear-gradient de velo).
+  function cssBgUrlOf(el){
+    if(!el) return null;
+    var bi = getComputedStyle(el).backgroundImage || '';
+    if(bi === 'none') return null;
+    var m = bi.match(/url\((['"]?)([^'")]+)\1\)/i);
+    return m ? m[2] : null;
+  }
+
   // Lee las props editables del elemento para prerellenar el panel.
   function describe(el, kind){
     var cs = el ? getComputedStyle(el) : null;
@@ -702,7 +714,8 @@ final class CanvasController
     if(kind === 'section'){
       p.pad = el.getAttribute('data-pp-pad') || 'default';
       p.reveal = el.getAttribute('data-pp-behavior') === 'reveal';
-      p.hasBgImage = !!bgImageOf(el);
+      // El fondo puede ser un <img> de cobertura O un background-image por CSS.
+      p.hasBgImage = !!bgImageOf(el) || !!cssBgUrlOf(el);
       p.bgcolor = cs ? cs.backgroundColor : '';
     }
     return p;
@@ -728,6 +741,8 @@ final class CanvasController
   var PAD_PRESETS = { 'default':'', 'compact':'48', 'normal':'72', 'roomy':'112' };
   var RADIUS_PRESETS = { 'sharp':'0', 'soft':'8px', 'round':'16px', 'pill':'999px' };
   var DIM_PRESETS = { 'none':'', 'soft':'brightness(0.82)', 'medium':'brightness(0.62)', 'strong':'brightness(0.42)' };
+  // Velo translúcido sobre fondos CSS para "atenuar" (hacer la imagen menos visible).
+  var VEIL_PRESETS = { 'none':0, 'soft':0.35, 'medium':0.6, 'strong':0.8 };
 
   // Resuelve un valor de color a CSS: 'reset'→'', '#hex'→hex, token→var(--pp-token).
   function colorCss(v){
@@ -788,21 +803,40 @@ final class CanvasController
         if(msg.value) sec.setAttribute('data-pp-behavior','reveal');
         else if(sec.getAttribute('data-pp-behavior')==='reveal') sec.removeAttribute('data-pp-behavior');
       } else if(msg.op === 'bgcolor'){
-        if(msg.value === 'reset') sec.style.removeProperty('background');
-        else sec.style.background = colorCss(msg.value);
+        // backgroundColor (no shorthand) para no borrar una imagen de fondo CSS.
+        if(msg.value === 'reset') sec.style.removeProperty('background-color');
+        else sec.style.backgroundColor = colorCss(msg.value);
       } else if(msg.op === 'bgdim'){
         var img = bgImageOf(sec);
         if(img){ var f = DIM_PRESETS[msg.value] || ''; if(f) img.style.filter = f; else img.style.removeProperty('filter'); }
+        else { // fondo por CSS: atenuar con un velo translúcido encima de la imagen
+          var u = cssBgUrlOf(sec);
+          if(u){
+            var a = VEIL_PRESETS[msg.value] || 0;
+            sec.style.backgroundImage = a > 0
+              ? 'linear-gradient(rgba(255,255,255,'+a+'),rgba(255,255,255,'+a+')),url("'+u+'")'
+              : 'url("'+u+'")';
+            sec.style.backgroundSize = 'cover';
+            sec.style.backgroundPosition = 'center';
+          }
+        }
       } else if(msg.op === 'bgimg'){
         var bg = bgImageOf(sec);
         if(msg.value === 'mark'){
-          document.querySelectorAll('[data-pp-img-edit]').forEach(function(n){ n.removeAttribute('data-pp-img-edit'); });
+          document.querySelectorAll('[data-pp-img-edit],[data-pp-bg-edit]').forEach(function(n){ n.removeAttribute('data-pp-img-edit'); n.removeAttribute('data-pp-bg-edit'); });
           if(bg){ bg.setAttribute('data-pp-img-edit','1'); }
+          else { sec.setAttribute('data-pp-bg-edit','1'); } // fondo CSS (incl. cuando aún no hay ninguno)
           return; // el padre abrirá la biblioteca; replace-image guardará
         }
-        if(msg.value === 'remove' && bg){
-          var wrap = bg.closest('[class*=overlay], [class*=bg], [class*=image], [class*=media]');
-          if(wrap && wrap !== sec && sectionOf(wrap) === sec) wrap.remove(); else bg.remove();
+        if(msg.value === 'remove'){
+          if(bg){
+            var wrap = bg.closest('[class*=overlay], [class*=bg], [class*=image], [class*=media]');
+            if(wrap && wrap !== sec && sectionOf(wrap) === sec) wrap.remove(); else bg.remove();
+          } else { // fondo CSS: quitarlo (none inline gana a la hoja de estilos)
+            sec.style.backgroundImage = 'none';
+            sec.style.removeProperty('background-size');
+            sec.style.removeProperty('background-position');
+          }
         }
       }
       if(!msg.preview) serializeAndSave(sec);
@@ -932,12 +966,28 @@ final class CanvasController
     }
     if(d.type === 'replace-image' && d.src){
       var img = document.querySelector('[data-pp-img-edit]');
-      if(!img) return;
-      img.src = d.src;
-      if(d.alt) img.alt = d.alt;
-      img.removeAttribute('data-pp-img-edit');
-      var sec = sectionOf(img);
-      if(sec) serializeAndSave(sec);
+      if(img){
+        img.src = d.src;
+        if(d.alt) img.alt = d.alt;
+        img.removeAttribute('data-pp-img-edit');
+        var sec = sectionOf(img);
+        if(sec) serializeAndSave(sec);
+        return;
+      }
+      // Fondo por CSS: poner/cambiar la imagen como background-image inline.
+      var bgEl = document.querySelector('[data-pp-bg-edit]');
+      if(bgEl){
+        var prev = cssBgUrlOf(bgEl);
+        // Conserva el velo de atenuación si lo había (sustituye solo la url).
+        var biCur = getComputedStyle(bgEl).backgroundImage || '';
+        var veil = /linear-gradient/i.test(bgEl.style.backgroundImage || '') ? (bgEl.style.backgroundImage.match(/linear-gradient\([^)]*\)/i) || [''])[0] : '';
+        bgEl.style.backgroundImage = (veil ? veil + ',' : '') + 'url("'+d.src+'")';
+        if(!bgEl.style.backgroundSize) bgEl.style.backgroundSize = 'cover';
+        if(!bgEl.style.backgroundPosition) bgEl.style.backgroundPosition = 'center';
+        bgEl.removeAttribute('data-pp-bg-edit');
+        var secB = sectionOf(bgEl);
+        if(secB) serializeAndSave(secB);
+      }
     }
   });
 

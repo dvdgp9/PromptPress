@@ -242,11 +242,13 @@
           + '<button type="button" id="ep-bg-change">Cambiar</button>'
           + '<button type="button" id="ep-bg-remove">Quitar</button>'
         + '</div></div>'
-        + '<div class="cvstudio-field"><label>Oscurecer fondo</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+        + '<div class="cvstudio-field"><label>Atenuar fondo</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
           + seg('bgdim', 'none', '', 'No') + seg('bgdim', 'soft', '', 'Suave')
           + seg('bgdim', 'medium', '', 'Medio') + seg('bgdim', 'strong', '', 'Mucho')
         + '</div></div>'
-      : '';
+      : '<div class="cvstudio-field"><label>Imagen de fondo</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + '<button type="button" id="ep-bg-add">Poner imagen de fondo</button>'
+        + '</div></div>';
     return ''
       + colorField('Color de fondo', 'bgcolor', { current: props.bgcolor })
       + bgImageBlock
@@ -355,8 +357,10 @@
       if (reveal) reveal.addEventListener('change', function () { applyOp('reveal', reveal.checked); showSaved('Guardado'); });
       var bgChange = panel.querySelector('#ep-bg-change');
       var bgRemove = panel.querySelector('#ep-bg-remove');
-      // "Cambiar" marca la imagen de fondo y abre la biblioteca (replace-image guarda).
+      var bgAdd = panel.querySelector('#ep-bg-add');
+      // "Cambiar"/"Poner" marca el destino del fondo y abre la biblioteca (replace-image guarda).
       if (bgChange) bgChange.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
+      if (bgAdd) bgAdd.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
       if (bgRemove) bgRemove.addEventListener('click', function () { applyOp('bgimg', 'remove'); showSaved('Guardado'); });
     }
   }

@@ -84,3 +84,16 @@ Dos problemas en el Studio (editor canvas en vivo):
   - Verificación de imágenes ahora cuenta imágenes en HTML Y en CSS (background-image), antes/después; acepta fondos solo-CSS.
 - Repro nueva: "Ponle imagen de fondo en Hero" → html:"" + css_append con background-image+url, SVG intacto, verificación pasa (before 0 → after 1), ~12-14s. Page-level "pon imágenes" → 4.5s, pasa. Tests canvas_image_requests/runtime/box_editor PASS.
 - PENDIENTE usuario: desplegar estos cambios nuevos (commit+push+pull en prod) y reprobar.
+
+## [2026-06-22] Fondos por CSS gestionables a mano (issues #1 y #2)
+- Causa #2: el panel detectaba el fondo solo con `bgImageOf()` (busca un <img> de cobertura). Los fondos por CSS (background-image) que introdujo el flujo de IA no se detectaban → no salían los controles "Imagen de fondo/Oscurecer". "Antes se podía" porque antes los fondos eran <img>.
+- Fix (overlay en CanvasController + panel canvas-studio.js):
+  - `cssBgUrlOf(el)`: detecta background-image (inline o por hoja de estilos), ignora velos linear-gradient.
+  - `describe` sección: `hasBgImage = <img> de cobertura O background-image CSS`.
+  - Panel sección SIEMPRE ofrece control de fondo: "Poner imagen de fondo" si no hay; "Cambiar/Quitar/Atenuar" si hay (resuelve #1: poner fondo a mano y verlo al instante en el elemento exacto).
+  - Ops para fondo CSS (estilo inline, alta especificidad, se serializa y guarda): bgimg mark/replace/remove sobre la sección (data-pp-bg-edit); bgdim = velo blanco translúcido (VEIL_PRESETS) "Atenuar fondo"; bgcolor pasa a backgroundColor (no shorthand) para no borrar la imagen.
+  - replace-image: rama para data-pp-bg-edit (pone background-image inline conservando velo). serializeAndSave limpia los marcadores.
+  - El sanitizer conserva `background-image: url("/...")` inline (scrubInlineStyle permite url local/https).
+- Verificado en navegador (preview): sección sin fondo → "Poner imagen de fondo"; elegir imagen → background-image inline cover/center, guardado en HTML; reselección detecta el fondo CSS → "Cambiar/Atenuar"; "Atenuar Medio" → velo rgba(255,255,255,.6) conservando url; "Quitar" → none; camino <img> del hero intacto (marca el <img>); sin errores de consola. Tests canvas_* PASS.
+- Unificado: un fondo puesto por IA (css_append) también queda detectable/editable por el panel.
+- PENDIENTE usuario: desplegar (commit+push+pull) y probar a mano "Poner imagen de fondo" en el hero.
