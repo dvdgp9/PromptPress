@@ -7,6 +7,7 @@ namespace App\Controllers\Admin;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
+use App\Services\AI\AIProviderFactory;
 use App\Services\BrandService;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
@@ -59,6 +60,10 @@ final class CanvasController
             // FORMS F5 — formularios disponibles para insertar en el Studio.
             'forms' => FormStore::all($siteId),
             'formTemplates' => FormTemplates::catalog(),
+            // Selector de modelo de IA para el chat (principal + auxiliar + sugeridos).
+            'aiModels' => self::chatModelOptions($siteId),
+            // ¿Está Unsplash configurado? (habilita la búsqueda en el selector de imágenes)
+            'bankAvailable' => ImageBankService::isAvailable(),
         ]);
     }
 
@@ -106,6 +111,13 @@ final class CanvasController
         $elementContext = trim((string) Request::post('element_context', ''));
         if ($instruction === '' || mb_strlen($instruction) > 1200) {
             Response::json(['ok' => false, 'error' => 'Cuéntame el cambio en unas pocas frases.'], 422);
+        }
+
+        // Modelo elegido por el usuario para ESTE cambio (opcional). Solo se
+        // acepta si está en la lista permitida del sitio: nunca un ID arbitrario.
+        $chosenModel = trim((string) Request::post('model', ''));
+        if ($chosenModel !== '' && in_array($chosenModel, self::chatModelIds($siteId), true)) {
+            AIProviderFactory::setModelOverride($chosenModel);
         }
 
         $canvas = CanvasService::get($pageId);
@@ -554,6 +566,49 @@ final class CanvasController
     {
         preg_match_all('/<img\b|background-image\s*:|<picture\b/iu', $html, $matches);
         return count($matches[0]);
+    }
+
+    /**
+     * Modelos seleccionables en el chat del Studio: el principal y el auxiliar
+     * configurados, más la lista curada del proveedor. Devuelve IDs únicos en
+     * orden (principal primero). Sirve para pintar el selector y para validar
+     * el modelo que llega en la petición (no aceptamos IDs arbitrarios).
+     *
+     * @return string[]
+     */
+    private static function chatModelIds(int $siteId): array
+    {
+        $meta = AIProviderFactory::currentMeta($siteId);
+        $ids = array_merge(
+            [(string) ($meta['model'] ?? ''), (string) ($meta['model_light'] ?? '')],
+            SettingsAIController::suggestedModelsFor((string) ($meta['provider'] ?? ''))
+        );
+        return array_values(array_unique(array_filter($ids, static fn ($m) => $m !== '')));
+    }
+
+    /** Etiqueta legible para un ID de modelo ("google/gemini-3.5-flash" → "Gemini 3.5 Flash"). */
+    private static function humanModelLabel(string $id): string
+    {
+        $tail = strpos($id, '/') !== false ? substr($id, strrpos($id, '/') + 1) : $id;
+        $tail = str_replace(['-', '_'], ' ', $tail);
+        $tail = preg_replace('/\s*:\s*free\b/i', ' (gratis)', $tail) ?? $tail;
+        return ucwords(trim($tail));
+    }
+
+    /** Opciones del selector de modelo del Studio: [id, label, default]. */
+    private static function chatModelOptions(int $siteId): array
+    {
+        $ids = self::chatModelIds($siteId);
+        $main = (string) (AIProviderFactory::currentMeta($siteId)['model'] ?? '');
+        $out = [];
+        foreach ($ids as $id) {
+            $out[] = [
+                'id' => $id,
+                'label' => self::humanModelLabel($id) . ($id === $main ? ' (actual)' : ''),
+                'default' => $id === $main,
+            ];
+        }
+        return $out;
     }
 
     /** ¿El sitio tiene al menos una imagen en su biblioteca de medios? */

@@ -142,3 +142,17 @@ Hecho por pasos con verificación. BORRADO (muerto): bindTemplateFlow + vars en 
 CONSERVADO (vivo): aiTemplatePreview() + ruta /pages/ai/templates/{slug}/preview (lo usan las visual style cards de /admin/design); PageTemplateService (all/get/placeholderContent); config/page_templates/*.json; filterSectionContent; variantContentHint (caller vivo en 557); aiVariations/applyVariation.
 VERIFICADO: lint PHP/JS OK; 22/22 tests OK; navegador: /admin/pages (header sin "Crear desde plantilla": [+ Nueva página con IA | Analizar sitio | Revisar enlaces | Crear manualmente]), /admin/pages/studio 200, /admin/design 200 con 18 visual style cards y sus iframes de preview funcionando (200, HTML real), galería /pages/ai/templates → 404, sin errores de consola.
 PENDIENTE usuario: desplegar (commit+push+pull).
+
+## [2026-06-23] Selector de modelo de IA en el chat del Studio
+- El chat del canvas usa TIER_MAIN (ai_model). Ahora muestra el modelo activo y permite elegir otro por petición.
+- SettingsAIController::suggestedModelsFor($provider) (nuevo público) expone la lista curada.
+- CanvasController: helpers chatModelIds()/humanModelLabel()/chatModelOptions(); studio() pasa 'aiModels'; chat() acepta `model` y valida contra chatModelIds() antes de AIProviderFactory::setModelOverride() (no IDs arbitrarios).
+- UI: selector en el footer del composer (views/admin/canvas/studio.php) + envío de `model` en canvas-studio.js + CSS .cvstudio-chat__formfoot/.cvstudio-model. Selección pegajosa; modelo principal marcado "(actual)".
+- Verificado: opciones correctas (incluye gemini-3.5-flash), selector renderiza con el actual preseleccionado, el submit envía model=elegido (interceptado), lint PHP/JS OK, tests canvas_* OK, sin errores de consola.
+
+## [2026-06-23] Modal de imágenes del Studio: subir + buscar en Unsplash
+- Antes el modal "Elige una imagen" solo listaba la biblioteca. Ahora: pestañas "Tu biblioteca" / "Buscar en Unsplash" + botón "Subir imagen".
+- Reutiliza endpoints existentes: GET /media/library, POST /media (subida, _csrf + X-Requested-With), GET /media/bank/search, POST /media/bank/import (_csrf). Backend sin cambios.
+- CanvasController::studio() pasa bankAvailable (ImageBankService::isAvailable) + data-attrs (upload/bank-search/bank-import). UI en views/admin/canvas/studio.php; lógica en canvas-studio.js (loadLibrary/upload/unsplash search+import → useMedia → replace-image, sirve para imagen de contenido y de fondo). mediaPath() normaliza a ruta relativa (subida/Unsplash dan url → pathname) para que el sanitizer conserve el background-image inline.
+- CSS: .cvstudio-media-bar/tabs/upload/search; fix .cvstudio-media-search[hidden]{display:none} (la regla display:flex anulaba [hidden]).
+- Verificado en navegador: pestañas OK; búsqueda Unsplash (classroom → 12 resultados con crédito); import end-to-end → /storage/uploads/...jpg aplicado como fondo; subida de PNG generado → /storage/uploads/...png aplicado; search oculta en biblioteca y visible en Unsplash; sin errores de consola. tests canvas_* OK.

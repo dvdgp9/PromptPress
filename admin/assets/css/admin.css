@@ -9249,6 +9249,12 @@ body.pp-login-page {
 .cvstudio-chat__composer textarea{resize:none;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font:inherit;font-size:.88rem;line-height:1.45;outline:none}
 .cvstudio-chat__composer textarea:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
 .cvstudio-chat__composer .cvstudio-primary-btn{align-self:flex-end}
+.cvstudio-chat__formfoot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cvstudio-chat__formfoot .cvstudio-primary-btn{align-self:center;flex:none}
+.cvstudio-model{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:60%;border:1px solid #e5e7eb;border-radius:9px;padding:5px 8px;background:#fff;color:#374151;font-size:.78rem}
+.cvstudio-model:focus-within{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
+.cvstudio-model__icon{color:#6366f1;font-size:.8rem;flex:none}
+.cvstudio-model select{border:0;background:transparent;font:inherit;font-size:.78rem;color:#374151;outline:none;cursor:pointer;max-width:100%;padding:0}
 .cvstudio-insert{position:relative}
 .cvstudio-insert__pop{left:0;right:0;width:auto;max-height:min(520px,60dvh);overflow:auto;padding:8px}
 .cvstudio-insert__title{display:block;padding:8px 10px 5px;color:#6b7280;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase}
@@ -9354,6 +9360,17 @@ body.pp-login-page {
 .cvstudio-saved.is-error{background:#fef2f2;color:#b91c1c}
 .cvstudio-saved[hidden]{display:none}
 .cvstudio-modal__panel--wide{width:min(720px,94vw)}
+.cvstudio-media-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
+.cvstudio-media-tabs{display:inline-flex;gap:2px;background:#f3f4f6;border-radius:9px;padding:3px}
+.cvstudio-media-tabs button{border:0;background:transparent;border-radius:7px;padding:6px 12px;font:inherit;font-size:.82rem;font-weight:600;color:#374151;cursor:pointer}
+.cvstudio-media-tabs button.is-active{background:#fff;color:#111827;box-shadow:0 1px 2px rgba(17,24,39,.08)}
+.cvstudio-media-upload{display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;border-radius:9px;padding:6px 12px;font-size:.82rem;font-weight:600;color:#374151;cursor:pointer;background:#fff}
+.cvstudio-media-upload:hover{border-color:#111827}
+.cvstudio-media-search{display:flex;gap:8px;margin-top:10px}
+.cvstudio-media-search[hidden]{display:none}
+.cvstudio-media-search input{flex:1;border:1px solid #d1d5db;border-radius:9px;padding:8px 12px;font:inherit;font-size:.85rem;outline:none}
+.cvstudio-media-search input:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
+.cvstudio-media-item.is-busy{opacity:.55;pointer-events:none}
 .cvstudio-media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px}
 .cvstudio-media-item{display:flex;flex-direction:column;gap:6px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:8px;cursor:pointer;text-align:left;transition:border-color .12s ease,transform .12s ease}
 .cvstudio-media-item:hover{border-color:#111827;transform:translateY(-1px)}

@@ -21,6 +21,7 @@
   var ctxBox = document.getElementById('chat-context');
   var ctxLabel = document.getElementById('chat-context-label');
   var ctxClear = document.getElementById('chat-context-clear');
+  var modelSelect = document.getElementById('chat-model');
 
   var selectedSection = null;
   var selectedElementContext = '';
@@ -399,6 +400,7 @@
     fd.append('instruction', text);
     if (selectedSection) fd.append('section', selectedSection);
     if (selectedElementContext) fd.append('element_context', selectedElementContext);
+    if (modelSelect && modelSelect.value) fd.append('model', modelSelect.value);
 
     fetch(body.dataset.chatUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
@@ -561,24 +563,57 @@
   // ----------------------------------------------------------------
   var mediaModal = document.getElementById('media-modal');
   var mediaGrid = document.getElementById('media-grid');
+  var mediaHint = document.getElementById('media-hint');
+  var mediaSearchForm = document.getElementById('media-search-form');
+  var mediaSearchInput = document.getElementById('media-search-input');
+  var mediaUploadInput = document.getElementById('media-upload-input');
+  var mediaTabs = mediaModal.querySelectorAll('[data-media-tab]');
   var mediaCache = null;
+
+  // Ruta servible relativa: la biblioteca da `path`; subida/Unsplash dan `url`.
+  function mediaPath(it) {
+    if (it.path) return it.path;
+    try { return new URL(it.url, location.href).pathname; } catch (e) { return it.url || ''; }
+  }
+  // Aplica la imagen elegida al destino marcado (imagen de contenido o fondo).
+  function useMedia(it) {
+    mediaModal.hidden = true;
+    iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'replace-image', src: mediaPath(it), alt: it.alt_text || '' }, '*');
+  }
+
+  function setMediaTab(tab) {
+    mediaTabs.forEach(function (b) { b.classList.toggle('is-active', b.dataset.mediaTab === tab); });
+    mediaSearchForm.hidden = tab !== 'unsplash';
+    if (tab === 'unsplash') {
+      mediaHint.textContent = 'Busca una foto en Unsplash; al elegirla se añade a tu biblioteca.';
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">Escribe qué foto necesitas y pulsa «Buscar».</p>';
+      if (mediaSearchInput) mediaSearchInput.focus();
+    } else {
+      mediaHint.textContent = 'Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.';
+      loadLibrary();
+    }
+  }
 
   function openMediaModal() {
     mediaModal.hidden = false;
-    if (mediaCache) { renderMedia(mediaCache); return; }
+    setMediaTab('library');
+  }
+
+  function loadLibrary() {
+    if (mediaCache) { renderLibrary(mediaCache); return; }
     mediaGrid.innerHTML = '<p class="pp-chat-hint">Cargando tu biblioteca…</p>';
     fetch(body.dataset.mediaUrl)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         mediaCache = (data.items || []).filter(function (it) { return (it.mime_type || '').indexOf('image/') === 0; });
-        renderMedia(mediaCache);
+        renderLibrary(mediaCache);
       })
       .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo cargar la biblioteca.</p>'; });
   }
 
-  function renderMedia(items) {
+  function renderLibrary(items) {
     if (!items.length) {
-      mediaGrid.innerHTML = '<p class="pp-chat-hint">Tu biblioteca está vacía. Sube imágenes desde Medios.</p>';
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">Tu biblioteca está vacía. Sube una imagen o busca en Unsplash.</p>';
       return;
     }
     mediaGrid.innerHTML = '';
@@ -587,14 +622,85 @@
       btn.type = 'button';
       btn.className = 'cvstudio-media-item';
       btn.innerHTML = '<img src="' + it.url + '" alt="" loading="lazy"><span>' + esc(it.alt_text || it.name || '') + '</span>';
-      btn.addEventListener('click', function () {
-        mediaModal.hidden = true;
-        iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'replace-image', src: it.path, alt: it.alt_text || '' }, '*');
-      });
+      btn.addEventListener('click', function () { useMedia(it); });
       mediaGrid.appendChild(btn);
     });
   }
 
+  // ---- Subir desde el equipo ----
+  if (mediaUploadInput) {
+    mediaUploadInput.addEventListener('change', function () {
+      var file = mediaUploadInput.files && mediaUploadInput.files[0];
+      if (!file) return;
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">Subiendo «' + esc(file.name) + '»…</p>';
+      var fd = new FormData();
+      fd.append('_csrf', csrf);
+      fd.append('file', file);
+      fetch(body.dataset.mediaUploadUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (data) {
+          if (!data.ok || !data.item) { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + esc(data.error || 'No se pudo subir la imagen.') + '</p>'; return; }
+          mediaCache = null; // la biblioteca cambió
+          useMedia(data.item);
+        })
+        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo subir la imagen.</p>'; })
+        .finally(function () { mediaUploadInput.value = ''; });
+    });
+  }
+
+  // ---- Buscar en Unsplash ----
+  if (mediaSearchForm) {
+    mediaSearchForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = (mediaSearchInput.value || '').trim();
+      if (!q) return;
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">Buscando «' + esc(q) + '» en Unsplash…</p>';
+      fetch(body.dataset.bankSearchUrl + '?q=' + encodeURIComponent(q) + '&orientation=landscape')
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (data) {
+          if (!data.ok) { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + esc(data.error || 'No se pudo buscar ahora mismo.') + '</p>'; return; }
+          renderUnsplash(data.items || [], q);
+        })
+        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo buscar ahora mismo.</p>'; });
+    });
+  }
+
+  function renderUnsplash(items, query) {
+    if (!items.length) {
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">Sin resultados para «' + esc(query) + '». Prueba otras palabras.</p>';
+      return;
+    }
+    mediaGrid.innerHTML = '';
+    items.forEach(function (it) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cvstudio-media-item';
+      var credit = it.photographer ? 'Foto: ' + it.photographer : (it.description || it.alt || '');
+      btn.innerHTML = '<img src="' + it.thumb + '" alt="" loading="lazy"><span>' + esc(credit) + '</span>';
+      btn.addEventListener('click', function () { importUnsplash(it, query, btn); });
+      mediaGrid.appendChild(btn);
+    });
+  }
+
+  function importUnsplash(it, query, btn) {
+    if (btn) { btn.disabled = true; btn.classList.add('is-busy'); }
+    var fd = new FormData();
+    fd.append('_csrf', csrf);
+    fd.append('result_id', it.id);
+    fd.append('query', query);
+    fd.append('orientation', 'landscape');
+    fd.append('alt', it.alt || it.description || '');
+    fetch(body.dataset.bankImportUrl, { method: 'POST', body: fd })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .then(function (data) {
+        if (!data.ok || !data.media) { showSaved(data.error || 'No se pudo añadir la imagen', true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } return; }
+        mediaCache = null;
+        useMedia(data.media);
+      })
+      .catch(function () { showSaved('No se pudo añadir la imagen', true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } });
+  }
+
+  mediaTabs.forEach(function (b) { b.addEventListener('click', function () { setMediaTab(b.dataset.mediaTab); }); });
   document.getElementById('media-close').addEventListener('click', function () { mediaModal.hidden = true; });
   mediaModal.addEventListener('click', function (e) { if (e.target === mediaModal) mediaModal.hidden = true; });
 

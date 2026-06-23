@@ -46,6 +46,13 @@ class SettingsAIController
         ],
     ];
 
+    /** Modelos sugeridos para un proveedor (lista curada). Reutilizable por
+     *  otras pantallas (p. ej. el selector de modelo del Studio). */
+    public static function suggestedModelsFor(string $provider): array
+    {
+        return self::SUGGESTED_MODELS[$provider] ?? [];
+    }
+
     /** Presets pensados para la UI: nombres humanos sobre IDs técnicos. */
     private const MODEL_PRESETS = [
         'openrouter' => [

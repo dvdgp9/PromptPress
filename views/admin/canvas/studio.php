@@ -52,6 +52,10 @@ $icon = static function (string $name): string {
       data-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/section')) ?>"
       data-insert-form-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-form')) ?>"
       data-media-url="<?= e(base_url('admin/media/library')) ?>"
+      data-media-upload-url="<?= e(base_url('admin/media')) ?>"
+      data-bank-search-url="<?= e(base_url('admin/media/bank/search')) ?>"
+      data-bank-import-url="<?= e(base_url('admin/media/bank/import')) ?>"
+      data-bank-available="<?= !empty($bankAvailable) ? '1' : '0' ?>"
       data-undo-url="<?= e(base_url('admin/canvas/' . $pageId . '/undo')) ?>"
       data-redo-url="<?= e(base_url('admin/canvas/' . $pageId . '/redo')) ?>"
       data-settings-url="<?= e(base_url('admin/canvas/' . $pageId . '/settings')) ?>"
@@ -175,7 +179,19 @@ $icon = static function (string $name): string {
       <form id="chat-form">
         <textarea id="chat-input" rows="2" maxlength="1200"
           placeholder="Ej.: pon el titular más grande y el botón en otro color"></textarea>
-        <button type="submit" id="chat-send" class="cvstudio-primary-btn">Aplicar cambio</button>
+        <div class="cvstudio-chat__formfoot">
+          <?php if (!empty($aiModels)): ?>
+          <label class="cvstudio-model" title="Modelo de IA usado para aplicar el cambio">
+            <span class="cvstudio-model__icon" aria-hidden="true">✦</span>
+            <select id="chat-model" aria-label="Modelo de IA para este cambio">
+              <?php foreach ($aiModels as $m): ?>
+              <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <?php endif; ?>
+          <button type="submit" id="chat-send" class="cvstudio-primary-btn">Aplicar cambio</button>
+        </div>
       </form>
     </div>
   </aside>
@@ -279,7 +295,24 @@ $icon = static function (string $name): string {
       <strong>Elige una imagen</strong>
       <button type="button" id="media-close" title="Cerrar">✕</button>
     </div>
-    <p class="pp-chat-hint">Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.</p>
+    <div class="cvstudio-media-bar">
+      <div class="cvstudio-media-tabs" role="tablist">
+        <button type="button" class="is-active" data-media-tab="library" role="tab">Tu biblioteca</button>
+        <?php if (!empty($bankAvailable)): ?>
+        <button type="button" data-media-tab="unsplash" role="tab">Buscar en Unsplash</button>
+        <?php endif; ?>
+      </div>
+      <label class="cvstudio-media-upload" title="Subir una imagen desde tu equipo">
+        <input type="file" id="media-upload-input" accept="image/*" hidden>
+        <span>⬆ Subir imagen</span>
+      </label>
+    </div>
+    <form class="cvstudio-media-search" id="media-search-form" hidden>
+      <input type="search" id="media-search-input" autocomplete="off"
+             placeholder="Busca fotos: aula, estudiantes, biblioteca…">
+      <button type="submit" class="cvstudio-ghost-btn">Buscar</button>
+    </form>
+    <p class="pp-chat-hint" id="media-hint">Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.</p>
     <div class="cvstudio-media-grid" id="media-grid"></div>
   </div>
 </div>
