@@ -220,6 +220,22 @@
     /* ---------- Construir config ---------- */
     function val(id) { var n = document.getElementById(id); return n ? n.value : ''; }
     function chk(id) { var n = document.getElementById(id); return !!(n && n.checked); }
+    function borderPart(prefix, side) {
+        return {
+            width: val(prefix + '_border_' + side + '_width'),
+            color: val(prefix + '_border_' + side + '_color')
+        };
+    }
+    function readBorder(prefix) {
+        return {
+            mode: val(prefix + '_border_mode') === 'sides' ? 'sides' : 'all',
+            all: borderPart(prefix, 'all'),
+            top: borderPart(prefix, 'top'),
+            right: borderPart(prefix, 'right'),
+            bottom: borderPart(prefix, 'bottom'),
+            left: borderPart(prefix, 'left')
+        };
+    }
 
     function buildConfig() {
         var blocks = [];
@@ -244,13 +260,13 @@
                     nav_alignment: val('h_nav_alignment'),
                     mobile_cta: val('h_mobile_cta')
                 },
-                style: { background: val('h_bg') },
+                style: { background: val('h_bg'), border: readBorder('h') },
                 brand: { url: val('h_brand_url').trim() },
                 menu: readItems(menuList),
                 cta: { mode: val('cta_mode'), label: val('cta_label').trim(), url: val('cta_url').trim(), style: val('cta_style') }
             },
             footer: {
-                style: { background: val('f_bg'), columns: parseInt(val('f_columns'), 10) || 0 },
+                style: { background: val('f_bg'), columns: parseInt(val('f_columns'), 10) || 0, border: readBorder('f') },
                 blocks: blocks,
                 brand: { name: val('f_brand_name').trim() },
                 labels: {
@@ -301,6 +317,19 @@
     form.addEventListener('input', preview);
     form.addEventListener('change', preview);
     form.addEventListener('submit', function () { hidden.value = JSON.stringify(buildConfig()); });
+
+    function syncBorderEditor(prefix) {
+        var mode = val(prefix + '_border_mode') === 'sides' ? 'sides' : 'all';
+        var all = document.querySelector('[data-border-all="' + prefix + '"]');
+        var sides = document.querySelector('[data-border-sides="' + prefix + '"]');
+        if (all) all.hidden = mode !== 'all';
+        if (sides) sides.hidden = mode !== 'sides';
+    }
+    ['h', 'f'].forEach(function (prefix) {
+        syncBorderEditor(prefix);
+        var mode = document.getElementById(prefix + '_border_mode');
+        if (mode) mode.addEventListener('change', function () { syncBorderEditor(prefix); preview(); });
+    });
 
     // Toggle de dispositivo (escritorio / móvil)
     document.querySelectorAll('.pp-chrome-devtoggle button').forEach(function (b) {

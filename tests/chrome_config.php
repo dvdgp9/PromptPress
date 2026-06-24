@@ -42,7 +42,16 @@ $config = ChromeService::sanitize([
             'nav_alignment' => 'center',
             'mobile_cta' => 'hide',
         ],
-        'style' => ['background' => 'brand'],
+        'style' => [
+            'background' => 'brand',
+            'border' => [
+                'mode' => 'sides',
+                'top' => ['width' => '2', 'color' => '#112233'],
+                'right' => ['width' => '0', 'color' => '#bad'],
+                'bottom' => ['width' => '26', 'color' => 'invalid'],
+                'left' => ['width' => '4', 'color' => '#445566'],
+            ],
+        ],
         'brand' => ['url' => '/clientes'],
         'menu' => [
             ['type' => 'link', 'label' => 'Servicios', 'url' => '/servicios'],
@@ -50,7 +59,14 @@ $config = ChromeService::sanitize([
         'cta' => ['mode' => 'custom', 'label' => 'Hablar ahora', 'url' => '/contacto', 'style' => 'ghost'],
     ],
     'footer' => [
-        'style' => ['background' => 'light', 'columns' => 4],
+        'style' => [
+            'background' => 'light',
+            'columns' => 4,
+            'border' => [
+                'mode' => 'all',
+                'all' => ['width' => '3', 'color' => '#778899'],
+            ],
+        ],
         'blocks' => ['brand', 'nav', 'contact', 'social', 'newsletter'],
         'brand' => ['name' => 'Marca Footer'],
         'labels' => [
@@ -75,7 +91,12 @@ check_chrome('sanitize conserva anchura full', ($config['header']['layout']['wid
 check_chrome('sanitize conserva alineación center', ($config['header']['layout']['nav_alignment'] ?? '') === 'center');
 check_chrome('sanitize conserva mobile_cta hide', ($config['header']['layout']['mobile_cta'] ?? '') === 'hide');
 check_chrome('sanitize conserva fondo header brand', ($config['header']['style']['background'] ?? '') === 'brand');
+check_chrome('sanitize conserva modo bordes header', ($config['header']['style']['border']['mode'] ?? '') === 'sides');
+check_chrome('sanitize expande color corto', ($config['header']['style']['border']['right']['color'] ?? '') === '#bbaadd');
+check_chrome('sanitize limita grosor borde', ($config['header']['style']['border']['bottom']['width'] ?? '') === '24');
+check_chrome('sanitize descarta color inválido', ($config['header']['style']['border']['bottom']['color'] ?? 'x') === '');
 check_chrome('sanitize limita columnas a 4', ($config['footer']['style']['columns'] ?? 0) === 4);
+check_chrome('sanitize conserva borde footer all', ($config['footer']['style']['border']['all']['width'] ?? '') === '3');
 check_chrome('sanitize conserva label newsletter', ($config['footer']['labels']['newsletter'] ?? '') === 'Avisos');
 check_chrome('sanitize conserva target página/enlace footer', ($config['footer']['nav'][0]['target'] ?? '') === '_blank');
 
@@ -84,11 +105,15 @@ check_chrome('header aplica clase full', str_contains($header, 'pp-site-header--
 check_chrome('header aplica nav center', str_contains($header, 'pp-site-header--nav-center'));
 check_chrome('header aplica CTA ocultable en móvil', str_contains($header, 'pp-site-header__cta--mobile-hidden'));
 check_chrome('header aplica fondo brand', str_contains($header, 'pp-site-header--bg-brand'));
+check_chrome('header aplica custom border', str_contains($header, 'pp-site-header--custom-border'));
+check_chrome('header emite variable borde top', str_contains($header, '--pp-chrome-border-top-width:2px'));
 check_chrome('header usa destino de marca', str_contains($header, '/clientes'));
 
 $footer = BrandService::publicFooter($siteId, $config);
 check_chrome('footer aplica fondo claro', str_contains($footer, 'pp-site-footer--light'));
 check_chrome('footer aplica columnas 4', str_contains($footer, 'pp-site-footer--cols-4'));
+check_chrome('footer aplica custom border', str_contains($footer, 'pp-site-footer--custom-border'));
+check_chrome('footer emite variable borde all', str_contains($footer, '--pp-chrome-border-left-width:3px'));
 check_chrome('footer usa nombre de marca manual', str_contains($footer, 'Marca Footer'));
 check_chrome('footer usa título nav manual', str_contains($footer, 'Mapa'));
 check_chrome('footer usa título contacto manual', str_contains($footer, 'Dónde estamos'));

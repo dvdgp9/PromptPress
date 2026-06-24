@@ -127,8 +127,10 @@ final class BrandService
 
         $brandUrl = trim((string) ($config['header']['brand']['url'] ?? ''));
         $brandHref = $brandUrl !== '' ? self::href($brandUrl) : htmlspecialchars(base_url('/'), ENT_QUOTES, 'UTF-8');
+        $borderStyle = self::borderStyle((array) ($style['border'] ?? []));
+        if ($borderStyle !== '') $mods .= ' pp-site-header--custom-border';
 
-        return '<header class="pp-site-header' . $mods . '">'
+        return '<header class="pp-site-header' . $mods . '"' . ($borderStyle !== '' ? ' style="' . $borderStyle . '"' : '') . '>'
              . '<div class="pp-site-header__inner">'
              . '<a class="pp-site-header__brand" href="' . $brandHref . '">'
              . self::brandMark($data)
@@ -381,11 +383,13 @@ final class BrandService
         // CHROME-EDITOR — fondo del footer (defecto 'dark' => sin modificador).
         $bg = (string) ($config['footer']['style']['background'] ?? 'dark');
         $columns = (int) ($config['footer']['style']['columns'] ?? 0);
+        $borderStyle = self::borderStyle((array) ($config['footer']['style']['border'] ?? []));
         $footerClass = 'pp-site-footer'
             . ($bg === 'light' ? ' pp-site-footer--light' : ($bg === 'brand' ? ' pp-site-footer--brand' : ''))
-            . (in_array($columns, [2, 3, 4], true) ? ' pp-site-footer--cols-' . $columns : '');
+            . (in_array($columns, [2, 3, 4], true) ? ' pp-site-footer--cols-' . $columns : '')
+            . ($borderStyle !== '' ? ' pp-site-footer--custom-border' : '');
 
-        return '<footer class="' . $footerClass . '">'
+        return '<footer class="' . $footerClass . '"' . ($borderStyle !== '' ? ' style="' . $borderStyle . '"' : '') . '>'
              . '<div class="pp-site-footer__grid">' . $cols . '</div>'
              . '<div class="pp-site-footer__bottom"><span class="pp-site-footer__copy">' . $copy . '</span></div>'
              . '</footer>'
@@ -472,5 +476,34 @@ final class BrandService
     {
         $label = trim((string) ($config['footer']['labels'][$key] ?? ''));
         return htmlspecialchars($label !== '' ? $label : $fallback, ENT_QUOTES, 'UTF-8');
+    }
+
+    private static function borderStyle(array $border): string
+    {
+        $mode = (string) ($border['mode'] ?? 'all');
+        $rules = [];
+        if ($mode === 'sides') {
+            foreach (['top', 'right', 'bottom', 'left'] as $side) {
+                $part = (array) ($border[$side] ?? []);
+                $width = trim((string) ($part['width'] ?? ''));
+                $color = trim((string) ($part['color'] ?? ''));
+                if ($width === '') continue;
+                $rules[] = '--pp-chrome-border-' . $side . '-width:' . ($width !== '' ? (int) $width . 'px' : '0');
+                $rules[] = '--pp-chrome-border-' . $side . '-color:' . ($color !== '' ? htmlspecialchars($color, ENT_QUOTES, 'UTF-8') : 'transparent');
+            }
+        } else {
+            $part = (array) ($border['all'] ?? []);
+            $width = trim((string) ($part['width'] ?? ''));
+            $color = trim((string) ($part['color'] ?? ''));
+            if ($width !== '') {
+                $w = $width !== '' ? (int) $width . 'px' : '0';
+                $c = $color !== '' ? htmlspecialchars($color, ENT_QUOTES, 'UTF-8') : 'transparent';
+                foreach (['top', 'right', 'bottom', 'left'] as $side) {
+                    $rules[] = '--pp-chrome-border-' . $side . '-width:' . $w;
+                    $rules[] = '--pp-chrome-border-' . $side . '-color:' . $c;
+                }
+            }
+        }
+        return $rules !== [] ? htmlspecialchars(implode(';', $rules), ENT_QUOTES, 'UTF-8') : '';
     }
 }

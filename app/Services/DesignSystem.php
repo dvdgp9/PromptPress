@@ -1783,6 +1783,7 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 .pp-site-header--bg-brand .pp-site-header__burger{border-color:color-mix(in srgb,var(--pp-on-primary) 32%,transparent)}
 .pp-site-header--bg-brand .pp-site-header__burger span{background:var(--pp-on-primary)}
 .pp-site-header--bg-transparent{background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+.pp-site-header--custom-border{border-style:solid;border-top-width:var(--pp-chrome-border-top-width,0);border-right-width:var(--pp-chrome-border-right-width,0);border-bottom-width:var(--pp-chrome-border-bottom-width,0);border-left-width:var(--pp-chrome-border-left-width,0);border-top-color:var(--pp-chrome-border-top-color,transparent);border-right-color:var(--pp-chrome-border-right-color,transparent);border-bottom-color:var(--pp-chrome-border-bottom-color,transparent);border-left-color:var(--pp-chrome-border-left-color,transparent)}
 .pp-site-header--density-compact .pp-site-header__inner{padding:8px 24px;min-height:0}
 .pp-site-header--density-compact{min-height:52px}
 .pp-site-header--density-tall .pp-site-header__inner{padding:22px 24px}
@@ -1812,6 +1813,7 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 .pp-site-footer--brand .pp-site-footer__name,.pp-site-footer--brand .pp-site-footer__col-title,.pp-site-footer--brand .pp-site-footer__link:hover{color:var(--pp-on-primary)}
 .pp-site-footer--brand .pp-site-footer__link{color:color-mix(in srgb,var(--pp-on-primary) 82%,transparent)}
 .pp-site-footer--brand .pp-site-footer__bottom{border-top:1px solid color-mix(in srgb,var(--pp-on-primary) 22%,transparent)}
+.pp-site-footer--custom-border{border-style:solid;border-top-width:var(--pp-chrome-border-top-width,0);border-right-width:var(--pp-chrome-border-right-width,0);border-bottom-width:var(--pp-chrome-border-bottom-width,0);border-left-width:var(--pp-chrome-border-left-width,0);border-top-color:var(--pp-chrome-border-top-color,transparent);border-right-color:var(--pp-chrome-border-right-color,transparent);border-bottom-color:var(--pp-chrome-border-bottom-color,transparent);border-left-color:var(--pp-chrome-border-left-color,transparent)}
 .pp-site-footer--cols-2 .pp-site-footer__grid,.pp-site-footer--cols-3 .pp-site-footer__grid,.pp-site-footer--cols-4 .pp-site-footer__grid{display:grid;justify-content:stretch}
 .pp-site-footer--cols-2 .pp-site-footer__grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .pp-site-footer--cols-3 .pp-site-footer__grid{grid-template-columns:repeat(3,minmax(0,1fr))}

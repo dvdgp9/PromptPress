@@ -34,14 +34,35 @@ final class ChromeService
                     'nav_alignment'         => 'right',     // left|center|right
                     'mobile_cta'            => 'show',      // show|hide
                 ],
-                'style' => ['background' => 'auto'], // auto|light|dark|brand|transparent
+                'style' => [
+                    'background' => 'auto', // auto|light|dark|brand|transparent
+                    'border' => [
+                        'mode' => 'all', // all|sides
+                        'all' => ['width' => '', 'color' => ''],
+                        'top' => ['width' => '', 'color' => ''],
+                        'right' => ['width' => '', 'color' => ''],
+                        'bottom' => ['width' => '', 'color' => ''],
+                        'left' => ['width' => '', 'color' => ''],
+                    ],
+                ],
                 'brand' => ['url' => ''],
                 'logo'  => ['dark_variant_path' => ''],
                 'menu'  => [],   // vacío => navegación automática (páginas publicadas)
                 'cta'   => ['mode' => 'auto', 'label' => '', 'url' => '', 'style' => 'primary'], // auto|custom|off
             ],
             'footer' => [
-                'style'   => ['background' => 'dark', 'columns' => 0], // columns 0 => auto
+                'style'   => [
+                    'background' => 'dark',
+                    'columns' => 0, // columns 0 => auto
+                    'border' => [
+                        'mode' => 'all',
+                        'all' => ['width' => '', 'color' => ''],
+                        'top' => ['width' => '', 'color' => ''],
+                        'right' => ['width' => '', 'color' => ''],
+                        'bottom' => ['width' => '', 'color' => ''],
+                        'left' => ['width' => '', 'color' => ''],
+                    ],
+                ],
                 'blocks'  => [], // vacío => orden automático (brand, nav, legal)
                 'brand'   => ['name' => ''],
                 'labels'  => ['nav' => '', 'legal' => '', 'contact' => '', 'social' => '', 'newsletter' => ''],
@@ -165,6 +186,7 @@ final class ChromeService
                 ],
                 'style' => [
                     'background' => $enum($hs['background'] ?? 'auto', ['auto', 'light', 'dark', 'brand', 'transparent'], 'auto'),
+                    'border' => self::sanitizeBorder((array) ($hs['border'] ?? []), $enum),
                 ],
                 'brand' => ['url' => $cut($hb['url'] ?? '', 300)],
                 'logo' => ['dark_variant_path' => $cut($h['logo']['dark_variant_path'] ?? '', 300)],
@@ -180,6 +202,7 @@ final class ChromeService
                 'style'   => [
                     'background' => $enum($fs['background'] ?? 'dark', ['dark', 'light', 'brand'], 'dark'),
                     'columns'    => max(0, min(4, (int) ($fs['columns'] ?? 0))),
+                    'border'     => self::sanitizeBorder((array) ($fs['border'] ?? []), $enum),
                 ],
                 'blocks'  => $blocks,
                 'brand'   => [
@@ -241,6 +264,32 @@ final class ChromeService
         $base['target'] = $enum($it['target'] ?? '_self', ['_self', '_blank'], '_self');
         if ($base['page_id'] <= 0) return null;
         return $base;
+    }
+
+    private static function sanitizeBorder(array $raw, callable $enum): array
+    {
+        $out = [
+            'mode' => $enum($raw['mode'] ?? 'all', ['all', 'sides'], 'all'),
+        ];
+        foreach (['all', 'top', 'right', 'bottom', 'left'] as $side) {
+            $src = (array) ($raw[$side] ?? []);
+            $widthRaw = trim((string) ($src['width'] ?? ''));
+            $width = $widthRaw === '' ? '' : (string) max(0, min(24, (int) $widthRaw));
+            $color = self::sanitizeHexColor((string) ($src['color'] ?? ''));
+            $out[$side] = ['width' => $width, 'color' => $color];
+        }
+        return $out;
+    }
+
+    private static function sanitizeHexColor(string $color): string
+    {
+        $color = trim($color);
+        if ($color === '') return '';
+        if (preg_match('/^#[0-9a-fA-F]{6}$/', $color)) return strtolower($color);
+        if (preg_match('/^#[0-9a-fA-F]{3}$/', $color)) {
+            return strtolower('#' . $color[1] . $color[1] . $color[2] . $color[2] . $color[3] . $color[3]);
+        }
+        return '';
     }
 
     /** Merge recursivo: $override gana; arrays asociativos se funden, listas se reemplazan. */

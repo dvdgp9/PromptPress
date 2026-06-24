@@ -216,3 +216,36 @@ No bloqueado. Queda pendiente prueba manual del usuario/Planner en `/admin/chrom
 
 ### Lessons
 - Antes de editar `/admin/chrome`, revisar siempre `ChromeService`, `BrandService`, `views/admin/chrome/index.php`, `admin/assets/js/chrome-editor.js` y `DesignSystem`: la UI, saneado y render público van acoplados.
+
+## [2026-06-24] Executor — Reorganizar panel /admin/chrome + bordes manuales
+
+### Background and Motivation
+El usuario pide usar `design-taste-frontend` para repensar el panel completo de `/admin/chrome`: reorganizar, compactar y hacerlo más operativo. Además solicita control manual completo de bordes: grosor y color de cada borde individualmente o de todos juntos.
+
+### Key Challenges and Analysis
+- El panel actual es una lista larga de tarjetas iguales; obliga a mucho scroll y mezcla estructura, estilo, contenido y navegación.
+- Hay que mantener CSS en `admin/assets/css/admin.css` y estilos públicos en `DesignSystem`, sin CSS inline.
+- Los bordes deben ser configurables para header y footer sin romper defaults: si no hay override, el diseño actual debe seguir igual.
+- Para evitar una UI pesada, el control de bordes debe tener modo "Todos" y modo "Por lado", con campos numéricos y color HTML.
+
+### High-level Task Breakdown
+1. Ampliar contrato `chrome_config` para `header.style.border` y `footer.style.border`. Éxito: sanitize valida `mode`, widths 0-24px y colores hex seguros.
+2. Render público de bordes manuales. Éxito: `BrandService` emite clases/variables por elemento y `DesignSystem` aplica los bordes sin afectar defaults.
+3. Reorganizar UI del editor en grupos compactos. Éxito: el panel queda dividido en bloques "Header", "Footer" y "Contenido del pie" con layout de dos columnas internas donde procede.
+4. Conectar JS y tests. Éxito: preview/guardado incluyen bordes; `tests/chrome_config.php`, lint y `git diff --check` pasan.
+
+### Project Status Board
+- [x] Tarea 1: contrato y render de bordes.
+- [x] Tarea 2: reorganización visual del panel.
+- [x] Tarea 3: JS de serialización/hidratación.
+- [x] Tarea 4: verificación automatizada.
+
+### Current Status / Progress Tracking
+Executor completó la implementación. El panel queda reorganizado en tres grupos compactos: Header, Footer y Contenido del pie. Dentro de Header/Footer se agrupan subpaneles de Menú, CTA, Layout, Apariencia, Bloques, Navegación y Marca/títulos, reduciendo scroll y mezclas conceptuales.
+
+Bordes manuales implementados para header y footer con modo "Todos juntos" o "Por lado". Cada borde admite grosor 0-24 px y color hex; el render público solo activa el borde manual cuando hay grosor explícito para evitar que los inputs de color por defecto anulen el diseño histórico. Los estilos estáticos viven en `DesignSystem`; los valores manuales se pasan como variables CSS por elemento para poder soportar colores arbitrarios.
+
+Verificado: `php -l` en archivos tocados, `node --check admin/assets/js/chrome-editor.js`, `php tests/chrome_config.php` y `git diff --check` correctos.
+
+### Executor's Feedback or Assistance Requests
+No bloqueado. Pendiente únicamente prueba manual autenticada en `/admin/chrome`, porque la ruta local redirige a login sin sesión activa.

@@ -9541,12 +9541,12 @@ body.pp-login-page {
 @media (max-width:640px){.pp-ps-review{grid-template-columns:1fr}.pp-ps-review__cover{width:100%;height:160px}}
 
 /* CHROME-EDITOR — editor de Header y pie */
-.pp-chrome-editor{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:24px;align-items:start}
+.pp-chrome-editor{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(420px,.92fr);gap:20px;align-items:start}
 @media (max-width:1100px){.pp-chrome-editor{grid-template-columns:1fr}}
-.pp-chrome-editor__form{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pp-chrome-editor__form{display:flex;flex-direction:column;gap:14px;min-width:0}
 
 /* Panel de vista previa */
-.pp-chrome-editor__preview{position:sticky;top:16px;border:1px solid var(--pp-border,#e5e7eb);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 28px rgba(16,24,40,.06)}
+.pp-chrome-editor__preview{position:sticky;top:16px;border:1px solid var(--pp-border,#e5e7eb);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 30px rgba(16,24,40,.06)}
 .pp-chrome-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--pp-border,#e5e7eb);background:#fafafa}
 .pp-chrome-preview-head>span{font-size:.74rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280}
 .pp-chrome-devtoggle{display:inline-flex;gap:2px;background:#eef0f3;border-radius:9px;padding:3px}
@@ -9555,17 +9555,35 @@ body.pp-login-page {
 .pp-chrome-preview-frame{position:relative;width:100%;overflow:hidden;background:#fff}
 #chrome-preview{border:0;background:#fff;transform-origin:top left;display:block}
 
+.pp-chrome-panel{padding:0;overflow:hidden;border-radius:12px}
+.pp-chrome-panel__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--pp-border,#e5e7eb);background:#fbfcfd}
+.pp-chrome-panel__head h3{margin:0 0 3px;font-size:1rem;letter-spacing:0;color:#111827}
+.pp-chrome-panel__head .pp-design-hint{margin:0;font-size:.84rem;line-height:1.45;color:#6b7280}
+.pp-chrome-panel__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.pp-chrome-subpanel{min-width:0;padding:16px 18px;border-top:1px solid var(--pp-border,#e5e7eb);border-right:1px solid var(--pp-border,#e5e7eb)}
+.pp-chrome-subpanel:nth-child(-n+2){border-top:0}
+.pp-chrome-subpanel:nth-child(2n){border-right:0}
+.pp-chrome-subpanel--wide{grid-column:span 2}
+.pp-chrome-subpanel h4{margin:0 0 12px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4b5563}
+.pp-chrome-subpanel .pp-form-group{margin-bottom:12px}
+.pp-chrome-subpanel .pp-form-row{gap:12px;margin-bottom:12px}
+.pp-form-row--compact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.pp-form-row--compact .pp-form-group{margin-bottom:0}
+.pp-chrome-switches{display:flex;flex-wrap:wrap;gap:8px 14px;margin-bottom:12px}
+@media (max-width:720px){.pp-chrome-panel__grid{grid-template-columns:1fr}.pp-chrome-subpanel,.pp-chrome-subpanel:nth-child(-n+2){border-top:1px solid var(--pp-border,#e5e7eb);border-right:0}.pp-chrome-subpanel:first-child{border-top:0}.pp-chrome-subpanel--wide{grid-column:auto}.pp-form-row--compact{grid-template-columns:1fr}}
+
 /* Listas de ítems */
-.pp-chrome-list{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
+.pp-chrome-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px}
+.pp-chrome-list--compact{gap:6px}
 #menu-list:empty,#footernav-list:empty{margin:10px 0 4px}
 #menu-list:empty::before,#footernav-list:empty::before{content:"Vacío: se usan tus páginas publicadas. Añade elementos para personalizar.";display:block;padding:14px 16px;border:1px dashed var(--pp-border,#d1d5db);border-radius:11px;color:#9ca3af;font-size:.85rem;text-align:center}
 
-.pp-chrome-row{position:relative;display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--pp-border,#e5e7eb);border-radius:12px;background:#fff;transition:border-color .15s ease,box-shadow .15s ease}
+.pp-chrome-row{position:relative;display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;background:#fff;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
 .pp-chrome-row:hover{border-color:#d1d5db;box-shadow:0 1px 2px rgba(16,24,40,.05)}
 .pp-chrome-row[data-type="dropdown"]{background:var(--pp-primary-soft,rgba(234,88,12,.06));border-color:color-mix(in srgb,var(--pp-primary,#ea580c) 28%,#e5e7eb);padding-left:15px}
 .pp-chrome-row[data-type="dropdown"]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px;background:var(--pp-primary,#ea580c)}
 
-.pp-chrome-row__fields{display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap;min-width:0}
+.pp-chrome-row__fields{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0}
 .pp-chrome-row__fields--col{flex-direction:column;align-items:stretch;gap:10px}
 .pp-chrome-row__line{display:flex;align-items:center;gap:10px;min-width:0}
 .pp-chrome-row__line>.pp-chrome-f-label{flex:1}
@@ -9590,6 +9608,15 @@ body.pp-login-page {
 
 .pp-chrome-addrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .pp-chrome-row__fields--col .pp-chrome-addrow{margin-top:2px}
+
+.pp-chrome-border{display:flex;flex-direction:column;gap:8px}
+.pp-chrome-border__sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pp-chrome-border__side{display:grid;grid-template-columns:minmax(70px,1fr) 62px 44px;align-items:center;gap:8px;padding:8px;border:1px solid var(--pp-border,#e5e7eb);border-radius:9px;background:#fff}
+.pp-chrome-border__side span{font-size:.78rem;font-weight:700;color:#4b5563}
+.pp-chrome-border input[type=number]{height:36px;min-width:0;padding:0 8px;border:1px solid var(--pp-border,#d1d5db);border-radius:8px;font:inherit;font-size:.86rem;color:#111827}
+.pp-chrome-border input[type=color]{width:44px;height:36px;padding:3px;border:1px solid var(--pp-border,#d1d5db);border-radius:8px;background:#fff;cursor:pointer}
+.pp-chrome-border [hidden]{display:none!important}
+@media (max-width:720px){.pp-chrome-border__sides{grid-template-columns:1fr}}
 
 /* PAGE-FROM-REF — "Desde una referencia": pasos, origen de contenido y semilla */
 .pp-studio-reference-form .pp-ref-step{
