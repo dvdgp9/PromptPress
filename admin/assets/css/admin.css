@@ -9647,11 +9647,13 @@ body.pp-login-page {
 .pp-switch input:checked ~ .pp-switch__knob{transform:translateX(14px)}
 .pp-switch input:focus-visible ~ .pp-switch__track{box-shadow:0 0 0 3px var(--pp-primary-soft,rgba(234,88,12,.3))}
 
-/* Apariencia del pie */
-.pp-fappearance{margin-top:18px;padding-top:16px;border-top:1px solid var(--pp-border,#e5e7eb)}
-.pp-fappearance h4{margin:0 0 12px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4b5563}
-.pp-fappearance .pp-form-row{gap:12px;margin-bottom:12px}
-.pp-fappearance .pp-form-group{margin-bottom:12px}
+/* Secciones apiladas (Header y Pie comparten lenguaje) */
+.pp-chrome-section:not(:first-child){margin-top:18px;padding-top:16px;border-top:1px solid var(--pp-border,#e5e7eb)}
+.pp-chrome-section h4{margin:0 0 12px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4b5563}
+.pp-chrome-section .pp-form-row{gap:12px;margin-bottom:12px}
+.pp-chrome-section .pp-form-group{margin-bottom:12px}
+.pp-chrome-section .pp-chrome-list{margin-top:0}
+.pp-switch-row{display:flex;align-items:center;gap:10px;font-size:.9rem;color:#374151;cursor:pointer;padding:3px 0;margin-bottom:8px}
 
 /* PAGE-FROM-REF — "Desde una referencia": pasos, origen de contenido y semilla */
 .pp-studio-reference-form .pp-ref-step{

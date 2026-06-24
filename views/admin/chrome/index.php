@@ -94,8 +94,8 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                     <p class="pp-design-hint">Estructura, botón, comportamiento visual y bordes del encabezado.</p>
                 </div>
             </div>
-            <div class="pp-chrome-panel__grid">
-                <div class="pp-chrome-subpanel pp-chrome-subpanel--wide">
+            <div class="pp-chrome-panel__body">
+                <div class="pp-chrome-section">
                     <h4>Menú</h4>
                     <div id="menu-list" class="pp-chrome-list"></div>
                     <div class="pp-chrome-addrow">
@@ -104,8 +104,9 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                         <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="dropdown">+ Submenú</button>
                     </div>
                 </div>
-                <div class="pp-chrome-subpanel">
-                    <h4>CTA</h4>
+
+                <div class="pp-chrome-section">
+                    <h4>Botón</h4>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
                             <label for="cta_mode">Modo</label>
@@ -141,12 +142,25 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                         </select>
                     </div>
                 </div>
-                <div class="pp-chrome-subpanel">
-                    <h4>Layout</h4>
-                    <div class="pp-chrome-switches">
-                        <label class="pp-checkbox-label"><input type="checkbox" id="h_sticky"<?= !empty($hl['sticky']) ? ' checked' : '' ?>> Fijo al hacer scroll</label>
-                        <label class="pp-checkbox-label"><input type="checkbox" id="h_transparent"<?= !empty($hl['transparent_over_hero']) ? ' checked' : '' ?>> Transparente sobre el hero</label>
-                    </div>
+
+                <div class="pp-chrome-section">
+                    <h4>Disposición</h4>
+                    <label class="pp-switch-row">
+                        <span class="pp-switch">
+                            <input type="checkbox" id="h_sticky"<?= !empty($hl['sticky']) ? ' checked' : '' ?>>
+                            <span class="pp-switch__track"></span>
+                            <span class="pp-switch__knob"></span>
+                        </span>
+                        <span>Fijo al hacer scroll</span>
+                    </label>
+                    <label class="pp-switch-row">
+                        <span class="pp-switch">
+                            <input type="checkbox" id="h_transparent"<?= !empty($hl['transparent_over_hero']) ? ' checked' : '' ?>>
+                            <span class="pp-switch__track"></span>
+                            <span class="pp-switch__knob"></span>
+                        </span>
+                        <span>Transparente sobre el hero</span>
+                    </label>
                     <div class="pp-form-group">
                         <label for="h_brand_url">Destino del logo / marca</label>
                         <input type="text" id="h_brand_url" maxlength="300" value="<?= e((string) ($hb['url'] ?? '')) ?>" placeholder="Portada por defecto">
@@ -161,7 +175,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="h_logo">Logo</label>
+                            <label for="h_logo">Posición del logo</label>
                             <select id="h_logo">
                                 <option value="left"<?= $sel($hl['logo_position'] ?? 'left', 'left') ?>>Izquierda</option>
                                 <option value="center"<?= $sel($hl['logo_position'] ?? '', 'center') ?>>Centro</option>
@@ -177,7 +191,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="h_nav_alignment">Menú</label>
+                            <label for="h_nav_alignment">Alineación del menú</label>
                             <select id="h_nav_alignment">
                                 <option value="right"<?= $sel($hl['nav_alignment'] ?? 'right', 'right') ?>>Derecha</option>
                                 <option value="center"<?= $sel($hl['nav_alignment'] ?? '', 'center') ?>>Centro</option>
@@ -186,7 +200,8 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                         </div>
                     </div>
                 </div>
-                <div class="pp-chrome-subpanel">
+
+                <div class="pp-chrome-section">
                     <h4>Apariencia</h4>
                     <div class="pp-form-group">
                         <label for="h_bg">Color de fondo</label>
@@ -298,7 +313,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                     <?php endforeach; ?>
                 </div>
 
-                <div class="pp-fappearance">
+                <div class="pp-chrome-section">
                     <h4>Apariencia del pie</h4>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">

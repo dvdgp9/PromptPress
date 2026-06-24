@@ -328,6 +328,13 @@
         });
     });
 
+    // CTA: los campos personalizados solo aparecen en modo "Personalizado"
+    var ctaModeSel = document.getElementById('cta_mode');
+    var ctaCustom = document.querySelector('[data-cta-custom]');
+    function syncCtaCustom() { if (ctaCustom) ctaCustom.hidden = !(ctaModeSel && ctaModeSel.value === 'custom'); }
+    if (ctaModeSel) ctaModeSel.addEventListener('change', syncCtaCustom);
+    syncCtaCustom();
+
     // Bloques del pie: plegar/desplegar, reordenar e interruptor
     function setBlockOpen(block, open) {
         block.classList.toggle('is-open', open);
