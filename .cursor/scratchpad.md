@@ -171,3 +171,11 @@ PENDIENTE usuario: desplegar (commit+push+pull).
   4. Wired en createReferenceCanvasPage: plan vacío → defaultPlanForType; con referencia → ensurePlanRhythm.
 - Verificado: ensurePlanRhythm (plano→mete dark en cita; ritmado→intacto; <3→no fuerza); defaultPlanForType 7 secciones con ritmo+briefs; COMPOSE honra outline; 22/22 tests OK.
 - Caveat: subjects del modo sin-referencia salen del sector (español) → Unsplash puede no encontrar (sesgo inglés); el modo con referencia usa subjects en inglés del modelo (fiable). Ritmo: garantizado por código en ambos.
+
+## [2026-06-23] Corrección: la generación empeoró (página corta, poco fiel, reseñas inventadas)
+- Causa: las 2 reglas que añadí al prompt DESCRIBE ("RITMO OBLIGATORIO" + "IMÁGENES PROACTIVAS") diluían la fidelidad a la referencia, mencionaban "testimonios/prueba social" (→ el modelo inventaba reseñas) y engordaban el JSON del plan (→ truncado a 1800 tok → menos secciones → página corta).
+- Fix:
+  1. Revertidas ambas reglas del prompt DESCRIBE. El ritmo lo sigue garantizando el código determinista ensurePlanRhythm (sin riesgo de prompt). Mantengo defaultPlanForType (sin-referencia).
+  2. Anti-invención reforzada en canvasAntiSlop (COMPOSE): prohíbe inventar porcentajes/valoraciones/volúmenes ('cientos de alumnos')/años/premios/logos/nombres/testimonios; y REDIRIGE la prueba social sin datos reales a hechos comprobables (método, garantías, modalidad, campus 24h, profesorado, normativa) + cita del propio centro.
+  3. DESCRIBE max_tokens 1800→2600 (planes completos, páginas más largas/fieles).
+- Verificado: repro COMPOSE con sección "testimonios" y contexto sin datos → 2/2 runs SIN cifras/volúmenes inventados (antes inventaba '92% aprobados', 'cientos de alumnos'). 22/22 tests OK.

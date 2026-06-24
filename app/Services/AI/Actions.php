@@ -91,8 +91,10 @@ final class Actions
           . "TEXTO (registro humano, no de IA):\n"
           . "- PROHIBIDOS los verbos hueco de marketing IA: 'impulsa', 'potencia', 'eleva', 'revoluciona', 'transforma tu negocio', 'lleva X al siguiente nivel', 'desbloquea', 'sin complicaciones', 'soluciones a medida'. Escribe como el dueño del negocio: concreto, específico, con el vocabulario del oficio.\n"
           . "- PROHIBIDA la raya larga (—) en cualquier texto visible: usa punto, coma o dos puntos.\n"
-          . "- Números/cifras solo si vienen del contexto del negocio; nunca inventes '+500 clientes', '99%', '4,9/5', 'más de 10 años'.\n"
-          . "- Testimonios: máximo 3 líneas, atribución con nombre + rol (nunca solo un nombre), comillas tipográficas (« » o \" \").\n"
+          . "- NO INVENTES NINGÚN dato verificable que no esté en el contexto: porcentajes ('92% de aprobados', '99%'), valoraciones ('4,9/5', estrellas), volúmenes ('+500 clientes', 'cientos/miles de alumnos', 'la mayoría'), años de experiencia, premios, certificaciones, logos de marcas, nombres de clientes/alumnos ni testimonios/reseñas. Inventar un dato así = error grave (peor que omitirlo).\n"
+          . "- PRUEBA SOCIAL sin datos reales: si la referencia tiene una banda de testimonios/resultados pero el contexto NO te da cifras ni opiniones reales, NO inventes ninguna. Construye esa sección con tu prueba social REAL y comprobable: la propuesta diferencial, el método, las garantías, la modalidad (presencial/online), recursos concretos (campus 24h, grupos reducidos), el perfil del profesorado y el marco normativo. Puedes usar UNA cita de valor del propio centro (atribuida a 'Dirección Académica' o similar), nunca opiniones de clientes falsas.\n"
+          . "- Las cifras de una franja de datos deben ser hechos reales (horas de campus, normativa LOMLOE, nº de modalidades, año de fundación SI lo tienes), no métricas de marketing inventadas.\n"
+          . "- Si el contexto SÍ trae testimonios reales: máximo 3 líneas, atribución con nombre + rol (nunca solo un nombre), comillas tipográficas (« » o \" \").\n"
           . "- Un único registro de voz en toda la página (no mezcles técnico, poético y comercial).\n"
           . "VISUAL:\n"
           . "- Jerarquía por peso y color, no solo por tamaño gigante. Sombras siempre con --pp-shadow-* (jamás negro puro). Un único criterio de radios en toda la página (vía --pp-radius-*). Un único color de acento (el de la marca) en toda la página.\n"
@@ -519,8 +521,6 @@ final class Actions
                   . "- Respeta el NÚMERO y el ORDEN reales de secciones que veas (normalmente entre 3 y 8). No inventes secciones que no aparecen ni fuerces un número fijo.\n"
                   . "- Describe SOLO estructura, disposición y aire. NO transcribas textos, NO menciones colores ni tipografías concretas, NO nombres de marca de la referencia (la marca y el color los pone el usuario, no la referencia).\n"
                   . "- `background` captura el RITMO de bandas de la página (alternancia claro/tintado/oscuro/foto). Es estructura, no color concreto: una banda rosa pastel y una azul pastel son ambas `tintada`.\n"
-                  . "- RITMO OBLIGATORIO: la página no puede quedar TODA en `clara`. Aunque la referencia sea plana, asegura al menos UNA banda fuerte (`oscura` o `intensa`) en un punto natural —una sección de enunciado/cita o el cierre/CTA— y evita 3+ secciones `clara` seguidas (intercala `suave`/`tintada`). El hero suele ser `foto` o `clara`.\n"
-                  . "- IMÁGENES PROACTIVAS: propón `image_brief` para las secciones que ganan con fotografía REAL del negocio del usuario (hero, sobre-nosotros/método, prueba social/testimonios, galería, servicios con media), AUNQUE la referencia no muestre fotos en ese punto. Deja `image_brief` en `null` solo en secciones de pura lista/dato/FAQ o CTA simple.\n"
                   . "- `image_brief.subject`: en INGLÉS, 3-6 palabras, pensado para buscar en un banco de fotos, y sobre el negocio del USUARIO (usa el contexto), no sobre lo que sale en la captura. SIEMPRE escenas REALES y concretas: personas trabajando, manos, objetos, espacios (ej.: 'physiotherapist treating patient back', 'team meeting around laptop'). PROHIBIDO lo abstracto: nada de 'abstract', 'technology background', '3d render', 'neon', 'wallpaper', 'pattern'.\n"
                   . "- `image_brief.count`: si la sección es un grid de N tarjetas CON foto, pide exactamente N fotos (máx 4). Si no se pueden conseguir N, el generador hará las tarjetas sin foto: mejor eso que tarjetas desiguales.\n"
                   . "- Si hay varias capturas, intégralas como un único lenguaje de diseño coherente.\n"
@@ -533,7 +533,7 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.3,
-                    'max_tokens'      => 1800,
+                    'max_tokens'      => 2600,
                 ],
             ],
 
