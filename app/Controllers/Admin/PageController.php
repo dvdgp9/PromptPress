@@ -257,13 +257,14 @@ class PageController
             Response::json(['ok' => false, 'error' => 'Describe qué página quieres crear o elige una oportunidad.'], 422);
         }
 
-        try {
-            $result = AIActionRunner::run(Actions::GENERATE_PAGE_BRIEF, [
-                'page_idea' => $idea,
-                'existing_pages' => self::existingPagesPrompt($siteId),
-                'extra_context' => $notes,
-            ], $siteId);
+        $input = [
+            'page_idea' => $idea,
+            'existing_pages' => self::existingPagesPrompt($siteId),
+            'extra_context' => $notes,
+        ];
 
+        try {
+            $result = AIActionRunner::run(Actions::GENERATE_PAGE_BRIEF, $input, $siteId);
             Response::json([
                 'ok' => true,
                 'data' => self::normalizeBrief((array) ($result['data'] ?? [])),
@@ -275,12 +276,50 @@ class PageController
                 'latency_ms' => $result['latency_ms'] ?? 0,
                 'warnings' => $result['warnings'] ?? [],
             ]);
-        } catch (AIException $e) {
-            Response::json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'http_status' => $e->getHttpStatus(),
-            ], $e->getHttpStatus() >= 400 && $e->getHttpStatus() < 600 ? $e->getHttpStatus() : 422);
+        } catch (AIException $first) {
+            if (!self::isJsonParseAiError($first)) {
+                Response::json([
+                    'ok' => false,
+                    'error' => self::publicAiBriefError($first),
+                    'http_status' => $first->getHttpStatus(),
+                ], $first->getHttpStatus() >= 400 && $first->getHttpStatus() < 600 ? $first->getHttpStatus() : 422);
+            }
+
+            error_log('[aiBrief] JSON no parseable, reintentando: ' . $first->getMessage());
+            try {
+                $retryInput = $input;
+                $retryInput['extra_context'] = trim(
+                    ($notes !== '' ? $notes . "\n\n" : '')
+                    . 'IMPORTANTE: devuelve SOLO JSON válido y compacto. Máximo 5 secciones y máximo 4 campos de formulario.'
+                );
+                $result = AIActionRunner::run(Actions::GENERATE_PAGE_BRIEF, $retryInput, $siteId);
+                Response::json([
+                    'ok' => true,
+                    'data' => self::normalizeBrief((array) ($result['data'] ?? [])),
+                    'provider' => $result['provider'] ?? '',
+                    'model' => $result['model'] ?? '',
+                    'tokens_in' => $result['tokens_in'] ?? 0,
+                    'tokens_out' => $result['tokens_out'] ?? 0,
+                    'estimated_cost' => $result['estimated_cost'] ?? 0,
+                    'latency_ms' => $result['latency_ms'] ?? 0,
+                    'warnings' => array_merge((array) ($result['warnings'] ?? []), ['Se reintentó porque la primera respuesta del modelo no era JSON válido.']),
+                ]);
+            } catch (AIException $second) {
+                error_log('[aiBrief] fallback local tras JSON no parseable: ' . $second->getMessage());
+                Response::json([
+                    'ok' => true,
+                    'fallback' => true,
+                    'data' => self::fallbackBrief($idea, $notes),
+                    'error_note' => 'El modelo devolvió un plan con formato incompleto. He preparado un plan base para que puedas continuar.',
+                    'provider' => '',
+                    'model' => '',
+                    'tokens_in' => 0,
+                    'tokens_out' => 0,
+                    'estimated_cost' => 0,
+                    'latency_ms' => 0,
+                    'warnings' => ['Plan base generado localmente por formato incompleto de la IA.'],
+                ]);
+            }
         }
     }
 
@@ -2249,6 +2288,76 @@ class PageController
             'purpose' => mb_substr(trim((string) ($form['purpose'] ?? '')), 0, 240),
             'fields' => array_slice($fields, 0, 8),
         ];
+    }
+
+    private static function isJsonParseAiError(AIException $e): bool
+    {
+        return str_contains($e->getMessage(), 'No se pudo parsear JSON');
+    }
+
+    private static function publicAiBriefError(AIException $e): string
+    {
+        if (self::isJsonParseAiError($e)) {
+            return 'La IA devolvió un plan con formato incompleto. Reinténtalo o cambia de modelo.';
+        }
+        return $e->getMessage();
+    }
+
+    /** @return array<string,mixed> */
+    private static function fallbackBrief(string $idea, string $notes = ''): array
+    {
+        $text = trim($idea . ($notes !== '' ? "\n" . $notes : ''));
+        $title = trim(preg_replace('/\s+/', ' ', strtok($idea, "\n") ?: $idea));
+        if ($title === '') $title = 'Nueva página';
+        if (mb_strlen($title) > 90) {
+            $title = rtrim(mb_substr($title, 0, 87), " \t.,;") . '...';
+        }
+
+        $lower = mb_strtolower($text);
+        $pageType = 'landing';
+        if (str_contains($lower, 'contact')) $pageType = 'contact';
+        elseif (str_contains($lower, 'servicio') || str_contains($lower, 'formación') || str_contains($lower, 'curso') || str_contains($lower, 'academia')) $pageType = 'service';
+        elseif (str_contains($lower, 'blog') || str_contains($lower, 'artículo') || str_contains($lower, 'guía')) $pageType = 'article';
+
+        $needsForm = $pageType === 'contact'
+            || str_contains($lower, 'contact')
+            || str_contains($lower, 'información')
+            || str_contains($lower, 'lead')
+            || str_contains($lower, 'solicitar');
+
+        $form = [
+            'needed' => $needsForm,
+            'purpose' => $needsForm ? 'Recoger solicitudes de información relacionadas con la página.' : '',
+            'fields' => $needsForm ? [
+                ['label' => 'Nombre', 'name' => 'nombre', 'field_type' => 'text', 'required' => true, 'placeholder' => 'Tu nombre'],
+                ['label' => 'Email', 'name' => 'email', 'field_type' => 'email', 'required' => true, 'placeholder' => 'tu@email.com'],
+                ['label' => 'Mensaje', 'name' => 'mensaje', 'field_type' => 'textarea', 'required' => true, 'placeholder' => 'Cuéntanos qué necesitas'],
+            ] : [],
+        ];
+
+        $sections = [
+            ['type' => 'hero', 'heading' => $title, 'purpose' => 'Presentar la propuesta principal y orientar al visitante hacia la acción.'],
+            ['type' => 'text_image', 'heading' => 'Qué ofrecemos', 'purpose' => 'Explicar la oferta con contexto suficiente y una imagen de apoyo si está disponible.'],
+            ['type' => 'benefits', 'heading' => 'Por qué elegirnos', 'purpose' => 'Resumir ventajas concretas y diferenciales relevantes para el público objetivo.'],
+        ];
+        if ($needsForm) {
+            $sections[] = ['type' => 'form', 'heading' => 'Solicita información', 'purpose' => 'Permitir que el visitante contacte o pida detalles.'];
+        }
+        $sections[] = ['type' => 'cta', 'heading' => 'Da el siguiente paso', 'purpose' => 'Cerrar la página con una llamada a la acción clara.'];
+
+        return self::normalizeBrief([
+            'title' => $title,
+            'page_type' => $pageType,
+            'goal' => 'Crear una página clara y útil a partir de la idea indicada: ' . $idea,
+            'audience' => '',
+            'tone' => 'Profesional y claro',
+            'seo_intent' => 'Cubrir la intención de búsqueda principal de la página sin inventar datos.',
+            'primary_cta' => $needsForm ? 'Solicitar información' : 'Contactar',
+            'recommended_form' => $form,
+            'sections' => $sections,
+            'questions' => [],
+            'extra_context' => $notes,
+        ]);
     }
 
     /** @return array<string,mixed> */

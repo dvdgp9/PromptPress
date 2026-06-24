@@ -795,7 +795,8 @@ final class Actions
                   . "La experiencia debe ser guiada: infiere todo lo posible desde memoria, documentos y páginas existentes. Solo incluye preguntas si faltan decisiones realmente importantes.\n"
                   . "Si la página necesita capturar leads, recomienda un formulario y sus campos; la plataforma lo creará automáticamente.\n"
                   . "Devuelve JSON con esta forma exacta: {\"title\":\"...\",\"page_type\":\"home|service|product|landing|article|contact\",\"goal\":\"...\",\"audience\":\"...\",\"tone\":\"...\",\"seo_intent\":\"...\",\"primary_cta\":\"...\",\"recommended_form\":{\"needed\":true,\"purpose\":\"...\",\"fields\":[{\"label\":\"...\",\"name\":\"...\",\"field_type\":\"text|email|tel|textarea|select|checkbox|number|date|url|file\",\"required\":true,\"placeholder\":\"...\"}]},\"sections\":[{\"type\":\"hero|text_image|benefits|faq|cta|form\",\"heading\":\"...\",\"purpose\":\"...\"}],\"questions\":[\"...\"],\"extra_context\":\"...\"}.\n"
-                  . "Usa entre 4 y 7 secciones. Si recommended_form.needed=true, incluye una sección type=form cerca del final. No inventes datos de contacto, precios ni promesas.",
+                  . "Devuelve SOLO JSON válido, sin markdown, sin comentarios y sin texto antes/después. Mantén textos compactos para evitar truncado.\n"
+                  . "Usa entre 4 y 6 secciones. Si recommended_form.needed=true, incluye una sección type=form cerca del final. No inventes datos de contacto, precios ni promesas.",
                 'user_template' =>
                     "Idea u oportunidad elegida:\n{page_idea}\n\n"
                   . "Páginas existentes del sitio:\n{existing_pages}\n\n"
@@ -803,7 +804,7 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.45,
-                    'max_tokens'      => 1200,
+                    'max_tokens'      => 1800,
                 ],
             ],
 

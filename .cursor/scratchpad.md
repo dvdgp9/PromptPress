@@ -272,3 +272,33 @@ Implementado en `DesignSystem.php`: `.pp-site-footer{margin-top:0;...}`. Añadid
 
 ### Executor's Feedback or Assistance Requests
 Pendiente solo prueba visual manual en una página real para confirmar que el footer queda pegado a la última sección.
+
+## [2026-06-24] Executor — 422 en creación de página por JSON de brief roto
+
+### Background and Motivation
+El usuario reporta en el Studio de creación de páginas un error `ai-create:1 Failed to load resource: 422` mientras revisaba el "Plan de página". La UI mostraba un error crudo: "No se pudo parsear JSON de la respuesta del modelo..." seguido de un fragmento de la respuesta.
+
+### Key Challenges and Analysis
+- El fallo ocurre en `POST /admin/pages/ai-brief`, antes de crear la página completa. El modelo devolvió JSON incompleto/no parseable para `GENERATE_PAGE_BRIEF`.
+- El endpoint devolvía 422 y exponía parte del output crudo del modelo, aunque la pantalla podía seguir mostrando parte del plan.
+- `GENERATE_PAGE_BRIEF` tenía `max_tokens=1200`, ajustado para respuestas compactas pero vulnerable a truncado si incluye formulario y varias secciones.
+
+### High-level Task Breakdown
+1. Reintentar automáticamente una vez si `ai-brief` falla por JSON no parseable. Éxito: el usuario no ve el primer fallo transitorio.
+2. Si el reintento falla, devolver un brief local base con `ok:true` y `fallback:true`, no 422. Éxito: el usuario puede continuar creando la página.
+3. No exponer JSON crudo del modelo en errores de brief. Éxito: mensaje público limpio.
+4. Ajustar prompt/límite de tokens y añadir test. Éxito: pruebas focalizadas pasan.
+
+### Project Status Board
+- [x] Tarea 1: retry de `ai-brief` ante JSON roto.
+- [x] Tarea 2: fallback local de brief.
+- [x] Tarea 3: mensaje público limpio.
+- [x] Tarea 4: prompt/token budget y test.
+
+### Current Status / Progress Tracking
+Implementado en `PageController::aiBrief`: reintento compacto si el error contiene "No se pudo parsear JSON"; fallback local usable si vuelve a fallar. `Actions::GENERATE_PAGE_BRIEF` ahora exige JSON compacto y sube `max_tokens` de 1200 a 1800. Añadido `tests/page_ai_brief_fallback.php`.
+
+Verificado: `php -l app/Controllers/Admin/PageController.php && php -l app/Services/AI/Actions.php && php -l tests/page_ai_brief_fallback.php`, `php tests/page_ai_brief_fallback.php`, `php tests/chrome_config.php` y `git diff --check` pasan.
+
+### Executor's Feedback or Assistance Requests
+Pendiente prueba manual: repetir la creación de página desde la misma idea. Si Gemini vuelve a devolver JSON roto, ahora debe aparecer un plan base en vez de un 422 bloqueante.
