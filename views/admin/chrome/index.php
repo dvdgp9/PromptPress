@@ -23,11 +23,17 @@ $borderValue = static fn($border, string $side, string $key): string => (string)
 $borderControls = static function (string $prefix, array $border) use ($sel, $borderValue): string {
     $mode = (string) ($border['mode'] ?? 'all');
     $sideLabels = ['top' => 'Arriba', 'right' => 'Derecha', 'bottom' => 'Abajo', 'left' => 'Izquierda'];
+    $hasBorder = false;
+    foreach (['all', 'top', 'right', 'bottom', 'left'] as $bs) {
+        if ((int) ($border[$bs]['width'] ?? 0) > 0) { $hasBorder = true; break; }
+    }
     ob_start(); ?>
+    <details class="pp-chrome-advanced"<?= $hasBorder ? ' open' : '' ?>>
+        <summary class="pp-chrome-advanced__summary">Bordes <span class="pp-chrome-advanced__tag">avanzado</span></summary>
     <div class="pp-chrome-border" data-border-editor="<?= e($prefix) ?>">
         <div class="pp-form-row pp-form-row--compact">
             <div class="pp-form-group">
-                <label for="<?= e($prefix) ?>_border_mode">Bordes</label>
+                <label for="<?= e($prefix) ?>_border_mode">Aplicar a</label>
                 <select id="<?= e($prefix) ?>_border_mode" data-border-mode="<?= e($prefix) ?>">
                     <option value="all"<?= $sel($mode, 'all') ?>>Todos juntos</option>
                     <option value="sides"<?= $sel($mode, 'sides') ?>>Por lado</option>
@@ -56,6 +62,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
             <?php endforeach; ?>
         </div>
     </div>
+    </details>
     <?php return (string) ob_get_clean();
 };
 ?>
@@ -79,7 +86,6 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
 <div class="pp-chrome-editor">
     <form method="POST" action="<?= e(base_url('admin/chrome')) ?>" class="pp-chrome-editor__form" id="chrome-form" autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-        <input type="hidden" name="config_json" id="config_json" value="">
 
         <div class="pp-tabs pp-chrome-tabs" role="tablist" aria-label="Secciones del chrome">
             <button type="button" class="pp-tab is-active" data-chrome-tab="header" role="tab" aria-selected="true" aria-controls="chrome-panel-header">Header</button>
@@ -340,9 +346,9 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         </section>
         </div>
 
-        <div class="pp-form-actions">
-            <button type="submit" class="pp-btn pp-btn--primary">Guardar cambios</button>
-            <button type="button" class="pp-btn pp-btn--secondary" id="refresh-preview">Actualizar vista previa</button>
+        <div class="pp-chrome-actions">
+            <button type="submit" class="pp-btn pp-btn--primary" id="chrome-save">Guardar cambios</button>
+            <span class="pp-chrome-dirty" id="chrome-dirty" hidden><span class="pp-chrome-dirty__dot" aria-hidden="true"></span>Cambios sin guardar</span>
         </div>
     </form>
 

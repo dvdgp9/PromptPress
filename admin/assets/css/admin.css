@@ -9655,6 +9655,22 @@ body.pp-login-page {
 .pp-chrome-section .pp-chrome-list{margin-top:0}
 .pp-switch-row{display:flex;align-items:center;gap:10px;font-size:.9rem;color:#374151;cursor:pointer;padding:3px 0;margin-bottom:8px}
 
+/* Disclosure "avanzado" (bordes) */
+.pp-chrome-advanced{border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;background:#fff}
+.pp-chrome-advanced__summary{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:.85rem;font-weight:600;color:#374151;cursor:pointer;list-style:none;user-select:none}
+.pp-chrome-advanced__summary::-webkit-details-marker{display:none}
+.pp-chrome-advanced__summary::before{content:"›";display:inline-block;color:#9ca3af;font-size:1rem;line-height:1;transition:transform .15s ease}
+.pp-chrome-advanced[open] .pp-chrome-advanced__summary::before{transform:rotate(90deg)}
+.pp-chrome-advanced__summary:hover{color:#111827}
+.pp-chrome-advanced__tag{font-size:.64rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;background:#eef0f3;padding:2px 8px;border-radius:999px}
+.pp-chrome-advanced .pp-chrome-border{padding:2px 12px 12px}
+
+/* Barra de acciones + aviso de cambios sin guardar */
+.pp-chrome-actions{display:flex;align-items:center;gap:14px;padding-top:8px}
+.pp-chrome-dirty{display:inline-flex;align-items:center;gap:7px;font-size:.85rem;font-weight:500;color:#b45309}
+.pp-chrome-dirty[hidden]{display:none}
+.pp-chrome-dirty__dot{width:8px;height:8px;border-radius:50%;background:#f59e0b}
+
 /* PAGE-FROM-REF — "Desde una referencia": pasos, origen de contenido y semilla */
 .pp-studio-reference-form .pp-ref-step{
     border:1px solid var(--pp-border,#e5e7eb);

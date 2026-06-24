@@ -41,6 +41,9 @@ class ChromeController
         $siteId = $this->requireSiteId();
         $config = ChromeService::sanitize($this->decodePayload());
         ChromeService::save($siteId, $config);
+        if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch') {
+            Response::json(['ok' => true, 'message' => 'Header y pie actualizados.']);
+        }
         Session::flash('success', 'Header y pie actualizados.');
         Response::redirect(base_url('admin/chrome'));
     }

@@ -348,8 +348,13 @@ El usuario pide mejorar la página `/admin/chrome` (editor de header y pie) apli
 ### Project Status Board
 - [x] Tarea 1: tabs Header/Pie.
 - [x] Tarea 2: editor de bloques unificado del pie.
-- [ ] Tarea 3: pulido (chips auto + bordes plegados).
-- [ ] Tarea 4: guardado AJAX + toast + aviso cambios sin guardar.
+- [x] Tarea 2.5: coherencia del tab Header (secciones + switches) + disclosure CTA.
+- [x] Tarea 3: bordes plegados tras disclosure "avanzado" (chips auto y empty-states ya presentes).
+- [x] Tarea 4: guardado AJAX + toast + aviso cambios sin guardar.
+
+### Cierre (todas las tareas implementadas y verificadas en navegador)
+Tarea 3: closure `$borderControls` ahora envuelve el editor en `<details class="pp-chrome-advanced">` (colapsado por defecto, `open` si ya hay borde). Label interno "Bordes"→"Aplicar a". CSS `.pp-chrome-advanced*`. Verificado: 2 disclosures, colapsados, inputs alcanzables en colapsado, layout sano.
+Tarea 4: `ChromeController::save` devuelve JSON si `HTTP_X_REQUESTED_WITH==='fetch'`. `chrome-editor.js`: `saveConfig()` por fetch (toast éxito/error, sin recarga), `setDirty/markDirty` (badge "Cambios sin guardar" enganchado en `preview()` tras `initialized`), `beforeunload` si dirty. Vista: barra `.pp-chrome-actions` con badge; eliminado botón "Actualizar vista previa" y el `#config_json` muerto. Verificado: badge engancha al editar y limpia al guardar; POST→200 JSON `{ok,message}` sin navegación; toast success; 0 errores; recarga limpia (6 bloques, 4 secciones header).
 
 ### Current Status / Progress Tracking
 Tarea 1 (verificada): tabs Header/Pie en `index.php`, handler en `chrome-editor.js`, `.pp-chrome-tabs` en `admin.css`.

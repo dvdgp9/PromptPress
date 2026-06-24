@@ -14,7 +14,39 @@
     var socialList = document.getElementById('social-list');
     var iframe = document.getElementById('chrome-preview');
     var previewFrame = document.getElementById('chrome-preview-frame');
-    var hidden = document.getElementById('config_json');
+    var saveBtn = document.getElementById('chrome-save');
+    var dirtyBadge = document.getElementById('chrome-dirty');
+    var initialized = false;
+    var dirty = false;
+    function setDirty(on) { dirty = on; if (dirtyBadge) dirtyBadge.hidden = !on; }
+    function markDirty() { if (!dirty) setDirty(true); }
+    function showToast(message, type) {
+        var elx = document.createElement('div');
+        elx.className = 'pp-toast pp-toast--' + (type || 'success');
+        elx.textContent = message;
+        document.body.appendChild(elx);
+        requestAnimationFrame(function () { elx.classList.add('is-visible'); });
+        setTimeout(function () { elx.classList.remove('is-visible'); setTimeout(function () { elx.remove(); }, 240); }, 3200);
+    }
+    function saveConfig() {
+        if (saveBtn) saveBtn.disabled = true;
+        var body = new URLSearchParams();
+        body.set('_csrf', csrf);
+        body.set('config_json', JSON.stringify(buildConfig()));
+        fetch(baseUrl + '/admin/chrome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch' },
+            body: body.toString(), credentials: 'same-origin'
+        }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json().catch(function () { return {}; });
+        }).then(function (data) {
+            setDirty(false);
+            showToast((data && data.message) || 'Header y pie actualizados.', 'success');
+        }).catch(function () {
+            showToast('No se pudieron guardar los cambios. Inténtalo de nuevo.', 'error');
+        }).then(function () { if (saveBtn) saveBtn.disabled = false; });
+    }
 
     /* Vista previa: renderiza a ancho real de dispositivo y escala para encajar. */
     var DEVICES = { desktop: { w: 1280, h: 880 }, mobile: { w: 390, h: 760 } };
@@ -267,6 +299,7 @@
     /* ---------- Vista previa ---------- */
     var previewTimer = null;
     function preview() {
+        if (initialized) markDirty();
         clearTimeout(previewTimer);
         previewTimer = setTimeout(function () {
             var body = new URLSearchParams();
@@ -291,10 +324,9 @@
     var addSocial = document.getElementById('add-social');
     if (addSocial) addSocial.addEventListener('click', function () { socialList.appendChild(socialRow({})); preview(); });
 
-    document.getElementById('refresh-preview').addEventListener('click', preview);
     form.addEventListener('input', preview);
     form.addEventListener('change', preview);
-    form.addEventListener('submit', function () { hidden.value = JSON.stringify(buildConfig()); });
+    form.addEventListener('submit', function (e) { e.preventDefault(); saveConfig(); });
 
     function syncBorderEditor(prefix) {
         var mode = val(prefix + '_border_mode') === 'sides' ? 'sides' : 'all';
@@ -372,4 +404,6 @@
 
     fitPreview();
     preview();
+    initialized = true;
+    window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 })();
