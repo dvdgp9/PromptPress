@@ -593,7 +593,7 @@ p{margin:0 0 1em}
 @media (max-width:720px){.pp-site-header{position:relative}.pp-site-header__nav{display:none}.pp-site-header__inner > .pp-site-header__cta{margin-left:auto}.pp-site-header__cta--mobile-hidden{display:none}}
 
 /* Public footer (E-GDPR G3 — enlaces legales) */
-.pp-site-footer{margin-top:96px;background:var(--pp-on-surface);color:color-mix(in srgb,var(--pp-on-text) 72%,transparent);font-size:.92rem}
+.pp-site-footer{margin-top:0;background:var(--pp-on-surface);color:color-mix(in srgb,var(--pp-on-text) 72%,transparent);font-size:.92rem}
 .pp-site-footer__grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:clamp(32px,5vw,64px);max-width:var(--pp-container-max);margin:0 auto;padding:clamp(40px,6vw,72px) 24px}
 .pp-site-footer__brandcol{display:flex;flex-direction:column;gap:12px;flex:1 1 280px;max-width:420px}
 .pp-site-footer__col{flex:0 1 auto;min-width:150px}

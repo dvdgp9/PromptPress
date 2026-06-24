@@ -249,3 +249,26 @@ Verificado: `php -l` en archivos tocados, `node --check admin/assets/js/chrome-e
 
 ### Executor's Feedback or Assistance Requests
 No bloqueado. Pendiente únicamente prueba manual autenticada en `/admin/chrome`, porque la ruta local redirige a login sin sesión activa.
+
+## [2026-06-24] Executor — Quitar franja blanca antes del footer público
+
+### Background and Motivation
+El usuario muestra que todas las páginas tienen una franja blanca entre el final del body y el inicio del footer. La captura encaja con el margen global del footer público, no con una sección concreta.
+
+### Key Challenges and Analysis
+- La regla `.pp-site-footer{margin-top:96px;...}` en `DesignSystem::css()` añade separación superior fija a todos los footers.
+- En páginas donde la última sección ya tiene su propio fondo/espaciado, ese margen se ve como una franja blanca artificial.
+
+### High-level Task Breakdown
+1. Eliminar el margen superior global del footer. Éxito: `.pp-site-footer` queda con `margin-top:0`.
+2. Añadir regresión focalizada. Éxito: test confirma que el CSS no contiene `margin-top:96px` para el footer.
+
+### Project Status Board
+- [x] Tarea 1: footer sin margen superior global.
+- [x] Tarea 2: verificación automatizada.
+
+### Current Status / Progress Tracking
+Implementado en `DesignSystem.php`: `.pp-site-footer{margin-top:0;...}`. Añadida cobertura en `tests/chrome_config.php`.
+
+### Executor's Feedback or Assistance Requests
+Pendiente solo prueba visual manual en una página real para confirmar que el footer queda pegado a la última sección.

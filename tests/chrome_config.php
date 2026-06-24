@@ -122,5 +122,9 @@ check_chrome('footer usa título newsletter manual', str_contains($footer, 'Avis
 check_chrome('footer usa CTA newsletter manual', str_contains($footer, 'Apuntarme'));
 check_chrome('footer respeta target blank en nav', str_contains($footer, 'target="_blank" rel="noopener"'));
 
+$designSystemSource = (string) file_get_contents(PP_ROOT . '/app/Services/DesignSystem.php');
+check_chrome('footer sin franja superior global', str_contains($designSystemSource, '.pp-site-footer{margin-top:0;'));
+check_chrome('footer no conserva margin-top 96px', !str_contains($designSystemSource, '.pp-site-footer{margin-top:96px;'));
+
 echo PHP_EOL . ($failed === 0 ? 'OK' : "$failed FALLOS") . PHP_EOL;
 exit($failed === 0 ? 0 : 1);
