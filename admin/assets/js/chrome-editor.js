@@ -331,6 +331,25 @@
         if (mode) mode.addEventListener('change', function () { syncBorderEditor(prefix); preview(); });
     });
 
+    // Pestañas Header / Pie
+    var chromeTabs = document.querySelectorAll('.pp-chrome-tabs [data-chrome-tab]');
+    var chromePanels = document.querySelectorAll('[data-chrome-panel]');
+    chromeTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var target = tab.getAttribute('data-chrome-tab');
+            chromeTabs.forEach(function (t) {
+                var on = t === tab;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            chromePanels.forEach(function (p) {
+                var on = p.getAttribute('data-chrome-panel') === target;
+                p.classList.toggle('is-active', on);
+                p.hidden = !on;
+            });
+        });
+    });
+
     // Toggle de dispositivo (escritorio / móvil)
     document.querySelectorAll('.pp-chrome-devtoggle button').forEach(function (b) {
         b.addEventListener('click', function () {

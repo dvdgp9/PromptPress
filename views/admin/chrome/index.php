@@ -81,6 +81,12 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
         <input type="hidden" name="config_json" id="config_json" value="">
 
+        <div class="pp-tabs pp-chrome-tabs" role="tablist" aria-label="Secciones del chrome">
+            <button type="button" class="pp-tab is-active" data-chrome-tab="header" role="tab" aria-selected="true" aria-controls="chrome-panel-header">Header</button>
+            <button type="button" class="pp-tab" data-chrome-tab="footer" role="tab" aria-selected="false" aria-controls="chrome-panel-footer">Pie</button>
+        </div>
+
+        <div class="pp-tab-panel is-active" id="chrome-panel-header" data-chrome-panel="header" role="tabpanel">
         <section class="pp-form-card pp-chrome-panel">
             <div class="pp-chrome-panel__head">
                 <div>
@@ -196,7 +202,9 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 </div>
             </div>
         </section>
+        </div>
 
+        <div class="pp-tab-panel" id="chrome-panel-footer" data-chrome-panel="footer" role="tabpanel" hidden>
         <section class="pp-form-card pp-chrome-panel">
             <div class="pp-chrome-panel__head">
                 <div>
@@ -306,6 +314,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 </div>
             </div>
         </section>
+        </div>
 
         <div class="pp-form-actions">
             <button type="submit" class="pp-btn pp-btn--primary">Guardar cambios</button>

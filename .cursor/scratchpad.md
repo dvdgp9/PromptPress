@@ -328,3 +328,35 @@ Verificado: `php -l app/Controllers/Admin/PageController.php && php -l tests/pag
 
 ### Executor's Feedback or Assistance Requests
 Pendiente solo prueba manual autenticada en `/admin/pages`: la tarjeta "Formularios (sistema)" ya no debería aparecer.
+
+## [2026-06-24] Rediseño UX del editor /admin/chrome (Header y pie)
+
+### Background and Motivation
+El usuario pide mejorar la página `/admin/chrome` (editor de header y pie) aplicando principios canónicos de diseño y buena UX. Tras análisis se aprueba el alcance **Nivel 1 + Nivel 2**. Nota: el modelo de datos JSON (`ChromeService`) y el render público (`BrandService`) NO cambian; solo se rediseña la UI del editor → regresión cero en páginas públicas.
+
+### Key Challenges and Analysis
+- `chrome-editor.js` lee/escribe la config por IDs de DOM en `buildConfig()`. Toda reestructura de HTML debe **conservar esos IDs** (o actualizar el JS en paralelo). Los paneles ocultos (`display:none`) siguen aportando valores (`getElementById` funciona en oculto).
+- Problemas: (1) todo visible a la vez sin tabs (Hick/Miller); (2) pie partido en 2 tarjetas sin relación (Gestalt proximidad); (3) modo "auto" invisible; (4) bordes pesan demasiado (falta divulgación progresiva); (5) guardado con recarga completa sin feedback ni aviso de cambios sin guardar (ya existe `.pp-toast`).
+- Se reutiliza `pp-tabs`/`pp-tab`/`pp-tab-panel` (página Diseño). Acento naranja `--pp-primary` en todo. Stack vanilla (sin React/Tailwind/Motion).
+
+### High-level Task Breakdown
+1. **Tabs Header / Pie.** Panel Header = tarjeta Header actual; panel Pie = Footer + Contenido del pie. JS de cambio de tab. Éxito: tabs alternan paneles; preview y guardado funcionan; `php tests/chrome_config.php` pasa.
+2. **Editor de bloques unificado del pie.** Cada bloque = fila con switch + reordenar + contenido inline. Conserva contrato de IDs. Éxito: activar bloque revela contenido; JSON guardado idéntico para misma config; test pasa.
+3. **Pulido Nivel 2.** Chips "auto: …" en listas/selects automáticos; bordes plegados tras disclosure. Éxito: listas vacías muestran hint; bordes ocultos por defecto.
+4. **Guardado AJAX + toast + aviso cambios sin guardar.** Quitar "Actualizar vista previa" redundante.
+
+### Project Status Board
+- [x] Tarea 1: tabs Header/Pie.
+- [ ] Tarea 2: editor de bloques unificado del pie.
+- [ ] Tarea 3: pulido (chips auto + bordes plegados).
+- [ ] Tarea 4: guardado AJAX + toast + aviso cambios sin guardar.
+
+### Current Status / Progress Tracking
+Tarea 1 implementada y verificada en navegador (puerto 8788, login admin):
+- `views/admin/chrome/index.php`: barra `pp-tabs` (Header / Pie) + dos `pp-tab-panel` envolviendo Header / (Footer + Contenido del pie).
+- `chrome-editor.js`: handler de cambio de pestaña (toggle `is-active`, `aria-selected`, `hidden`).
+- `admin.css`: `.pp-chrome-tabs{margin-bottom:2px}`.
+Comprobado: `php -l`, `node --check`, `php tests/chrome_config.php` (OK), `git diff --check` limpio. En navegador: las pestañas alternan paneles, los campos del pie siguen accesibles, la vista previa renderiza header+footer y no hay errores de consola.
+
+### Executor's Feedback or Assistance Requests
+Tarea 1 lista para verificación manual del usuario. Pendiente confirmar antes de pasar a Tarea 2 (editor de bloques unificado del pie).
