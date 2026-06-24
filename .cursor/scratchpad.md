@@ -302,3 +302,29 @@ Verificado: `php -l app/Controllers/Admin/PageController.php && php -l app/Servi
 
 ### Executor's Feedback or Assistance Requests
 Pendiente prueba manual: repetir la creación de página desde la misma idea. Si Gemini vuelve a devolver JSON roto, ahora debe aparecer un plan base en vez de un 422 bloqueante.
+
+## [2026-06-24] Executor — Ocultar contenedor interno de formularios en /admin/pages
+
+### Background and Motivation
+El usuario detecta en `/admin/pages` una tarjeta "Formularios (sistema)" con slug `/__forms`. Pregunta por qué aparece ahí.
+
+### Key Challenges and Analysis
+- `FormStore` crea una página contenedora oculta por sitio con slug `__forms` para alojar secciones `form` reutilizables.
+- Esa página técnica debe existir, pero no debe aparecer como página editable normal en el mapa de páginas, selectores ni contexto de IA.
+
+### High-level Task Breakdown
+1. Filtrar slugs internos en cargas administrativas de páginas. Éxito: `__forms` no aparece en `/admin/pages`, selector de enlaces ni datos de IA.
+2. Mantener la página contenedora intacta. Éxito: no se borra ni se modifica `FormStore`.
+3. Añadir regresión. Éxito: test verifica que `__forms` no entra en opciones ni árbol.
+
+### Project Status Board
+- [x] Tarea 1: filtro de páginas internas.
+- [x] Tarea 2: test de regresión.
+
+### Current Status / Progress Tracking
+Implementado en `PageController.php`: añadido filtro de slugs internos (`__forms`) en el índice, JSON de páginas, seed pages, selectores de enlaces, jerarquía y contexto de oportunidades. Añadido `tests/page_internal_pages.php`.
+
+Verificado: `php -l app/Controllers/Admin/PageController.php && php -l tests/page_internal_pages.php`, `php tests/page_internal_pages.php`, `php tests/page_ai_brief_fallback.php`, `php tests/chrome_config.php` y `git diff --check` pasan.
+
+### Executor's Feedback or Assistance Requests
+Pendiente solo prueba manual autenticada en `/admin/pages`: la tarjeta "Formularios (sistema)" ya no debería aparecer.

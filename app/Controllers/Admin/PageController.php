@@ -43,6 +43,7 @@ class PageController
     ];
 
     private const STATUSES = ['draft', 'published'];
+    private const INTERNAL_PAGE_SLUGS = ['__forms'];
 
     // ----------------------------------------------------------------------
     // Listado
@@ -57,9 +58,9 @@ class PageController
         $pages = Database::select(
             'SELECT id, title, slug, page_type, parent_id, nav_label, tree_sort_order,
                     status, updated_at, published_at
-             FROM pages WHERE site_id = ?
+             FROM pages WHERE site_id = ? AND slug <> ?
              ORDER BY tree_sort_order ASC, sort_order ASC, updated_at DESC',
-            [$siteId]
+            [$siteId, '__forms']
         );
 
         $data = DashboardController::getCommonData();
@@ -83,8 +84,8 @@ class PageController
         $siteId = self::requireSiteId();
         $rows = Database::select(
             'SELECT id, title, slug, page_type, status FROM pages
-             WHERE site_id = ? ORDER BY tree_sort_order ASC, sort_order ASC, title ASC',
-            [$siteId]
+             WHERE site_id = ? AND slug <> ? ORDER BY tree_sort_order ASC, sort_order ASC, title ASC',
+            [$siteId, '__forms']
         );
         Response::json([
             'ok'    => true,
@@ -175,9 +176,9 @@ class PageController
         // en "Desde una referencia".
         $data['seedPages'] = Database::select(
             "SELECT id, title, page_type FROM pages
-             WHERE site_id = ? AND render_mode = 'canvas'
+             WHERE site_id = ? AND render_mode = 'canvas' AND slug <> ?
              ORDER BY (page_type = 'home') DESC, id ASC",
-            [$siteId]
+            [$siteId, '__forms']
         );
         $data['documents'] = Database::select(
             "SELECT id, title FROM documents WHERE site_id = ? AND status = 'ready' ORDER BY id DESC LIMIT 50",
@@ -1411,8 +1412,8 @@ class PageController
             if ($linkSiteId !== null) {
                 $rows = Database::select(
                     'SELECT id, title, slug, page_type, status FROM pages
-                     WHERE site_id = ? ORDER BY tree_sort_order ASC, sort_order ASC, title ASC',
-                    [$linkSiteId]
+                     WHERE site_id = ? AND slug <> ? ORDER BY tree_sort_order ASC, sort_order ASC, title ASC',
+                    [$linkSiteId, '__forms']
                 );
                 $pagesForLinks = array_map([self::class, 'pageLinkInfo'], $rows);
             }
@@ -1581,8 +1582,8 @@ class PageController
         if ($done) return;
 
         $pages = Database::select(
-            'SELECT id, title, slug, parent_id FROM pages WHERE site_id = ? ORDER BY slug ASC',
-            [$siteId]
+            'SELECT id, title, slug, parent_id FROM pages WHERE site_id = ? AND slug <> ? ORDER BY slug ASC',
+            [$siteId, '__forms']
         );
         $bySlug = [];
         foreach ($pages as $p) {
@@ -1612,12 +1613,12 @@ class PageController
 
     private static function repairFlatOnboardingHierarchy(int $siteId): void
     {
-        $linked = Database::selectOne('SELECT COUNT(*) AS n FROM pages WHERE site_id = ? AND parent_id IS NOT NULL', [$siteId]);
+        $linked = Database::selectOne('SELECT COUNT(*) AS n FROM pages WHERE site_id = ? AND slug <> ? AND parent_id IS NOT NULL', [$siteId, '__forms']);
         if ((int) ($linked['n'] ?? 0) > 0) return;
 
         $pages = Database::select(
-            'SELECT id, title, slug, page_type FROM pages WHERE site_id = ? ORDER BY tree_sort_order ASC, id ASC',
-            [$siteId]
+            'SELECT id, title, slug, page_type FROM pages WHERE site_id = ? AND slug <> ? ORDER BY tree_sort_order ASC, id ASC',
+            [$siteId, '__forms']
         );
         if (count($pages) < 2) return;
 
@@ -1661,9 +1662,23 @@ class PageController
         return 0;
     }
 
+    private static function isInternalPageSlug(string $slug): bool
+    {
+        return in_array(trim($slug, '/'), self::INTERNAL_PAGE_SLUGS, true);
+    }
+
+    /** @param array<int,array<string,mixed>> $pages */
+    private static function visibleAdminPages(array $pages): array
+    {
+        return array_values(array_filter($pages, static function (array $page): bool {
+            return !self::isInternalPageSlug((string) ($page['slug'] ?? ''));
+        }));
+    }
+
     /** @param array<int,array<string,mixed>> $pages */
     private static function buildPageTree(array $pages): array
     {
+        $pages = self::visibleAdminPages($pages);
         $children = [];
         $byId = [];
         foreach ($pages as $page) {
@@ -1700,6 +1715,7 @@ class PageController
     /** @param array<int,array<string,mixed>> $pages */
     private static function pageOptions(array $pages): array
     {
+        $pages = self::visibleAdminPages($pages);
         return array_map(fn($p) => [
             'id' => (int) $p['id'],
             'label' => (string) (($p['nav_label'] ?? '') ?: $p['title']),
@@ -2039,9 +2055,9 @@ class PageController
         self::ensureHierarchySchema();
         return Database::select(
             'SELECT id, title, slug, page_type, parent_id, nav_label, tree_sort_order, status, updated_at
-             FROM pages WHERE site_id = ?
+             FROM pages WHERE site_id = ? AND slug <> ?
              ORDER BY parent_id ASC, tree_sort_order ASC, page_type ASC, title ASC',
-            [$siteId]
+            [$siteId, '__forms']
         );
     }
 
@@ -2081,8 +2097,8 @@ class PageController
 
         $pages = Database::select(
             'SELECT id, title, slug, page_type, parent_id, nav_label, tree_sort_order, status, updated_at
-             FROM pages WHERE site_id = ? ORDER BY id ASC',
-            [$siteId]
+             FROM pages WHERE site_id = ? AND slug <> ? ORDER BY id ASC',
+            [$siteId, '__forms']
         );
         $parts[] = 'pages:' . json_encode($pages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
