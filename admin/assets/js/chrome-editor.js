@@ -109,7 +109,10 @@
         } else {
             var label = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: 'Texto (opcional)', maxlength: '120' });
             label.value = item.label || '';
-            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: 'Página' }), pageSelect(item.page_id), label]);
+            var pageTgt = el('input', { type: 'checkbox', class: 'pp-chrome-f-blank' });
+            pageTgt.checked = item.target === '_blank';
+            var pageTgtL = el('label', { class: 'pp-chrome-row__chk' }, [pageTgt, document.createTextNode(' nueva pestaña')]);
+            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: 'Página' }), pageSelect(item.page_id), label, pageTgtL]);
         }
 
         row.appendChild(fields);
@@ -133,7 +136,12 @@
         }
         var pid = parseInt(row.querySelector('.pp-chrome-page').value, 10) || 0;
         if (pid <= 0) return null;
-        return { type: 'page', page_id: pid, label: row.querySelector('.pp-chrome-f-label').value.trim() };
+        return {
+            type: 'page',
+            page_id: pid,
+            label: row.querySelector('.pp-chrome-f-label').value.trim(),
+            target: row.querySelector('.pp-chrome-f-blank').checked ? '_blank' : '_self'
+        };
     }
     function readItems(list) {
         var out = [];
@@ -227,19 +235,37 @@
         });
         return {
             header: {
-                layout: { sticky: chk('h_sticky'), transparent_over_hero: chk('h_transparent'), density: val('h_density'), logo_position: val('h_logo') },
+                layout: {
+                    sticky: chk('h_sticky'),
+                    transparent_over_hero: chk('h_transparent'),
+                    density: val('h_density'),
+                    logo_position: val('h_logo'),
+                    width: val('h_width'),
+                    nav_alignment: val('h_nav_alignment'),
+                    mobile_cta: val('h_mobile_cta')
+                },
+                style: { background: val('h_bg') },
+                brand: { url: val('h_brand_url').trim() },
                 menu: readItems(menuList),
                 cta: { mode: val('cta_mode'), label: val('cta_label').trim(), url: val('cta_url').trim(), style: val('cta_style') }
             },
             footer: {
-                style: { background: val('f_bg') },
+                style: { background: val('f_bg'), columns: parseInt(val('f_columns'), 10) || 0 },
                 blocks: blocks,
+                brand: { name: val('f_brand_name').trim() },
+                labels: {
+                    nav: val('f_label_nav').trim(),
+                    legal: val('f_label_legal').trim(),
+                    contact: val('f_label_contact').trim(),
+                    social: val('f_label_social').trim(),
+                    newsletter: val('f_label_newsletter').trim()
+                },
                 nav: readItems(footerNavList),
                 tagline: val('f_tagline').trim(),
                 copyright: val('f_copyright').trim(),
                 contact: { address: val('c_address').trim(), phone: val('c_phone').trim(), email: val('c_email').trim(), hours: val('c_hours').trim() },
                 social: social,
-                newsletter: { enabled: chk('n_enabled'), heading: val('n_heading').trim(), form_ref: val('n_form').trim() }
+                newsletter: { enabled: chk('n_enabled'), heading: val('n_heading').trim(), form_ref: val('n_form').trim(), cta_label: val('n_cta_label').trim() }
             }
         };
     }

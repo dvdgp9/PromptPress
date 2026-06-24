@@ -179,3 +179,40 @@ PENDIENTE usuario: desplegar (commit+push+pull).
   2. Anti-invención reforzada en canvasAntiSlop (COMPOSE): prohíbe inventar porcentajes/valoraciones/volúmenes ('cientos de alumnos')/años/premios/logos/nombres/testimonios; y REDIRIGE la prueba social sin datos reales a hechos comprobables (método, garantías, modalidad, campus 24h, profesorado, normativa) + cita del propio centro.
   3. DESCRIBE max_tokens 1800→2600 (planes completos, páginas más largas/fieles).
 - Verificado: repro COMPOSE con sección "testimonios" y contexto sin datos → 2/2 runs SIN cifras/volúmenes inventados (antes inventaba '92% aprobados', 'cientos de alumnos'). 22/22 tests OK.
+
+## [2026-06-24] Executor — Ampliar edición manual de header y footer en /admin/chrome
+
+### Background and Motivation
+El usuario pide que `/admin/chrome` permita editar más elementos manuales del header y footer. El editor actual cubre menú, CTA básico, layout mínimo, bloques, navegación del pie, contacto, redes, newsletter y fondo. Hay campos ya previstos o hardcodeados que conviene exponer sin cambiar el comportamiento por defecto de sitios existentes.
+
+### Key Challenges and Analysis
+- Mantener regresión cero: si un sitio no configura estos campos, el render debe seguir usando los textos y clases actuales.
+- `footer.style.columns` existe en `ChromeService::defaults()` y `sanitize()`, pero el editor no lo manda y `BrandService` no lo aplica.
+- Títulos visibles como "Explora", "Legal", "Contacto", "Síguenos", "Newsletter" y el CTA "Suscribirme" están hardcodeados en `BrandService`; son buenos candidatos para edición manual.
+- El enlace de marca del header siempre apunta a home; se puede exponer como override opcional.
+- No se necesita documentación externa ni APIs nuevas; se trabaja sobre PHP/JS/CSS local.
+
+### High-level Task Breakdown
+1. Ampliar contrato de configuración y render público para nuevos campos manuales. Éxito: `ChromeService::sanitize()` conserva campos nuevos con defaults y `BrandService` los renderiza con fallback histórico.
+2. Exponer controles en `/admin/chrome` y conectarlos en `chrome-editor.js`. Éxito: los campos se hidratan desde config, se incluyen en `config_json` y aparecen en la vista previa.
+3. Añadir/ajustar CSS público/admin necesario sin inline CSS. Éxito: columnas footer y controles nuevos se ven correctamente.
+4. Verificar lint y pruebas focalizadas. Éxito: `php -l`, `node --check`, prueba de servicio/render y `git diff --check` correctos.
+
+### Project Status Board
+- [x] Tarea 1: contrato y render público ampliados.
+- [x] Tarea 2: controles del editor y serialización JS.
+- [x] Tarea 3: estilos CSS necesarios.
+- [x] Tarea 4: verificación automatizada.
+
+### Current Status / Progress Tracking
+Executor completó la implementación. Nuevos controles en `/admin/chrome`: destino del logo/marca, anchura del header, alineación del menú, ocultar CTA en móvil, target nueva pestaña para páginas del menú, columnas del footer, nombre de marca del footer, títulos manuales de columnas del footer y texto del botón newsletter. El render público conserva defaults históricos cuando los campos están vacíos.
+
+Verificado: `php -l` en `ChromeService.php`, `BrandService.php`, `views/admin/chrome/index.php`, `DesignSystem.php` y `tests/chrome_config.php`; `node --check admin/assets/js/chrome-editor.js`; `php tests/chrome_config.php`; `git diff --check`.
+
+Extensión 2026-06-24: añadido selector "Color de fondo" para el header con opciones Automático, Claro, Oscuro, Color de marca y Transparente. Se guarda en `header.style.background`, se renderiza con clases `pp-site-header--bg-*` y se cubre en `tests/chrome_config.php`.
+
+### Executor's Feedback or Assistance Requests
+No bloqueado. Queda pendiente prueba manual del usuario/Planner en `/admin/chrome`: guardar una configuración con los nuevos campos y revisar la vista previa desktop/móvil antes de dar el proyecto por cerrado.
+
+### Lessons
+- Antes de editar `/admin/chrome`, revisar siempre `ChromeService`, `BrandService`, `views/admin/chrome/index.php`, `admin/assets/js/chrome-editor.js` y `DesignSystem`: la UI, saneado y render público van acoplados.

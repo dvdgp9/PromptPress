@@ -590,7 +590,7 @@ p{margin:0 0 1em}
 .pp-site-header__inner > .pp-site-header__cta{margin-left:0}
 .pp-site-header__inner > .pp-site-header__cta:first-of-type{margin-left:auto}
 .pp-site-header__nav + .pp-site-header__cta{margin-left:0}
-@media (max-width:720px){.pp-site-header{position:relative}.pp-site-header__nav{display:none}.pp-site-header__inner > .pp-site-header__cta{margin-left:auto}}
+@media (max-width:720px){.pp-site-header{position:relative}.pp-site-header__nav{display:none}.pp-site-header__inner > .pp-site-header__cta{margin-left:auto}.pp-site-header__cta--mobile-hidden{display:none}}
 
 /* Public footer (E-GDPR G3 — enlaces legales) */
 .pp-site-footer{margin-top:96px;background:var(--pp-on-surface);color:color-mix(in srgb,var(--pp-on-text) 72%,transparent);font-size:.92rem}
@@ -1767,14 +1767,34 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 .pp-site-header--static{position:relative;top:auto}
 .pp-site-header--transparent{position:absolute;left:0;right:0;background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}
 .pp-site-header--transparent .pp-site-header__link{color:var(--pp-text)}
+.pp-site-header--bg-light{background:var(--pp-surface);border-bottom:1px solid color-mix(in srgb,var(--pp-text) 12%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none}
+.pp-site-header--bg-light .pp-site-header__brand{color:var(--pp-text)}
+.pp-site-header--bg-light .pp-site-header__link{color:var(--pp-text-muted)}
+.pp-site-header--bg-light .pp-site-header__link:hover{color:var(--pp-text)}
+.pp-site-header--bg-dark{background:var(--pp-on-surface);border-bottom:1px solid color-mix(in srgb,var(--pp-on-text) 16%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none}
+.pp-site-header--bg-dark .pp-site-header__brand,.pp-site-header--bg-dark .pp-site-header__link:hover{color:var(--pp-on-text)}
+.pp-site-header--bg-dark .pp-site-header__link{color:color-mix(in srgb,var(--pp-on-text) 76%,transparent)}
+.pp-site-header--bg-dark .pp-site-header__burger{border-color:color-mix(in srgb,var(--pp-on-text) 24%,transparent)}
+.pp-site-header--bg-dark .pp-site-header__burger span{background:var(--pp-on-text)}
+.pp-site-header--bg-brand{background:var(--pp-primary);border-bottom:1px solid color-mix(in srgb,var(--pp-on-primary) 22%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none}
+.pp-site-header--bg-brand .pp-site-header__brand,.pp-site-header--bg-brand .pp-site-header__link:hover{color:var(--pp-on-primary)}
+.pp-site-header--bg-brand .pp-site-header__link{color:color-mix(in srgb,var(--pp-on-primary) 82%,transparent)}
+.pp-site-header--bg-brand .pp-site-header__logo-fallback{background:color-mix(in srgb,var(--pp-on-primary) 18%,transparent);color:var(--pp-on-primary)}
+.pp-site-header--bg-brand .pp-site-header__burger{border-color:color-mix(in srgb,var(--pp-on-primary) 32%,transparent)}
+.pp-site-header--bg-brand .pp-site-header__burger span{background:var(--pp-on-primary)}
+.pp-site-header--bg-transparent{background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}
 .pp-site-header--density-compact .pp-site-header__inner{padding:8px 24px;min-height:0}
 .pp-site-header--density-compact{min-height:52px}
 .pp-site-header--density-tall .pp-site-header__inner{padding:22px 24px}
 .pp-site-header--density-tall{min-height:88px}
+.pp-site-header--full .pp-site-header__inner{max-width:none}
+.pp-site-header--nav-left .pp-site-header__nav{margin-left:0;margin-right:auto}
+.pp-site-header--nav-center .pp-site-header__nav{margin-left:auto;margin-right:auto}
+.pp-site-header--nav-center .pp-site-header__nav + .pp-site-header__cta{margin-left:0}
 .pp-site-header--logo-center .pp-site-header__inner{position:relative}
 .pp-site-header--logo-center .pp-site-header__brand{position:absolute;left:50%;transform:translateX(-50%)}
 .pp-site-header--logo-center .pp-site-header__nav{margin-left:0;margin-right:auto}
-@media (max-width:720px){.pp-site-header--logo-center .pp-site-header__brand{position:static;transform:none}}
+@media (max-width:720px){.pp-site-header--logo-center .pp-site-header__brand{position:static;transform:none}.pp-site-header--nav-left .pp-site-header__nav,.pp-site-header--nav-center .pp-site-header__nav{margin-left:0;margin-right:0}}
 /* Desplegables del menú */
 .pp-site-header__dropdown{position:relative;display:inline-flex;align-items:center}
 .pp-site-header__dropdown-toggle{cursor:pointer}
@@ -1792,6 +1812,14 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 .pp-site-footer--brand .pp-site-footer__name,.pp-site-footer--brand .pp-site-footer__col-title,.pp-site-footer--brand .pp-site-footer__link:hover{color:var(--pp-on-primary)}
 .pp-site-footer--brand .pp-site-footer__link{color:color-mix(in srgb,var(--pp-on-primary) 82%,transparent)}
 .pp-site-footer--brand .pp-site-footer__bottom{border-top:1px solid color-mix(in srgb,var(--pp-on-primary) 22%,transparent)}
+.pp-site-footer--cols-2 .pp-site-footer__grid,.pp-site-footer--cols-3 .pp-site-footer__grid,.pp-site-footer--cols-4 .pp-site-footer__grid{display:grid;justify-content:stretch}
+.pp-site-footer--cols-2 .pp-site-footer__grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pp-site-footer--cols-3 .pp-site-footer__grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pp-site-footer--cols-4 .pp-site-footer__grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pp-site-footer--cols-2 .pp-site-footer__brandcol,.pp-site-footer--cols-3 .pp-site-footer__brandcol,.pp-site-footer--cols-4 .pp-site-footer__brandcol{max-width:none}
+.pp-site-footer--cols-2 .pp-site-footer__col,.pp-site-footer--cols-3 .pp-site-footer__col,.pp-site-footer--cols-4 .pp-site-footer__col{min-width:0}
+@media (max-width:860px){.pp-site-footer--cols-3 .pp-site-footer__grid,.pp-site-footer--cols-4 .pp-site-footer__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.pp-site-footer--cols-2 .pp-site-footer__grid,.pp-site-footer--cols-3 .pp-site-footer__grid,.pp-site-footer--cols-4 .pp-site-footer__grid{grid-template-columns:1fr}}
 /* Footer: columnas nuevas (contacto, redes, newsletter) */
 .pp-site-footer__contact-item{display:block;line-height:1.6}
 .pp-site-footer__newsletter-text{margin:0 0 4px;line-height:1.5}

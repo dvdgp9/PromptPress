@@ -7,9 +7,13 @@
 \Core\View::extend('admin/layout');
 $h = $config['header'] ?? [];
 $hl = $h['layout'] ?? [];
+$hs = $h['style'] ?? [];
+$hb = $h['brand'] ?? [];
 $cta = $h['cta'] ?? [];
 $f = $config['footer'] ?? [];
 $fs = $f['style'] ?? [];
+$fb = $f['brand'] ?? [];
+$fl = $f['labels'] ?? [];
 $fc = $f['contact'] ?? [];
 $fn = $f['newsletter'] ?? [];
 $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
@@ -85,6 +89,20 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
                 <label class="pp-checkbox-label"><input type="checkbox" id="h_sticky"<?= !empty($hl['sticky']) ? ' checked' : '' ?>> Fijo al hacer scroll</label>
                 <label class="pp-checkbox-label"><input type="checkbox" id="h_transparent"<?= !empty($hl['transparent_over_hero']) ? ' checked' : '' ?>> Transparente sobre el hero</label>
             </div>
+            <div class="pp-form-group">
+                <label for="h_brand_url">Destino del logo / marca</label>
+                <input type="text" id="h_brand_url" maxlength="300" value="<?= e((string) ($hb['url'] ?? '')) ?>" placeholder="Déjalo vacío para enlazar a la portada">
+            </div>
+            <div class="pp-form-group">
+                <label for="h_bg">Color de fondo</label>
+                <select id="h_bg">
+                    <option value="auto"<?= $sel($hs['background'] ?? 'auto', 'auto') ?>>Automático</option>
+                    <option value="light"<?= $sel($hs['background'] ?? '', 'light') ?>>Claro</option>
+                    <option value="dark"<?= $sel($hs['background'] ?? '', 'dark') ?>>Oscuro</option>
+                    <option value="brand"<?= $sel($hs['background'] ?? '', 'brand') ?>>Color de marca</option>
+                    <option value="transparent"<?= $sel($hs['background'] ?? '', 'transparent') ?>>Transparente</option>
+                </select>
+            </div>
             <div class="pp-form-row">
                 <div class="pp-form-group">
                     <label for="h_density">Densidad</label>
@@ -101,6 +119,30 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
                         <option value="center"<?= $sel($hl['logo_position'] ?? '', 'center') ?>>Centro</option>
                     </select>
                 </div>
+            </div>
+            <div class="pp-form-row">
+                <div class="pp-form-group">
+                    <label for="h_width">Anchura</label>
+                    <select id="h_width">
+                        <option value="contained"<?= $sel($hl['width'] ?? 'contained', 'contained') ?>>Contenida</option>
+                        <option value="full"<?= $sel($hl['width'] ?? '', 'full') ?>>Ancho completo</option>
+                    </select>
+                </div>
+                <div class="pp-form-group">
+                    <label for="h_nav_alignment">Alineación del menú</label>
+                    <select id="h_nav_alignment">
+                        <option value="right"<?= $sel($hl['nav_alignment'] ?? 'right', 'right') ?>>Derecha</option>
+                        <option value="center"<?= $sel($hl['nav_alignment'] ?? '', 'center') ?>>Centro</option>
+                        <option value="left"<?= $sel($hl['nav_alignment'] ?? '', 'left') ?>>Izquierda</option>
+                    </select>
+                </div>
+            </div>
+            <div class="pp-form-group">
+                <label for="h_mobile_cta">Botón en móvil</label>
+                <select id="h_mobile_cta">
+                    <option value="show"<?= $sel($hl['mobile_cta'] ?? 'show', 'show') ?>>Mostrar</option>
+                    <option value="hide"<?= $sel($hl['mobile_cta'] ?? '', 'hide') ?>>Ocultar</option>
+                </select>
             </div>
         </section>
 
@@ -123,13 +165,28 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
 
         <section class="pp-form-card">
             <h3>Pie · Estilo y textos</h3>
+            <div class="pp-form-row">
+                <div class="pp-form-group">
+                    <label for="f_bg">Fondo</label>
+                    <select id="f_bg">
+                        <option value="dark"<?= $sel($fs['background'] ?? 'dark', 'dark') ?>>Oscuro</option>
+                        <option value="light"<?= $sel($fs['background'] ?? '', 'light') ?>>Claro</option>
+                        <option value="brand"<?= $sel($fs['background'] ?? '', 'brand') ?>>Color de marca</option>
+                    </select>
+                </div>
+                <div class="pp-form-group">
+                    <label for="f_columns">Columnas</label>
+                    <select id="f_columns">
+                        <option value="0"<?= $sel($fs['columns'] ?? 0, 0) ?>>Automático</option>
+                        <option value="2"<?= $sel($fs['columns'] ?? 0, 2) ?>>2 columnas</option>
+                        <option value="3"<?= $sel($fs['columns'] ?? 0, 3) ?>>3 columnas</option>
+                        <option value="4"<?= $sel($fs['columns'] ?? 0, 4) ?>>4 columnas</option>
+                    </select>
+                </div>
+            </div>
             <div class="pp-form-group">
-                <label for="f_bg">Fondo</label>
-                <select id="f_bg">
-                    <option value="dark"<?= $sel($fs['background'] ?? 'dark', 'dark') ?>>Oscuro</option>
-                    <option value="light"<?= $sel($fs['background'] ?? '', 'light') ?>>Claro</option>
-                    <option value="brand"<?= $sel($fs['background'] ?? '', 'brand') ?>>Color de marca</option>
-                </select>
+                <label for="f_brand_name">Nombre de marca en el pie</label>
+                <input type="text" id="f_brand_name" maxlength="120" value="<?= e((string) ($fb['name'] ?? '')) ?>" placeholder="Déjalo vacío para usar el nombre del sitio">
             </div>
             <div class="pp-form-group">
                 <label for="f_tagline">Lema (tagline)</label>
@@ -138,6 +195,18 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
             <div class="pp-form-group">
                 <label for="f_copyright">Texto de copyright</label>
                 <input type="text" id="f_copyright" maxlength="160" value="<?= e((string) ($f['copyright'] ?? '')) ?>" placeholder="Déjalo vacío para «© AÑO · Nombre»">
+            </div>
+            <div class="pp-form-row">
+                <div class="pp-form-group"><label for="f_label_nav">Título navegación</label><input type="text" id="f_label_nav" maxlength="60" value="<?= e((string) ($fl['nav'] ?? '')) ?>" placeholder="Explora"></div>
+                <div class="pp-form-group"><label for="f_label_legal">Título legal</label><input type="text" id="f_label_legal" maxlength="60" value="<?= e((string) ($fl['legal'] ?? '')) ?>" placeholder="Legal"></div>
+            </div>
+            <div class="pp-form-row">
+                <div class="pp-form-group"><label for="f_label_contact">Título contacto</label><input type="text" id="f_label_contact" maxlength="60" value="<?= e((string) ($fl['contact'] ?? '')) ?>" placeholder="Contacto"></div>
+                <div class="pp-form-group"><label for="f_label_social">Título redes</label><input type="text" id="f_label_social" maxlength="60" value="<?= e((string) ($fl['social'] ?? '')) ?>" placeholder="Síguenos"></div>
+            </div>
+            <div class="pp-form-group">
+                <label for="f_label_newsletter">Título newsletter</label>
+                <input type="text" id="f_label_newsletter" maxlength="60" value="<?= e((string) ($fl['newsletter'] ?? '')) ?>" placeholder="Newsletter">
             </div>
         </section>
 
@@ -167,6 +236,7 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
                 <div class="pp-form-group"><label for="n_heading">Titular</label><input type="text" id="n_heading" maxlength="120" value="<?= e((string) ($fn['heading'] ?? '')) ?>" placeholder="Suscríbete a nuestra newsletter"></div>
                 <div class="pp-form-group"><label for="n_form">Destino (URL del formulario)</label><input type="text" id="n_form" maxlength="120" value="<?= e((string) ($fn['form_ref'] ?? '')) ?>" placeholder="/contacto"></div>
             </div>
+            <div class="pp-form-group"><label for="n_cta_label">Texto del botón</label><input type="text" id="n_cta_label" maxlength="60" value="<?= e((string) ($fn['cta_label'] ?? '')) ?>" placeholder="Suscribirme"></div>
         </section>
 
         <div class="pp-form-actions">

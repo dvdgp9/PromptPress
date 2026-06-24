@@ -30,7 +30,12 @@ final class ChromeService
                     'transparent_over_hero' => false,
                     'density'               => 'regular', // compact|regular|tall
                     'logo_position'         => 'left',    // left|center
+                    'width'                 => 'contained', // contained|full
+                    'nav_alignment'         => 'right',     // left|center|right
+                    'mobile_cta'            => 'show',      // show|hide
                 ],
+                'style' => ['background' => 'auto'], // auto|light|dark|brand|transparent
+                'brand' => ['url' => ''],
                 'logo'  => ['dark_variant_path' => ''],
                 'menu'  => [],   // vacío => navegación automática (páginas publicadas)
                 'cta'   => ['mode' => 'auto', 'label' => '', 'url' => '', 'style' => 'primary'], // auto|custom|off
@@ -38,11 +43,13 @@ final class ChromeService
             'footer' => [
                 'style'   => ['background' => 'dark', 'columns' => 0], // columns 0 => auto
                 'blocks'  => [], // vacío => orden automático (brand, nav, legal)
+                'brand'   => ['name' => ''],
+                'labels'  => ['nav' => '', 'legal' => '', 'contact' => '', 'social' => '', 'newsletter' => ''],
                 'tagline' => '', // vacío => tagline de la memoria
                 'nav'     => [], // vacío => páginas publicadas
                 'contact' => ['address' => '', 'phone' => '', 'email' => '', 'hours' => ''],
                 'social'  => [], // [{network,url}]
-                'newsletter' => ['enabled' => false, 'form_ref' => '', 'heading' => ''],
+                'newsletter' => ['enabled' => false, 'form_ref' => '', 'heading' => '', 'cta_label' => ''],
                 'copyright'  => '', // vacío => "© AÑO · Nombre"
             ],
         ];
@@ -102,8 +109,12 @@ final class ChromeService
         $h = (array) ($raw['header'] ?? []);
         $f = (array) ($raw['footer'] ?? []);
         $hl = (array) ($h['layout'] ?? []);
+        $hs = (array) ($h['style'] ?? []);
+        $hb = (array) ($h['brand'] ?? []);
         $cta = (array) ($h['cta'] ?? []);
         $fs = (array) ($f['style'] ?? []);
+        $fb = (array) ($f['brand'] ?? []);
+        $fl = (array) ($f['labels'] ?? []);
         $fc = (array) ($f['contact'] ?? []);
         $fn = (array) ($f['newsletter'] ?? []);
 
@@ -148,7 +159,14 @@ final class ChromeService
                     'transparent_over_hero' => (bool) ($hl['transparent_over_hero'] ?? false),
                     'density'               => $enum($hl['density'] ?? 'regular', ['compact', 'regular', 'tall'], 'regular'),
                     'logo_position'         => $enum($hl['logo_position'] ?? 'left', ['left', 'center'], 'left'),
+                    'width'                 => $enum($hl['width'] ?? 'contained', ['contained', 'full'], 'contained'),
+                    'nav_alignment'         => $enum($hl['nav_alignment'] ?? 'right', ['left', 'center', 'right'], 'right'),
+                    'mobile_cta'            => $enum($hl['mobile_cta'] ?? 'show', ['show', 'hide'], 'show'),
                 ],
+                'style' => [
+                    'background' => $enum($hs['background'] ?? 'auto', ['auto', 'light', 'dark', 'brand', 'transparent'], 'auto'),
+                ],
+                'brand' => ['url' => $cut($hb['url'] ?? '', 300)],
                 'logo' => ['dark_variant_path' => $cut($h['logo']['dark_variant_path'] ?? '', 300)],
                 'menu' => $menu,
                 'cta'  => [
@@ -164,6 +182,16 @@ final class ChromeService
                     'columns'    => max(0, min(4, (int) ($fs['columns'] ?? 0))),
                 ],
                 'blocks'  => $blocks,
+                'brand'   => [
+                    'name' => $cut($fb['name'] ?? '', 120),
+                ],
+                'labels'  => [
+                    'nav'        => $cut($fl['nav'] ?? '', 60),
+                    'legal'      => $cut($fl['legal'] ?? '', 60),
+                    'contact'    => $cut($fl['contact'] ?? '', 60),
+                    'social'     => $cut($fl['social'] ?? '', 60),
+                    'newsletter' => $cut($fl['newsletter'] ?? '', 60),
+                ],
                 'tagline' => $cut($f['tagline'] ?? '', 200),
                 'nav'     => $footerNav,
                 'contact' => [
@@ -177,6 +205,7 @@ final class ChromeService
                     'enabled'  => (bool) ($fn['enabled'] ?? false),
                     'form_ref' => $cut($fn['form_ref'] ?? '', 120),
                     'heading'  => $cut($fn['heading'] ?? '', 120),
+                    'cta_label' => $cut($fn['cta_label'] ?? '', 60),
                 ],
                 'copyright'  => $cut($f['copyright'] ?? '', 160),
             ],
