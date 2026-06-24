@@ -1570,6 +1570,85 @@ final class OnboardingController
         return $plan;
     }
 
+    /** Temas "fuertes" que rompen el muro blanco (banda con presencia visual). */
+    private const STRONG_THEMES = ['dark', 'primary', 'image', 'tint'];
+
+    /**
+     * Garantiza ritmo en un plan con referencia: si NINGUNA sección lleva banda
+     * fuerte, promueve una sección de enunciado (cita/cierre/CTA) o la del medio
+     * a `dark`. Best-effort; no toca planes que ya tienen ritmo.
+     */
+    private static function ensurePlanRhythm(array $plan): array
+    {
+        if (count($plan) < 3) {
+            return $plan;
+        }
+        foreach ($plan as $b) {
+            if (in_array(trim((string) ($b['theme'] ?? '')), self::STRONG_THEMES, true)) {
+                return $plan; // ya hay ritmo
+            }
+        }
+        $pick = null;
+        foreach ($plan as $i => $b) {
+            if ($i === 0) continue; // nunca el hero
+            if (preg_match('/\b(cita|frase|enunciad|cierre|cta|contacto|destac|llamada|convers)/iu', (string) ($b['role'] ?? ''))) {
+                $pick = $i;
+                break;
+            }
+        }
+        if ($pick === null) {
+            $pick = max(1, intdiv(count($plan), 2));
+        }
+        $plan[$pick]['theme'] = 'dark';
+        return $plan;
+    }
+
+    /** Subject de imagen (sector del negocio) para briefs por defecto. */
+    private static function businessImageSubject(int $siteId): string
+    {
+        try {
+            $site = Database::selectOne('SELECT personality FROM sites WHERE id = ?', [$siteId]);
+            $personality = json_decode((string) ($site['personality'] ?? ''), true) ?: [];
+            $q = str_replace('-', ' ', trim((string) ($personality['inferred_sector'] ?? '')));
+            if ($q === '') {
+                $mem = Database::selectOne(
+                    "SELECT field_value FROM site_memory WHERE site_id = ? AND field_key = 'services' LIMIT 1",
+                    [$siteId]
+                );
+                $q = mb_substr(trim((string) ($mem['field_value'] ?? '')), 0, 60);
+            }
+            return trim((string) preg_replace('/\s+/u', ' ', $q));
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Plan opinado por defecto cuando NO hay referencia (DESCRIBE da plan vacío):
+     * ritmo de landing estándar (hero foto → datos → servicios → banda oscura →
+     * método foto → prueba social → CTA intensa) con briefs de imagen del sector.
+     */
+    private static function defaultPlanForType(string $type, int $siteId): array
+    {
+        $subject = self::businessImageSubject($siteId);
+        $brief = static fn(): ?array => $subject !== ''
+            ? ['subject' => $subject, 'orientation' => 'landscape', 'count' => 1]
+            : null;
+        $rows = [
+            ['role' => 'Hero principal: titular potente, subtítulo y 1-2 CTAs', 'theme' => 'image', 'image_brief' => $brief()],
+            ['role' => 'Tira de datos o garantías (3-4 cifras/sellos)', 'theme' => '', 'image_brief' => null],
+            ['role' => 'Servicios o vías principales (grid de 2-3 tarjetas)', 'theme' => 'surface', 'image_brief' => null],
+            ['role' => 'Banda de enunciado: una frase potente sobre el valor', 'theme' => 'dark', 'image_brief' => null],
+            ['role' => 'Cómo trabajamos / método (texto + media)', 'theme' => 'image', 'image_brief' => $brief()],
+            ['role' => 'Prueba social / testimonios', 'theme' => 'surface', 'image_brief' => null],
+            ['role' => 'Cierre / CTA final', 'theme' => 'primary', 'image_brief' => null],
+        ];
+        return array_map(static fn(array $r): array => $r + [
+            'goal' => 'Desarrolla esta sección con contenido útil y concreto para el negocio del usuario.',
+            'images' => [],
+        ], $rows);
+    }
+
     /**
      * FH2 — Crea una página CANVAS desde la referencia visual: describe la
      * estructura (D-MB2), resuelve fotos reales y pide a la IA la página
@@ -1607,6 +1686,12 @@ final class OnboardingController
         $layout = self::describeReferenceLayout($siteId, $title, $goal, $context, $referenceImages);
         $designLanguage = (string) ($layout['design_language'] ?? '');
         $plan = $layout['plan'];
+        // Sin referencia, DESCRIBE devuelve plan vacío → usamos un plan opinado
+        // por defecto (ritmo + fotos) para que la página no salga plana ni sin
+        // imágenes. Con referencia, garantizamos al menos una banda fuerte.
+        $plan = $plan === []
+            ? self::defaultPlanForType($type, $siteId)
+            : self::ensurePlanRhythm($plan);
         $plan = self::resolvePlanImages($siteId, $plan);
 
         // Outline en texto para el prompt (rol + fondo + imágenes por sección).
