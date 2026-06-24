@@ -205,28 +205,101 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         </div>
 
         <div class="pp-tab-panel" id="chrome-panel-footer" data-chrome-panel="footer" role="tabpanel" hidden>
-        <section class="pp-form-card pp-chrome-panel">
-            <div class="pp-chrome-panel__head">
-                <div>
-                    <h3>Footer</h3>
-                    <p class="pp-design-hint">Orden, navegación, superficie visual y bordes del pie.</p>
-                </div>
-            </div>
-            <div class="pp-chrome-panel__grid">
-                <div class="pp-chrome-subpanel">
-                    <h4>Bloques</h4>
-                    <div id="blocks-list" class="pp-chrome-list pp-chrome-list--compact"></div>
-                </div>
-                <div class="pp-chrome-subpanel pp-chrome-subpanel--wide">
-                    <h4>Navegación</h4>
+        <?php
+        $allFBlocks = ['brand', 'nav', 'legal', 'contact', 'social', 'newsletter'];
+        $fblockTitles = [
+            'brand' => 'Marca y lema', 'nav' => 'Navegación', 'legal' => 'Enlaces legales',
+            'contact' => 'Contacto', 'social' => 'Redes sociales', 'newsletter' => 'Newsletter',
+        ];
+        $fblockAuto = ['nav' => 'auto: páginas publicadas', 'legal' => 'auto: páginas legales'];
+        $savedFBlocks = array_values(array_filter((array) ($f['blocks'] ?? []), 'is_string'));
+        $defaultFOn = ['brand', 'nav', 'legal'];
+        $enabledFBlocks = $savedFBlocks ?: $defaultFOn;
+        $fOrder = $savedFBlocks ?: $defaultFOn;
+        foreach ($allFBlocks as $b) { if (!in_array($b, $fOrder, true)) $fOrder[] = $b; }
+
+        $fblockBody = function (string $b) use ($f, $fb, $fl, $fc, $fn): string {
+            ob_start();
+            switch ($b) {
+                case 'brand': ?>
+                    <div class="pp-form-group"><label for="f_brand_name">Nombre en el pie</label><input type="text" id="f_brand_name" maxlength="120" value="<?= e((string) ($fb['name'] ?? '')) ?>" placeholder="Nombre del sitio"></div>
+                    <div class="pp-form-group"><label for="f_tagline">Lema</label><input type="text" id="f_tagline" maxlength="200" value="<?= e((string) ($f['tagline'] ?? '')) ?>" placeholder="Memoria del negocio"></div>
+                    <div class="pp-form-group"><label for="f_copyright">Copyright</label><input type="text" id="f_copyright" maxlength="160" value="<?= e((string) ($f['copyright'] ?? '')) ?>" placeholder="© AÑO · Nombre"></div>
+                <?php break;
+                case 'nav': ?>
+                    <div class="pp-form-group"><label for="f_label_nav">Título de la columna</label><input type="text" id="f_label_nav" maxlength="60" value="<?= e((string) ($fl['nav'] ?? '')) ?>" placeholder="Explora"></div>
                     <div id="footernav-list" class="pp-chrome-list"></div>
                     <div class="pp-chrome-addrow">
                         <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="page">+ Página</button>
                         <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="link">+ Enlace</button>
                     </div>
+                    <p class="pp-fblock__hint">Si lo dejas vacío, se listan automáticamente tus páginas publicadas.</p>
+                <?php break;
+                case 'legal': ?>
+                    <div class="pp-form-group"><label for="f_label_legal">Título de la columna</label><input type="text" id="f_label_legal" maxlength="60" value="<?= e((string) ($fl['legal'] ?? '')) ?>" placeholder="Legal"></div>
+                    <p class="pp-fblock__hint">Los enlaces legales se generan automáticamente desde tus páginas legales publicadas.</p>
+                <?php break;
+                case 'contact': ?>
+                    <div class="pp-form-group"><label for="f_label_contact">Título de la columna</label><input type="text" id="f_label_contact" maxlength="60" value="<?= e((string) ($fl['contact'] ?? '')) ?>" placeholder="Contacto"></div>
+                    <div class="pp-form-group"><label for="c_address">Dirección</label><textarea id="c_address" rows="2" maxlength="300"><?= e((string) ($fc['address'] ?? '')) ?></textarea></div>
+                    <div class="pp-form-row pp-form-row--compact">
+                        <div class="pp-form-group"><label for="c_phone">Teléfono</label><input type="text" id="c_phone" maxlength="60" value="<?= e((string) ($fc['phone'] ?? '')) ?>"></div>
+                        <div class="pp-form-group"><label for="c_email">Email</label><input type="text" id="c_email" maxlength="120" value="<?= e((string) ($fc['email'] ?? '')) ?>"></div>
+                    </div>
+                    <div class="pp-form-group"><label for="c_hours">Horario</label><input type="text" id="c_hours" maxlength="120" value="<?= e((string) ($fc['hours'] ?? '')) ?>" placeholder="L-V 9:00-18:00"></div>
+                <?php break;
+                case 'social': ?>
+                    <div class="pp-form-group"><label for="f_label_social">Título de la columna</label><input type="text" id="f_label_social" maxlength="60" value="<?= e((string) ($fl['social'] ?? '')) ?>" placeholder="Síguenos"></div>
+                    <div id="social-list" class="pp-chrome-list"></div>
+                    <div class="pp-chrome-addrow"><button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="add-social">+ Red social</button></div>
+                <?php break;
+                case 'newsletter': ?>
+                    <div class="pp-form-group"><label for="f_label_newsletter">Título de la columna</label><input type="text" id="f_label_newsletter" maxlength="60" value="<?= e((string) ($fl['newsletter'] ?? '')) ?>" placeholder="Newsletter"></div>
+                    <div class="pp-form-row pp-form-row--compact">
+                        <div class="pp-form-group"><label for="n_heading">Titular</label><input type="text" id="n_heading" maxlength="120" value="<?= e((string) ($fn['heading'] ?? '')) ?>" placeholder="Suscríbete a nuestra newsletter"></div>
+                        <div class="pp-form-group"><label for="n_form">Destino</label><input type="text" id="n_form" maxlength="120" value="<?= e((string) ($fn['form_ref'] ?? '')) ?>" placeholder="/contacto"></div>
+                    </div>
+                    <div class="pp-form-group"><label for="n_cta_label">Texto del botón</label><input type="text" id="n_cta_label" maxlength="60" value="<?= e((string) ($fn['cta_label'] ?? '')) ?>" placeholder="Suscribirme"></div>
+                    <p class="pp-fblock__hint">Activa este bloque con el interruptor para mostrar el formulario de suscripción.</p>
+                <?php break;
+            }
+            return (string) ob_get_clean();
+        };
+        ?>
+        <section class="pp-form-card pp-chrome-panel">
+            <div class="pp-chrome-panel__head">
+                <div>
+                    <h3>Bloques del pie</h3>
+                    <p class="pp-design-hint">Activa, ordena y edita cada bloque en el mismo sitio. Lo que desactives no se muestra.</p>
                 </div>
-                <div class="pp-chrome-subpanel">
-                    <h4>Apariencia</h4>
+            </div>
+            <div class="pp-chrome-panel__body">
+                <div class="pp-fblocks" id="footer-blocks">
+                    <?php foreach ($fOrder as $b): $on = in_array($b, $enabledFBlocks, true); ?>
+                    <div class="pp-fblock<?= $on ? '' : ' is-off' ?>" data-fblock="<?= e($b) ?>">
+                        <div class="pp-fblock__head">
+                            <label class="pp-switch" title="Mostrar bloque">
+                                <input type="checkbox" class="pp-fblock-on"<?= $on ? ' checked' : '' ?> aria-label="Mostrar <?= e($fblockTitles[$b]) ?>">
+                                <span class="pp-switch__track"></span>
+                                <span class="pp-switch__knob"></span>
+                            </label>
+                            <button type="button" class="pp-fblock__toggle" aria-expanded="false">
+                                <span class="pp-fblock__name"><?= e($fblockTitles[$b]) ?></span>
+                                <?php if (isset($fblockAuto[$b])): ?><span class="pp-fblock__auto"><?= e($fblockAuto[$b]) ?></span><?php endif; ?>
+                                <span class="pp-fblock__chev" aria-hidden="true">⌄</span>
+                            </button>
+                            <div class="pp-fblock__reorder">
+                                <button type="button" class="pp-chrome-row__btn" data-fblock-up title="Subir">↑</button>
+                                <button type="button" class="pp-chrome-row__btn" data-fblock-down title="Bajar">↓</button>
+                            </div>
+                        </div>
+                        <div class="pp-fblock__body" hidden><?= $fblockBody($b) ?></div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="pp-fappearance">
+                    <h4>Apariencia del pie</h4>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
                             <label for="f_bg">Fondo</label>
@@ -247,70 +320,6 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                         </div>
                     </div>
                     <?= $borderControls('f', (array) $fBorder) ?>
-                </div>
-                <div class="pp-chrome-subpanel">
-                    <h4>Marca y títulos</h4>
-                    <div class="pp-form-group">
-                        <label for="f_brand_name">Nombre en el pie</label>
-                        <input type="text" id="f_brand_name" maxlength="120" value="<?= e((string) ($fb['name'] ?? '')) ?>" placeholder="Nombre del sitio">
-                    </div>
-                    <div class="pp-form-group">
-                        <label for="f_tagline">Lema</label>
-                        <input type="text" id="f_tagline" maxlength="200" value="<?= e((string) ($f['tagline'] ?? '')) ?>" placeholder="Memoria del negocio">
-                    </div>
-                    <div class="pp-form-group">
-                        <label for="f_copyright">Copyright</label>
-                        <input type="text" id="f_copyright" maxlength="160" value="<?= e((string) ($f['copyright'] ?? '')) ?>" placeholder="© AÑO · Nombre">
-                    </div>
-                    <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="f_label_nav">Navegación</label><input type="text" id="f_label_nav" maxlength="60" value="<?= e((string) ($fl['nav'] ?? '')) ?>" placeholder="Explora"></div>
-                        <div class="pp-form-group"><label for="f_label_legal">Legal</label><input type="text" id="f_label_legal" maxlength="60" value="<?= e((string) ($fl['legal'] ?? '')) ?>" placeholder="Legal"></div>
-                    </div>
-                    <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="f_label_contact">Contacto</label><input type="text" id="f_label_contact" maxlength="60" value="<?= e((string) ($fl['contact'] ?? '')) ?>" placeholder="Contacto"></div>
-                        <div class="pp-form-group"><label for="f_label_social">Redes</label><input type="text" id="f_label_social" maxlength="60" value="<?= e((string) ($fl['social'] ?? '')) ?>" placeholder="Síguenos"></div>
-                    </div>
-                    <div class="pp-form-group">
-                        <label for="f_label_newsletter">Newsletter</label>
-                        <input type="text" id="f_label_newsletter" maxlength="60" value="<?= e((string) ($fl['newsletter'] ?? '')) ?>" placeholder="Newsletter">
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="pp-form-card pp-chrome-panel">
-            <div class="pp-chrome-panel__head">
-                <div>
-                    <h3>Contenido del pie</h3>
-                    <p class="pp-design-hint">Datos visibles en bloques opcionales: contacto, redes y newsletter.</p>
-                </div>
-            </div>
-            <div class="pp-chrome-panel__grid">
-                <div class="pp-chrome-subpanel">
-                    <h4>Contacto</h4>
-                    <div class="pp-form-group">
-                        <label for="c_address">Dirección</label>
-                        <textarea id="c_address" rows="2" maxlength="300"><?= e((string) ($fc['address'] ?? '')) ?></textarea>
-                    </div>
-                    <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="c_phone">Teléfono</label><input type="text" id="c_phone" maxlength="60" value="<?= e((string) ($fc['phone'] ?? '')) ?>"></div>
-                        <div class="pp-form-group"><label for="c_email">Email</label><input type="text" id="c_email" maxlength="120" value="<?= e((string) ($fc['email'] ?? '')) ?>"></div>
-                    </div>
-                    <div class="pp-form-group"><label for="c_hours">Horario</label><input type="text" id="c_hours" maxlength="120" value="<?= e((string) ($fc['hours'] ?? '')) ?>" placeholder="L-V 9:00-18:00"></div>
-                </div>
-                <div class="pp-chrome-subpanel">
-                    <h4>Redes sociales</h4>
-                    <div id="social-list" class="pp-chrome-list"></div>
-                    <div class="pp-chrome-addrow"><button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="add-social">+ Red social</button></div>
-                </div>
-                <div class="pp-chrome-subpanel pp-chrome-subpanel--wide">
-                    <h4>Newsletter</h4>
-                    <label class="pp-checkbox-label"><input type="checkbox" id="n_enabled"<?= !empty($fn['enabled']) ? ' checked' : '' ?>> Mostrar bloque de newsletter</label>
-                    <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="n_heading">Titular</label><input type="text" id="n_heading" maxlength="120" value="<?= e((string) ($fn['heading'] ?? '')) ?>" placeholder="Suscríbete a nuestra newsletter"></div>
-                        <div class="pp-form-group"><label for="n_form">Destino</label><input type="text" id="n_form" maxlength="120" value="<?= e((string) ($fn['form_ref'] ?? '')) ?>" placeholder="/contacto"></div>
-                    </div>
-                    <div class="pp-form-group"><label for="n_cta_label">Texto del botón</label><input type="text" id="n_cta_label" maxlength="60" value="<?= e((string) ($fn['cta_label'] ?? '')) ?>" placeholder="Suscribirme"></div>
                 </div>
             </div>
         </section>

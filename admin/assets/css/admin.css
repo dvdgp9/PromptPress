@@ -9619,6 +9619,40 @@ body.pp-login-page {
 .pp-chrome-border [hidden]{display:none!important}
 @media (max-width:720px){.pp-chrome-border__sides{grid-template-columns:1fr}}
 
+/* CHROME-EDITOR — editor de bloques unificado del pie */
+.pp-chrome-panel__body{padding:16px 18px}
+.pp-fblocks{display:flex;flex-direction:column;gap:8px}
+.pp-fblock{border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;background:#fff;overflow:hidden;transition:border-color .15s ease,box-shadow .15s ease}
+.pp-fblock:hover{border-color:#d1d5db}
+.pp-fblock.is-open{border-color:color-mix(in srgb,var(--pp-primary,#ea580c) 35%,#e5e7eb);box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.pp-fblock__head{display:flex;align-items:center;gap:10px;padding:9px 10px}
+.pp-fblock__toggle{flex:1;display:flex;align-items:center;gap:10px;min-width:0;background:none;border:0;padding:5px 2px;margin:0;font:inherit;cursor:pointer;text-align:left}
+.pp-fblock__name{font-size:.92rem;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-fblock.is-off .pp-fblock__name{color:#9ca3af}
+.pp-fblock__auto{flex-shrink:0;font-size:.68rem;font-weight:600;color:#6b7280;background:#eef0f3;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.pp-fblock__chev{margin-left:auto;flex-shrink:0;color:#9ca3af;font-size:1rem;line-height:1;transition:transform .15s ease}
+.pp-fblock.is-open .pp-fblock__chev{transform:rotate(180deg)}
+.pp-fblock__reorder{display:flex;gap:4px;flex-shrink:0}
+.pp-fblock__body{padding:6px 12px 14px;border-top:1px solid var(--pp-border,#eef0f3);display:flex;flex-direction:column;gap:12px}
+.pp-fblock__body[hidden]{display:none}
+.pp-fblock__body .pp-form-group,.pp-fblock__body .pp-form-row{margin:0}
+.pp-fblock__hint{font-size:.8rem;color:#6b7280;line-height:1.45;margin:0}
+
+/* Interruptor (switch) */
+.pp-switch{position:relative;flex-shrink:0;display:inline-block;width:34px;height:20px;cursor:pointer}
+.pp-switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+.pp-switch__track{position:absolute;inset:0;border-radius:999px;background:#cbd0d8;transition:background .15s ease}
+.pp-switch__knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.25);transition:transform .15s ease}
+.pp-switch input:checked ~ .pp-switch__track{background:var(--pp-primary,#ea580c)}
+.pp-switch input:checked ~ .pp-switch__knob{transform:translateX(14px)}
+.pp-switch input:focus-visible ~ .pp-switch__track{box-shadow:0 0 0 3px var(--pp-primary-soft,rgba(234,88,12,.3))}
+
+/* Apariencia del pie */
+.pp-fappearance{margin-top:18px;padding-top:16px;border-top:1px solid var(--pp-border,#e5e7eb)}
+.pp-fappearance h4{margin:0 0 12px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4b5563}
+.pp-fappearance .pp-form-row{gap:12px;margin-bottom:12px}
+.pp-fappearance .pp-form-group{margin-bottom:12px}
+
 /* PAGE-FROM-REF — "Desde una referencia": pasos, origen de contenido y semilla */
 .pp-studio-reference-form .pp-ref-step{
     border:1px solid var(--pp-border,#e5e7eb);

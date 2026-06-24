@@ -347,16 +347,18 @@ El usuario pide mejorar la página `/admin/chrome` (editor de header y pie) apli
 
 ### Project Status Board
 - [x] Tarea 1: tabs Header/Pie.
-- [ ] Tarea 2: editor de bloques unificado del pie.
+- [x] Tarea 2: editor de bloques unificado del pie.
 - [ ] Tarea 3: pulido (chips auto + bordes plegados).
 - [ ] Tarea 4: guardado AJAX + toast + aviso cambios sin guardar.
 
 ### Current Status / Progress Tracking
-Tarea 1 implementada y verificada en navegador (puerto 8788, login admin):
-- `views/admin/chrome/index.php`: barra `pp-tabs` (Header / Pie) + dos `pp-tab-panel` envolviendo Header / (Footer + Contenido del pie).
-- `chrome-editor.js`: handler de cambio de pestaña (toggle `is-active`, `aria-selected`, `hidden`).
-- `admin.css`: `.pp-chrome-tabs{margin-bottom:2px}`.
-Comprobado: `php -l`, `node --check`, `php tests/chrome_config.php` (OK), `git diff --check` limpio. En navegador: las pestañas alternan paneles, los campos del pie siguen accesibles, la vista previa renderiza header+footer y no hay errores de consola.
+Tarea 1 (verificada): tabs Header/Pie en `index.php`, handler en `chrome-editor.js`, `.pp-chrome-tabs` en `admin.css`.
+
+Tarea 2 (verificada): editor de bloques unificado del pie.
+- `index.php`: se eliminan las tarjetas "Footer" + "Contenido del pie"; el pie pasa a UNA tarjeta "Bloques del pie" con lista `#footer-blocks`. Cada bloque (`.pp-fblock`) = interruptor (`.pp-switch`/`.pp-fblock-on`) + nombre + chip `auto:` (nav/legal) + reordenar (↑/↓) + cuerpo desplegable con los inputs del bloque (ids intactos). Apariencia (`f_bg`/`f_columns`/bordes) baja a sección propia. Se elimina el checkbox redundante `n_enabled` (newsletter ahora se activa con el interruptor del bloque).
+- `chrome-editor.js`: `footerBlocks` reemplaza a `blocksList`; `buildConfig` lee `blocks` desde `.pp-fblock` (orden DOM, on=interruptor) y deriva `newsletter.enabled = blocks incluye 'newsletter'`. Handlers de plegar/desplegar, reordenar y dim/auto-expand al togglear. Código muerto eliminado (`blockRow`, `BLOCK_LABELS`, `ALL_BLOCKS`).
+- `admin.css`: estilos `.pp-fblock*`, `.pp-switch*` (naranja de marca), `.pp-fappearance`, `.pp-chrome-panel__body`.
+Comprobado: `php -l`, `node --check`, `php tests/chrome_config.php` (OK), `git diff --check` limpio, sin refs muertas. En navegador (1440px): plegar/desplegar OK, interruptor on→un-dim+auto-expand, reorden ↑/↓ reordena y refleja en preview, preview renderiza columna newsletter al activarla, 0 errores de consola. Captura del JSON de `buildConfig()`: shape idéntico al modelo `ChromeService` (mismas claves header/footer, `labels`, `newsletter.enabled` derivado, `blocks` en orden DOM solo activos) → guardado byte-compatible sin tocar la BD dev.
 
 ### Executor's Feedback or Assistance Requests
-Tarea 1 lista para verificación manual del usuario. Pendiente confirmar antes de pasar a Tarea 2 (editor de bloques unificado del pie).
+Tarea 2 lista para verificación manual del usuario (recarga `/admin/chrome` → Pie: activa/desactiva bloques, despliega, reordena, guarda y comprueba que el pie público no cambia salvo lo editado). Pendiente confirmar antes de Tarea 3 (chips auto en listas vacías + bordes plegados tras disclosure).
