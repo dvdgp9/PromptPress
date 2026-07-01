@@ -425,3 +425,11 @@ Pendiente de verificación manual del usuario: flujo completo de generación 8+1
 - `ai_logs` no tiene columna `action`: es `action_type`. Un `2>/dev/null` en mysql dentro de un until-loop convierte ese error en bucle infinito silencioso.
 - El atributo `hidden` no basta si la clase tiene `display:grid/flex`: añadir regla `[hidden]{display:none}` explícita.
 - `preview_click` sobre las intent-cards no dispara el listener (posición/overlay); usar `el.click()` vía eval para verificar.
+
+### ONB-REV ampliación (2026-07-02) — hijas condicionales en services/portfolio
+Petición del usuario: subpáginas solo cuando los documentos/memoria tengan sustancia real (la plataforma no debe inventar contenido).
+- `intentDirective('services')`: hijas bajo Servicios SOLO para servicios con detalle documentado (qué incluye, proceso, precios, público); si solo hay una lista de nombres, una única página de Servicios.
+- `intentDirective('portfolio')`: goal de Portfolio pide estructura de GALERÍA (grid con imagen/título/contexto); hijas por proyecto SOLO si hay casos documentados, con nombre real; prohibidas hijas genéricas ("Casos de éxito", segunda galería) — regla añadida tras verse en una prueba real.
+- Prompt ANALYZE_SITE_ARCHITECTURE: cap 6→8 páginas faltantes (contradecía la directiva SEO) + instrucción de volcar datos REALES del documento en goal/architecture_context de las hijas.
+- `proposalPages`: cap 8→10 para no truncar hijas tras el merge con la base.
+Verificado con llamadas reales (sitio dev = academia con dossieres): services → 2 hijas solo de los servicios documentados con datos reales en el goal; portfolio → sin hijas de proyecto inventadas ni hub duplicado tras el ajuste. Restos de prueba limpiados (cache borrada, intent restaurado a services).

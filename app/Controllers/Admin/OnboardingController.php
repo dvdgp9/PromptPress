@@ -627,8 +627,9 @@ final class OnboardingController
 
             'services' =>
                 "OBJETIVO DEL USUARIO: Captar clientes para servicios.\n"
-              . "- Proponer 4-5 páginas: Inicio (home), Servicios (service), Sobre nosotros (landing/about), Contacto (contact).\n"
-              . "- Si los servicios son varios y diferenciados, puedes proponer hijas bajo Servicios.\n"
+              . "- Base: Inicio (home), Servicios (service), Sobre nosotros (landing/about), Contacto (contact).\n"
+              . "- SUBPÁGINAS DE SERVICIO (condicional, ONB-REV): revisa memoria y documentos. SOLO si un servicio concreto tiene sustancia REAL documentada (qué incluye, proceso, precios, a quién va dirigido…), propón una hija bajo Servicios (service, parent_slug=servicios) PARA ESE servicio, con esos datos reales en su goal.\n"
+              . "- Si los servicios solo se mencionan de pasada (una lista de nombres sin detalle), NO propongas hijas: mejor una única página de Servicios bien hecha que cuatro hijas vacías que la IA tendría que inventar.\n"
               . "- NO incluir blog salvo que sea muy obvio que aporta. Prioriza estructura de conversión.",
 
             'seo' =>
@@ -645,8 +646,11 @@ final class OnboardingController
 
             'portfolio' =>
                 "OBJETIVO DEL USUARIO: Mostrar el trabajo / portfolio.\n"
-              . "- Proponer 3-4 páginas: Inicio (home) con galería destacada, Portfolio (landing) con casos, Sobre mí (landing), Contacto.\n"
-              . "- Prioriza la visualidad: Portfolio debe ser high priority.\n"
+              . "- Base: Inicio (home) con selección destacada, Portfolio (landing) con casos, Sobre mí (landing), Contacto.\n"
+              . "- El goal de Portfolio debe pedir explícitamente una estructura de GALERÍA visual: grid de proyectos con imagen protagonista, título y una línea de contexto por caso; no una landing de servicios con párrafos.\n"
+              . "- PÁGINAS DE PROYECTO (condicional, ONB-REV): SOLO si memoria o documentos describen proyectos/casos concretos con sustancia real (cliente o contexto, qué se hizo, resultado), propón una hija bajo Portfolio (landing, parent_slug=portfolio) por CADA caso documentado, con esos datos reales en su goal.\n"
+              . "- Cada hija de Portfolio lleva el NOMBRE del proyecto/caso real. PROHIBIDO proponer hijas genéricas tipo 'Casos de éxito', 'Galería' o una segunda página de portfolio: eso ya lo cubre la página Portfolio.\n"
+              . "- Si solo hay una descripción genérica del oficio, NO propongas hijas de proyecto.\n"
               . "- NO incluir blog ni precios.",
 
             'product' =>
@@ -2182,7 +2186,9 @@ final class OnboardingController
             $seen[$key] = true;
             $out[] = $p;
         }
-        return array_slice($out, 0, 8);
+        // ONB-REV — 10: deja sitio a las hijas condicionales (servicios/
+        // proyectos documentados) sin truncarlas tras el merge con la base.
+        return array_slice($out, 0, 10);
     }
 
     private static function resolveParentIdForPage(int $siteId, array $item, string $type, string $title): int

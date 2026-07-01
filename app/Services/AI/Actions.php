@@ -818,7 +818,8 @@ final class Actions
                   . "Analiza memoria, documentos, páginas existentes, slugs, formularios y secciones para detectar cómo debería organizarse el sitio.\n"
                   . "No inventes servicios ni páginas que no estén apoyados por el contexto. Prioriza claridad de navegación, captación de leads y cobertura de servicios/SEO.\n"
                   . "Devuelve JSON con esta forma exacta: {\"summary\":\"...\",\"health\":{\"score\":0,\"label\":\"...\"},\"suggested_groups\":[{\"label\":\"...\",\"slug\":\"...\",\"reason\":\"...\",\"priority\":\"high|medium|low\"}],\"missing_pages\":[{\"title\":\"...\",\"page_type\":\"service|product|landing|article|contact\",\"parent_slug\":\"...\",\"goal\":\"...\",\"reason\":\"...\",\"priority\":\"high|medium|low\",\"architecture_context\":\"...\"}],\"diagnostics\":[{\"label\":\"...\",\"severity\":\"info|warning|critical\",\"detail\":\"...\"}]}.\n"
-                  . "Usa máximo 4 grupos sugeridos, 6 páginas faltantes y 5 diagnósticos. El score debe ser 0-100.\n\n"
+                  . "Usa máximo 4 grupos sugeridos, 8 páginas faltantes y 5 diagnósticos. El score debe ser 0-100.\n"
+                  . "Cuando propongas una página hija basada en documentos o memoria, vuelca en `goal` y `architecture_context` los datos REALES que la sustentan (nombres, cifras, procesos, público), para que la generación posterior no tenga que inventar.\n\n"
                   . "F22 — DIRECTIVA DE OBJETIVO DEL USUARIO (sesga la propuesta):\n{intent_directive}",
                 'user_template' =>
                     "Contexto estructural del sitio:\n{site_map_context}",
