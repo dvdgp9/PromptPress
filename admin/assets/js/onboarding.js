@@ -8,6 +8,8 @@
     var baseUrl = (root.dataset.baseUrl || '').replace(/\/$/, '');
     var step = Number(root.dataset.step || 1);
     var isGenerating = false;
+    // ONB-REV — intent activo del paso 5 (para "Volver a proponer" con force).
+    var currentIntent = '';
 
     bindButtons();
     bindMemoryWarning();
@@ -435,7 +437,7 @@
         });
     }
 
-    function startAnalysis(intent) {
+    function startAnalysis(intent, force) {
         var loading = root.querySelector('[data-arch-loading]');
         if (loading) loading.hidden = false;
         var msg = loading && loading.querySelector('[data-loading-msg]');
@@ -449,10 +451,11 @@
             };
             msg.textContent = labels[intent] || 'Pensando en la mejor arquitectura para tu negocio…';
         }
-        analyzeArchitecture(intent);
+        analyzeArchitecture(intent, force);
     }
 
-    function analyzeArchitecture(intent) {
+    function analyzeArchitecture(intent, force) {
+        currentIntent = intent || '';
         var loading = root.querySelector('[data-arch-loading]');
         var resultWrap = root.querySelector('[data-arch-result]');
         var errorWrap = root.querySelector('[data-arch-error]');
@@ -464,11 +467,13 @@
             if (p) p.textContent = 'La IA está siendo más cuidadosa de lo habitual. Un momento más…';
         }, 15000);
 
-        post('/admin/onboarding/analyze', { intent: intent || '' }, 60000)
+        // ONB-REV — el análisis SEO añade una 2ª llamada IA (ideas de blog);
+        // margen extra. force=1 salta la caché del servidor.
+        post('/admin/onboarding/analyze', { intent: intent || '', force: force ? '1' : '' }, 120000)
             .then(function (body) {
                 clearTimeout(slowTimer);
                 loading.hidden = true;
-                renderArchitecture(body.architecture || {});
+                renderArchitecture(body.architecture || {}, body.blog_posts || []);
                 resultWrap.hidden = false;
             })
             .catch(function () {
@@ -476,14 +481,25 @@
                 loading.hidden = true;
                 if (errorWrap) errorWrap.hidden = false;
                 if (button) button.disabled = true;
+                toggleFooter(false);
             });
 
-        if (button) {
+        // ONB-REV — bind único: "Volver a proponer" re-entra por aquí y antes
+        // duplicaba el listener del botón principal.
+        if (button && !button.dataset.archBound) {
+            button.dataset.archBound = '1';
             button.addEventListener('click', handleArchitectureNext);
         }
     }
 
-    function renderArchitecture(architecture) {
+    // ONB-REV T1 — el footer del paso 5 nace oculto (el picker de intent trae
+    // sus propios CTAs); solo se muestra cuando hay propuesta en pantalla.
+    function toggleFooter(show) {
+        var foot = root.querySelector('[data-onboarding-footer]');
+        if (foot) foot.hidden = !show;
+    }
+
+    function renderArchitecture(architecture, blogPosts) {
         var resultWrap = root.querySelector('[data-arch-result]');
         var pages = Array.isArray(architecture.missing_pages) ? architecture.missing_pages : [];
         // D-Slice 1 (S1.13) — Ya no usamos visual_styles del backend; el skin
@@ -514,6 +530,29 @@
             return '<span>' + escapeHtml(page.title || 'Página') + '</span>';
         }).join('');
 
+        // ONB-REV T4 — Entradas de blog sugeridas (solo llegan con intent SEO):
+        // premarcadas, deseleccionables, se generan tras las páginas.
+        var postRows = (blogPosts || []).map(function (post, index) {
+            return [
+                '<label class="pp-onboarding-page-card" style="--delay:' + index + '">',
+                    '<input type="checkbox" data-proposed-post="' + escapeHtml(JSON.stringify(post)) + '" checked>',
+                    '<span class="pp-onboarding-check"></span>',
+                    '<span class="pp-onboarding-page-card__body">',
+                        '<small>Blog</small>',
+                        '<strong>' + escapeHtml(post.title || 'Entrada') + '</strong>',
+                        '<em>' + escapeHtml(post.angle || '') + '</em>',
+                    '</span>',
+                    '<span class="pp-onboarding-page-type">Entrada</span>',
+                '</label>'
+            ].join('');
+        }).join('');
+        var blogGroup = postRows === '' ? '' : [
+            '<div class="pp-onboarding-blog-group">',
+                '<header><strong>Entradas de blog para posicionar</strong><span>Las generamos junto a las páginas, ya redactadas como borrador. Desmarca las que no encajen.</span></header>',
+                '<div class="pp-onboarding-page-list">' + postRows + '</div>',
+            '</div>'
+        ].join('');
+
         resultWrap.innerHTML = [
             '<section class="pp-onboarding-flow-guide">',
                 '<article class="is-active" data-flow-step="structure"><small>1</small><strong>Páginas</strong><p>Elige qué crear.</p></article>',
@@ -522,10 +561,12 @@
             '</section>',
             '<section class="pp-onboarding-structure-panel" data-arch-stage="structure">',
                 '<div class="pp-onboarding-route" aria-label="Ruta sugerida">' + route + '</div>',
-                '<div class="pp-onboarding-arch-toolbar"><strong>' + selectedCount + ' seleccionadas</strong><span>Las imprescindibles vienen marcadas.</span></div>',
+                '<div class="pp-onboarding-arch-toolbar"><strong data-selection-count>' + selectedCount + ' seleccionadas</strong><span>Las imprescindibles vienen marcadas.</span></div>',
                 '<div class="pp-onboarding-page-list">' + rows + '</div>',
+                blogGroup,
                 '<div class="pp-onboarding-alt-actions">',
                     '<button type="button" data-create-home>Crear solo "Inicio"</button>',
+                    '<button type="button" data-reanalyze>Volver a proponer</button>',
                     '<form method="POST" action="' + baseUrl + '/admin/onboarding/skip"><input type="hidden" name="_csrf" value="' + escapeHtml(csrf) + '"><input type="hidden" name="step" value="5"><button type="submit">Empezar desde el mapa vacío</button></form>',
                 '</div>',
             '</section>',
@@ -538,12 +579,32 @@
         ].join('');
         root.dataset.archStage = 'structure';
         setArchitectureStage('structure');
-        resultWrap.addEventListener('change', syncCreateButton);
-        resultWrap.addEventListener('click', function (e) {
+        toggleFooter(true);
+        // ONB-REV — bind único: "Volver a proponer" repinta este contenedor y
+        // antes se acumulaban listeners delegados (nudges dobles, etc.).
+        if (!resultWrap.dataset.bound) {
+            resultWrap.dataset.bound = '1';
+            resultWrap.addEventListener('change', syncCreateButton);
+            resultWrap.addEventListener('click', function (e) {
             var back = e.target.closest('[data-back-to-structure]');
             if (back) {
                 e.preventDefault();
                 setArchitectureStage('structure');
+                return;
+            }
+            var home = e.target.closest('[data-create-home]');
+            if (home) {
+                e.preventDefault();
+                createHomeOnly();
+                return;
+            }
+            // ONB-REV T2 — descartar propuesta cacheada y pedir otra.
+            var re = e.target.closest('[data-reanalyze]');
+            if (re) {
+                e.preventDefault();
+                resultWrap.hidden = true;
+                toggleFooter(false);
+                startAnalysis(currentIntent, true);
                 return;
             }
             // D-Slice 1 (S1.13/S1.14) — nudge chips + regenerar.
@@ -565,9 +626,8 @@
                 composeAndShowPreview({ force: true });
                 return;
             }
-        });
-        var home = resultWrap.querySelector('[data-create-home]');
-        if (home) home.addEventListener('click', createHomeOnly);
+            });
+        }
         syncCreateButton();
 
         // FH6 — Generamos el Inicio canvas en SEGUNDO PLANO mientras el
@@ -618,7 +678,7 @@
         }
         var count = root.querySelector('[data-style-count]');
         if (count) {
-            count.textContent = root.querySelectorAll('[data-proposed-page]:checked').length + ' páginas seleccionadas';
+            count.textContent = selectionLabel();
         }
         // D-Slice 1 (S1.13) — al entrar al stage "style" por primera vez,
         // disparar compose-skin para poblar el iframe de preview.
@@ -772,7 +832,11 @@
         var checked = Array.prototype.slice.call(root.querySelectorAll('[data-proposed-page]:checked'));
         if (!checked.length) return;
         var pages = checked.map(pagePayload);
-        runCreate(pages);
+        // ONB-REV T5 — entradas de blog marcadas: se encolan tras las páginas.
+        var posts = Array.prototype.slice.call(root.querySelectorAll('[data-proposed-post]:checked')).map(function (input) {
+            return JSON.parse(input.getAttribute('data-proposed-post') || '{}');
+        });
+        runCreate(pages, posts);
     }
 
     function findHomePageInput() {
@@ -792,10 +856,19 @@
     function createHomeOnly() {
         var firstHome = findHomePageInput();
         if (!firstHome) return;
-        runCreate([pagePayload(firstHome)]);
+        runCreate([pagePayload(firstHome)], []);
     }
 
-    function runCreate(pages) {
+    function runCreate(pages, posts) {
+        posts = posts || [];
+        // ONB-REV T5 — cola única: primero páginas (canvas), después entradas
+        // de blog (artículo estructurado, más rápido). Misma barra de progreso.
+        var items = pages.map(function (page) {
+            return { kind: 'page', data: page, label: page.title || 'Página' };
+        }).concat(posts.map(function (post) {
+            return { kind: 'post', data: post, label: 'Entrada · ' + (post.title || 'Sin título') };
+        }));
+        if (!items.length) return;
         var button = root.querySelector('[data-next-button]');
         var gen = root.querySelector('[data-generation]');
         var created = [];
@@ -803,38 +876,43 @@
         isGenerating = true;
         root.classList.add('is-generating');
         setArchitectureStage('generate');
-        setBusy(button, true, 'Generando ' + pages.length + ' páginas…');
+        var busyLabel = 'Generando ' + pages.length + ' páginas' + (posts.length ? ' y ' + posts.length + ' entradas' : '') + '…';
+        setBusy(button, true, busyLabel);
         if (gen) {
             gen.hidden = false;
             gen.innerHTML = '<strong>Creando borradores con IA</strong>'
                 + '<small data-gen-summary>Preparando la primera página.</small>'
                 + '<div class="pp-onboarding-generation__bar"><i data-gen-bar></i></div>'
-                + pages.map(function (page, index) {
-                    return '<p data-gen-row="' + index + '" class="' + (index === 0 ? 'is-active' : 'is-pending') + '"><span></span><em>' + escapeHtml(page.title || 'Página') + '</em><small>' + (index === 0 ? 'Generando ahora' : 'En cola') + '</small></p>';
+                + items.map(function (item, index) {
+                    return '<p data-gen-row="' + index + '" class="' + (index === 0 ? 'is-active' : 'is-pending') + '"><span></span><em>' + escapeHtml(item.label) + '</em><small>' + (index === 0 ? 'Generando ahora' : 'En cola') + '</small></p>';
                 }).join('');
         }
 
-        createPageAt(0);
+        createItemAt(0);
 
-        function createPageAt(index) {
-            if (index >= pages.length) {
+        function createItemAt(index) {
+            if (index >= items.length) {
                 finishInteractiveCreate();
                 return;
             }
-            updateGenerationProgress(index, pages.length, created.length, failed.length);
-            post('/admin/onboarding/create-pages', { pages: [pages[index]], complete: false }, 240000, true)
+            updateGenerationProgress(index, items.length, created.length, failed.length);
+            var item = items[index];
+            var req = item.kind === 'post'
+                ? post('/admin/onboarding/create-post', { post: item.data }, 240000, true)
+                : post('/admin/onboarding/create-pages', { pages: [item.data], complete: false }, 240000, true);
+            req
                 .then(function (body) {
-                    var pageFailed = Array.isArray(body.failed) ? body.failed : [];
-                    var pageCreated = Array.isArray(body.created) ? body.created : [];
-                    created = created.concat(pageCreated);
-                    failed = failed.concat(pageFailed);
-                    markGenerationRow(index, pageFailed.length ? 'error' : 'done', pageFailed[0] && pageFailed[0].error ? pageFailed[0].error : 'Borrador creado');
-                    createPageAt(index + 1);
+                    var itemFailed = Array.isArray(body.failed) ? body.failed : [];
+                    var itemCreated = Array.isArray(body.created) ? body.created : [];
+                    created = created.concat(itemCreated);
+                    failed = failed.concat(itemFailed);
+                    markGenerationRow(index, itemFailed.length ? 'error' : 'done', itemFailed[0] && itemFailed[0].error ? itemFailed[0].error : 'Borrador creado');
+                    createItemAt(index + 1);
                 })
                 .catch(function (err) {
-                    failed.push({ title: pages[index].title || 'Página', error: err.message || 'Error al generar' });
+                    failed.push({ title: item.label, error: err.message || 'Error al generar' });
                     markGenerationRow(index, 'error', err.message || 'Error al generar');
-                    createPageAt(index + 1);
+                    createItemAt(index + 1);
                 });
         }
 
@@ -856,7 +934,7 @@
                         }
                         return;
                     }
-                    updateGenerationProgress(pages.length, pages.length, created.length, 0);
+                    updateGenerationProgress(items.length, items.length, created.length, 0);
                     isGenerating = false;
                     window.location.href = body.redirect_url || (baseUrl + '/admin/pages');
                 })
@@ -875,7 +953,7 @@
         if (!gen) return;
         var summary = gen.querySelector('[data-gen-summary]');
         var bar = gen.querySelector('[data-gen-bar]');
-        if (summary) summary.textContent = 'Página ' + Math.min(index + 1, total) + ' de ' + total + '. Creadas: ' + created + (failed ? '. Con error: ' + failed : '') + '.';
+        if (summary) summary.textContent = 'Borrador ' + Math.min(index + 1, total) + ' de ' + total + '. Creados: ' + created + (failed ? '. Con error: ' + failed : '') + '.';
         if (bar) bar.style.width = Math.round((index / Math.max(total, 1)) * 100) + '%';
         gen.querySelectorAll('[data-gen-row]').forEach(function (row) {
             var rowIndex = Number(row.getAttribute('data-gen-row') || 0);
@@ -908,6 +986,19 @@
         var button = root.querySelector('[data-next-button]');
         if (!button) return;
         button.disabled = root.querySelectorAll('[data-proposed-page]:checked').length === 0;
+        var toolbar = root.querySelector('[data-selection-count]');
+        if (toolbar) toolbar.textContent = selectionLabel();
+        var style = root.querySelector('[data-style-count]');
+        if (style) style.textContent = selectionLabel();
+    }
+
+    // ONB-REV T4 — "8 páginas + 12 entradas seleccionadas".
+    function selectionLabel() {
+        var pages = root.querySelectorAll('[data-proposed-page]:checked').length;
+        var posts = root.querySelectorAll('[data-proposed-post]:checked').length;
+        var label = pages + ' página' + (pages === 1 ? '' : 's');
+        if (posts > 0) label += ' + ' + posts + ' entrada' + (posts === 1 ? '' : 's');
+        return label + ' seleccionadas';
     }
 
     function post(path, data, timeoutMs, json) {

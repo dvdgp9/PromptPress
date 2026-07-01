@@ -399,7 +399,8 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.85,    // más creativa: queremos variedad
-                    'max_tokens'      => 1200,
+                    // ONB-REV — el onboarding SEO pide hasta 12 ideas de golpe.
+                    'max_tokens'      => 2500,
                 ],
             ],
 

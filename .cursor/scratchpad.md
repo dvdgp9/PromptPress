@@ -373,3 +373,55 @@ Comprobado: `php -l`, `node --check`, `php tests/chrome_config.php` OK. En naveg
 
 ### Executor's Feedback or Assistance Requests
 Tareas 1, 2 y 2.5 listas para verificación manual (recarga `/admin/chrome`, revisa Header y Pie, guarda y comprueba el sitio público). Pendiente confirmar antes de Tarea 3, que queda reducida a: plegar los controles de bordes tras un disclosure "avanzado" (los chips `auto:` ya están en las cabeceras de bloque nav/legal; empty-states de menú/footernav ya existen).
+
+---
+
+# ONB-REV — Revisión del onboarding + SEO 20 páginas (2026-07-01, Planner)
+
+### Background and Motivation
+El onboarding ha ido acumulando cambios (canvas, intent picker F22, skin preview D-Slice1/FH6) y el paso 5 muestra elementos duplicados. Además, el usuario quiere que el intent "Aparecer en Google (SEO)" pueda crear ~20 páginas de golpe: páginas corporativas + entradas de blog.
+
+### Key Challenges and Analysis
+**Bug del "paso duplicado" (verificado en navegador, paso 5 sin intent guardado):**
+- El picker de intent (`[data-intent-picker]`, views/admin/onboarding/index.php:304) trae sus propios botones "Saltar (sin preferencia)" + "Ver mi arquitectura →", pero el footer global (`onboarding_footer`, index.php:352) se renderiza a la vez con "Saltar" + "Continuar al estilo →". Resultado: dos pares de CTAs apilados = sensación de paso duplicado. Además "Continuar al estilo →" es un botón muerto en ese momento (su handler solo se engancha en `analyzeArchitecture`, onboarding.js:482).
+- Secundario: con intent ya guardado, cada visita a `?step=5` relanza el análisis IA (`startAnalysis` → POST /analyze) sin caché → coste/latencia en cada recarga. Y el onboarding sigue accesible tras `onboarding_completed_at`.
+
+**Estado actual del intent SEO:**
+- `intentDirective('seo')` (OnboardingController.php:569) pide estructura base + Blog obligatorio (~5 páginas).
+- `createPages` capa a 6 ítems por request (`array_slice($items,0,6)`, línea 645) — el front envía 1 página por request, así que no limita el flujo interactivo.
+- Si intent=seo y se creó Blog, `generateSeoStarterPosts` (línea 724) genera 3 entradas automáticas (SUGGEST_RELATED_ARTICLES + GENERATE_ARTICLE por entrada), invisibles para el usuario hasta el flash final.
+- El front genera páginas secuencialmente con barra de progreso (`runCreate`, onboarding.js:798).
+
+**Retos del "20 de golpe":**
+- Tiempo/coste: 20 generaciones canvas serían prohibitivas. Las entradas de blog usan GENERATE_ARTICLE (estructurado, más barato/rápido) — el mix correcto es ~7-8 páginas corporativas canvas + ~12 entradas de blog.
+- Transparencia: hoy las 3 entradas SEO se crean a ciegas; el usuario debe ver y poder deseleccionar los títulos propuestos.
+- El prompt ANALYZE_SITE_ARCHITECTURE no devuelve ideas de blog; hay que pedirlas (2ª llamada a SUGGEST_RELATED_ARTICLES con count alto, o ampliar el schema del análisis).
+
+### High-level Task Breakdown (ONB-REV)
+- [ ] T1 — Arreglar el footer duplicado del paso 5: ocultar `onboarding_footer` mientras el picker de intent esté visible; mostrarlo al pintar `[data-arch-result]`. Éxito: en paso 5 nuevo solo se ve un par de CTAs; tras elegir intent aparece el footer con "Continuar al estilo".
+- [ ] T2 — Cachear la propuesta de arquitectura por sitio (setting `onboarding_architecture_json` + botón "Volver a proponer"): recargar step 5 no dispara IA. Éxito: 2ª carga sin fila nueva en ai_logs.
+- [ ] T3 — Backend SEO: ampliar `intentDirective('seo')` a ~7-8 páginas corporativas (servicios hijos, FAQ/recursos, SEO local si aplica) y, en `analyze()` cuando intent=seo, pedir además ~12 títulos de entradas (SUGGEST_RELATED_ARTICLES count=12) devolviéndolos como `blog_posts` en la respuesta. Éxito: /analyze con intent=seo devuelve missing_pages (7-8) + blog_posts (12).
+- [ ] T4 — UI paso 5: bajo la lista de páginas, grupo "Entradas de blog" con checkboxes premarcados (solo intent seo); contador "X páginas + Y entradas". Éxito: seleccionables/deseleccionables, botón refleja el total.
+- [ ] T5 — Generación: nuevo endpoint `create-post` (factorizar `generateSeoStarterPosts` a "crear 1 entrada desde sugerencia") y extender `runCreate` para encolar posts tras las páginas en la misma barra de progreso. Eliminar la generación automática a ciegas de 3 posts. Éxito: flujo SEO crea ~8 páginas + ~12 entradas visibles en progreso, todo en borrador.
+
+### Project Status Board (ONB-REV)
+- [x] T1 footer duplicado paso 5
+- [x] T2 caché de arquitectura
+- [x] T3 backend SEO (páginas + blog_posts)
+- [x] T4 UI selección entradas de blog
+- [x] T5 endpoint create-post + progreso unificado
+
+### Current Status / Progress Tracking (ONB-REV)
+Todas las tareas implementadas y verificadas en navegador (2026-07-01):
+- T1 ✔ footer del paso 5 nace `hidden` (index.php, `onboarding_footer(..., true)` + `data-onboarding-footer`); JS lo muestra al pintar la propuesta (`toggleFooter`). Añadido `.pp-onboarding-footer[hidden]{display:none}` porque el `display:grid` del footer pisaba el atributo. Verificado: en el picker solo se ven "Saltar (sin preferencia)" y "Ver mi arquitectura →".
+- T2 ✔ propuesta cacheada en setting `onboarding_architecture_json` (intent + architecture + blog_posts); `analyze()` la devuelve si intent coincide y no hay `force=1`. Botón "Volver a proponer" (data-reanalyze) fuerza recálculo. Verificado: recarga del paso 5 sin filas nuevas en ai_logs; reanalyze genera filas nuevas.
+- T3 ✔ `intentDirective('seo')` ampliada (7-8 páginas, hijas de servicios, FAQ/recursos, SEO local) + `suggestSeoBlogPosts()` (SUGGEST_RELATED_ARTICLES count=12, max_tokens 1200→2500). Dedupe de hub de blog en `proposalPages` (base "Blog" + IA "Blog de X" → solo uno), verificado offline contra respuesta real (ai_logs 843).
+- T4 ✔ grupo "Entradas de blog para posicionar" (checkboxes premarcados) + contador vivo "X páginas + Y entradas seleccionadas" (`selectionLabel`). Verificado: 8 páginas + 12 entradas renderizadas.
+- T5 ✔ endpoint POST /admin/onboarding/create-post (GENERATE_ARTICLE + createPostFromAiPayload); `runCreate(pages, posts)` encola entradas tras páginas en la misma barra. Eliminada la generación automática a ciegas de 3 posts (F22.T22.3). Verificado: endpoint crea borrador article con cuerpo (page 638, borrada tras la prueba).
+Fix colateral: listeners del paso 5 ahora se bindean una sola vez (resultWrap.dataset.bound / button.dataset.archBound) — antes cada re-render duplicaba listeners delegados.
+Pendiente de verificación manual del usuario: flujo completo de generación 8+12 (no ejecutado en dev por coste IA; el bucle reutiliza el mecanismo por-ítem ya existente + endpoint probado).
+
+### Lessons (ONB-REV)
+- `ai_logs` no tiene columna `action`: es `action_type`. Un `2>/dev/null` en mysql dentro de un until-loop convierte ese error en bucle infinito silencioso.
+- El atributo `hidden` no basta si la clase tiene `display:grid/flex`: añadir regla `[hidden]{display:none}` explícita.
+- `preview_click` sobre las intent-cards no dispara el listener (posición/overlay); usar `el.click()` vía eval para verificar.

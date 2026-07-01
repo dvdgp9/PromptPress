@@ -38,7 +38,7 @@ $groups = [
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=DM+Sans:wght@300..900&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=IBM+Plex+Sans:wght@300..700&family=Lora:wght@400..700&family=Manrope:wght@300..800&family=Montserrat:wght@300..800&family=Open+Sans:wght@300..800&family=Outfit:wght@300..900&family=Playfair+Display:wght@400..900&family=Plus+Jakarta+Sans:wght@300..800&family=Source+Sans+3:wght@300..900&family=Space+Grotesk:wght@300..700&display=swap">
 <?php \Core\View::end(); ?>
 <?php \Core\View::start('scripts'); ?>
-<script src="<?= e(base_url('admin/assets/js/onboarding.js')) ?>"></script>
+<script src="<?= e(base_url('admin/assets/js/onboarding.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/onboarding.js') ?: '1' ?>"></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-onboarding" id="pp-onboarding" data-step="<?= (int) $step ?>" data-csrf="<?= e($csrf) ?>" data-base-url="<?= e(base_url('')) ?>">
@@ -349,7 +349,8 @@ $groups = [
                             <button class="pp-btn pp-btn--primary" type="submit">Empezar desde el mapa vacío</button>
                         </form>
                     </div>
-                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action']) ?>
+                    <?php // ONB-REV T1 — oculto hasta que se pinta la propuesta; si no, duplica los CTAs del picker de intent. ?>
+                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], 'Saltar', true) ?>
                 </div>
             <?php endif; ?>
         </section>
@@ -357,10 +358,10 @@ $groups = [
 </div>
 
 <?php
-function onboarding_footer(int $step, string $csrf, string $action, string $skip = 'Saltar'): string
+function onboarding_footer(int $step, string $csrf, string $action, string $skip = 'Saltar', bool $hidden = false): string
 {
     ob_start(); ?>
-    <footer class="pp-onboarding-footer">
+    <footer class="pp-onboarding-footer" data-onboarding-footer <?= $hidden ? 'hidden' : '' ?>>
         <?php if ($step > 1): ?><a href="<?= e(base_url('admin/onboarding?step=' . ($step - 1))) ?>">← Atrás</a><?php else: ?><span></span><?php endif; ?>
         <?php if ($step < 5): ?>
             <input type="hidden" name="step" value="<?= (int) $step ?>">

@@ -125,6 +125,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/onboarding/upload-references',  [OnboardingController::class, 'uploadReferences']);
     $r->post('/onboarding/analyze',            [OnboardingController::class, 'analyze']);
     $r->post('/onboarding/create-pages',       [OnboardingController::class, 'createPages']);
+    $r->post('/onboarding/create-post',        [OnboardingController::class, 'createPost']);
     // D-Slice 1 — Step 5 reconvertido a preview + nudges.
     $r->post('/onboarding/compose-skin',        [OnboardingController::class, 'composeSkin']);
     $r->post('/onboarding/prepare-home',        [OnboardingController::class, 'prepareHome']);

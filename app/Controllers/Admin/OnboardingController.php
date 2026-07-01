@@ -511,17 +511,46 @@ final class OnboardingController
         if ($intent !== '') {
             self::storeSetting($siteId, 'onboarding_intent', $intent);
         }
+        $force = (string) Request::post('force', '') === '1';
+
+        // ONB-REV T2 — Propuesta cacheada: recargar el paso 5 no relanza la IA.
+        // Se invalida con force=1 ("Volver a proponer") o si cambia el intent.
+        if (!$force) {
+            $cached = json_decode(self::loadSetting($siteId, 'onboarding_architecture_json', ''), true);
+            if (is_array($cached)
+                && (string) ($cached['intent'] ?? '') === $intent
+                && is_array($cached['architecture'] ?? null)
+                && ($cached['architecture']['missing_pages'] ?? []) !== []) {
+                Response::json([
+                    'ok' => true,
+                    'cached' => true,
+                    'intent' => $intent,
+                    'architecture' => $cached['architecture'],
+                    'blog_posts' => array_values((array) ($cached['blog_posts'] ?? [])),
+                ]);
+            }
+        }
 
         try {
             $result = AIActionRunner::run(Actions::ANALYZE_SITE_ARCHITECTURE, [
                 'site_map_context' => self::siteMapContext($siteId),
                 'intent_directive' => self::intentDirective($intent),
             ], $siteId);
+            $architecture = self::normalizeArchitecture((array) ($result['data'] ?? []), $intent);
+            // ONB-REV T3 — Con intent SEO, proponemos además ~12 entradas de
+            // blog para que el usuario las revise y genere en el mismo flujo.
+            $blogPosts = $intent === 'seo' ? self::suggestSeoBlogPosts($siteId, 12) : [];
+            self::storeSetting($siteId, 'onboarding_architecture_json', json_encode([
+                'intent' => $intent,
+                'architecture' => $architecture,
+                'blog_posts' => $blogPosts,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             Response::json([
                 'ok' => true,
                 'cached' => false,
                 'intent' => $intent,
-                'architecture' => self::normalizeArchitecture((array) ($result['data'] ?? []), $intent),
+                'architecture' => $architecture,
+                'blog_posts' => $blogPosts,
                 'model' => $result['model'] ?? '',
                 'tokens_in' => $result['tokens_in'] ?? 0,
                 'tokens_out' => $result['tokens_out'] ?? 0,
@@ -533,9 +562,45 @@ final class OnboardingController
                 'fallback' => true,
                 'intent' => $intent,
                 'architecture' => self::fallbackArchitecture($intent),
+                'blog_posts' => [],
                 'error_note' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * ONB-REV T3 — Pide títulos de entradas de blog para el arranque SEO.
+     * Devuelve sugerencias normalizadas {title, angle, audience}; [] si la
+     * llamada falla (best-effort: la arquitectura sigue siendo válida sin blog).
+     *
+     * @return array<int,array{title:string,angle:string,audience:string}>
+     */
+    private static function suggestSeoBlogPosts(int $siteId, int $count): array
+    {
+        try {
+            $result = AIActionRunner::run(Actions::SUGGEST_RELATED_ARTICLES, [
+                'existing_count' => '0',
+                'existing_posts' => '(El blog está vacío. Propón un plan editorial de arranque: pilares fundamentales del tema del negocio y variantes de cola larga, con títulos concretos y específicos.)',
+                'count'          => (string) $count,
+            ], $siteId);
+        } catch (\Throwable $e) {
+            error_log('[suggestSeoBlogPosts] site=' . $siteId . ' ' . get_class($e) . ': ' . $e->getMessage());
+            return [];
+        }
+
+        $posts = [];
+        foreach ((array) (($result['data']['suggestions'] ?? []) ?: []) as $s) {
+            if (!is_array($s)) continue;
+            $title = trim((string) ($s['title'] ?? ''));
+            if ($title === '') continue;
+            $posts[] = [
+                'title'    => mb_substr($title, 0, 160),
+                'angle'    => mb_substr(trim((string) ($s['angle'] ?? '')), 0, 300),
+                'audience' => mb_substr(trim((string) ($s['audience'] ?? '')), 0, 160),
+            ];
+            if (count($posts) >= $count) break;
+        }
+        return $posts;
     }
 
     /** F22 — Valida intent contra los slugs conocidos. */
@@ -567,11 +632,16 @@ final class OnboardingController
               . "- NO incluir blog salvo que sea muy obvio que aporta. Prioriza estructura de conversión.",
 
             'seo' =>
-                "OBJETIVO DEL USUARIO: Atraer tráfico orgánico (SEO).\n"
-              . "- Proponer estructura base completa: Inicio, Servicios, Sobre nosotros, Contacto.\n"
-              . "- OBLIGATORIO: incluir Blog (page_type=article) como página de alta prioridad.\n"
-              . "- El blog es central, no opcional. En `reason` del blog explica el rol SEO.\n"
-              . "- Opcional: una página de Casos/Recursos como hub editorial.",
+                "OBJETIVO DEL USUARIO: Atraer tráfico orgánico (SEO). Quiere una estructura AMPLIA desde el día uno.\n"
+              . "- Proponer 7-8 páginas corporativas, cada una atacando una intención de búsqueda distinta:\n"
+              . "  · Inicio (home) con las keywords principales.\n"
+              . "  · Servicios (service) como hub + 2-3 páginas HIJAS (service, parent_slug=servicios), una por servicio/keyword transaccional concreta del negocio.\n"
+              . "  · Sobre nosotros (landing) para E-E-A-T y SEO local.\n"
+              . "  · Una página de FAQ o Recursos (landing) para keywords informacionales de compra.\n"
+              . "  · Contacto (contact).\n"
+              . "- Si el negocio es local, orienta títulos y goals a 'servicio + ciudad'.\n"
+              . "- OBLIGATORIO: incluir Blog (page_type=article) como página de alta prioridad. El blog es central, no opcional; en su `reason` explica el rol SEO.\n"
+              . "- Marca como high las que atacan keywords transaccionales; medium el resto.",
 
             'portfolio' =>
                 "OBJETIVO DEL USUARIO: Mostrar el trabajo / portfolio.\n"
@@ -679,100 +749,73 @@ final class OnboardingController
         }
         self::storeSetting($siteId, 'onboarding_home_draft', '');
 
-        // F22.T22.3 — Si el intent del usuario es SEO orgánico y han creado el
-        // Blog, generamos automáticamente 3 entradas iniciales de partida para
-        // que el blog no nazca vacío. Best-effort: si falla, no rompe el flujo.
-        $seoPostsCreated = [];
-        $intent = self::loadSetting($siteId, 'onboarding_intent', '');
-        $createdBlog = false;
-        foreach ($items as $item) {
-            $title = mb_strtolower((string) ($item['title'] ?? ''));
-            if (str_contains($title, 'blog') || ($item['page_type'] ?? '') === 'article') {
-                $createdBlog = true;
-                break;
-            }
-        }
-        if ($intent === 'seo' && $createdBlog && empty($failed)) {
-            $seoPostsCreated = self::generateSeoStarterPosts($siteId, 3);
-        }
-
         if ($complete) {
             self::complete($siteId, false);
-            $msg = '¡Listo! Te hemos creado ' . count($created) . ' borradores.';
-            if (!empty($seoPostsCreated)) {
-                $msg .= ' Además, hemos preparado ' . count($seoPostsCreated) . ' entradas iniciales en tu blog.';
-            }
-            $msg .= ' Revísalos y publica cuando quieras.';
-            Session::flash('success', $msg);
+            Session::flash('success', '¡Listo! Te hemos creado ' . count($created) . ' borradores. Revísalos y publica cuando quieras.');
         }
         Response::json([
             'ok' => true,
             'created' => $created,
             'failed' => $failed,
-            'seo_posts' => $seoPostsCreated,
             'requested' => count($items),
             'redirect_url' => base_url('admin/pages'),
         ]);
     }
 
     /**
-     * F22.T22.3 — Genera N entradas iniciales para sitios con intent SEO.
-     * Best-effort: ningún fallo bloquea el cierre del onboarding.
+     * ONB-REV T5 — Crea UNA entrada de blog desde una sugerencia del paso 5
+     * (título + ángulo + audiencia). El front la encola tras las páginas en la
+     * misma barra de progreso. Sustituye a la antigua generación automática a
+     * ciegas de 3 posts (F22.T22.3).
      *
-     * @return array<int,array{title:string, edit_url:string}>
+     * Endpoint: POST /admin/onboarding/create-post
      */
-    private static function generateSeoStarterPosts(int $siteId, int $count = 3): array
+    public function createPost(): void
     {
-        // 1) Pedir N ideas con la acción que ya tenemos (tier light, ~1$/1k).
+        @set_time_limit(180);
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $payload = Request::isJson() ? Request::json() : [];
+        $post = is_array($payload['post'] ?? null) ? $payload['post'] : [];
+        $title = mb_substr(trim((string) ($post['title'] ?? '')), 0, 160);
+        if ($title === '') {
+            Response::json(['ok' => false, 'error' => 'Falta el título de la entrada.'], 422);
+        }
+
         try {
-            $sugg = AIActionRunner::run(Actions::SUGGEST_RELATED_ARTICLES, [
-                'existing_count' => '0',
-                'existing_posts' => '(El blog está vacío. Propón pilares fundamentales del tema del negocio, con título concreto y específico.)',
-                'count'          => (string) $count,
+            $articleResult = AIActionRunner::run(Actions::GENERATE_ARTICLE, [
+                'topic'         => $title,
+                'audience'      => (string) ($post['audience'] ?? 'lector general'),
+                'tone'          => 'profesional y cercano',
+                'length_label'  => 'medio',
+                'details'       => (string) ($post['angle'] ?? ''),
             ], $siteId);
-        } catch (\Throwable $e) {
-            error_log('[generateSeoStarterPosts] suggest error: ' . $e->getMessage());
-            return [];
-        }
 
-        $suggestions = (array) (($sugg['data']['suggestions'] ?? []) ?: []);
-        if (empty($suggestions)) return [];
-
-        // 2) Por cada idea, llamar a GENERATE_ARTICLE y crear la entrada.
-        $created = [];
-        foreach (array_slice($suggestions, 0, $count) as $s) {
-            @set_time_limit(180);
-            $title = trim((string) ($s['title'] ?? ''));
-            if ($title === '') continue;
-
-            try {
-                $articleResult = AIActionRunner::run(Actions::GENERATE_ARTICLE, [
-                    'topic'         => $title,
-                    'audience'      => (string) ($s['audience'] ?? 'lector general'),
-                    'tone'          => 'profesional y cercano',
-                    'length_label'  => 'medio',
-                    'details'       => (string) ($s['angle'] ?? ''),
-                ], $siteId);
-                $articleData = (array) ($articleResult['data'] ?? []);
-
-                $page = \App\Controllers\Admin\PostController::createPostFromAiPayload(
-                    $siteId,
-                    Auth::id(),
-                    $articleData,
-                    /* withFeaturedImage */ true
-                );
-                if ($page) {
-                    $created[] = [
-                        'title'    => (string) $page['title'],
-                        'edit_url' => base_url('admin/posts/' . (int) $page['id'] . '/edit'),
-                    ];
-                }
-            } catch (\Throwable $e) {
-                error_log('[generateSeoStarterPosts] generate article error: ' . $e->getMessage());
-                continue;
+            $page = \App\Controllers\Admin\PostController::createPostFromAiPayload(
+                $siteId,
+                Auth::id(),
+                (array) ($articleResult['data'] ?? []),
+                /* withFeaturedImage */ true
+            );
+            if (!$page) {
+                throw new \RuntimeException('La IA no devolvió un artículo válido.');
             }
+            Response::json([
+                'ok' => true,
+                'created' => [[
+                    'title'    => (string) $page['title'],
+                    'edit_url' => base_url('admin/posts/' . (int) $page['id'] . '/edit'),
+                ]],
+                'failed' => [],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[createPost] site=' . $siteId . ' ' . get_class($e) . ': ' . $e->getMessage());
+            Response::json([
+                'ok' => true,
+                'created' => [],
+                'failed' => [['title' => $title, 'error' => $e->getMessage()]],
+            ]);
         }
-        return $created;
     }
 
     /**
@@ -2126,9 +2169,16 @@ final class OnboardingController
         };
         $seen = [];
         $out = [];
+        $hasArticleHub = false;
         foreach (array_merge($base, $aiPages) as $p) {
             $key = mb_strtolower((string) ($p['title'] ?? ''));
             if ($key === '' || isset($seen[$key])) continue;
+            // ONB-REV — un solo hub de blog: la base ya trae "Blog" y la IA a
+            // veces propone además "Blog de X"; el segundo solo confunde.
+            if ((string) ($p['page_type'] ?? '') === 'article') {
+                if ($hasArticleHub) continue;
+                $hasArticleHub = true;
+            }
             $seen[$key] = true;
             $out[] = $p;
         }
