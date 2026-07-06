@@ -126,6 +126,25 @@ final class FormController
         );
         $submissionId = (int) Database::lastInsertId();
 
+        // FEAT-3 A6 — conversión form_submit en la analítica propia. Server-side
+        // (los POST de formulario no se cachean). EventRecorder ya es tolerante
+        // a fallos; el try/catch cubre además cualquier error de carga del módulo.
+        try {
+            if (\App\Modules\ModuleRegistry::isEnabled($siteId, 'analytics')) {
+                $slug = trim((string) ($originPage['slug'] ?? ''), '/');
+                \App\Modules\Analytics\EventRecorder::record(
+                    $siteId,
+                    'form_submit',
+                    $slug === '' ? '/' : '/' . $slug,
+                    null,
+                    Request::ip(),
+                    Request::userAgent()
+                );
+            }
+        } catch (\Throwable $e) {
+            // La analítica jamás debe romper un envío de formulario.
+        }
+
         // FORMS F6 — autorrespuesta al visitante (absorbe E6). Texto fijo del
         // formulario con placeholders {{nombre}}/{{sitio}} sustituidos (sin IA).
         if ($arEnabled && $visitorEmail === '') {

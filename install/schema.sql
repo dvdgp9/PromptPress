@@ -423,6 +423,181 @@ CREATE TABLE IF NOT EXISTS email_log (
         FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------
+-- Módulo Analytics (FEAT-3 A2) — ver cursor/analytics-design.md.
+-- Sin IP ni User-Agent persistidos: visitante = hash con salt diario rotativo.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS analytics_salts (
+    day  DATE NOT NULL PRIMARY KEY,
+    salt BINARY(32) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id       INT UNSIGNED NOT NULL,
+    created_at    DATETIME NOT NULL,
+    event_type    VARCHAR(50) NOT NULL DEFAULT 'pageview',
+    path          VARCHAR(255) NOT NULL DEFAULT '/',
+    referrer_host VARCHAR(120) DEFAULT NULL,
+    device        VARCHAR(10) NOT NULL DEFAULT 'desktop',
+    browser       VARCHAR(24) DEFAULT NULL,
+    visitor_hash  BINARY(16) NOT NULL,
+    INDEX idx_ae_site_time (site_id, created_at),
+    CONSTRAINT fk_ae_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS analytics_daily (
+    site_id   INT UNSIGNED NOT NULL,
+    day       DATE NOT NULL,
+    dimension VARCHAR(12) NOT NULL,
+    dim_key   VARCHAR(255) NOT NULL DEFAULT '',
+    pageviews INT UNSIGNED NOT NULL DEFAULT 0,
+    visitors  INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, day, dimension, dim_key),
+    CONSTRAINT fk_ad_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Módulo Booking (FEAT-3 Fase B) — ver cursor/booking-design.md
+-- booking_hours.start/end_time en zona del sitio; booking_bookings en UTC.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS booking_services (
+    id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id          INT UNSIGNED NOT NULL,
+    name             VARCHAR(120) NOT NULL,
+    description      TEXT NULL,
+    duration_min     SMALLINT UNSIGNED NOT NULL DEFAULT 60,
+    buffer_min       SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    capacity         SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    min_notice_hours SMALLINT UNSIGNED NOT NULL DEFAULT 12,
+    max_advance_days SMALLINT UNSIGNED NOT NULL DEFAULT 60,
+    auto_confirm     TINYINT(1) NOT NULL DEFAULT 0,
+    price_label      VARCHAR(60) DEFAULT NULL,
+    active           TINYINT(1) NOT NULL DEFAULT 1,
+    created_at       DATETIME NOT NULL,
+    updated_at       DATETIME NOT NULL,
+    INDEX idx_bs_site (site_id, active),
+    CONSTRAINT fk_bs_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS booking_hours (
+    id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id    INT UNSIGNED NOT NULL,
+    service_id INT UNSIGNED DEFAULT NULL,
+    weekday    TINYINT UNSIGNED DEFAULT NULL,
+    date       DATE DEFAULT NULL,
+    start_time TIME DEFAULT NULL,
+    end_time   TIME DEFAULT NULL,
+    closed     TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_bh_service (service_id, weekday),
+    INDEX idx_bh_date (site_id, date),
+    CONSTRAINT fk_bh_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    CONSTRAINT fk_bh_service
+        FOREIGN KEY (service_id) REFERENCES booking_services(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS booking_bookings (
+    id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id        INT UNSIGNED NOT NULL,
+    service_id     INT UNSIGNED NOT NULL,
+    starts_at_utc  DATETIME NOT NULL,
+    ends_at_utc    DATETIME NOT NULL,
+    status         ENUM('pending','confirmed','cancelled') NOT NULL DEFAULT 'pending',
+    customer_name  VARCHAR(120) NOT NULL,
+    customer_email VARCHAR(190) NOT NULL,
+    customer_phone VARCHAR(40) DEFAULT NULL,
+    notes          TEXT NULL,
+    admin_notes    TEXT NULL,
+    cancel_token   CHAR(32) NOT NULL,
+    ip_hash        CHAR(64) DEFAULT NULL,
+    email_status   VARCHAR(12) NOT NULL DEFAULT 'unknown',
+    email_error    VARCHAR(255) DEFAULT NULL,
+    created_at     DATETIME NOT NULL,
+    updated_at     DATETIME NOT NULL,
+    INDEX idx_bb_slot (service_id, starts_at_utc, status),
+    INDEX idx_bb_site_time (site_id, starts_at_utc),
+    INDEX idx_bb_ip (site_id, ip_hash, created_at),
+    CONSTRAINT fk_bb_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    CONSTRAINT fk_bb_service
+        FOREIGN KEY (service_id) REFERENCES booking_services(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Módulo Commerce / PromptCommerce (FEAT-3 Fase C) — ver cursor/commerce-design.md
+-- Importes en céntimos; EUR fijo v1; líneas de pedido con snapshot.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS commerce_products (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id      INT UNSIGNED NOT NULL,
+    name         VARCHAR(160) NOT NULL,
+    slug         VARCHAR(180) NOT NULL,
+    description  TEXT NULL,
+    price_cents  INT UNSIGNED NOT NULL DEFAULT 0,
+    tax_rate     DECIMAL(4,2) NOT NULL DEFAULT 21.00,
+    stock        INT UNSIGNED DEFAULT NULL,
+    media_id     INT UNSIGNED DEFAULT NULL,
+    active       TINYINT(1) NOT NULL DEFAULT 1,
+    created_at   DATETIME NOT NULL,
+    updated_at   DATETIME NOT NULL,
+    UNIQUE KEY uq_cp_slug (site_id, slug),
+    INDEX idx_cp_site (site_id, active),
+    CONSTRAINT fk_cp_site  FOREIGN KEY (site_id)  REFERENCES sites(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cp_media FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS commerce_orders (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id         INT UNSIGNED NOT NULL,
+    order_number    VARCHAR(20) NOT NULL,
+    status          ENUM('pending_payment','paid','shipped','cancelled') NOT NULL DEFAULT 'pending_payment',
+    payment_method  VARCHAR(20) NOT NULL,
+    payment_ref     VARCHAR(120) DEFAULT NULL,
+    access_key      CHAR(32) NOT NULL,
+    currency        CHAR(3) NOT NULL DEFAULT 'EUR',
+    subtotal_cents  INT UNSIGNED NOT NULL,
+    shipping_cents  INT UNSIGNED NOT NULL DEFAULT 0,
+    tax_cents       INT UNSIGNED NOT NULL,
+    total_cents     INT UNSIGNED NOT NULL,
+    customer_name   VARCHAR(120) NOT NULL,
+    customer_email  VARCHAR(190) NOT NULL,
+    customer_phone  VARCHAR(40) DEFAULT NULL,
+    ship_address    VARCHAR(200) DEFAULT NULL,
+    ship_city       VARCHAR(80) DEFAULT NULL,
+    ship_postcode   VARCHAR(12) DEFAULT NULL,
+    ship_province   VARCHAR(80) DEFAULT NULL,
+    notes           TEXT NULL,
+    admin_notes     TEXT NULL,
+    ip_hash         CHAR(64) DEFAULT NULL,
+    email_status    VARCHAR(12) NOT NULL DEFAULT 'unknown',
+    email_error     VARCHAR(255) DEFAULT NULL,
+    created_at      DATETIME NOT NULL,
+    updated_at      DATETIME NOT NULL,
+    UNIQUE KEY uq_co_number (site_id, order_number),
+    INDEX idx_co_status (site_id, status, created_at),
+    CONSTRAINT fk_co_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS commerce_order_items (
+    id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id         INT UNSIGNED NOT NULL,
+    product_id       INT UNSIGNED DEFAULT NULL,
+    product_name     VARCHAR(160) NOT NULL,
+    unit_price_cents INT UNSIGNED NOT NULL,
+    tax_rate         DECIMAL(4,2) NOT NULL,
+    quantity         SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    line_total_cents INT UNSIGNED NOT NULL,
+    INDEX idx_ci_order (order_id),
+    CONSTRAINT fk_ci_order   FOREIGN KEY (order_id)   REFERENCES commerce_orders(id)   ON DELETE CASCADE,
+    CONSTRAINT fk_ci_product FOREIGN KEY (product_id) REFERENCES commerce_products(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ------------------------------------------------------------

@@ -22,6 +22,9 @@ use Core\Database;
  *      {{form:123}} / {{form:slug-de-pagina}}  → formulario real (leads+GDPR)
  *      {{posts:recent}}                        → listado de entradas
  *      {{posts:recent|limit=3|variant=featured-first|heading=Últimas entradas}}
+ *      {{products:featured}}                   → productos destacados (C7;
+ *      {{products:featured|limit=4|heading=Nuestros productos}}  solo con el
+ *      módulo Commerce activo; apagado → comentario HTML invisible)
  */
 final class CanvasService
 {
@@ -217,14 +220,15 @@ final class CanvasService
     }
 
     /**
-     * {{form:...}} y {{posts:recent}} → componentes reales del sistema.
+     * {{form:...}}, {{posts:recent}} y {{products:featured}} → componentes
+     * reales del sistema.
      */
     public static function expandPlaceholders(string $html, int $siteId, bool &$hasForm = false): string
     {
         SectionRenderer::setSiteContext($siteId);
 
         $result = preg_replace_callback(
-            '/\{\{\s*(form|posts)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            '/\{\{\s*(form|posts|products)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
             static function (array $m) use ($siteId, &$hasForm): string {
                 $kind = strtolower($m[1]);
                 $ref = strtolower($m[2]);
@@ -235,6 +239,20 @@ final class CanvasService
                 // inline pueda revertirlo a su placeholder al guardar la sección.
                 $wrap = static fn(string $html): string =>
                     '<div class="pp-canvas-embed" data-pp-placeholder="' . htmlspecialchars($placeholderRef, ENT_QUOTES, 'UTF-8') . '">' . $html . '</div>';
+
+                // C7 — productos destacados; solo con el módulo Commerce activo.
+                if ($kind === 'products') {
+                    if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'commerce')) {
+                        return '<!-- pp:products (módulo tienda desactivado) -->';
+                    }
+                    $content = \App\Modules\Commerce\FeaturedProductsRenderer::render(
+                        $siteId,
+                        self::parsePlaceholderOptions($optionsRaw)
+                    );
+                    return $content === ''
+                        ? '<!-- pp:products (sin productos activos) -->'
+                        : $wrap($content);
+                }
 
                 if ($kind === 'posts') {
                     $content = self::postsPlaceholderContent($optionsRaw);
@@ -261,7 +279,7 @@ final class CanvasService
     private static function canonicalizePlaceholders(string $html): string
     {
         return preg_replace_callback(
-            '/\{\{\s*(form|posts)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            '/\{\{\s*(form|posts|products)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
             static fn(array $m): string => '{{' . self::canonicalPlaceholderRef(
                 strtolower($m[1]),
                 strtolower($m[2]),
@@ -273,19 +291,23 @@ final class CanvasService
 
     private static function canonicalPlaceholderRef(string $kind, string $ref, string $optionsRaw = ''): string
     {
-        if ($kind !== 'posts') {
+        if ($kind === 'form') {
             return $kind . ':' . $ref;
         }
 
+        // posts y products llevan opciones canónicas ordenadas.
+        $optionKeys = $kind === 'posts'
+            ? ['limit', 'variant', 'heading', 'subheading']
+            : ['limit', 'heading'];
         $opts = self::parsePlaceholderOptions($optionsRaw);
         $parts = [];
-        foreach (['limit', 'variant', 'heading', 'subheading'] as $key) {
+        foreach ($optionKeys as $key) {
             if (isset($opts[$key]) && $opts[$key] !== '') {
                 $parts[] = $key . '=' . $opts[$key];
             }
         }
 
-        return 'posts:' . $ref . ($parts !== [] ? '|' . implode('|', $parts) : '');
+        return $kind . ':' . $ref . ($parts !== [] ? '|' . implode('|', $parts) : '');
     }
 
     /**
@@ -315,6 +337,19 @@ final class CanvasService
     /**
      * @return array<string,string>
      */
+    /**
+     * C7 — Pista para los prompts canvas ({modules_hint}) sobre los bloques
+     * de módulos disponibles en ESTE sitio. Con el módulo Commerce apagado
+     * devuelve una negativa explícita para que la IA no invente el placeholder.
+     */
+    public static function modulesHint(int $siteId): string
+    {
+        if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'commerce')) {
+            return '(este sitio no tiene tienda online: NO uses placeholders {{products:...}})';
+        }
+        return "Este sitio tiene TIENDA ONLINE activa. Si la página pide enseñar productos (o encaja de forma natural), inserta el placeholder `{{products:featured}}` (opciones: `{{products:featured|limit=4|heading=Nuestros productos}}`): el sistema lo sustituye por una cuadrícula real de productos con foto, precio y enlace a la tienda. NUNCA dibujes tarjetas de producto a mano ni inventes productos o precios. La tienda vive en /tienda (puedes enlazar CTAs a esa ruta).";
+    }
+
     private static function parsePlaceholderOptions(string $raw): array
     {
         $out = [];

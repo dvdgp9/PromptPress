@@ -76,6 +76,10 @@ final class SmtpTransport implements MailTransportInterface
                 $mail->addReplyTo($message->replyToEmail, (string) $message->replyToName);
             }
 
+            foreach ($message->attachments as $att) {
+                $mail->addStringAttachment($att['content'], $att['filename'], PHPMailer::ENCODING_BASE64, $att['mime']);
+            }
+
             $mail->Subject = $message->subject;
             if ($message->html !== '') {
                 $mail->isHTML(true);

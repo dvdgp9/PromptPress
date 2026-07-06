@@ -219,6 +219,15 @@ final class PageController
         // FH5 — comportamientos declarativos (acordeón, slider, reveal, contador)
         // y menú móvil del header. Curado y único para todo el sitio.
         $h .= '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>';
+        // FEAT-3 A3 — telemetría propia, solo si el módulo Analytics está activo
+        // para el sitio. Va dentro del HTML cacheado: el toggle del módulo hace
+        // CacheService::flush para que este cambio se refleje.
+        if (\App\Modules\ModuleRegistry::isEnabled($siteId, 'analytics')) {
+            $analyticsJs = PP_ROOT . '/public/js/pp-analytics.js';
+            $ver = @filemtime($analyticsJs) ?: PP_VERSION;
+            $h .= '<script src="' . e(base_url('public/js/pp-analytics.js')) . '?v=' . e((string) $ver) . '"'
+                . ' data-site="' . (int) $siteId . '" defer></script>';
+        }
         $h .= '</body></html>';
 
         // T7.3: persistir en cache antes de servir. Las páginas con formularios

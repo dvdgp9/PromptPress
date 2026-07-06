@@ -56,6 +56,7 @@ final class CanvasGenerator
                         ? (string) $input['source_content']
                         : '(el usuario no aportó contenido propio: redacta tú el contenido para el negocio, sin inventar datos concretos como precios, nombres, cifras o contacto)',
                     'available_forms' => self::availableForms($siteId),
+                    'modules_hint' => CanvasService::modulesHint($siteId),
                     'available_pages' => self::availablePages($siteId),
                     'extra_context' => $extraContext,
                     '_images' => $input['reference_images'] ?? [],

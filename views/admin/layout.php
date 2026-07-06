@@ -44,8 +44,26 @@
                 ['url' => 'admin/marketing',  'icon' => 'marketing', 'label' => 'Marketing',      'match' => '/admin/marketing'],
                 ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => 'IA',             'match' => '/admin/ai'],
                 ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => 'Privacidad',     'match' => '/admin/privacy'],
+                ['url' => 'admin/modules',    'icon' => 'settings',  'label' => 'Módulos',        'match' => '/admin/modules'],
                 ['url' => 'admin/settings',   'icon' => 'settings',  'label' => 'Ajustes',        'match' => '/admin/settings'],
             ];
+            // FEAT-3 — entradas de módulos activables (solo si están activos).
+            $navSiteId = \Core\Auth::siteId();
+            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'commerce')) {
+                array_splice($navItems, 12, 0, [
+                    ['url' => 'admin/commerce', 'icon' => 'commerce', 'label' => 'Tienda', 'match' => '/admin/commerce'],
+                ]);
+            }
+            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'booking')) {
+                array_splice($navItems, 12, 0, [
+                    ['url' => 'admin/booking', 'icon' => 'booking', 'label' => 'Reservas', 'match' => '/admin/booking'],
+                ]);
+            }
+            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'analytics')) {
+                array_splice($navItems, 12, 0, [
+                    ['url' => 'admin/analytics', 'icon' => 'analytics', 'label' => 'Analítica', 'match' => '/admin/analytics'],
+                ]);
+            }
             foreach ($navItems as $item):
                 // Match por segmento: '/admin/forms' NO debe activar '/admin/formularios'
                 // (el carácter tras el prefijo ha de ser '/' o el fin de la ruta).

@@ -148,7 +148,7 @@ class PrivacyWizardController
             'legalInput'         => $legalInput,
             'legalErrors'        => $legalErrors,
             'legalPagesState'    => PrivacyController::loadLegalPagesState($siteId),
-            'legalTypes'         => LegalPageGenerator::TYPES,
+            'legalTypes'         => LegalPageGenerator::typesFor($siteId),
             'trackingCatalog'    => TrackingCatalog::services(),
             'trackingCategories' => TrackingCatalog::CATEGORIES,
             'formsList'          => PrivacyController::loadFormsList($siteId),

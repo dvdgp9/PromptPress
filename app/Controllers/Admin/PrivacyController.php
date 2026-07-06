@@ -160,7 +160,7 @@ class PrivacyController
         $siteId = self::requireSiteId();
         $type = (string) Request::post('type', '');
 
-        if (!isset(LegalPageGenerator::TYPES[$type])) {
+        if (!isset(LegalPageGenerator::typesFor($siteId)[$type])) {
             Session::flash('error', 'Tipo de página legal no válido.');
             Response::redirect(base_url('admin/privacy?tab=pages'));
         }
@@ -362,7 +362,7 @@ class PrivacyController
             'legalInput'      => $legalInput,
             'legalErrors'     => $legalErrors,
             'legalPagesState' => $legalPagesState,
-            'legalTypes'      => LegalPageGenerator::TYPES,
+            'legalTypes'      => LegalPageGenerator::typesFor($siteId),
             'trackingCatalog' => TrackingCatalog::services(),
             'trackingCategories' => TrackingCatalog::CATEGORIES,
             'formsList'       => $formsList,
@@ -380,7 +380,7 @@ class PrivacyController
     public static function loadLegalPagesState(int $siteId): array
     {
         $out = [];
-        foreach (LegalPageGenerator::TYPES as $key => $info) {
+        foreach (LegalPageGenerator::typesFor($siteId) as $key => $info) {
             $row = \Core\Database::selectOne(
                 "SELECT id, title, slug, updated_at, status
                  FROM pages

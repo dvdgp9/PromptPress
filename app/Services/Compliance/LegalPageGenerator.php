@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Compliance;
 
 use App\Controllers\Admin\PageController;
+use App\Modules\ModuleRegistry;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
@@ -47,7 +48,30 @@ final class LegalPageGenerator
             'title' => 'Aviso legal',
             'label' => 'Aviso legal',
         ],
+        // FEAT-3 C4 — solo visible/generable con el módulo Commerce activo
+        // (filtrado en typesFor(); generate() lo rechaza si el módulo está off).
+        'purchase_conditions' => [
+            'slug'  => 'condiciones-de-compra',
+            'title' => 'Condiciones de compra',
+            'label' => 'Condiciones de compra',
+        ],
     ];
+
+    /**
+     * Tipos aplicables a un sitio concreto: `purchase_conditions` solo existe
+     * si el módulo Commerce está activo (una web sin tienda no debe ver ni
+     * generar condiciones de compra).
+     *
+     * @return array<string, array{slug:string, title:string, label:string}>
+     */
+    public static function typesFor(int $siteId): array
+    {
+        $types = self::TYPES;
+        if (!ModuleRegistry::isEnabled($siteId, 'commerce')) {
+            unset($types['purchase_conditions']);
+        }
+        return $types;
+    }
 
     /**
      * Genera (o regenera) una página legal.
@@ -58,7 +82,7 @@ final class LegalPageGenerator
      */
     public static function generate(int $siteId, string $type): array
     {
-        if (!isset(self::TYPES[$type])) {
+        if (!isset(self::typesFor($siteId)[$type])) {
             throw new \InvalidArgumentException('Tipo de página legal no válido: ' . $type);
         }
 
@@ -73,6 +97,8 @@ final class LegalPageGenerator
             'page_language'    => self::languageLabel($language),
             'controller_data'  => self::formatControllerData($manifest['controller'] ?? []),
             'site_features'    => self::formatSiteFeatures($manifest['site_features'] ?? []),
+            'own_analytics'    => self::formatOwnAnalytics($siteId),
+            'own_commerce'     => self::formatOwnCommerce($siteId),
             'tracking_services'=> self::formatTrackingServices((array) ($manifest['tracking']['services'] ?? [])),
             'forms_list'       => self::formatFormsList($siteId),
             'processors_list'  => self::formatProcessors((array) ($manifest['processors'] ?? [])),
@@ -148,7 +174,7 @@ final class LegalPageGenerator
         $results = [];
         $generated = 0;
         $failed = 0;
-        foreach (array_keys(self::TYPES) as $type) {
+        foreach (array_keys(self::typesFor($siteId)) as $type) {
             try {
                 $r = self::generate($siteId, $type);
                 $results[$type] = [
@@ -242,6 +268,56 @@ final class LegalPageGenerator
             if (!empty($f[$key])) $active[] = '- ' . $label;
         }
         return $active === [] ? '- Web informativa simple (sin tienda, sin cuentas, sin newsletter)' : implode("\n", $active);
+    }
+
+    /**
+     * FEAT-3 A-privacy — describe la analítica propia de PromptPress (módulo
+     * Analytics) como un dato OBJETIVO y fijo, no un processor externo: no usa
+     * cookies, no persiste IP/User-Agent, el visitante se identifica con un
+     * hash que rota cada día. Si el módulo no está activo para el sitio, no
+     * se menciona nada (comportamiento idéntico al actual).
+     */
+    private static function formatOwnAnalytics(int $siteId): string
+    {
+        if (!ModuleRegistry::isEnabled($siteId, 'analytics')) {
+            return '- (No activa)';
+        }
+        return "- Activa: analítica de visitas propia de PromptPress, alojada en el mismo servidor del sitio (no es un servicio de terceros).\n"
+             . "- No usa cookies ni almacenamiento en el navegador (localStorage/sessionStorage): no requiere consentimiento de cookies.\n"
+             . "- No almacena la dirección IP ni el User-Agent del visitante. El visitante se identifica con un código anónimo (hash) que se calcula con una clave aleatoria que cambia cada día, por lo que no permite seguir a la misma persona entre distintos días.\n"
+             . "- Datos recogidos: página visitada, procedencia (referrer) reducida al dominio, tipo de dispositivo y navegador, y eventos de conversión (p. ej. envío de un formulario).\n"
+             . "- Conservación: los datos detallados se conservan 90 días; los resúmenes estadísticos agregados (sin datos identificativos) se conservan de forma indefinida.\n"
+             . "- Finalidad: medir el uso de la web (páginas más visitadas, procedencia del tráfico) para mejorar el servicio. Base jurídica: interés legítimo del responsable.";
+    }
+
+    /**
+     * FEAT-3 C4 — Hechos objetivos del módulo Commerce (tienda propia), NO
+     * inventables por la IA: métodos de pago realmente configurados, si hay
+     * envío físico y qué datos del comprador se recogen. Con el módulo
+     * apagado no se menciona nada.
+     */
+    private static function formatOwnCommerce(int $siteId): string
+    {
+        if (!ModuleRegistry::isEnabled($siteId, 'commerce')) {
+            return '- (No activa)';
+        }
+        $methods = \App\Modules\Commerce\Payments\PaymentMethods::availableFor($siteId);
+        $labels = [];
+        foreach ($methods as $key => $m) {
+            $labels[] = $key === 'manual'
+                ? 'pago manual (transferencia bancaria o pago acordado; el pedido queda pendiente hasta confirmar el pago)'
+                : $m->label($siteId);
+        }
+        $shipping = \App\Modules\Commerce\CommerceSettings::shippingCents($siteId) > 0
+            || \App\Modules\Commerce\CommerceSettings::freeShippingOverCents($siteId) !== null;
+
+        return "- Activa: tienda online propia integrada en la web (PromptCommerce), alojada en el mismo servidor del sitio (no es un marketplace de terceros).\n"
+             . "- Compra como invitado: no se crean cuentas de cliente ni contraseñas.\n"
+             . "- Datos del comprador que se recogen con cada pedido: nombre, email, teléfono (opcional)" . ($shipping ? ", dirección de envío (dirección, población, código postal, provincia)" : '') . " y notas del pedido. Finalidad: gestionar y entregar el pedido. Base jurídica: ejecución de contrato.\n"
+             . "- El carrito usa la sesión técnica del navegador (cookie de sesión estrictamente necesaria, exenta de consentimiento).\n"
+             . "- Métodos de pago configurados: " . ($labels !== [] ? implode('; ', $labels) : 'ninguno todavía') . ".\n"
+             . ($shipping ? "- Hay envío físico de productos con gastos de envío mostrados antes de confirmar el pedido.\n" : "- No hay gastos de envío configurados actualmente.\n")
+             . "- Los precios mostrados " . (\App\Modules\Commerce\CommerceSettings::pricesIncludeTax($siteId) ? 'incluyen IVA' : 'NO incluyen IVA (se añade en el carrito antes de confirmar)') . ".";
     }
 
     private static function formatTrackingServices(array $services): string

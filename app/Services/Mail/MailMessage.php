@@ -22,6 +22,13 @@ final class MailMessage
     public string $html;
     public ?string $replyToEmail;
     public ?string $replyToName;
+    /** @var array<int, array{content:string, filename:string, mime:string}> adjuntos en memoria */
+    public array $attachments = [];
+
+    public function attach(string $content, string $filename, string $mime): void
+    {
+        $this->attachments[] = ['content' => $content, 'filename' => $filename, 'mime' => $mime];
+    }
 
     public function __construct(
         string $toEmail,

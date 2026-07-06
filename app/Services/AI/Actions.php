@@ -683,6 +683,7 @@ final class Actions
                   . "ESTRUCTURA SUGERIDA (de la referencia; nº y orden de secciones, fondo e imágenes por sección):\n{sections_outline}\n\n"
                   . "CONTENIDO APORTADO POR EL USUARIO (úsalo como ÚNICA fuente de hechos; ver regla 'CONTENIDO APORTADO'):\n{source_content}\n\n"
                   . "FORMULARIOS DISPONIBLES (para {{form:REF}}):\n{available_forms}\n\n"
+                  . "BLOQUES DE MÓDULOS DEL SITIO:\n{modules_hint}\n\n"
                   . "PÁGINAS DEL SITIO (enlaza tus CTAs SOLO a estas rutas, o a #anclas internas de esta página, o a /contacto):\n{available_pages}\n\n"
                   . "{extra_context}",
                 'options'      => [
@@ -723,6 +724,7 @@ final class Actions
                   . "Sección actual:\n```html\n{section_html}\n```\n\n"
                   . "CSS actual de la página (contexto, NO lo devuelvas entero):\n```css\n{page_css}\n```\n\n"
                   . "Imágenes disponibles si pide cambiar/añadir fotos:\n{available_images}\n\n"
+                  . "Bloques de módulos del sitio:\n{modules_hint}\n\n"
                   . "Página: \"{page_title}\" · Idioma: {language}",
                 'options'      => [
                     'response_format' => 'json',
@@ -759,6 +761,7 @@ final class Actions
                   . "Página actual:\n```html\n{page_html}\n```\n\n"
                   . "CSS actual:\n```css\n{page_css}\n```\n\n"
                   . "Imágenes disponibles:\n{available_images}\n\n"
+                  . "Bloques de módulos del sitio:\n{modules_hint}\n\n"
                   . "Página: \"{page_title}\" · Idioma: {language}",
                 'options'      => [
                     'response_format' => 'json',
@@ -951,15 +954,19 @@ final class Actions
                   . "- NO uses markdown, HTML, ni adornos. Texto plano en cada `text`.\n"
                   . "- NO uses H1 (el título ya se renderiza arriba). Solo H2/H3.\n\n"
                   . "ESTRUCTURA ESPERADA POR TIPO:\n"
-                  . "- privacy_policy: 1) Responsable del tratamiento  2) Finalidades  3) Base jurídica  4) Categorías de datos  5) Destinatarios / processors  6) Transferencias internacionales (si aplica)  7) Plazos de conservación  8) Derechos del usuario y cómo ejercerlos  9) Autoridad de control (AEPD para España).\n"
-                  . "- cookie_policy: 1) Qué son las cookies  2) Categorías que usamos (Necesarias, Analítica, Personalización, Marketing, Multimedia externa)  3) Lista de servicios concretos (de la información dada)  4) Cómo gestionarlas / revocar consentimiento  5) Más información.\n"
-                  . "- legal_notice: 1) Datos identificativos (LSSI art. 10)  2) Objeto del sitio  3) Propiedad intelectual  4) Responsabilidad  5) Legislación aplicable y jurisdicción.\n\n"
+                  . "- privacy_policy: 1) Responsable del tratamiento  2) Finalidades  3) Base jurídica  4) Categorías de datos  5) Destinatarios / processors  6) Transferencias internacionales (si aplica)  7) Plazos de conservación  8) Derechos del usuario y cómo ejercerlos  9) Autoridad de control (AEPD para España). Si hay analítica propia activa (ver bloque ANALÍTICA PROPIA), menciónala en Finalidades o en un apartado breve propio: es un dato objetivo dado, no un processor externo — no la mezcles con los \"Destinatarios / processors\" de terceros.\n"
+                  . "- cookie_policy: 1) Qué son las cookies  2) Categorías que usamos (Necesarias, Analítica, Personalización, Marketing, Multimedia externa)  3) Lista de servicios concretos (de la información dada)  4) Cómo gestionarlas / revocar consentimiento  5) Más información. Si hay analítica propia activa, acláralo explícitamente: NO usa cookies ni almacenamiento en el navegador, por lo que no requiere consentimiento de cookies (a diferencia de los servicios de tracking de terceros que sí lo requieran).\n"
+                  . "- legal_notice: 1) Datos identificativos (LSSI art. 10)  2) Objeto del sitio  3) Propiedad intelectual  4) Responsabilidad  5) Legislación aplicable y jurisdicción.\n"
+                  . "- purchase_conditions: 1) Identificación del vendedor  2) Proceso de compra (compra como invitado, pasos hasta confirmar)  3) Precios e impuestos (según el bloque TIENDA PROPIA: si incluyen IVA o no)  4) Métodos de pago (SOLO los del bloque TIENDA PROPIA)  5) Envío y entrega (si hay envío físico; plazos concretos → `TODO-LEGAL:` si no constan)  6) Derecho de desistimiento de 14 días naturales para consumidores UE (con las excepciones legales habituales; el procedimiento concreto de devolución → `TODO-LEGAL:` si no consta)  7) Garantía legal de conformidad  8) Atención al cliente y reclamaciones  9) Legislación aplicable. Usa exclusivamente los hechos del bloque TIENDA PROPIA; lo que no conste ahí es `TODO-LEGAL:`.\n"
+                  . "  Además, en privacy_policy: si la tienda propia está activa (bloque TIENDA PROPIA), añade el tratamiento de datos de compradores (finalidad: gestión del pedido; base: ejecución de contrato) — es un tratamiento propio, no un processor externo.\n\n"
                   . "IDIOMA: Redacta toda la salida en {page_language}.",
                 'user_template' =>
                     "Tipo de página legal a generar: {legal_page_type}\n\n"
                   . "DATOS DEL RESPONSABLE (lo que sabemos):\n{controller_data}\n\n"
                   . "CARACTERÍSTICAS DEL SITIO:\n{site_features}\n\n"
-                  . "SERVICIOS DE TRACKING ACTIVOS:\n{tracking_services}\n\n"
+                  . "ANALÍTICA PROPIA (dato objetivo, no un processor externo — no inventes nada más allá de esto):\n{own_analytics}\n\n"
+                  . "TIENDA PROPIA (dato objetivo, no un marketplace externo — no inventes nada más allá de esto):\n{own_commerce}\n\n"
+                  . "SERVICIOS DE TRACKING ACTIVOS (terceros):\n{tracking_services}\n\n"
                   . "FORMULARIOS DE LA WEB:\n{forms_list}\n\n"
                   . "PROCESSORS / TERCEROS DECLARADOS:\n{processors_list}\n\n"
                   . "Recuerda: cualquier dato que NO esté arriba → `TODO-LEGAL: ...`.",

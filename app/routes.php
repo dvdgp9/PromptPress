@@ -21,6 +21,7 @@ use App\Controllers\Admin\FormSubmissionController;
 use App\Controllers\Admin\FormsController;
 use App\Controllers\Admin\MediaController;
 use App\Controllers\Admin\MemoryController;
+use App\Controllers\Admin\ModulesController;
 use App\Controllers\Admin\OnboardingController;
 use App\Controllers\Admin\CanvasController;
 use App\Controllers\Admin\PageController;
@@ -299,7 +300,15 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/chrome',          [ChromeController::class, 'index']);   // Editor Header y pie
     $r->post('/chrome',         [ChromeController::class, 'save']);
     $r->post('/chrome/preview', [ChromeController::class, 'preview']);
+
+    // FEAT-3 — Módulos (activación por sitio)
+    $r->get('/modules',         [ModulesController::class, 'index']);
+    $r->post('/modules/toggle', [ModulesController::class, 'toggle']);
 }, [$requireAuth, $requireOnboarding]);
+
+// FEAT-3 — Rutas de cada módulo activable. Se registran siempre; el guard
+// requireEnabled() devuelve 404 cuando el módulo está apagado para el sitio.
+\App\Modules\ModuleRegistry::registerRoutes($router, [$requireAuth, $requireOnboarding]);
 
 // Health check (debug / smoke test)
 $router->get('/_health', function () {

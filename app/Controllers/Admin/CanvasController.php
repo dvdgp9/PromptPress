@@ -461,6 +461,7 @@ final class CanvasController
             'page_title' => (string) $page['title'],
             'language' => 'es',
             'available_images' => self::availableImages($siteId),
+            'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
         $data = (array) ($result['data'] ?? []);
@@ -493,6 +494,7 @@ final class CanvasController
             'page_title' => (string) $page['title'],
             'language' => 'es',
             'available_images' => self::availableImages($siteId),
+            'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
         $data = (array) ($result['data'] ?? []);

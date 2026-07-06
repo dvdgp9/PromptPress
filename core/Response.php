@@ -29,6 +29,13 @@ final class Response
         exit;
     }
 
+    /** 204 sin cuerpo — para endpoints de telemetría (analytics collect). */
+    public static function noContent(): never
+    {
+        http_response_code(204);
+        exit;
+    }
+
     public static function notFound(string $message = 'Página no encontrada'): never
     {
         http_response_code(404);
