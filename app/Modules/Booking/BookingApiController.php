@@ -82,6 +82,9 @@ final class BookingApiController
             'service_id' => $serviceId,
             'timezone'   => $timezone,
             'days'       => $result['days'],
+            // FEAT-4 AB5 — ancla del time-trap: el widget lo reenvía como
+            // `_pp_ts` al crear la reserva.
+            'bot_ts'     => \App\Services\Security\BotGuard::issueTimestamp(),
         ]);
     }
 
@@ -97,6 +100,19 @@ final class BookingApiController
         // Honeypot (mismo criterio que formularios): responder ok sin crear nada.
         if (trim((string) ($data['company_url'] ?? '')) !== '') {
             Response::json(['id' => 0, 'status' => 'pending', 'message' => 'Te hemos enviado un email con los detalles.'], 201);
+        }
+
+        // FEAT-4 AB5 — time-trap. Ausente o caducado → se acepta (el API
+        // público lo usan integraciones directas que no pasan por el widget;
+        // misma degradación confirmada que en formularios). Presente pero
+        // demasiado rápido o manipulado → bot: 201 falso, sin crear nada.
+        $ppTs = trim((string) ($data['_pp_ts'] ?? ''));
+        if ($ppTs !== '') {
+            $tsCheck = \App\Services\Security\BotGuard::verifyTimestamp($ppTs);
+            if ($tsCheck === \App\Services\Security\BotGuard::TOO_FAST
+                || $tsCheck === \App\Services\Security\BotGuard::INVALID) {
+                Response::json(['id' => 0, 'status' => 'pending', 'message' => 'Te hemos enviado un email con los detalles.'], 201);
+            }
         }
 
         $ipHash = FormSubmissionService::ipHash(Request::ip());

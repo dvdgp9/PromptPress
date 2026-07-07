@@ -324,6 +324,9 @@ $router->get('/_health', function () {
 // Formularios públicos generados por secciones `form`.
 $router->post('/forms/{sectionId}', [PublicFormController::class, 'submit']);
 
+// FEAT-4 AB3 — reto proof-of-work anti-bot (stateless, sin CSRF).
+$router->post('/_botguard/challenge', [\App\Controllers\Public\BotGuardController::class, 'challenge']);
+
 // Página pública por slug (T7.2 + T7.4) — catch-all, debe registrarse tras rutas específicas.
 // {slug:path} soporta slugs anidados tipo /servicios/diseno-web.
 $router->get('/{slug:path}', [PublicPageController::class, 'show']);

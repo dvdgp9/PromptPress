@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS form_submissions (
     payload JSON NOT NULL,
     ip_hash CHAR(64) NOT NULL,
     user_agent VARCHAR(500) DEFAULT NULL,
+    bot_check VARCHAR(16) NOT NULL DEFAULT 'none',
     status ENUM('unread','read') NOT NULL DEFAULT 'unread',
     email_status ENUM('skipped','sent','failed') NOT NULL DEFAULT 'skipped',
     email_error VARCHAR(500) DEFAULT NULL,
@@ -596,6 +597,15 @@ CREATE TABLE IF NOT EXISTS commerce_order_items (
     INDEX idx_ci_order (order_id),
     CONSTRAINT fk_ci_order   FOREIGN KEY (order_id)   REFERENCES commerce_orders(id)   ON DELETE CASCADE,
     CONSTRAINT fk_ci_product FOREIGN KEY (product_id) REFERENCES commerce_products(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- FEAT-4 — BotGuard: anti-replay del proof-of-work (2026_07_07_botguard)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS botguard_solved (
+    challenge_hash CHAR(64) NOT NULL PRIMARY KEY,
+    expires_at DATETIME NOT NULL,
+    INDEX idx_bgs_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Public;
 
 use App\Services\FormSubmissionService;
+use App\Services\Security\BotGuard;
 use App\Services\Mail\MailMessage;
 use App\Services\Mail\MailService;
 use Core\CSRF;
@@ -38,6 +39,40 @@ final class FormController
 
         if (trim((string) Request::post('company_url', '')) !== '') {
             $this->respond($target, $sectionId, 'ok', $successMessage);
+        }
+
+        // FEAT-4 AB1 — time-trap: envío demasiado rápido o timestamp ausente/
+        // manipulado → bot: mismo "ok" falso del honeypot, sin crear nada.
+        // Caducado (>6 h) → humano con la pestaña vieja: error amable.
+        $ts = Request::post('_pp_ts');
+        $tsCheck = BotGuard::verifyTimestamp(is_string($ts) ? $ts : null);
+        if ($tsCheck === BotGuard::TOO_FAST || $tsCheck === BotGuard::INVALID) {
+            $this->respond($target, $sectionId, 'ok', $successMessage);
+        }
+        if ($tsCheck === BotGuard::EXPIRED) {
+            $this->respond(
+                $target,
+                $sectionId,
+                'error',
+                'La página llevaba demasiado tiempo abierta. Recárgala e inténtalo de nuevo.',
+                422
+            );
+        }
+
+        // FEAT-4 AB4 — proof-of-work. Presente y válido → 'pow'. Presente pero
+        // inválido o reutilizado → bot: "ok" falso. Ausente o caducado →
+        // degradación confirmada: se acepta con las capas base y queda
+        // auditado como 'timetrap' (el hidden lo pone JS; sin JS no llega).
+        $pow = Request::post('_pp_pow');
+        $botCheck = 'timetrap';
+        if (is_string($pow) && $pow !== '') {
+            $powCheck = BotGuard::verifySolution($pow);
+            if ($powCheck === BotGuard::POW_INVALID || $powCheck === BotGuard::POW_REPLAY) {
+                $this->respond($target, $sectionId, 'ok', $successMessage);
+            }
+            if ($powCheck === BotGuard::POW_OK) {
+                $botCheck = 'pow';
+            }
         }
 
         $ipHash = FormSubmissionService::ipHash(Request::ip());
@@ -101,9 +136,9 @@ final class FormController
         Database::execute(
             'INSERT INTO form_submissions
                 (site_id, page_id, section_id, page_title, section_heading,
-                 sender_name, sender_email, sender_phone, payload, ip_hash, user_agent,
+                 sender_name, sender_email, sender_phone, payload, ip_hash, user_agent, bot_check,
                  status, email_status, email_error, autoresponder_status, autoresponder_error, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $section['site_id'],
                 (int) $originPage['id'],
@@ -116,6 +151,7 @@ final class FormController
                 json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 $ipHash,
                 mb_substr(Request::userAgent(), 0, 500),
+                $botCheck,
                 'unread',
                 $emailStatus,
                 $emailError,

@@ -47,6 +47,7 @@ final class FormSubmissionService
                 payload JSON NOT NULL,
                 ip_hash CHAR(64) NOT NULL,
                 user_agent VARCHAR(500) DEFAULT NULL,
+                bot_check VARCHAR(16) NOT NULL DEFAULT 'none',
                 status ENUM('unread','read') NOT NULL DEFAULT 'unread',
                 email_status ENUM('skipped','sent','failed') NOT NULL DEFAULT 'skipped',
                 email_error VARCHAR(500) DEFAULT NULL,

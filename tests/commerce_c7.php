@@ -171,6 +171,8 @@ function buy_c7(string $base, int $siteId, int $pid, string $email): bool
     [, , $finalUrl] = shop_c7('POST', $base . '/tienda/checkout', [
         '_csrf' => csrf_c7($html), 'name' => 'Cliente C7', 'email' => $email,
         'payment_method' => 'manual', 'company_url' => '',
+        // FEAT-4 AB5 — time-trap estricto del checkout.
+        '_pp_ts' => \App\Services\Security\BotGuard::issueTimestamp(time() - 60),
     ]);
     return str_contains($finalUrl, '/tienda/gracias/');
 }

@@ -151,7 +151,8 @@
                     service_id: serviceId,
                     start: state.selSlot,
                     name: name.value, email: email.value, phone: phone.value, notes: notes.value,
-                    company_url: hp.value
+                    company_url: hp.value,
+                    _pp_ts: state.botTs || ''
                 }).then(function (r) {
                     if (r.status === 201) {
                         root.innerHTML = '';
@@ -195,6 +196,8 @@
                 if (r.status !== 200) throw new Error('availability ' + r.status);
                 state.days = r.data.days || [];
                 state.tzLabel = r.data.timezone || '';
+                // FEAT-4 AB5 — ancla firmada del time-trap anti-bot.
+                if (r.data.bot_ts) state.botTs = r.data.bot_ts;
                 if (state.days.length && !state.days.some(function (d) { return d.date === state.selDay; })) {
                     state.selDay = state.days[0].date;
                     state.selSlot = null;

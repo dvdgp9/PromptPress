@@ -210,9 +210,11 @@ check_ck('HTTP añadir → redirect a carrito con línea', str_ends_with($finalU
 [$st, $html] = shop('GET', $base . '/tienda/checkout');
 check_ck('HTTP checkout 200 con método manual', $st === 200 && str_contains($html, 'Transferencia'));
 $csrf = csrf_of($html);
+// FEAT-4 AB5 — el time-trap estricto exige _pp_ts con ≥3 s de antigüedad.
+$agedTs = \App\Services\Security\BotGuard::issueTimestamp(time() - 60);
 [$st, $html, $finalUrl] = shop('POST', $base . '/tienda/checkout', [
     '_csrf' => $csrf, 'name' => 'HTTP C4', 'email' => 'http-c4@example.com',
-    'payment_method' => 'manual', 'company_url' => '',
+    'payment_method' => 'manual', 'company_url' => '', '_pp_ts' => $agedTs,
 ]);
 check_ck('HTTP pedido creado → gracias con instrucciones', $st === 200
     && str_contains($finalUrl, '/tienda/gracias/PC-') && str_contains($html, 'pendiente de pago'), $finalUrl);
@@ -227,15 +229,25 @@ $csrf = csrf_of($html);
 shop('POST', $base . '/tienda/carrito', ['_csrf' => $csrf, 'product_id' => $pid1, 'quantity' => 1]);
 [$st, $html] = shop('GET', $base . '/tienda/checkout');
 $before = (int) Database::selectOne('SELECT COUNT(*) AS n FROM commerce_orders WHERE site_id = ?', [$siteId])['n'];
-[$st, $html] = shop('POST', $base . '/tienda/checkout', ['_csrf' => csrf_of($html), 'name' => '', 'email' => 'no-email', 'payment_method' => 'manual', 'company_url' => '']);
+[$st, $html] = shop('POST', $base . '/tienda/checkout', ['_csrf' => csrf_of($html), 'name' => '', 'email' => 'no-email', 'payment_method' => 'manual', 'company_url' => '', '_pp_ts' => $agedTs]);
 $after = (int) Database::selectOne('SELECT COUNT(*) AS n FROM commerce_orders WHERE site_id = ?', [$siteId])['n'];
 check_ck('checkout inválido → errores sin crear pedido', str_contains($html, 'email válido') && $before === $after);
 
 // Honeypot → redirect a tienda sin crear pedido.
 [$st, $html] = shop('GET', $base . '/tienda/checkout');
-[$st, , $finalUrl] = shop('POST', $base . '/tienda/checkout', ['_csrf' => csrf_of($html), 'name' => 'Bot', 'email' => 'bot@example.com', 'payment_method' => 'manual', 'company_url' => 'http://spam']);
+[$st, , $finalUrl] = shop('POST', $base . '/tienda/checkout', ['_csrf' => csrf_of($html), 'name' => 'Bot', 'email' => 'bot@example.com', 'payment_method' => 'manual', 'company_url' => 'http://spam', '_pp_ts' => $agedTs]);
 $after2 = (int) Database::selectOne('SELECT COUNT(*) AS n FROM commerce_orders WHERE site_id = ?', [$siteId])['n'];
 check_ck('honeypot → sin pedido nuevo', $after2 === $after && str_ends_with($finalUrl, '/tienda'), $finalUrl);
+
+// FEAT-4 AB5 — time-trap: checkout renderiza _pp_ts; POST sin él (bot directo)
+// → éxito aparente (redirect a tienda) sin pedido nuevo.
+[$st, $html] = shop('GET', $base . '/tienda/p/' . $slug);
+shop('POST', $base . '/tienda/carrito', ['_csrf' => csrf_of($html), 'product_id' => $pid1, 'quantity' => 1]);
+[$st, $html] = shop('GET', $base . '/tienda/checkout');
+check_ck('checkout renderiza _pp_ts firmado', preg_match('/name="_pp_ts" value="\d+\.[0-9a-f]{64}"/', $html) === 1);
+[$st, , $finalUrl] = shop('POST', $base . '/tienda/checkout', ['_csrf' => csrf_of($html), 'name' => 'Bot TT', 'email' => 'bot-tt@example.com', 'payment_method' => 'manual', 'company_url' => '']);
+$after3 = (int) Database::selectOne('SELECT COUNT(*) AS n FROM commerce_orders WHERE site_id = ?', [$siteId])['n'];
+check_ck('sin _pp_ts → éxito aparente sin pedido', $after3 === $after2 && str_ends_with($finalUrl, '/tienda'), $finalUrl);
 
 // ---------------------------------------------------------------------------
 // Limpieza

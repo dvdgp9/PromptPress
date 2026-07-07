@@ -201,6 +201,20 @@ $r = http('POST', $base . '/api/booking/v1/bookings', ['service_id' => $svcId, '
 $after = (int) Database::selectOne('SELECT COUNT(*) AS n FROM booking_bookings WHERE service_id = ?', [$svcId])['n'];
 check_api('honeypot → 201 sin crear nada', $r['status'] === 201 && $before === $after);
 
+// FEAT-4 AB5 — time-trap: availability entrega bot_ts firmado; un _pp_ts
+// fresco (<3 s) o manipulado → 201 falso sin crear; ausente → se acepta
+// (compatibilidad con integraciones directas del API, cubierta por el resto
+// del test, que nunca envía _pp_ts).
+$r = http('GET', $base . "/api/booking/v1/services/$svcId/availability?from=$tomorrow&to=$tomorrow");
+check_api('availability incluye bot_ts firmado', preg_match('/^\d+\.[0-9a-f]{64}$/', (string) ($r['body']['bot_ts'] ?? '')) === 1);
+$freshTs = \App\Services\Security\BotGuard::issueTimestamp();
+$r = http('POST', $base . '/api/booking/v1/bookings', ['service_id' => $svcId, 'start' => $slotIso, 'name' => 'Bot TT', 'email' => 'bot-tt@example.com', '_pp_ts' => $freshTs]);
+$afterTt = (int) Database::selectOne('SELECT COUNT(*) AS n FROM booking_bookings WHERE service_id = ?', [$svcId])['n'];
+check_api('_pp_ts fresco → 201 falso sin crear', $r['status'] === 201 && (int) ($r['body']['id'] ?? -1) === 0 && $afterTt === $after);
+$r = http('POST', $base . '/api/booking/v1/bookings', ['service_id' => $svcId, 'start' => $slotIso, 'name' => 'Bot TT', 'email' => 'bot-tt@example.com', '_pp_ts' => 'manipulado.deadbeef']);
+$afterTt2 = (int) Database::selectOne('SELECT COUNT(*) AS n FROM booking_bookings WHERE service_id = ?', [$svcId])['n'];
+check_api('_pp_ts manipulado → 201 falso sin crear', $r['status'] === 201 && (int) ($r['body']['id'] ?? -1) === 0 && $afterTt2 === $after);
+
 // LA CARRERA: dos POST concurrentes al último hueco (mañana 10:00).
 $slot10 = (new DateTimeImmutable($tomorrow . ' 10:00', new DateTimeZone($tz)))->format('c');
 $mh = curl_multi_init();

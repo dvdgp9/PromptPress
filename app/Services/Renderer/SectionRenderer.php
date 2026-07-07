@@ -385,6 +385,7 @@ final class SectionRenderer
         $html .= '<form class="pp-form__form" data-pp-form-id="' . $sectionId . '" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '"' . ($hasFile ? ' enctype="multipart/form-data"' : '') . '>';
         $html .= '<input type="hidden" name="_csrf" value="' . self::e(CSRF::token()) . '">';
         $html .= '<input type="hidden" name="_return" value="' . self::e(Request::path()) . '">';
+        $html .= '<input type="hidden" name="_pp_ts" value="' . self::e(\App\Services\Security\BotGuard::issueTimestamp()) . '">';
         $html .= '<div class="pp-form__hp" aria-hidden="true"><label>Web<input type="text" name="company_url" tabindex="-1" autocomplete="off"></label></div>';
         foreach ($validFields as $idx => $f) {
             if (!is_array($f)) continue;

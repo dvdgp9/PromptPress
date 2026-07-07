@@ -219,6 +219,13 @@ final class PageController
         // FH5 — comportamientos declarativos (acordeón, slider, reveal, contador)
         // y menú móvil del header. Curado y único para todo el sitio.
         $h .= '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>';
+        // FEAT-4 AB3 — resolutor del proof-of-work anti-bot, solo en páginas
+        // con formulario (que nunca se cachean, ver $cacheable más abajo).
+        $hasFormOnPage = $isCanvas ? $canvasHasForm : self::sectionsHaveForm($sections);
+        if ($hasFormOnPage) {
+            $bgJs = PP_ROOT . '/public/js/pp-botguard.js';
+            $h .= '<script src="' . e(base_url('public/js/pp-botguard.js')) . '?v=' . e((string) (@filemtime($bgJs) ?: PP_VERSION)) . '" defer></script>';
+        }
         // FEAT-3 A3 — telemetría propia, solo si el módulo Analytics está activo
         // para el sitio. Va dentro del HTML cacheado: el toggle del módulo hace
         // CacheService::flush para que este cambio se refleje.

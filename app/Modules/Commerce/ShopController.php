@@ -220,6 +220,18 @@ final class ShopController
             Response::redirect(base_url('tienda'));
         }
 
+        // FEAT-4 AB5 — time-trap ESTRICTO (el checkout siempre lo renderizamos
+        // nosotros con el campo): ausente, manipulado o <3 s → mismo éxito
+        // aparente del honeypot. Caducado (>6 h con el checkout abierto) →
+        // error amable re-renderizando el formulario.
+        $ts = Request::post('_pp_ts');
+        $tsCheck = \App\Services\Security\BotGuard::verifyTimestamp(is_string($ts) ? $ts : null);
+        if ($tsCheck === \App\Services\Security\BotGuard::TOO_FAST
+            || $tsCheck === \App\Services\Security\BotGuard::INVALID) {
+            CartService::clear($siteId);
+            Response::redirect(base_url('tienda'));
+        }
+
         $input = [
             'name'     => trim((string) Request::post('name', '')),
             'email'    => trim((string) Request::post('email', '')),
@@ -233,6 +245,9 @@ final class ShopController
         $methodKey = (string) Request::post('payment_method', '');
 
         $errors = [];
+        if ($tsCheck === \App\Services\Security\BotGuard::EXPIRED) {
+            $errors[] = 'El checkout llevaba demasiado tiempo abierto. Revisa los datos y vuelve a confirmar.';
+        }
         if ($input['name'] === '') {
             $errors[] = 'El nombre es obligatorio.';
         }
@@ -429,6 +444,7 @@ final class ShopController
         // Columna izquierda: formulario.
         $body .= '<form method="post" action="' . e(base_url('tienda/checkout')) . '" class="pp-shop-form">';
         $body .= '<input type="hidden" name="_csrf" value="' . e(CSRF::token()) . '">';
+        $body .= '<input type="hidden" name="_pp_ts" value="' . e(\App\Services\Security\BotGuard::issueTimestamp()) . '">';
         $body .= '<input type="text" name="company_url" value="" class="pp-shop-hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
         $body .= '<h2>Tus datos</h2>';
         $body .= '<label>Nombre y apellidos *<input type="text" name="name" maxlength="120" required value="' . $v('name') . '"></label>';
