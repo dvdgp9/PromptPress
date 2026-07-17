@@ -157,12 +157,36 @@ final class SiteAssistantPlanner
             $status      = strtolower(trim((string) ($raw['status'] ?? '')));
             $reason      = trim((string) ($raw['reason'] ?? ''));
 
+            // Los modelos usan ocasionalmente sinónimos pese al vocabulario
+            // cerrado del prompt. Normalizarlos evita convertir un "aplicable"
+            // perfectamente claro en una falsa ambigüedad.
+            $status = match ($status) {
+                'aplicable', 'viable', 'aplicar directamente', 'se puede aplicar' => 'aplicar',
+                'aclarar', 'necesita aclarar', 'necesito aclarar', 'ambiguous' => 'ambiguo',
+                'no viable', 'no-viable', 'inviable', 'no aplicable' => 'no_viable',
+                default => $status,
+            };
+
             if (!in_array($status, self::STATUSES, true)) {
                 $status = 'ambiguo';
                 $reason = $reason !== '' ? $reason : 'No he podido clasificar este cambio con seguridad.';
             }
 
             $page = $pages[$pageId] ?? null;
+
+            // Si el modelo marca "ambiguo" pero aporta una instrucción concreta
+            // y su motivo no contiene pregunta ni dato faltante, el propio plan
+            // demuestra que el cambio es ejecutable. Es el caso observado en
+            // producción: "Se puede aplicar directamente..." aparecía amarillo.
+            if (
+                $status === 'ambiguo'
+                && $page !== null
+                && $page['editable']
+                && $instruction !== ''
+                && !self::reasonRequiresClarification($reason)
+            ) {
+                $status = 'aplicar';
+            }
 
             if ($status === 'aplicar') {
                 if ($page === null) {
@@ -193,5 +217,18 @@ final class SiteAssistantPlanner
             ];
         }
         return $items;
+    }
+
+    /** Un ambiguo real debe explicar qué dato falta o formular una pregunta. */
+    private static function reasonRequiresClarification(string $reason): bool
+    {
+        $reason = mb_strtolower(trim($reason));
+        if ($reason === '' || str_contains($reason, '?') || str_contains($reason, '¿')) {
+            return true;
+        }
+        return preg_match(
+            '/\b(?:falta|faltan|necesit\w*|aclar\w*|especific\w*|indic\w* cu[aá]l|confirm\w*|elige\w*|no (?:se )?indica|sin informaci[oó]n)\b/u',
+            $reason
+        ) === 1;
     }
 }

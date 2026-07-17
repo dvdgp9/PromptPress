@@ -65,5 +65,45 @@ checkAssistantPlanning(
     json_encode($normalized)
 );
 
+$ambiguous = $method->invoke(null, [
+    [
+        'page_id' => 10,
+        'section' => 'hero',
+        'instruction' => 'Cambiar el texto de bienvenida por el literal indicado.',
+        'status' => 'ambiguo',
+        'reason' => 'Se puede aplicar directamente el nuevo texto de bienvenida.',
+    ],
+    [
+        'page_id' => 10,
+        'section' => 'servicios',
+        'instruction' => 'Actualizar las tarjetas.',
+        'status' => 'ambiguo',
+        'reason' => '¿Qué descripción debe llevar la tarjeta de Idiomas?',
+    ],
+    [
+        'page_id' => 10,
+        'section' => 'hero',
+        'instruction' => 'Actualizar el titular.',
+        'status' => 'aplicable',
+        'reason' => 'Cambio directo de contenido.',
+    ],
+], $pages);
+
+checkAssistantPlanning(
+    'false_ambiguity_is_promoted',
+    ($ambiguous[0]['status'] ?? '') === 'aplicar',
+    json_encode($ambiguous[0] ?? null)
+);
+checkAssistantPlanning(
+    'real_question_stays_ambiguous',
+    ($ambiguous[1]['status'] ?? '') === 'ambiguo',
+    json_encode($ambiguous[1] ?? null)
+);
+checkAssistantPlanning(
+    'applicable_alias_is_normalized',
+    ($ambiguous[2]['status'] ?? '') === 'aplicar',
+    json_encode($ambiguous[2] ?? null)
+);
+
 echo $failed === 0 ? "ALL PASS\n" : "{$failed} FAILED\n";
 exit($failed === 0 ? 0 : 1);

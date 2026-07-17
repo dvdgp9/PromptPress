@@ -114,6 +114,7 @@
         ambiguo:   { label: 'Necesito aclarar', cls: 'ppa-item--ask' },
         no_viable: { label: 'No viable',        cls: 'ppa-item--no' }
     };
+    let lastPlanContext = null;
 
     function renderPlan(plan) {
         const msg = document.createElement('div');
@@ -130,6 +131,7 @@
         }
 
         const items = plan.items || [];
+        const promoters = [];
         const order = ['aplicar', 'ambiguo', 'no_viable'];
         order.forEach((status) => {
             items.filter((it) => it.status === status).forEach((it) => {
@@ -156,6 +158,37 @@
                 body.textContent = status === 'aplicar' ? it.instruction : (it.reason || it.instruction);
                 card.appendChild(body);
 
+                // Una ambigüedad real puede ejecutarse bajo confirmación
+                // expresa del usuario. Antes no había ningún control y una
+                // respuesta "sí, procede" se perdía como petición nueva.
+                if (status === 'ambiguo' && it.page_title && it.instruction) {
+                    const controls = document.createElement('div');
+                    controls.className = 'ppa-plan__foot';
+                    const proceed = document.createElement('button');
+                    proceed.type = 'button';
+                    proceed.className = 'pp-btn pp-btn--secondary';
+                    proceed.textContent = 'Aplicar con esta información';
+                    controls.appendChild(proceed);
+                    card.appendChild(controls);
+
+                    const promote = () => {
+                        if (it.status === 'aplicar') return;
+                        it.status = 'aplicar';
+                        card.classList.remove('ppa-item--ask');
+                        card.classList.add('ppa-item--ok');
+                        badge.textContent = 'Se aplicará';
+                        body.textContent = it.instruction;
+                        controls.remove();
+                    };
+                    proceed.addEventListener('click', () => {
+                        promote();
+                        if (lastPlanContext && lastPlanContext.plan === plan) {
+                            lastPlanContext.refresh();
+                        }
+                    });
+                    promoters.push(promote);
+                }
+
                 bubble.appendChild(card);
             });
         });
@@ -166,21 +199,42 @@
             bubble.appendChild(p);
         }
 
-        const applicable = items.filter((it) => it.status === 'aplicar');
-        if (applicable.length > 0) {
+        const actionable = items.filter((it) => it.status === 'aplicar' || (it.status === 'ambiguo' && it.page_title && it.instruction));
+        if (actionable.length > 0) {
             const foot = document.createElement('div');
             foot.className = 'ppa-plan__foot';
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'pp-btn pp-btn--primary ppa-plan__apply';
-            btn.textContent = 'Aplicar ' + applicable.length + (applicable.length === 1 ? ' cambio' : ' cambios');
-            btn.addEventListener('click', () => applyPlan(plan, applicable, btn));
+            const refresh = () => {
+                const applicable = items.filter((it) => it.status === 'aplicar');
+                btn.disabled = applicable.length === 0;
+                btn.textContent = applicable.length > 0
+                    ? 'Aplicar ' + applicable.length + (applicable.length === 1 ? ' cambio' : ' cambios')
+                    : 'Confirma arriba qué cambios aplicar';
+            };
+            btn.addEventListener('click', () => {
+                const applicable = items.filter((it) => it.status === 'aplicar');
+                if (applicable.length > 0) applyPlan(plan, applicable, btn);
+            });
             foot.appendChild(btn);
             const note = document.createElement('span');
             note.className = 'ppa-plan__note';
             note.textContent = 'Los cambios quedan como borrador; nada se publica solo.';
             foot.appendChild(note);
             bubble.appendChild(foot);
+            refresh();
+            lastPlanContext = {
+                plan,
+                button: btn,
+                refresh,
+                promoteAll: () => {
+                    promoters.forEach((promote) => promote());
+                    refresh();
+                }
+            };
+        } else {
+            lastPlanContext = null;
         }
 
         thread.appendChild(msg);
@@ -317,6 +371,9 @@
         if (applying) return;
         applying = true;
         btn.disabled = true;
+        if (lastPlanContext && lastPlanContext.plan === plan) {
+            lastPlanContext = null;
+        }
 
         const progressMsg = document.createElement('div');
         progressMsg.className = 'ppa-msg ppa-msg--assistant';
@@ -374,15 +431,39 @@
     // ------------------------------------------------------------------
     let planning = false;
 
+    function isAffirmativeReply(text) {
+        const normalized = text.toLocaleLowerCase('es-ES')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[.,;:!?¿¡]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        return /^(?:si|vale|ok|de acuerdo|adelante|procede|hazlo|aplica|si procede|si adelante|si hazlo)$/.test(normalized);
+    }
+
     async function sendRequest() {
         const text = input.value.trim();
         if ((text === '' && !attachedDoc) || extracting || planning) return;
+
+        // Continuación natural del plan mostrado: una confirmación breve
+        // aplica el último plan en vez de pedir a la IA que planifique la frase
+        // aislada "sí, procede" (que lógicamente no contiene cambios).
+        if (!attachedDoc && lastPlanContext && isAffirmativeReply(text)) {
+            addMessage('user', text);
+            input.value = '';
+            const context = lastPlanContext;
+            context.promoteAll();
+            const applicable = context.plan.items.filter((it) => it.status === 'aplicar');
+            await applyPlan(context.plan, applicable, context.button);
+            refreshSendState();
+            return;
+        }
 
         let userLabel = text !== '' ? text : 'Aplica los cambios descritos en el documento adjunto.';
         if (attachedDoc) {
             userLabel += '\n📄 ' + attachedDoc.filename;
         }
         addMessage('user', userLabel);
+        lastPlanContext = null;
 
         const docText = attachedDoc ? attachedDoc.text : '';
         input.value = '';
