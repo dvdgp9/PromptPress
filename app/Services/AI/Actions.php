@@ -700,27 +700,25 @@ final class Actions
             // sección reescrita + CSS adicional + una respuesta humana corta.
             self::EDIT_CANVAS_SECTION => [
                 'label'        => 'Editar sección canvas (chat)',
-                'output'       => 'json',
+                'output'       => 'text',
                 'required'     => ['instruction', 'section_html'],
                 'instruction'  =>
                     "Eres el diseñador de confianza de un cliente NO técnico. Te pide un cambio sobre UNA sección de su página web. Aplica EXACTAMENTE lo que pide (interpretando su intención con criterio profesional) y no toques nada que no haya pedido.\n"
-                  . "Devuelve ÚNICAMENTE JSON válido:\n"
-                  . "{\n"
-                  . "  \"html\": \"<section data-pp-section=\\\"...\\\">...</section>\",   // la sección COMPLETA reescrita, mismo data-pp-section; CADENA VACÍA si el cambio es solo de estilo\n"
-                  . "  \"css_append\": \"/* solo reglas NUEVAS o modificadas */\",          // se añade al CSS de la página; cadena vacía si no hace falta\n"
-                  . "  \"reply\": \"frase corta en español, tono cercano, explicando qué has cambiado\"  // p. ej. \"Listo, he puesto el titular más grande y el botón en verde.\"\n"
-                  . "}\n\n"
+                  . "Devuelve ÚNICAMENTE estos tres bloques, en este orden y sin markdown ni texto fuera de ellos:\n"
+                  . "<pp-html>\n<section data-pp-section=\"...\">...</section>\n</pp-html>\n"
+                  . "<pp-css>\n/* solo reglas NUEVAS o modificadas */\n</pp-css>\n"
+                  . "<pp-reply>\nFrase corta en español explicando qué has cambiado.\n</pp-reply>\n\n"
                   . "REGLAS:\n"
-                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto (color, tamaño de letra, esquinas/border-radius, espaciado, fondo, sombra, alineación…) y NO cambian textos ni estructura, devuelve \"html\":\"\" (vacío) y expresa TODO el cambio en `css_append`, apuntando a las clases existentes del elemento. NO reescribas el HTML en ese caso: reescribirlo entero es lento, puede truncarse y puede destrozar ilustraciones SVG o contenido que no debes tocar. Devuelve HTML solo si de verdad cambian el texto, el orden o la estructura.\n"
+                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto (color, tamaño de letra, esquinas/border-radius, espaciado, fondo, sombra, alineación…) y NO cambian textos ni estructura, deja `<pp-html>` vacío y expresa TODO el cambio en `<pp-css>`, apuntando a las clases existentes del elemento. NO reescribas el HTML en ese caso: reescribirlo entero es lento, puede truncarse y puede destrozar ilustraciones SVG o contenido que no debes tocar. Devuelve HTML solo si de verdad cambian el texto, el orden o la estructura.\n"
                   . "- Cambia lo MÍNIMO necesario para cumplir la petición. Conserva textos, imágenes y estructura que el cliente no ha mencionado.\n"
                   . "- El HTML cumple el contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed. Formularios solo vía {{form:REF}}.\n"
-                  . "- `css_append`: solo reglas nuevas o que SOBRESCRIBEN a las existentes (van después en la cascada). Reutiliza los nombres de clase existentes cuando modificas algo; usa tokens de marca (var(--pp-*)) para colores/tipos.\n"
-                  . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → aplícala con CSS (`background-image: url(/ruta...)`) en `css_append` y deja \"html\":\"\" (no reescribas el HTML, sobre todo si la sección tiene SVG/ilustraciones). Imagen de CONTENIDO (foto dentro del texto) → devuélvela como <img> en el HTML. Si ninguna encaja, mantén la actual y dilo en `reply`.\n"
+                  . "- `<pp-css>`: solo reglas nuevas o que SOBRESCRIBEN a las existentes (van después en la cascada). Reutiliza los nombres de clase existentes cuando modificas algo; usa tokens de marca (var(--pp-*)) para colores/tipos.\n"
+                  . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → aplícala con CSS (`background-image: url(/ruta...)`) en `<pp-css>` y deja `<pp-html>` vacío (no reescribas el HTML, sobre todo si la sección tiene SVG/ilustraciones). Imagen de CONTENIDO (foto dentro del texto) → devuélvela como <img> en el HTML. Si ninguna encaja, mantén la actual y dilo en `<pp-reply>`.\n"
                   . "- PROHIBIDO: emojis, datos de contacto inventados, placeholders. Responsive intacto.\n"
                   . "- Mantén el nivel de diseño: nada de clichés de IA (eyebrows en cada titular, verbos hueco como 'impulsa/transforma', datos inventados, raya larga —, 3 tarjetas iguales). Texto humano y concreto.\n"
                   . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
                   . "- Si la petición es imposible o peligrosa (p. ej. 'añade un vídeo de YouTube'), NO lo simules: haz la mejor alternativa válida y explícalo en `reply` con naturalidad.\n"
-                  . "- `reply` máximo 2 frases, sin tecnicismos (nada de 'CSS', 'HTML', 'clases'): habla de lo visual ('el titular', 'el fondo', 'el botón').",
+                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos (nada de 'CSS', 'HTML', 'clases'): habla de lo visual ('el titular', 'el fondo', 'el botón').",
                 'user_template' =>
                     "Petición del cliente: \"{instruction}\"\n\n"
                   . "Sección actual:\n```html\n{section_html}\n```\n\n"
@@ -729,7 +727,7 @@ final class Actions
                   . "Bloques de módulos del sitio:\n{modules_hint}\n\n"
                   . "Página: \"{page_title}\" · Idioma: {language}",
                 'options'      => [
-                    'response_format' => 'json',
+                    'response_format' => 'text',
                     'temperature'     => 0.4,
                     'max_tokens'      => 16000,
                     'timeout'         => 120,   // reescrituras largas superan los 60s por defecto
@@ -740,25 +738,23 @@ final class Actions
             // globales: "más aire", "todo más sobrio", "reordena secciones").
             self::EDIT_CANVAS_PAGE => [
                 'label'        => 'Editar página canvas (chat)',
-                'output'       => 'json',
+                'output'       => 'text',
                 'required'     => ['instruction', 'page_html'],
                 'instruction'  =>
                     "Eres el diseñador de confianza de un cliente NO técnico. Te pide un cambio GLOBAL sobre su página web. Aplica lo que pide con criterio profesional, tocando lo mínimo necesario.\n"
-                  . "Devuelve ÚNICAMENTE JSON válido:\n"
-                  . "{\n"
-                  . "  \"html\": \"...página completa (secuencia de <section data-pp-section>)...\",   // CADENA VACÍA si el cambio es solo de estilo\n"
-                  . "  \"css\": \"...CSS completo actualizado de la página...\",\n"
-                  . "  \"reply\": \"frase corta en español explicando qué has cambiado\"\n"
-                  . "}\n\n"
+                  . "Devuelve ÚNICAMENTE estos tres bloques, en este orden y sin markdown ni texto fuera de ellos:\n"
+                  . "<pp-html>\n...página completa (secuencia de <section data-pp-section>)...\n</pp-html>\n"
+                  . "<pp-css>\n...CSS completo actualizado de la página...\n</pp-css>\n"
+                  . "<pp-reply>\nFrase corta en español explicando qué has cambiado.\n</pp-reply>\n\n"
                   . "REGLAS:\n"
-                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto global (colores, tipografías, espaciados, esquinas, sombras…) y NO cambian textos ni estructura ni orden, devuelve \"html\":\"\" (vacío) y entrega solo el `css` actualizado. Reescribir todo el HTML es lento y puede truncarse o destrozar contenido. Devuelve HTML solo si cambian textos, el orden de secciones o la estructura.\n"
+                  . "- PREFIERE SOLO CSS. Si el cambio es de aspecto global (colores, tipografías, espaciados, esquinas, sombras…) y NO cambian textos ni estructura ni orden, deja `<pp-html>` vacío y entrega en `<pp-css>` el CSS completo actualizado. Reescribir todo el HTML es lento y puede truncarse o destrozar contenido. Devuelve HTML solo si cambian textos, el orden de secciones o la estructura.\n"
                   . "- Conserva los `data-pp-section` existentes (puedes reordenar secciones si lo piden, manteniendo sus ids). Conserva todo contenido no mencionado.\n"
                   . "- AÑADIR sección nueva: si piden insertar/añadir una sección, devuelve el HTML COMPLETO de la página con la nueva `<section data-pp-section=\"ID-unico\">…</section>` colocada en la posición pedida (encima/debajo de la sección de referencia indicada). El nuevo `data-pp-section` debe ser único, en minúsculas-con-guiones y descriptivo (p. ej. `parallax-frase`). No dupliques ids existentes ni borres otras secciones.\n"
                   . "- Contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed; formularios solo vía {{form:REF}}; tokens de marca para color/tipo; responsive intacto; cero emojis.\n"
-                  . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → con CSS (`background-image`) y \"html\":\"\"; imagen de CONTENIDO → como <img> en el HTML.\n"
+                  . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → con CSS (`background-image`) y `<pp-html>` vacío; imagen de CONTENIDO → como <img> en el HTML.\n"
                   . "- Mantén el nivel de diseño: nada de clichés de IA (eyebrows en cada titular, verbos hueco como 'impulsa/transforma', datos inventados, raya larga —, 3 tarjetas iguales).\n"
                   . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
-                  . "- `reply` máximo 2 frases, sin tecnicismos.",
+                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos.",
                 'user_template' =>
                     "Petición del cliente: \"{instruction}\"\n\n"
                   . "Página actual:\n```html\n{page_html}\n```\n\n"
@@ -767,7 +763,7 @@ final class Actions
                   . "Bloques de módulos del sitio:\n{modules_hint}\n\n"
                   . "Página: \"{page_title}\" · Idioma: {language}",
                 'options'      => [
-                    'response_format' => 'json',
+                    'response_format' => 'text',
                     'temperature'     => 0.4,
                     'max_tokens'      => 30000,
                     'timeout'         => 180,   // reescrituras largas superan los 60s por defecto

@@ -6,6 +6,7 @@ namespace App\Services\Canvas;
 
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
+use App\Services\AI\AIException;
 use App\Services\ImageBankService;
 use Core\Database;
 
@@ -142,7 +143,7 @@ final class CanvasChatService
             'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
-        $data = (array) ($result['data'] ?? []);
+        $data = self::parseEditEnvelope((string) ($result['data'] ?? ''));
         // Cambio solo de estilo: el modelo deja "html" vacío y manda únicamente
         // css_append. Conservamos la sección original intacta (no reescribir el
         // HTML protege ilustraciones SVG y evita truncados en secciones grandes).
@@ -156,7 +157,7 @@ final class CanvasChatService
             }
         }
 
-        $cssAppend = trim((string) ($data['css_append'] ?? ''));
+        $cssAppend = trim((string) ($data['css'] ?? ''));
         $css = $canvas['css'] . ($cssAppend !== '' ? "\n/* chat */\n" . $cssAppend : '');
 
         return ['html' => $newHtml, 'css' => $css, 'reply' => self::reply($data)];
@@ -175,7 +176,7 @@ final class CanvasChatService
             'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
-        $data = (array) ($result['data'] ?? []);
+        $data = self::parseEditEnvelope((string) ($result['data'] ?? ''));
         // Cambio global solo de estilo: si el modelo deja "html" vacío, conservamos
         // el HTML actual de la página y aplicamos únicamente el CSS devuelto.
         $newPageHtml = trim((string) ($data['html'] ?? ''));
@@ -190,6 +191,49 @@ final class CanvasChatService
     {
         $reply = trim((string) ($data['reply'] ?? ''));
         return $reply !== '' ? mb_substr($reply, 0, 400) : 'Hecho, cambio aplicado.';
+    }
+
+    /**
+     * Extrae una edición Canvas del sobre de texto usado por las acciones de
+     * chat. El HTML deja de viajar dentro de JSON: atributos con comillas,
+     * saltos de línea y CSS complejo ya no pueden invalidar la respuesta.
+     *
+     * @return array{html:string,css:string,reply:string}
+     * @throws AIException si faltan bloques o la edición está vacía
+     */
+    public static function parseEditEnvelope(string $raw): array
+    {
+        $raw = trim($raw);
+        // Algunos modelos añaden un fence pese a la instrucción; se tolera
+        // siempre que dentro exista el sobre completo.
+        if (preg_match('/^```(?:html|text)?\s*(.*?)\s*```$/is', $raw, $fence)) {
+            $raw = trim((string) $fence[1]);
+        }
+
+        $extract = static function (string $tag) use ($raw): ?string {
+            if (!preg_match('~<' . preg_quote($tag, '~') . '>\s*(.*?)\s*</' . preg_quote($tag, '~') . '>~is', $raw, $match)) {
+                return null;
+            }
+            return trim((string) $match[1]);
+        };
+
+        $html = $extract('pp-html');
+        $css = $extract('pp-css');
+        $reply = $extract('pp-reply');
+        if ($html === null || $css === null) {
+            throw new AIException(
+                'La edición no contiene el sobre de texto esperado. Respuesta: ' . mb_substr($raw, 0, 300)
+            );
+        }
+        if ($html === '' && $css === '') {
+            throw new AIException('La edición no contiene ni HTML ni estilos.');
+        }
+
+        return [
+            'html' => $html,
+            'css' => $css,
+            'reply' => $reply ?? '',
+        ];
     }
 
     /**
