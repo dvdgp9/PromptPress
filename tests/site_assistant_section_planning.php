@@ -38,6 +38,24 @@ checkAssistantPlanning(
         && str_contains($instruction, 'reordenar'),
     $instruction
 );
+checkAssistantPlanning(
+    'planner_consolidates_missing_subpages',
+    str_contains($instruction, 'MEJOR ALTERNATIVA VIABLE')
+        && str_contains($instruction, 'secciones, tarjetas o acordeones')
+        && str_contains($instruction, 'NO marques todo ese contenido como no_viable'),
+    $instruction
+);
+checkAssistantPlanning(
+    'planner_separates_content_from_navigation_limit',
+    str_contains($instruction, 'URLs independientes')
+        && str_contains($instruction, 'menú o jerarquía global'),
+    $instruction
+);
+checkAssistantPlanning(
+    'planner_must_not_invent_page_ids',
+    str_contains($instruction, 'No inventes IDs'),
+    $instruction
+);
 
 // La normalización y el job deben conservar items distintos que apuntan a
 // secciones diferentes de la misma página; no deben deduplicarlos por page_id.
