@@ -121,6 +121,8 @@ final class CanvasController
 
         // F5-T4: el pipeline (imágenes, enrutado sección/página, verificación y
         // guardado) vive en CanvasChatService, compartido con el asistente central.
+        // Margen para el timeout HTTP del proveedor (hasta 180s en página completa).
+        @set_time_limit(240);
         try {
             $outcome = CanvasChatService::applyInstruction($siteId, $page, $instruction, $sectionId, $elementContext, 'chat');
         } catch (AIException $e) {

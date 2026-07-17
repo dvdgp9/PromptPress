@@ -691,6 +691,7 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.6,
                     'max_tokens'      => 30000,
+                    'timeout'         => 180,   // reescrituras largas superan los 60s por defecto
                 ],
             ],
 
@@ -731,6 +732,7 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.4,
                     'max_tokens'      => 16000,
+                    'timeout'         => 120,   // reescrituras largas superan los 60s por defecto
                 ],
             ],
 
@@ -768,6 +770,7 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.4,
                     'max_tokens'      => 30000,
+                    'timeout'         => 180,   // reescrituras largas superan los 60s por defecto
                 ],
             ],
 
@@ -1008,6 +1011,7 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.3,
                     'max_tokens'      => 2500,
+                    'timeout'         => 90,
                 ],
             ],
         ];

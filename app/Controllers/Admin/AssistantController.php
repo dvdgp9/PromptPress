@@ -191,7 +191,9 @@ class AssistantController
         $siteId = self::requireSiteId();
         CSRF::check();
 
-        @set_time_limit(180);
+        // Margen: hasta 2 intentos de una edición de página completa (180s de
+        // timeout HTTP cada uno) + guardado.
+        @set_time_limit(420);
         $result = SiteAssistantJobs::stepJob((int) ($params['id'] ?? 0), $siteId);
         if (!$result['ok']) {
             Response::json(['ok' => false, 'error' => (string) $result['error']], 404);

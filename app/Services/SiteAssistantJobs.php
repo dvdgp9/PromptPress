@@ -126,15 +126,7 @@ final class SiteAssistantJobs
             if ($page === null) {
                 throw new \RuntimeException('La página ya no existe o dejó de ser editable.');
             }
-            $outcome = CanvasChatService::applyInstruction(
-                $siteId,
-                $page,
-                (string) $item['instruction'],
-                (string) $item['section'],
-                '',
-                'assistant',
-                'Asistente'
-            );
+            $outcome = self::applyWithRetry($siteId, $page, $item);
             if ($outcome['ok']) {
                 Database::execute(
                     'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
@@ -170,6 +162,43 @@ final class SiteAssistantJobs
         }
 
         return ['ok' => true, 'job' => self::jobState($jobId, $siteId)];
+    }
+
+    /**
+     * Aplica el item con UN reintento automático si el fallo es transitorio
+     * (timeout/red = status 0, rate limit 429, o 5xx del proveedor). Los
+     * rediseños de página completa rozan el timeout con facilidad; un único
+     * reintento absorbe la mayoría de estos fallos sin disparar el coste.
+     *
+     * @param array<string,mixed> $page
+     * @param array<string,mixed> $item
+     * @return array<string,mixed>
+     * @throws AIException
+     */
+    private static function applyWithRetry(int $siteId, array $page, array $item): array
+    {
+        $attempt = static fn (): array => CanvasChatService::applyInstruction(
+            $siteId,
+            $page,
+            (string) $item['instruction'],
+            (string) $item['section'],
+            '',
+            'assistant',
+            'Asistente'
+        );
+
+        try {
+            return $attempt();
+        } catch (AIException $e) {
+            $status = $e->getHttpStatus();
+            $transient = $status === 0 || $status === 429 || $status >= 500;
+            if (!$transient) {
+                throw $e;
+            }
+            error_log('[assistant job] retry item page=' . $page['id'] . ' tras fallo transitorio (status=' . $status . '): ' . $e->getMessage());
+            sleep(2);
+            return $attempt();
+        }
     }
 
     /**
