@@ -760,13 +760,15 @@ class PageController
             Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
         }
 
-        // Referencia visual: obligatoria (es el insumo que define la estructura).
+        // Fuente visual: una captura aporta estructura; una página base puede
+        // actuar por sí sola como referencia de coherencia cuando no hay captura.
         [$images, $imgError] = self::readReferenceImages();
         if ($imgError !== null) {
             Response::json(['ok' => false, 'error' => $imgError], 422);
         }
-        if ($images === []) {
-            Response::json(['ok' => false, 'error' => 'Sube al menos una captura de referencia.'], 422);
+        $sourceError = self::referenceSourceError($siteId, $seedPageId, $images);
+        if ($sourceError !== null) {
+            Response::json(['ok' => false, 'error' => $sourceError], 422);
         }
 
         // Contenido aportado por el usuario: texto escrito y/o documento subido.
@@ -818,6 +820,33 @@ class PageController
             'ai_usage' => self::emptyAiUsage(),
             'image_warning' => $result['image_warning'] ?? null,
         ]);
+    }
+
+    /**
+     * Valida que la generación tenga al menos una fuente visual utilizable:
+     * captura subida O página canvas base del mismo sitio.
+     *
+     * @param array<int,array{mime:string,data:string}> $images
+     */
+    private static function referenceSourceError(int $siteId, int $seedPageId, array $images): ?string
+    {
+        if ($images !== []) {
+            return null;
+        }
+        if ($seedPageId <= 0) {
+            return 'Sube una captura de referencia o elige una página base.';
+        }
+        $seed = Database::selectOne(
+            "SELECT p.id
+             FROM pages p
+             INNER JOIN page_canvas pc ON pc.page_id = p.id
+             WHERE p.id = ? AND p.site_id = ? AND p.render_mode = 'canvas'
+             LIMIT 1",
+            [$seedPageId, $siteId]
+        );
+        return $seed !== null
+            ? null
+            : 'La página base elegida ya no está disponible. Elige otra o sube una captura.';
     }
 
     /**

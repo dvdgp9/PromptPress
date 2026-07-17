@@ -100,7 +100,7 @@
                 <div class="pp-studio-panel__head">
                     <div>
                         <h3>Crea una página desde una referencia</h3>
-                        <p>Tú pones el contenido y una captura de la estructura que te gusta. PromptPress la construye con el estilo de tu web —tomando una página tuya como base— y la deja lista para revisar en el Studio.</p>
+                        <p>Tú pones el contenido y eliges una página base. La captura visual es opcional si quieres inspirarte en otra estructura. PromptPress la deja lista para revisar en el Studio.</p>
                     </div>
                 </div>
 
@@ -164,6 +164,7 @@
                             <div class="pp-dropzone__empty" id="pp-reference-empty">
                                 <span class="pp-dropzone__icon" aria-hidden="true">🖼️</span>
                                 <strong>Arrastra una captura de la estructura que te gusta</strong>
+                                <small>Es opcional si eliges una página base</small>
                                 <small>PNG, JPG o WebP · hasta 4 imágenes · máx. 8 MB cada una</small>
                             </div>
                             <div class="pp-dropzone__previews" id="pp-reference-previews" hidden></div>
@@ -199,7 +200,7 @@
                     <div class="pp-studio-progress pp-studio-reference-progress" id="pp-reference-progress" aria-live="polite" hidden>
                         <div class="pp-studio-progress__bar"><span></span></div>
                         <ol>
-                            <li class="is-active">Analizando tu referencia</li>
+                            <li class="is-active">Analizando tu referencia o página base</li>
                             <li>Tomando el estilo de tu página base</li>
                             <li>Maquetando tu contenido</li>
                             <li>Afinando el diseño</li>

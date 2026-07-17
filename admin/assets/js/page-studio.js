@@ -419,6 +419,7 @@
         var previews = document.getElementById('pp-reference-previews');
         var titleEl  = document.getElementById('pp-reference-title');
         var goalEl   = document.getElementById('pp-reference-goal');
+        var seedEl   = document.getElementById('pp-reference-seed');
         var audEl    = form.querySelector('[name="ai_target_audience"]');
         var detEl    = form.querySelector('[name="ai_extra_context"]');
         var submit   = document.getElementById('pp-reference-submit');
@@ -435,7 +436,14 @@
         }
 
         function updateSubmit() {
-            submit.disabled = !(files.length > 0 && titleEl.value.trim() && goalEl.value.trim());
+            var hasVisualSource = files.length > 0 || seedEl.value;
+            var hasRequiredText = titleEl.value.trim() && goalEl.value.trim();
+            submit.disabled = !(hasVisualSource && hasRequiredText);
+            if (hasRequiredText && !hasVisualSource) {
+                setStatus('Sube una captura o elige una página base.', 'err');
+            } else if (hasVisualSource && status.textContent === 'Sube una captura o elige una página base.') {
+                setStatus('');
+            }
         }
 
         function renderPreviews() {
@@ -505,6 +513,7 @@
 
         titleEl.addEventListener('input', updateSubmit);
         goalEl.addEventListener('input', updateSubmit);
+        seedEl.addEventListener('change', updateSubmit);
 
         function startReferenceProgress() {
             var items = progress.querySelectorAll('li');
@@ -532,8 +541,6 @@
             var typeEl    = form.querySelector('[name="page_type"]');
             var contentEl = form.querySelector('[name="source_content"]');
             var docEl     = form.querySelector('[name="document_id"]');
-            var seedEl    = form.querySelector('[name="seed_page_id"]');
-
             var fd = new FormData();
             fd.set('_csrf', form.querySelector('[name="_csrf"]').value);
             fd.set('title', titleEl.value.trim());
