@@ -8,6 +8,7 @@
  */
 
 use App\Controllers\Admin\AITestController;
+use App\Controllers\Admin\AssistantController;
 use App\Controllers\Admin\AIUsageController;
 use App\Controllers\Admin\AuthController;
 use App\Controllers\Admin\DashboardController;
@@ -132,6 +133,13 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/onboarding/prepare-home',        [OnboardingController::class, 'prepareHome']);
     $r->post('/onboarding/nudge',               [OnboardingController::class, 'nudge']);
     $r->get('/onboarding/skin-preview',         [OnboardingController::class, 'skinPreview']);
+
+    // FEAT-5 — Asistente central del sitio (cambios multi-página por chat/documento)
+    $r->get('/assistant',           [AssistantController::class, 'index']);
+    $r->post('/assistant/extract',  [AssistantController::class, 'extract']);
+    $r->post('/assistant/plan',     [AssistantController::class, 'plan']);
+    $r->post('/assistant/apply',    [AssistantController::class, 'apply']);
+    $r->post('/assistant/jobs/{id}/step', [AssistantController::class, 'step']);
 
     // Páginas (CRUD)
     $r->get('/pages',                [PageController::class, 'index']);

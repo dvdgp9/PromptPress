@@ -189,6 +189,7 @@ final class AIActionRunner
             Actions::COMPOSE_CUSTOM_PAGE_FROM_REFERENCE => self::validateCustomPageDraft($data),
             Actions::COMPOSE_CANVAS_PAGE => self::validateCanvasDraft($data),
             Actions::EDIT_CANVAS_SECTION, Actions::EDIT_CANVAS_PAGE => self::validateCanvasEdit($data),
+            Actions::PLAN_SITE_CHANGES => self::validateSitePlan($data),
             default                          => $warnings,
         };
     }
@@ -211,6 +212,31 @@ final class AIActionRunner
             throw new AIException('La edición no contiene ni "html" ni "css".');
         }
         return [];
+    }
+
+    /**
+     * FEAT-5 — shape mínimo del plan del asistente central. La normalización
+     * semántica (page_id existe, sección válida, status coherente) vive en
+     * SiteAssistantPlanner, que tiene acceso a BD.
+     */
+    private static function validateSitePlan(array $data): array
+    {
+        if (!array_key_exists('items', $data) || !is_array($data['items'])) {
+            throw new AIException('El plan no contiene un array "items".');
+        }
+        foreach (array_values($data['items']) as $i => $item) {
+            if (!is_array($item)) {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no es un objeto válido.');
+            }
+            if (trim((string) ($item['status'] ?? '')) === '') {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "status".');
+            }
+        }
+        $warnings = [];
+        if (trim((string) ($data['summary'] ?? '')) === '') {
+            $warnings[] = 'El plan no trae "summary".';
+        }
+        return $warnings;
     }
 
     /** FH2 — shape mínimo de la página canvas; el sanitizado vive en CanvasService. */

@@ -45,6 +45,7 @@ final class Actions
     public const DESCRIBE_REFERENCE_LAYOUT  = 'describe_reference_layout';
     public const DESIGN_FORM                = 'design_form';                 // FORMS F4
     public const DRAFT_FORM_AUTORESPONDER   = 'draft_form_autoresponder';    // FORMS F4
+    public const PLAN_SITE_CHANGES          = 'plan_site_changes';           // FEAT-5 asistente central
 
     /**
      * FH2 — Principios POSITIVOS de diseño (la otra cara del anti-slop):
@@ -974,6 +975,39 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.3,
                     'max_tokens'      => 3500,
+                ],
+            ],
+
+            // FEAT-5 — Asistente central: descompone una petición (texto y/o
+            // documento) en cambios por página y los clasifica. SOLO planifica:
+            // la ejecución la hace después EDIT_CANVAS_PAGE/SECTION página a página.
+            self::PLAN_SITE_CHANGES => [
+                'label'        => 'Planificar cambios del sitio',
+                'output'       => 'json',
+                'required'     => ['request_text', 'site_map'],
+                'instruction'  =>
+                    "Eres el asistente central de un sitio web ya publicado. El dueño del sitio (o su cliente) pide cambios; tu trabajo es SOLO planificar: descomponer la petición en cambios concretos por página y clasificarlos. Aquí NO generas HTML ni contenido final.\n"
+                  . "Devuelve SOLO JSON con esta forma exacta:\n"
+                  . "{\"summary\":\"...\",\"items\":[{\"page_id\":<int>,\"section\":\"<id de sección o cadena vacía>\",\"instruction\":\"...\",\"status\":\"aplicar|no_viable|ambiguo\",\"reason\":\"...\"}]}\n"
+                  . "REGLAS:\n"
+                  . "- UN item por página afectada: agrupa todos los cambios de una misma página en un solo item con la instrucción completa.\n"
+                  . "- page_id debe ser un id del MAPA DEL SITIO. Si un cambio pedido no corresponde a ninguna página (header/footer global, logo, menú, ajustes, funcionalidades), usa page_id 0 con status no_viable y explica en reason desde dónde se hace o por qué no se puede.\n"
+                  . "- Las páginas listadas como SIN EDITOR en el mapa no son editables por este asistente: cambios sobre ellas → no_viable.\n"
+                  . "- section: si el cambio afecta claramente a UNA sección concreta de la página, pon su id (de los listados en el mapa); si afecta a varias o a toda la página, déjala vacía.\n"
+                  . "- status aplicar: cambio concreto y ejecutable sobre esa página con la información disponible.\n"
+                  . "- status ambiguo: falta información para ejecutarlo con seguridad — NO adivines. En reason formula la pregunta concreta que lo desbloquearía.\n"
+                  . "- status no_viable: no se puede hacer editando páginas (funcionalidad nueva, integraciones, cosas fuera del contenido de una página). reason en tono claro para alguien no técnico.\n"
+                  . "- instruction debe ser AUTOSUFICIENTE: la ejecutará otra IA que solo verá esa página. Incluye literales (textos nuevos, teléfonos, precios) tal cual deben quedar.\n"
+                  . "- Si hay documento adjunto, los cambios salen de él; no inventes cambios que nadie pidió. Si el documento no contiene peticiones de cambio, dilo en summary y devuelve items vacío o ambiguo.\n"
+                  . "- summary: 1-3 frases en castellano resumiendo el plan para el usuario.",
+                'user_template' =>
+                    "MAPA DEL SITIO:\n{site_map}\n\n"
+                  . "PETICIÓN DEL USUARIO:\n{request_text}\n"
+                  . "{document_block}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.3,
+                    'max_tokens'      => 2500,
                 ],
             ],
         ];

@@ -1,0 +1,4 @@
+# Entorno de pruebas desechable (WordPress local, wp-cli).
+dev/
+# Zips generados.
+*.zip

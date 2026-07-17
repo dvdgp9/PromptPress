@@ -10494,3 +10494,71 @@ body.pp-login-page {
 @media (max-width: 860px) {
     .pp-order-grid { grid-template-columns: 1fr; }
 }
+
+/* ======================================================================
+   FEAT-5 — Asistente del sitio (ppa-*)
+   ====================================================================== */
+.ppa-chat { display: flex; flex-direction: column; max-width: 860px; background: var(--pp-admin-surface, #fff); border: 1px solid var(--pp-admin-border, #e7e5e4); border-radius: 12px; overflow: hidden; }
+.ppa-thread { display: flex; flex-direction: column; gap: 14px; padding: 20px; min-height: 260px; max-height: 55vh; overflow-y: auto; }
+.ppa-msg { display: flex; }
+.ppa-msg--user { justify-content: flex-end; }
+.ppa-msg__bubble { max-width: 78%; padding: 10px 14px; border-radius: 12px; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; }
+.ppa-msg--assistant .ppa-msg__bubble { background: var(--pp-admin-bg, #f5f5f4); color: var(--pp-text, #1c1917); border-bottom-left-radius: 4px; }
+.ppa-msg--user .ppa-msg__bubble { background: var(--pp-admin-primary, #4f46e5); color: #fff; border-bottom-right-radius: 4px; }
+.ppa-msg--error .ppa-msg__bubble { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+.ppa-composer { border-top: 1px solid var(--pp-admin-border, #e7e5e4); padding: 12px 16px 14px; background: #fff; }
+.ppa-composer__row { display: flex; align-items: flex-end; gap: 10px; }
+.ppa-composer__attach { flex: 0 0 auto; width: 38px; height: 38px; border: 1px solid var(--pp-admin-border, #e7e5e4); border-radius: 10px; background: #fff; font-size: 1rem; cursor: pointer; transition: background 0.15s; }
+.ppa-composer__attach:hover { background: var(--pp-admin-bg, #f5f5f4); }
+.ppa-composer__attach.is-busy { opacity: 0.5; pointer-events: none; }
+.ppa-composer__input { flex: 1; resize: vertical; min-height: 44px; max-height: 200px; padding: 10px 12px; border: 1px solid var(--pp-admin-border, #e7e5e4); border-radius: 10px; font: inherit; font-size: 0.92rem; }
+.ppa-composer__send { flex: 0 0 auto; }
+.ppa-composer__hint { margin-top: 8px; font-size: 0.78rem; color: var(--pp-text-soft, #78716c); }
+
+.ppa-attachment { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 12px; background: var(--pp-admin-bg, #f5f5f4); border: 1px solid var(--pp-admin-border, #e7e5e4); border-radius: 10px; font-size: 0.85rem; }
+.ppa-attachment__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.ppa-attachment__meta { color: var(--pp-text-soft, #78716c); }
+.ppa-attachment__toggle { margin-left: auto; border: none; background: none; color: var(--pp-admin-primary, #4f46e5); font-size: 0.82rem; cursor: pointer; padding: 2px 4px; }
+.ppa-attachment__remove { border: none; background: none; font-size: 1.1rem; line-height: 1; color: var(--pp-text-soft, #78716c); cursor: pointer; padding: 2px 6px; }
+.ppa-attachment__remove:hover { color: #991b1b; }
+.ppa-attachment-preview { margin: 0 0 10px; padding: 10px 12px; max-height: 200px; overflow-y: auto; background: #fafaf9; border: 1px dashed var(--pp-admin-border, #e7e5e4); border-radius: 10px; font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; }
+
+@media (max-width: 700px) {
+    .ppa-msg__bubble { max-width: 92%; }
+    .ppa-composer__row { flex-wrap: wrap; }
+    .ppa-composer__send { width: 100%; }
+}
+/* El display de CSS pisa el atributo hidden: restaurarlo explícitamente. */
+.ppa-attachment[hidden], .ppa-attachment-preview[hidden] { display: none; }
+
+/* FEAT-5 F5-T3 — tarjetas del plan propuesto */
+.ppa-msg__bubble--plan { max-width: 94%; width: 100%; }
+.ppa-plan__summary { margin: 0 0 12px; font-weight: 500; }
+.ppa-item { border: 1px solid var(--pp-admin-border, #e7e5e4); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+.ppa-item__head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.ppa-item__badge { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+.ppa-item--ok .ppa-item__badge { background: #dcfce7; color: #166534; }
+.ppa-item--ask .ppa-item__badge { background: #fef9c3; color: #854d0e; }
+.ppa-item--no .ppa-item__badge { background: #fee2e2; color: #991b1b; }
+.ppa-item--ok { border-left: 3px solid #22c55e; }
+.ppa-item--ask { border-left: 3px solid #eab308; }
+.ppa-item--no { border-left: 3px solid #ef4444; }
+.ppa-item__page { font-weight: 600; font-size: 0.88rem; }
+.ppa-item__body { font-size: 0.86rem; color: var(--pp-text, #1c1917); }
+.ppa-plan__foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.ppa-plan__note { font-size: 0.78rem; color: var(--pp-text-soft, #78716c); }
+.ppa-msg--thinking .ppa-msg__bubble { opacity: 0.7; font-style: italic; }
+
+/* FEAT-5 F5-T4/T5 — progreso e informe del asistente */
+.ppa-progress__title { font-weight: 600; margin-bottom: 8px; }
+.ppa-progress__row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; font-size: 0.87rem; border-bottom: 1px solid var(--pp-admin-border, #e7e5e4); }
+.ppa-progress__row:last-child { border-bottom: none; }
+.ppa-progress__icon { width: 18px; text-align: center; flex: 0 0 auto; }
+.ppa-progress__label { flex: 1; }
+.ppa-progress__state { font-size: 0.78rem; color: var(--pp-text-soft, #78716c); }
+.ppa-progress__row--running .ppa-progress__state { color: var(--pp-admin-primary, #4f46e5); font-weight: 600; }
+.ppa-progress__row--done .ppa-progress__icon { color: #16a34a; }
+.ppa-progress__row--failed .ppa-progress__icon { color: #dc2626; }
+.ppa-item__link { margin-left: auto; font-size: 0.82rem; color: var(--pp-admin-primary, #4f46e5); text-decoration: none; font-weight: 600; }
+.ppa-item__link:hover { text-decoration: underline; }

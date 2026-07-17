@@ -303,3 +303,77 @@ Decisión del usuario (2026-07-07): implementar las opciones 1 (trampa de tiempo
 ---
 
 Histórico completo de tareas cerradas (Unsplash/imágenes, panel/chat Studio, limpieza plantillas-bloque, chrome header/footer) archivado en [`.cursor/scratchpad-archive.md`](scratchpad-archive.md).
+
+# FEAT-5 — Asistente central del sitio: cambios multi-página por chat/documento (2026-07-17, Planner)
+
+## Background and Motivation (FEAT-5)
+
+Una vez entregada la web, el cliente pide tandas de cambios que afectan a varias páginas ("cambiad el teléfono en toda la web", "aquí va el nuevo texto de Servicios y quitad la sección de precios", a veces en un documento adjunto). Hoy eso exige entrar página a página al Studio y pedir cada cambio por separado. Se quiere una IA "central" a nivel de sitio: recibe una petición en texto libre y/o un documento, decide qué páginas tocar, aplica los cambios y devuelve un informe (qué hizo, qué no es viable, qué no entendió).
+
+## Key Challenges and Analysis (FEAT-5)
+
+**Qué ya existe y se reutiliza (por eso la viabilidad es ALTA):**
+- Pipeline de edición por chat de una página canvas: `CanvasController::chat()` → `applySectionEdit`/`applyPageEdit`, con sanitizado (`CanvasSanitizer`), versionado (25 versiones, undo/redo, restore) y draft/publish. El motor de "aplicar un cambio a una página" está resuelto; el asistente central es un orquestador encima.
+- Extracción de documentos: `TextExtractor` (ya usado en Onboarding/Documents/Posts) + `DocumentSummarizer`.
+- Infra IA: `AIProviderFactory`, `PromptBuilder`, `AILogger`/`AIPricing` (coste registrado por llamada), override de modelo por petición.
+
+**Retos reales:**
+1. **Planificación (nuevo)**: mapear la petición → lista de tareas por página. Necesita una llamada IA "planner" con el sitemap del sitio (páginas: título, slug, render_mode, lista de secciones vía `CanvasService::listSections`) que devuelva JSON: items `{page_id, section?, instruction, viable|no_viable|ambiguo, motivo}`. Este paso es también el que genera el informe (lo no viable / no entendido se clasifica ANTES de tocar nada).
+2. **Páginas en modo `sections` (bloques)**: el pipeline de chat solo cubre canvas. V1: el planner marca cambios sobre páginas de bloques como "no viable desde aquí" con enlace al editor clásico (o solo campos de texto simples si sale barato). No bloquea el valor principal: las páginas de marketing son canvas (pivote C10).
+3. **Duración/UX**: N páginas = N llamadas IA (30-90 s cada una). PHP sin colas → tabla de trabajos + ejecución secuencial con polling desde el navegador (mismo patrón request-a-request que ya usa el Studio, pero encadenado por JS). Sin cron ni workers.
+4. **Seguridad del resultado**: cada cambio se guarda como versión draft con summary "Asistente — <petición>"; NADA se publica solo. El informe final lista cada página con enlace a su preview y su botón de publicar/deshacer ya existentes. Reversión = restore por página (ya existe).
+5. **Ambigüedad**: si el planner clasifica un item como ambiguo, NO se ejecuta; se pregunta en el propio chat central. Mejor preguntar que adivinar (misma filosofía que el resto del producto).
+6. **Coste**: 1 llamada planner (barata, solo sitemap+petición) + 1 por página afectada. Se muestra el plan ANTES de ejecutar → el usuario confirma y ve cuántas páginas se van a tocar.
+
+**Decisión de diseño clave (a validar por el usuario):** flujo en dos fases — (1) "Proponer plan": la IA responde con el desglose por página y lo no viable; (2) "Aplicar": el usuario confirma y se ejecutan los items viables uno a uno con progreso visible. Evita sorpresas, cortes a mitad y gasto no consentido.
+
+## High-level Task Breakdown (FEAT-5)
+
+### Fase 1 — Planner + informe (sin aplicar nada aún)
+- **F5-T1**: UI `/admin/assistant` (chat central): textarea + subida de documento (reutiliza `TextExtractor`), listado de conversaciones no necesario en v1 (stateless por petición). Éxito: la página carga, acepta texto y/o doc, muestra el texto extraído.
+- **F5-T2**: Servicio `SiteAssistantPlanner`: construye sitemap (páginas + secciones canvas), llama a la IA, devuelve plan JSON validado (items con page_id real, clasificación viable/no_viable/ambiguo + motivo en castellano). Éxito: con una petición de prueba multi-página devuelve plan coherente; item sobre página de bloques sale como no_viable con motivo claro; petición sin sentido sale 100% ambigua.
+- **F5-T3**: Render del plan en el chat: agrupado por estado, con "Aplicar N cambios" solo sobre los viables. Éxito: visual verificado en navegador.
+
+### Fase 2 — Ejecución + informe final
+- **F5-T4**: Tabla `assistant_jobs` (+items) y endpoint "ejecutar siguiente item": reutiliza internamente el mismo camino que `CanvasController::chat()` (extraer a un servicio compartido `CanvasChatService` lo que hoy vive en el controller, sin duplicar). Cada item aplicado = versión draft con summary del asistente. Éxito: job de 2 páginas deja 2 versiones draft correctas; un fallo IA en el item 2 no rompe el item 1 y queda registrado.
+- **F5-T5**: Progreso por polling en la UI + informe final: por página → hecho (enlace a preview + publicar), fallido (motivo), omitido. Éxito: verificado end-to-end en navegador con el dev server.
+
+### Fase 3 — Pulido (posterior, según uso real)
+- **F5-T6** (opcional): publicar en lote desde el informe; historial de peticiones del asistente; soporte de campos simples en páginas de bloques.
+
+## Project Status Board (FEAT-5)
+
+- [x] F5-T1 UI chat central + subida de documento (2026-07-17)
+- [x] F5-T2 SiteAssistantPlanner (plan JSON + clasificación) (2026-07-17)
+- [x] F5-T3 Render del plan + confirmación (2026-07-17)
+- [x] F5-T4 Jobs + ejecución item a item (extraer CanvasChatService) (2026-07-17)
+- [x] F5-T5 Progreso + informe final (2026-07-17)
+- [ ] F5-T6 (opcional) publicación en lote / historial / bloques
+
+## Decisiones pendientes del usuario (FEAT-5)
+
+1. ¿OK al flujo en dos fases (plan → confirmar → aplicar)? Alternativa: aplicar directo sin confirmación (más rápido, más riesgo/gasto).
+2. Páginas de bloques en v1: ¿basta con marcarlas "no viable, usa el editor clásico"?
+3. ¿El asistente puede tocar también posts del blog, o solo páginas? (Propuesta v1: solo páginas.)
+
+## Decisiones cerradas (usuario, 2026-07-17) (FEAT-5)
+
+1. Flujo en dos fases confirmado: plan → confirmar → aplicar.
+2. No existen ya páginas en modo bloques (todo es canvas) → desaparece el reto #2: el planner no necesita la rama "no viable por bloques". Simplifica F5-T2.
+3. Alcance v1: solo páginas, no posts del blog.
+4. Futuro (backlog, no v1): **F5-T7** — subir varias entradas de blog de golpe y que el asistente las planifique, redacte y publique.
+
+## Current Status / Progress Tracking (FEAT-5)
+
+**F5-T1 (2026-07-17): completada y verificada E2E en navegador.** Nuevos ficheros: `app/Controllers/Admin/AssistantController.php` (GET /admin/assistant + POST /admin/assistant/extract), `views/admin/assistant/index.php`, `admin/assets/js/assistant.js`; CSS namespaced `ppa-*` añadido a `admin/assets/css/admin.css`; entrada "Asistente" en el nav de `views/admin/layout.php` (los splices de módulos pasan de índice 12 a 13 por el item nuevo). El adjunto es stateless: se extrae texto (TextExtractor, cap 60k chars) desde un tmp con extensión y se borra; NO crea filas en `documents`. El envío del chat es stub client-side hasta F5-T2 (`sendRequest()` en assistant.js indica dónde enchufar POST /admin/assistant/plan con {instruction, doc_text}). Verificado: página carga con sesión admin, subida real de TXT → chip con nombre + nº caracteres + "Ver texto" con preview, envío pinta burbujas user/assistant; .png rechazado con 422.
+
+**F5-T2 + F5-T3 (2026-07-17): completadas y verificadas E2E con IA real.** Nueva acción `Actions::PLAN_SITE_CHANGES` (output json, tier main, temp 0.3) + validador de shape `validateSitePlan` en AIActionRunner. Nuevo servicio `app/Services/SiteAssistantPlanner.php`: `sitePages()` (páginas no-article, sin slugs __*, con flag editable=canvas+page_canvas y lista de secciones vía CanvasService::listSections), `renderSiteMap()` (bloques EDITABLES / SIN EDITOR) y `normalizeItems()` (invariantes post-IA: status del vocabulario, page_id real, "aplicar" solo sobre editables, sección inexistente cae a página completa). Endpoint `POST /admin/assistant/plan` en AssistantController (instruction ≤4000 + doc_text ≤60k, doc recortado a 30k en el prompt). UI: `renderPlan()` en assistant.js pinta summary + tarjetas por estado (SE APLICARÁ verde / NECESITO ACLARAR amarillo / NO VIABLE rojo) + botón "Aplicar N cambios" (stub hasta F5-T4, punto de enganche `applyPlan()`). Verificado con IA real (gemini-3-flash via OpenRouter, ~$0.002/plan): petición multi-página → 3 aplicar con página+sección correctas y Bizum/logo no_viable con motivo claro; petición sin sentido → 100% ambiguo con pregunta concreta; documento sin texto libre → plan correcto extraído del doc. Captura OK, consola limpia.
+
+**F5-T4 + F5-T5 (2026-07-17): completadas y verificadas E2E con IA real.** (1) REFACTOR: el pipeline de CanvasController::chat() (imágenes, enrutado sección/página, verificación de imágenes, guardado) movido a `app/Services/Canvas/CanvasChatService::applyInstruction()` (param origin: 'chat'|'assistant'); el controller delega y mapea errores a HTTP; regresión OK (chat del Studio probado vía HTTP + tests/canvas_runtime.php 49/49). (2) JOBS: migración `2026_07_17_assistant_jobs.sql` (assistant_jobs + assistant_job_items, FK cascade) aplicada al dev y AÑADIDA a install/schema.sql (no agravar la divergencia conocida). `app/Services/SiteAssistantJobs.php`: createJob (re-valida items contra sitePages, cap 12), stepJob (un item por request, fallo no detiene los siguientes, job done al agotar pendientes), jobState. Endpoints `POST /admin/assistant/apply` y `POST /admin/assistant/jobs/{id}/step` (el navegador llama step en bucle — sin cron ni colas). (3) UI: progreso por item (en cola/aplicando/hecho/falló) e informe final con enlace "Revisar y publicar →" al Studio por página y nota de que todo queda en borrador. VERIFICADO: job real de 2 páginas → item 1 (Servicios·hero) falló por timeout 60s de OpenRouter y NO impidió el item 2 (Sobre nosotros·quote) que quedó como versión draft origin='assistant' con el texto nuevo en page_canvas; job 'done'; informe correcto con ambos estados. El fallo por timeout es entorno/latencia, no bug: comportamiento diseñado.
+
+## Lessons (FEAT-5)
+
+- `Core\Response::json/html/redirect` son `never` (hacen `exit`): un `finally` tras un catch que responda JSON NO se ejecuta. Limpiar recursos (tmp files) ANTES de llamar a Response::*.
+- `finfo` clasifica contenido texto-ish como `text/plain` aunque el archivo se llame `foto.png` → validar también la extensión del nombre original (rechazar extensiones fuera de la whitelist aunque el mime cuele). Ojo: `DocumentController::detectType` tiene la misma laxitud en /admin/documents.
+- Si una clase CSS fija `display:flex`, pisa el atributo HTML `hidden`; añadir `.clase[hidden]{display:none}`.
+- El provider HTTP tiene timeout de 60s: ediciones canvas de secciones grandes pueden superarlo y fallar con "Error de red ... timed out". En el asistente es un item failed tolerado; si se repite mucho, considerar subir el timeout del provider o reintento único por item.

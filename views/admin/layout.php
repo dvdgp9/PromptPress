@@ -31,6 +31,7 @@
             $currentPath = \Core\Request::path();
             $navItems = [
                 ['url' => 'admin/',           'icon' => 'dashboard', 'label' => 'Escritorio',     'match' => '/admin'],
+                ['url' => 'admin/assistant',  'icon' => 'ai',        'label' => 'Asistente',      'match' => '/admin/assistant'],
                 ['url' => 'admin/pages',      'icon' => 'pages',     'label' => 'Páginas',        'match' => '/admin/pages'],
                 ['url' => 'admin/posts',      'icon' => 'posts',     'label' => 'Entradas',       'match' => '/admin/posts'],
                 ['url' => 'admin/media',      'icon' => 'media',     'label' => 'Medios',         'match' => '/admin/media'],
@@ -50,17 +51,17 @@
             // FEAT-3 — entradas de módulos activables (solo si están activos).
             $navSiteId = \Core\Auth::siteId();
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'commerce')) {
-                array_splice($navItems, 12, 0, [
+                array_splice($navItems, 13, 0, [
                     ['url' => 'admin/commerce', 'icon' => 'commerce', 'label' => 'Tienda', 'match' => '/admin/commerce'],
                 ]);
             }
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'booking')) {
-                array_splice($navItems, 12, 0, [
+                array_splice($navItems, 13, 0, [
                     ['url' => 'admin/booking', 'icon' => 'booking', 'label' => 'Reservas', 'match' => '/admin/booking'],
                 ]);
             }
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'analytics')) {
-                array_splice($navItems, 12, 0, [
+                array_splice($navItems, 13, 0, [
                     ['url' => 'admin/analytics', 'icon' => 'analytics', 'label' => 'Analítica', 'match' => '/admin/analytics'],
                 ]);
             }

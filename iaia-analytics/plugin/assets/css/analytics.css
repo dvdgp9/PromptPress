@@ -1,0 +1,377 @@
+/**
+ * analytics.css — estilos del dashboard de IAIA Analytics.
+ *
+ * Portado del bloque "Analítica" de PromptPress (admin/assets/css/admin.css,
+ * FEAT-3 A5). Las variables --pp-* del tema de PromptPress se definen aquí
+ * scoped al contenedor del plugin para no contaminar el admin de WordPress.
+ */
+
+.iaia-analytics-wrap {
+    --pp-surface: #ffffff;
+    --pp-surface-alt: #f5f5f4;
+    --pp-primary: #ea580c;
+    --pp-primary-soft: rgba(234, 88, 12, 0.08);
+    --pp-text: #1c1917;
+    --pp-text-muted: #78716c;
+    --pp-text-subtle: #a8a29e;
+    --pp-border: #e7e5e4;
+    --pp-border-strong: #d6d3d1;
+    --pp-radius-lg: 16px;
+    --pp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --pp-duration-fast: 140ms;
+    --pp-shadow-sm: 0 1px 0 rgba(28, 25, 23, 0.02), 0 1px 2px rgba(28, 25, 23, 0.04);
+
+    max-width: 1080px;
+    margin-top: 16px;
+}
+
+/* Drill-down (F1/F2): migas, buscador, enlaces "Ver todo" y tarjeta a ancho completo. */
+.iaia-analytics-breadcrumb {
+    margin: 0 0 2px;
+    font-size: 0.8rem;
+}
+.iaia-analytics-breadcrumb a { text-decoration: none; color: var(--pp-text-muted); }
+.iaia-analytics-breadcrumb a:hover { color: var(--pp-primary); }
+.iaia-analytics-search {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.iaia-analytics-search input[type="search"] {
+    min-width: 280px;
+    border-radius: 8px;
+}
+.iaia-analytics-search__clear { font-size: 0.85rem; color: var(--pp-text-muted); text-decoration: none; }
+.iaia-analytics-search__clear:hover { color: var(--pp-primary); }
+.iaia-analytics-fullcard { max-width: none; }
+.pp-analytics-card__more {
+    float: right;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--pp-primary);
+}
+.pp-analytics-card__more:hover { color: var(--pp-text); }
+.pp-analytics-list__label a {
+    color: inherit;
+    text-decoration: none;
+}
+.pp-analytics-list__label a:hover { color: var(--pp-primary); }
+/* En list/detail los rangos son <a>: mismo aspecto que los botones. */
+a.pp-analytics-range { text-decoration: none; }
+
+/* Override WP admin default blue links inside plugin pages. */
+.iaia-analytics-wrap a { color: var(--pp-text-muted); }
+.iaia-analytics-wrap a:hover,
+.iaia-analytics-wrap a:focus { color: var(--pp-primary); }
+.iaia-analytics-wrap .notice a { color: var(--pp-primary); text-decoration: underline; }
+.iaia-analytics-wrap .notice a:hover { color: var(--pp-text); }
+
+/* Override WP blue button inside plugin pages. */
+.iaia-analytics-wrap .button-primary {
+    background: var(--pp-primary);
+    border-color: var(--pp-primary);
+    color: #fff;
+}
+.iaia-analytics-wrap .button-primary:hover,
+.iaia-analytics-wrap .button-primary:focus {
+    background: #c2410c;
+    border-color: #c2410c;
+    color: #fff;
+}
+
+/* Importador GA4 (F4). */
+.iaia-analytics-steps {
+    margin: 8px 0 0 18px;
+    font-size: 0.88rem;
+    color: var(--pp-text-muted);
+}
+.iaia-analytics-steps li { margin-bottom: 4px; }
+
+/* Cabecera de la página (equivalente al .pp-page-header de PromptPress). */
+.iaia-analytics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.iaia-analytics-header h1 {
+    margin: 0 0 4px;
+    padding: 0;
+    font-size: 1.4rem;
+    color: var(--pp-text);
+}
+.iaia-analytics-header__lead {
+    margin: 0;
+    color: var(--pp-text-muted);
+    font-size: 0.9rem;
+}
+
+/* Analítica — dashboard del módulo Analytics (FEAT-3 A5) */
+.pp-icon--analytics {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Crect x='7' y='12' width='3' height='6' rx='1'/%3E%3Crect x='12' y='8' width='3' height='10' rx='1'/%3E%3Crect x='17' y='5' width='3' height='13' rx='1'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Crect x='7' y='12' width='3' height='6' rx='1'/%3E%3Crect x='12' y='8' width='3' height='10' rx='1'/%3E%3Crect x='17' y='5' width='3' height='13' rx='1'/%3E%3C/svg%3E");
+}
+
+.pp-analytics-ranges {
+    display: inline-flex;
+    background: var(--pp-surface);
+    border: 1px solid var(--pp-border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+    box-shadow: var(--pp-shadow-sm);
+}
+.pp-analytics-range {
+    border: 0;
+    background: transparent;
+    padding: 7px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--pp-text-muted);
+    cursor: pointer;
+    transition: background var(--pp-duration-fast) var(--pp-ease), color var(--pp-duration-fast) var(--pp-ease);
+}
+.pp-analytics-range:hover { color: var(--pp-text); }
+.pp-analytics-range.is-active {
+    background: var(--pp-primary);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(234,88,12,0.35);
+}
+
+#pp-analytics { display: flex; flex-direction: column; gap: 16px; }
+#pp-analytics.is-loading { opacity: 0.55; pointer-events: none; transition: opacity 150ms ease; }
+
+.pp-analytics-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+}
+.pp-analytics-kpi {
+    background: var(--pp-surface);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: var(--pp-shadow-sm);
+    position: relative;
+    overflow: hidden;
+}
+.pp-analytics-kpi::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--pp-primary);
+    opacity: 0.75;
+}
+.pp-analytics-kpi__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--pp-text-muted);
+}
+.pp-analytics-kpi__value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--pp-text);
+    font-variant-numeric: tabular-nums;
+}
+.pp-analytics-kpi__delta {
+    font-size: 0.8rem;
+    font-weight: 600;
+    align-self: flex-start;
+    padding: 1px 8px;
+    border-radius: 999px;
+}
+.pp-analytics-kpi__delta--up   { color: #047857; background: #ecfdf5; }
+.pp-analytics-kpi__delta--down { color: #991b1b; background: #fef2f2; }
+
+.pp-analytics-chart-card {
+    background: var(--pp-surface);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    padding: 20px;
+    box-shadow: var(--pp-shadow-sm);
+}
+.pp-analytics-chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.pp-analytics-chart-head h3 { margin: 0; font-size: 1rem; }
+.pp-analytics-legend { display: flex; gap: 16px; font-size: 0.8rem; color: var(--pp-text-muted); }
+.pp-analytics-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.pp-analytics-legend__item::before {
+    content: '';
+    width: 10px; height: 10px; border-radius: 3px;
+}
+.pp-analytics-legend__item--pv::before  { background: rgba(234,88,12,0.35); }
+.pp-analytics-legend__item--vis::before { background: var(--pp-primary); border-radius: 999px; height: 4px; }
+
+.pp-analytics-chart { position: relative; }
+.pp-analytics-svg { width: 100%; height: auto; display: block; }
+.pp-analytics-grid-line { stroke: var(--pp-border); stroke-width: 1; }
+.pp-analytics-axis { fill: var(--pp-text-subtle); font-size: 11px; }
+.pp-analytics-bar {
+    fill: rgba(234,88,12,0.28);
+    transition: fill 120ms ease;
+    animation: ppBarGrow 420ms var(--pp-ease) backwards;
+}
+.pp-analytics-bar.is-hover, .pp-analytics-bar:hover { fill: rgba(234,88,12,0.55); }
+@keyframes ppBarGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.pp-analytics-line { fill: none; stroke: var(--pp-primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pp-analytics-area { fill: rgba(234,88,12,0.07); }
+.pp-analytics-dot  { fill: var(--pp-primary); }
+.pp-analytics-guide { stroke: var(--pp-border-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.pp-analytics-tooltip {
+    position: absolute;
+    z-index: 5;
+    background: #1c1917;
+    color: #fafaf9;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(28,25,23,0.25);
+    white-space: nowrap;
+}
+.pp-analytics-tooltip[hidden] { display: none; }
+.pp-analytics-swatch {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    margin-right: 6px;
+}
+.pp-analytics-swatch--pv  { background: rgba(234,88,12,0.5); }
+.pp-analytics-swatch--vis { background: var(--pp-primary); border-radius: 999px; }
+
+.pp-analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+.pp-analytics-card {
+    background: var(--pp-surface);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    padding: 20px;
+    box-shadow: var(--pp-shadow-sm);
+}
+.pp-analytics-card h3 { margin: 0 0 12px; font-size: 0.95rem; }
+.pp-analytics-card__subtitle {
+    margin-top: 18px !important;
+    font-size: 0.78rem !important;
+    color: var(--pp-text-muted) !important;
+    font-weight: 600;
+}
+
+.pp-analytics-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pp-analytics-list__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    overflow: hidden;
+    animation: ppListIn 260ms var(--pp-ease) backwards;
+}
+@keyframes ppListIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.pp-analytics-list__bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--pp-primary-soft);
+    border-radius: 8px;
+    transition: width 400ms var(--pp-ease);
+}
+.pp-analytics-list__label {
+    position: relative;
+    font-size: 0.87rem;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.pp-analytics-list__count {
+    position: relative;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--pp-text);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+.pp-analytics-list__count small { color: var(--pp-text-subtle); font-weight: 500; }
+.pp-analytics-list__empty { color: var(--pp-text-subtle); font-size: 0.85rem; padding: 6px 10px; list-style: none; }
+
+.pp-analytics-devices { display: flex; flex-direction: column; gap: 10px; }
+.pp-analytics-device { display: flex; align-items: center; gap: 10px; font-size: 0.87rem; }
+.pp-analytics-device__icon {
+    flex-shrink: 0;
+    color: var(--pp-text-muted);
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+.pp-analytics-device__name { width: 86px; flex-shrink: 0; color: var(--pp-text); }
+.pp-analytics-device__track {
+    flex: 1;
+    height: 8px;
+    background: var(--pp-surface-alt);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.pp-analytics-device__fill {
+    display: block;
+    height: 100%;
+    background: var(--pp-primary);
+    border-radius: 999px;
+    transition: width 500ms var(--pp-ease);
+}
+.pp-analytics-device__pct {
+    width: 42px;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.pp-analytics-hint { margin: 12px 0 0; font-size: 0.78rem; color: var(--pp-text-subtle); }
+.pp-analytics-hint code { background: var(--pp-surface-alt); padding: 1px 5px; border-radius: 4px; }
+.pp-analytics-footnote { font-size: 0.78rem; color: var(--pp-text-subtle); margin: 0; }
+
+.pp-analytics-empty {
+    background: var(--pp-surface);
+    border: 1px dashed var(--pp-border-strong);
+    border-radius: var(--pp-radius-lg);
+    padding: 48px 24px;
+    text-align: center;
+}
+.pp-analytics-empty__icon { margin-bottom: 8px; color: var(--pp-text-subtle); }
+.pp-analytics-empty__icon .dashicons { font-size: 40px; width: 40px; height: 40px; }
+.pp-analytics-empty h3 { margin: 0 0 6px; }
+.pp-analytics-empty p { margin: 0 auto; max-width: 46em; color: var(--pp-text-muted); font-size: 0.9rem; }
+
+@media (max-width: 720px) {
+    .pp-analytics-kpis { grid-template-columns: repeat(2, 1fr); }
+    .pp-analytics-ranges { align-self: flex-start; }
+}
