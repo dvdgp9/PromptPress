@@ -65,6 +65,10 @@ final class CanvasChatService
         $wantsNewSection = self::requestsNewSection($instruction);
 
         $effectiveInstruction = $instruction;
+        $crossPageReference = CanvasCrossPageReference::resolve($siteId, $page, $instruction);
+        if ($crossPageReference !== null) {
+            $effectiveInstruction .= CanvasCrossPageReference::promptBlock($crossPageReference);
+        }
         if (!$wantsNewSection && $sectionId !== '' && $elementContext !== '') {
             $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
         }

@@ -178,7 +178,8 @@ $icon = static function (string $name): string {
       </div>
       <form id="chat-form">
         <textarea id="chat-input" rows="2" maxlength="1200"
-          placeholder="Ej.: pon el titular más grande y el botón en otro color"></textarea>
+          placeholder="Ej.: haz esta sección como «metodología» de la página Inicio"></textarea>
+        <p class="cvstudio-insert__hint">También puedes usar una sección de otra página como referencia; sus textos solo se copian si lo pides.</p>
         <div class="cvstudio-chat__formfoot">
           <?php if (!empty($aiModels)): ?>
           <label class="cvstudio-model" title="Modelo de IA usado para aplicar el cambio">
