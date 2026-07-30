@@ -1565,3 +1565,75 @@ Verificación:
 - Filtrar filas DESPUÉS del `LIMIT` es una trampa: `images($siteId, 1, true)` con el filtro de logos en PHP devolvía vacío cuando la única fila del LIMIT era un logo, y `hasOwnImages()` mentía. El filtro tiene que ir en el WHERE.
 - `Response::json()` hace `exit`, así que un `register_shutdown_function` registrado antes SÍ se ejecuta después de enviar el cuerpo: sirve para trabajo post-respuesta (descripción con IA) sin hacer esperar al navegador. Medido: subida en 1,32 s con la descripción llegando después.
 - Detectar el fondo de una sección por geometría (`getBoundingClientRect`) es frágil si se mide antes del layout; en la práctica funciona porque se calcula al seleccionar, ya con la página pintada, pero conviene no moverlo a la carga.
+
+---
+
+# [C3-FIX] La generación seguía bajando fotos de Unsplash con 9 propias — 30/07/2026 (Executor)
+
+## Lo que reportó el usuario
+
+Página nueva desde /admin/pages con IA, desde referencia visual + documento ya
+subido. El sitio tenía **9 imágenes en Medios, todas con descripción**, y la
+página salió con **2 fotos descargadas de Unsplash**.
+
+## Causas (tres, encadenadas)
+
+1. **`COMPOSE_CANVAS_PAGE` no recibe `available_images`.** La única vía por la
+   que una foto llega a la generación canvas es dentro de `sections_outline`.
+2. **Con referencia visual, el pool de fotos propias no se enviaba.** El bloque
+   de pool estaba dentro de `if (!$hasRefs)`, así que en el flujo "desde
+   referencia" el modelo **nunca veía** las 9 fotos: solo lo que nosotros le
+   hubiéramos asignado sección a sección.
+3. **El emparejado por sección era léxico.** `bestMatch()` exigía una palabra
+   compartida entre el brief y la descripción. Verificado con briefs y
+   descripciones realistas: "estudiantes en un aula preparando oposiciones" no
+   empareja con "Grupo de alumnos en clase…" (sinónimos), y "equipo docente del
+   centro" emparejaba con la foto de la **fachada** por compartir "centro" —
+   una asignación equivocada, que es peor que ninguna porque el modelo la da por
+   buena. Los briefs sin pareja caían directos a Unsplash **teniendo 6 fotos
+   propias sin usar**: exactamente las 2 descargas del usuario.
+
+## Arreglo
+
+- El pool de fotos propias **va siempre** al outline (con referencia también),
+  etiquetado como prioritario, con "cada foto una vez" y "entre una propia que
+  encaje y una de banco, la propia". Las secciones sin foto asignada dejan de
+  decir "diséñala sin foto" y pasan a "elige la que mejor encaje del POOL".
+- **Presupuesto de banco**: se cuenta cuánta foto pide la página y cuántas
+  propias hay; si las propias cubren, a Unsplash **no se le llama**. Solo se
+  descarga el déficit.
+- `bestMatch()` acepta `minScore`; la generación exige **2 palabras** en común
+  para asignar. Con menos, la sección se queda sin asignar y decide el modelo,
+  que sí entiende de significado. La orientación pasa a desempatar (+0,5) sin
+  poder alcanzar el umbral por sí sola.
+- Las bandas `theme: image` ya no se degradan a `dark` si queda pool: antes se
+  perdía la banda de foto por no tener asignación nuestra.
+
+## Verificación
+
+- `tests/canvas_generation_own_images.php` (nuevo, 7 comprobaciones): con 9
+  fotos propias descritas y 5 briefs con sinónimos, **0 descargas de banco** y
+  ninguna imagen asignada de banco; el umbral 2 no empareja por casualidad
+  (documentando que con 1 sí lo hacía); las coincidencias claras siguen
+  asignándose; las bandas de foto se conservan.
+- **Generación real end-to-end** en dev por el mismo camino del usuario
+  (referencia visual guardada + 9 fotos propias): el prompt llevó **las 9 fotos
+  en el POOL** y 6 secciones con "elige del POOL"; **0 descargas de Unsplash**
+  (antes 2); la página resultante usó **2 fotos propias y 0 de banco**. Página y
+  filas de prueba borradas: `media` vuelve a 33 filas.
+- 15 suites, 206 comprobaciones en verde.
+
+### Lessons (C3-FIX)
+
+- Emparejar imágenes con briefs comparando palabras es una idea mala en dos
+  direcciones: **falla por sinónimos** y **acierta por casualidad** (una palabra
+  incidental compartida). Si hay un modelo en el bucle que entiende el
+  significado, el trabajo del código es ponerle delante el material completo y
+  bien descrito, no decidir por él.
+- Al probar un matcher con datos sintéticos, usar las MISMAS claves que lee el
+  código (`alt_text`, no `alt`): mi primera demostración "probaba" que fallaban
+  5 de 5 briefs porque solo comparaba contra el nombre del archivo. Casi
+  diagnostiqué la causa equivocada.
+- Un `if (!$hasRefs)` alrededor de un bloque de contexto es una bomba de
+  relojería: el flujo "con referencia" es el principal del producto y se queda
+  sin ese contexto sin que nada lo señale.

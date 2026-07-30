@@ -123,22 +123,25 @@ final class MediaLibraryService
      * @param array<int,array<string,mixed>> $candidates
      * @param array<int,int> $usedIds
      */
-    public static function bestMatch(array $candidates, string $subject, array $usedIds = [], string $orientation = ''): ?array
+    public static function bestMatch(array $candidates, string $subject, array $usedIds = [], string $orientation = '', int $minScore = 1): ?array
     {
         $wanted = self::keywords($subject);
         if ($wanted === []) return null;
+        $minScore = max(1, $minScore);
 
         $best = null;
-        $bestScore = 0;
+        $bestRank = -1.0;
         foreach ($candidates as $row) {
             if (in_array((int) $row['id'], $usedIds, true)) continue;
             $haystack = self::keywords(((string) ($row['alt_text'] ?? '')) . ' ' . ((string) ($row['original_name'] ?? '')));
             if ($haystack === []) continue;
+            // El umbral se mide SOLO con palabras compartidas; la orientación
+            // desempata (media décima) pero no puede hacer que una coincidencia
+            // flojita alcance el mínimo exigido.
             $score = count(array_intersect($wanted, $haystack));
-            if ($score === 0) continue;
-            // Desempate suave por orientación pedida.
-            if ($orientation !== '' && self::orientationMatches($row, $orientation)) $score++;
-            if ($score > $bestScore) { $bestScore = $score; $best = $row; }
+            if ($score < $minScore) continue;
+            $rank = $score + (($orientation !== '' && self::orientationMatches($row, $orientation)) ? 0.5 : 0);
+            if ($rank > $bestRank) { $bestRank = $rank; $best = $row; }
         }
         return $best;
     }

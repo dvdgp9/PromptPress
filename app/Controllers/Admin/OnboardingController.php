@@ -1600,16 +1600,35 @@ final class OnboardingController
         $ownPool = \App\Services\MediaLibraryService::images($siteId, 40, true);
         $ownUsed = [];
 
+        // C3-FIX — Cuánta foto pide la página en total y cuánta propia hay. Si
+        // las propias dan para cubrirla, al banco NO se le llama: antes bastaba
+        // que mi comparador de palabras no encontrara pareja para un brief
+        // (sinónimos: "estudiantes/aula" frente a "alumnos/clase") para bajar
+        // una foto de stock teniendo 6 propias sin usar.
+        $wantedTotal = 0;
+        foreach ($plan as $block) {
+            $brief = $block['image_brief'] ?? null;
+            if (is_array($brief)) $wantedTotal += max(1, min(4, (int) ($brief['count'] ?? 1)));
+        }
+        $bankBudget = max(0, $wantedTotal - count($ownPool));
+
         foreach ($plan as $i => $block) {
             $brief = $block['image_brief'] ?? null;
             if (is_array($brief) && $ownPool !== []) {
                 $wantedOwn = max(1, min(4, (int) ($brief['count'] ?? 1)));
                 while (count($plan[$i]['images']) < $wantedOwn) {
+                    // Umbral 2: con una sola palabra en común se emparejaba por
+                    // casualidad ("equipo docente del centro" → foto de la
+                    // FACHADA, por "centro"). Una asignación equivocada es peor
+                    // que ninguna, porque el modelo la da por buena. Si no hay
+                    // coincidencia clara, la sección se queda sin asignar y el
+                    // modelo elige del pool, que sí entiende de significado.
                     $match = \App\Services\MediaLibraryService::bestMatch(
                         $ownPool,
                         (string) $brief['subject'],
                         $ownUsed,
-                        (string) ($brief['orientation'] ?? '')
+                        (string) ($brief['orientation'] ?? ''),
+                        2
                     );
                     if ($match === null) break;
                     $ownUsed[] = (int) $match['id'];
@@ -1623,8 +1642,9 @@ final class OnboardingController
             }
 
             $wanted = is_array($brief) ? max(1, min(4, (int) ($brief['count'] ?? 1))) : 0;
-            // Solo se molesta al banco por lo que las fotos propias no cubren.
-            if ($available && is_array($brief) && count($plan[$i]['images']) < $wanted) {
+            // Solo se molesta al banco por lo que las fotos propias no dan.
+            if ($available && $bankBudget > 0 && is_array($brief) && count($plan[$i]['images']) < $wanted) {
+                $wanted = min($wanted, count($plan[$i]['images']) + $bankBudget);
                 try {
                     $results = ImageBankService::search((string) $brief['subject'], $wanted + 5, (string) $brief['orientation']);
                     foreach ($results as $result) {
@@ -1633,6 +1653,7 @@ final class OnboardingController
                         if ($resultId === '' || isset($usedIds[$resultId])) continue;
                         $row = ImageBankService::downloadToMedia($result, $siteId, Auth::id());
                         $usedIds[$resultId] = true;
+                        $bankBudget--;
                         $plan[$i]['images'][] = [
                             'url' => '/' . ltrim((string) ($row['path'] ?? ''), '/'),
                             'alt' => trim((string) ($row['alt_text'] ?? '')) !== '' ? (string) $row['alt_text'] : (string) $brief['subject'],
@@ -1644,7 +1665,10 @@ final class OnboardingController
                 }
             }
 
-            if (($plan[$i]['images'] ?? []) === [] && ($plan[$i]['theme'] ?? '') === 'image') {
+            // Una banda "a sangre" sin foto no existe... salvo que el modelo
+            // pueda coger una del pool de fotos propias: entonces se mantiene.
+            if (($plan[$i]['images'] ?? []) === [] && ($plan[$i]['theme'] ?? '') === 'image'
+                && count($ownUsed) >= count($ownPool)) {
                 $plan[$i]['theme'] = 'dark';
             }
         }
@@ -1776,6 +1800,29 @@ final class OnboardingController
             : self::ensurePlanRhythm($plan);
         $plan = self::resolvePlanImages($siteId, $plan);
 
+        // C3-FIX — Fotos propias que NO se han asignado a ninguna sección. Van
+        // como pool para que el modelo las coloque donde encajen: entiende de
+        // significado ("alumnos en clase" para una sección de estudiantes) allí
+        // donde un comparador de palabras no llega. Con referencia visual esto
+        // no se enviaba y el sitio podía tener 9 fotos sin que el modelo las
+        // llegara a ver nunca.
+        $assigned = [];
+        foreach ($plan as $block) {
+            foreach ((array) ($block['images'] ?? []) as $img) {
+                $assigned[trim((string) ($img['url'] ?? ''))] = true;
+            }
+        }
+        $ownPoolLines = [];
+        foreach (\App\Services\MediaLibraryService::images($siteId, 24, true) as $own) {
+            $url = '/' . ltrim((string) $own['path'], '/');
+            if (isset($assigned[$url])) continue;
+            $alt = trim((string) ($own['alt_text'] ?? ''));
+            $ownPoolLines[] = '- ' . $url
+                . ' | ' . ($alt !== '' ? $alt : 'sin descripción')
+                . ' | ' . \App\Services\MediaLibraryService::orientationOf($own);
+        }
+        $hasOwnPool = $ownPoolLines !== [];
+
         // Outline en texto para el prompt (rol + fondo + imágenes por sección).
         $outline = [];
         foreach ($plan as $i => $block) {
@@ -1783,9 +1830,14 @@ final class OnboardingController
             $line = ($i + 1) . '. ' . (string) ($block['role'] ?? 'Sección')
                 . "\n   Fondo en la referencia: " . ($theme !== '' ? $theme : 'claro/por defecto');
             $imgs = self::formatAvailableImages((array) ($block['images'] ?? []));
-            $line .= $imgs !== ''
-                ? "\n   Imágenes de ESTA sección:\n" . preg_replace('/^/m', '   ', $imgs)
-                : "\n   Sin imágenes (diséñala sin foto).";
+            if ($imgs !== '') {
+                $line .= "\n   Imágenes de ESTA sección:\n" . preg_replace('/^/m', '   ', $imgs);
+            } elseif ($hasOwnPool) {
+                // Sin foto asignada pero con pool: que la elija, no que la omita.
+                $line .= "\n   Sin foto asignada: si esta sección pide imagen, ELIGE la que mejor encaje del POOL DE FOTOS PROPIAS (más abajo).";
+            } else {
+                $line .= "\n   Sin imágenes (diséñala sin foto).";
+            }
             $outline[] = $line;
         }
 
@@ -1803,9 +1855,20 @@ final class OnboardingController
             }
         }
 
-        // FH6 — sin referencias no hay briefs por sección: ofrecer un pool de
-        // fotos genéricas del negocio para que el modelo las reparta.
-        if (!$hasRefs) {
+        // C3-FIX — El pool de fotos PROPIAS va SIEMPRE (con referencia visual
+        // también). Es lo único que permite al modelo usar el material del
+        // negocio en las secciones que nuestro emparejado no supo resolver.
+        if ($hasOwnPool) {
+            $outline[] = "POOL DE FOTOS PROPIAS DEL NEGOCIO (prioritarias: son fotos reales de este cliente).\n"
+                . "- Colócalas en las secciones donde encajen por lo que MUESTRAN, según su descripción.\n"
+                . "- Cada foto, como máximo UNA vez en toda la página. No es obligatorio usarlas todas.\n"
+                . "- Entre una foto propia que encaje razonablemente y una de banco, siempre la propia.\n"
+                . implode("\n", $ownPoolLines);
+        }
+
+        // FH6 — sin referencias ni fotos propias suficientes, un pool genérico
+        // del sector (banco) para que la página no salga sin una sola imagen.
+        if (!$hasRefs && !$hasOwnPool) {
             $pool = self::formatAvailableImages(self::genericBusinessImages($siteId));
             if ($pool !== '') {
                 $outline[] = "IMÁGENES DISPONIBLES (repártelas donde mejor encajen, máximo una vez cada una):\n" . $pool;
