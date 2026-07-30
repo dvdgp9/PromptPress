@@ -3,12 +3,14 @@
 namespace App\Controllers\Public;
 
 use App\Services\CacheService;
+use App\Services\LanguageService;
 use App\Services\ArticleTemplateService;
 use App\Services\BrandService;
 use App\Services\DesignSystem;
 use App\Services\PostMetaService;
 use App\Services\Renderer\SectionRenderer;
 use App\Services\Seo404Service;
+use App\Services\SeoHreflangService;
 use App\Services\SeoIndexingService;
 use App\Services\SeoRedirectService;
 use App\Services\SeoStructuredDataService;
@@ -30,8 +32,61 @@ final class PageController
     public function home(array $params = []): void
     {
         $siteId = self::requireSiteId();
+        self::serveHome($siteId, LanguageService::primaryFor($siteId));
+    }
+
+    /**
+     * Sirve la home de un idioma concreto. La usa `/` (idioma principal) y
+     * también `/fr`, `/fr/`… a través de `show()`.
+     */
+    private static function serveHome(int $siteId, string $lang): void
+    {
+        $page = self::homePageFor($siteId, $lang);
+
+        if (!$page) {
+            self::renderFallback($siteId);
+            return;
+        }
+
+        $cacheKey = CacheService::homeKey($siteId, $lang);
+        if (!self::pageHasForm((int) $page['id'])) {
+            $cached = CacheService::get($siteId, $cacheKey);
+            if ($cached !== null) {
+                self::serve($cached, true);
+            }
+        }
+        self::render($page, $siteId, $cacheKey);
+    }
+
+    /**
+     * Home publicada de un idioma. Se busca por `page_type='home'` acotado al
+     * idioma; si el sitio es monolingüe, se acepta también una home sin idioma
+     * asignado (fila anterior a la migración) para no romper nada.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function homePageFor(int $siteId, string $lang): ?array
+    {
+        $lang = LanguageService::normalize($lang);
 
         $page = Database::selectOne(
+            "SELECT * FROM pages
+             WHERE site_id = ? AND status = 'published' AND page_type = 'home' AND language = ?
+             ORDER BY updated_at DESC LIMIT 1",
+            [$siteId, $lang]
+        );
+        if ($page) {
+            return $page;
+        }
+
+        // Compatibilidad: sitio de un solo idioma cuya home no tiene idioma
+        // asignado todavía. En un sitio multi-idioma NO se aplica, porque
+        // serviría la home equivocada.
+        if (LanguageService::isMultilingual($siteId)) {
+            return null;
+        }
+
+        return Database::selectOne(
             "SELECT * FROM pages
              WHERE site_id = ? AND status = 'published' AND page_type = 'home'
              ORDER BY updated_at DESC LIMIT 1",
@@ -42,19 +97,6 @@ final class PageController
              LIMIT 1",
             [$siteId]
         );
-
-        if (!$page) {
-            self::renderFallback($siteId);
-            return;
-        }
-
-        if (!self::pageHasForm((int) $page['id'])) {
-            $cached = CacheService::get($siteId, CacheService::HOME_KEY);
-            if ($cached !== null) {
-                self::serve($cached, true);
-            }
-        }
-        self::render($page, $siteId, CacheService::HOME_KEY);
     }
 
     public function show(array $params = []): void
@@ -65,6 +107,14 @@ final class PageController
         // Validar slug (solo a-z, 0-9, -, _, /)
         if ($slug === '' || !preg_match('#^[a-z0-9][a-z0-9\-_/]*$#i', $slug)) {
             Response::notFound();
+        }
+
+        // `/fr` y `/fr/` (el router ya quita la barra final) son la HOME del
+        // idioma francés, no una página con slug «fr».
+        $homeLang = LanguageService::languageFromHomeSlug($siteId, $slug);
+        if ($homeLang !== null) {
+            self::serveHome($siteId, $homeLang);
+            return;
         }
 
         $page = Database::selectOne(
@@ -128,7 +178,10 @@ final class PageController
         );
 
         $site = Database::selectOne('SELECT name, language, url FROM sites WHERE id = ?', [$siteId]) ?? [];
-        $lang = (string) ($site['language'] ?? 'es');
+        // El idioma del documento es el de la PÁGINA, no el del sitio: en una
+        // web bilingüe, `/fr/contact` debe declarar `lang="fr"` aunque el
+        // idioma principal sea otro.
+        $lang = LanguageService::forPage($page, $siteId);
 
         $title    = (string) ($page['meta_title'] ?: $page['title']);
         $metaDesc = (string) ($page['meta_description'] ?? '');
@@ -137,7 +190,7 @@ final class PageController
 
         $styleSlug = VisualStyleService::selectedForSite($siteId);
         $designHead = DesignSystem::renderHead($siteId, $styleSlug);
-        SectionRenderer::setSiteContext($siteId);
+        SectionRenderer::setSiteContext($siteId, $lang);
 
         // F21.T21.2.d — Si la página es una entrada de blog, anteponemos un
         // hero automático (featured image + título + meta) antes del cuerpo.
@@ -174,6 +227,9 @@ final class PageController
         if ($canon !== '') {
             $h .= '<link rel="canonical" href="' . e($canon) . '">';
         }
+        // I18N-FULL T4.1 — versiones idiomáticas de esta página. Solo se emiten
+        // si existen de verdad: una página sin traducir no declara nada.
+        $h .= SeoHreflangService::renderTags($siteId, $page, $site);
         $robotsMeta = SeoIndexingService::robotsMeta($page);
         if ($robotsMeta !== '') {
             $h .= '<meta name="robots" content="' . e($robotsMeta) . '">';
@@ -210,12 +266,13 @@ final class PageController
             $bodyClasses[] = ArticleTemplateService::bodyClass($articleTemplate);
         }
         $h .= '</head><body class="' . e(implode(' ', array_filter($bodyClasses))) . '">';
-        $h .= BrandService::publicHeader($siteId);
+        BrandService::setCurrentPage($page);
+        $h .= BrandService::publicHeader($siteId, null, $lang);
         $mainClass = $isArticle
             ? ' class="pp-article-page ' . e(ArticleTemplateService::bodyClass($articleTemplate)) . '"'
             : '';
         $h .= '<main' . $mainClass . '>' . $articleHero . $body . '</main>';
-        $h .= BrandService::publicFooter($siteId);
+        $h .= BrandService::publicFooter($siteId, null, $lang);
         // FH5 — comportamientos declarativos (acordeón, slider, reveal, contador)
         // y menú móvil del header. Curado y único para todo el sitio.
         $h .= '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>';

@@ -22,6 +22,8 @@ namespace App\Services\AI;
  */
 final class Actions
 {
+    public const TRANSLATE_PAGE_CANVAS   = 'translate_page_canvas';
+    public const TRANSLATE_PAGE_SECTIONS = 'translate_page_sections';
     public const GENERATE_SECTION        = 'generate_section';
     public const REWRITE_TEXT            = 'rewrite_text';
     public const IMPROVE_SEO             = 'improve_seo';
@@ -37,6 +39,7 @@ final class Actions
     public const GENERATE_LEGAL_PAGE        = 'generate_legal_page';
     public const INFER_BRAND_PERSONALITY    = 'infer_brand_personality';
     public const RECREATE_FROM_REFERENCE    = 'recreate_from_reference';
+    public const DESCRIBE_IMAGE             = 'describe_image';
     public const GENERATE_CUSTOM_BLOCK_FROM_REFERENCE = 'generate_custom_block_from_reference';
     public const COMPOSE_CUSTOM_PAGE_FROM_REFERENCE = 'compose_custom_page_from_reference';
     public const COMPOSE_CANVAS_PAGE = 'compose_canvas_page';
@@ -100,6 +103,27 @@ final class Actions
           . "VISUAL:\n"
           . "- Jerarquía por peso y color, no solo por tamaño gigante. Sombras siempre con --pp-shadow-* (jamás negro puro). Un único criterio de radios en toda la página (vía --pp-radius-*). Un único color de acento (el de la marca) en toda la página.\n"
           . "- Contraste AA en todos los CTAs y textos sobre foto (usa overlay si hace falta); ningún texto de botón a dos líneas; no dupliques CTAs con la misma intención y etiquetas distintas (un solo texto para 'contactar' en toda la página).\n";
+    }
+
+    /**
+     * Regla dura de idioma, compartida por todas las acciones que escriben
+     * texto visible del sitio.
+     *
+     * Sin esto, pasar `{language}` en el user_template NO basta: la memoria del
+     * sitio, la instrucción del cliente y el HTML actual suelen estar en
+     * castellano y el modelo los imita (verificado: un sitio con
+     * `sites.language = fr` seguía generando en español). El idioma tiene que
+     * viajar en el system prompt y como orden explícita.
+     */
+    public static function languageRule(): string
+    {
+        return
+            "\n\nIDIOMA DE SALIDA (REGLA DURA, POR ENCIMA DE CUALQUIER OTRA):\n"
+          . "- TODO el texto visible que escribas va en {language}: titulares, párrafos, botones, etiquetas, listas, textos alternativos.\n"
+          . "- La instrucción del cliente, la memoria del sitio, los documentos y el HTML actual pueden estar en OTRO idioma. Da igual: son fuente de HECHOS, no de idioma. Tú escribes en {language}.\n"
+          . "- NO traduzcas nombres propios, marcas, nombres de producto, direcciones postales ni datos legales (razón social, NIF).\n"
+          . "- Si el contenido existente está en otro idioma y solo te piden un cambio puntual, reescribe en {language} SOLO lo que toques; no traduzcas por tu cuenta el resto de la página.\n"
+          . "- Excepción: `<pp-reply>` (tu mensaje al administrador en el chat) va siempre en español, porque el panel está en español.";
     }
 
     /**
@@ -469,6 +493,33 @@ final class Actions
                 ],
             ],
 
+            // STUDIO-2 C4 — Describir una foto SUBIDA por el negocio (visión).
+            // Sin descripción, las fotos propias llegan al prompt como una ruta
+            // pelada y el modelo prefiere las de banco, que sí vienen descritas:
+            // describirlas es lo que hace posible priorizarlas de verdad.
+            self::DESCRIBE_IMAGE => [
+                'label'        => 'Describir imagen subida',
+                'output'       => 'json',
+                'required'     => [],
+                'instruction'  =>
+                    "Describes fotos para el texto alternativo de una web. Estás viendo UNA foto.\n"
+                  . "Devuelve JSON con esta forma exacta: {\"alt\":\"...\"}\n"
+                  . "REGLAS:\n"
+                  . "- Una sola frase de 4 a 14 palabras, concreta y literal: QUÉ se ve (personas, lugar, objeto, actividad) y, si es evidente, dónde.\n"
+                  . "- Sirve para dos cosas: accesibilidad y que otra IA sepa dónde encaja esta foto en una web. Prioriza sustantivos útiles.\n"
+                  . "- Nada de interpretaciones ni marketing ('transmite confianza', 'ambiente acogedor'), ni empezar con 'Imagen de' o 'Foto de'.\n"
+                  . "- Si aparece texto legible relevante (un cartel, un rótulo), inclúyelo entre comillas.\n"
+                  . "- Si la foto es un logotipo, un icono o una captura de pantalla, dilo explícitamente."
+                  . self::languageRule(),
+                'user_template' => "Describe la foto adjunta. Idioma: {language}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.2,
+                    'max_tokens'      => 160,
+                    'timeout'         => 45,
+                ],
+            ],
+
             // Recrear una página a partir de una CAPTURA de referencia (visión).
             // La imagen viaja por `$input['_images']` (no es un placeholder de texto).
             self::RECREATE_FROM_REFERENCE => [
@@ -539,6 +590,74 @@ final class Actions
                 ],
             ],
 
+            // ===============================================================
+            // I18N-FULL T5.2 — Traducción de páginas (motor híbrido).
+            // El MODO (fiel vs adaptación nativa) llega en {translation_mode}:
+            // lo decide PageTranslator según el tipo de página.
+            // ===============================================================
+            self::TRANSLATE_PAGE_CANVAS => [
+                'label'        => 'Traducir página (canvas)',
+                'output'       => 'text',
+                'required'     => ['page_html', 'language'],
+                'instruction'  =>
+                    "Eres traductor y redactor web. Recibes el HTML de una página y devuelves ESA MISMA página en el idioma pedido.\n\n"
+                  . "MODO DE TRABAJO PARA ESTA PÁGINA:\n{translation_mode}\n\n"
+                  . "QUÉ SE TOCA Y QUÉ NO:\n"
+                  . "- Se traduce ÚNICAMENTE el texto visible y los textos alternativos de imagen.\n"
+                  . "- NO toques la estructura: mismas etiquetas, mismo número de `<section>`, mismo orden.\n"
+                  . "- NO toques los atributos de plataforma: `data-pp-section`, `data-pp-field`, `data-pp-behavior`, `id`, `class`.\n"
+                  . "- NO toques los placeholders `{{form:REF}}`, `{{module:...}}` ni nada entre llaves dobles: cópialos exactos.\n"
+                  . "- NO toques `src` de imágenes ni `href` de enlaces: las URLs se ajustan después, fuera de aquí.\n"
+                  . "- NO inventes datos: ni cifras, ni fechas, ni servicios, ni testimonios, ni promesas que no estén en el original.\n"
+                  . "- Nombres propios, marcas, direcciones postales y datos legales (razón social, NIF) se quedan como están.\n\n"
+                  . "FORMATO DE RESPUESTA (texto plano, sin JSON, sin markdown):\n"
+                  . "<pp-title>…título de la página traducido (es el que se ve en el menú del sitio)…</pp-title>\n"
+                  . "<pp-html>\n…la página completa traducida…\n</pp-html>\n"
+                  . "<pp-meta-title>…título SEO traducido, máx 60 caracteres…</pp-meta-title>\n"
+                  . "<pp-meta-description>…descripción SEO traducida, máx 155 caracteres…</pp-meta-description>"
+                  . self::languageRule(),
+                'user_template' =>
+                    "Página: \"{page_title}\"\n\n"
+                  . "HTML actual:\n```html\n{page_html}\n```\n\n"
+                  . "Título SEO actual: {meta_title}\n"
+                  . "Descripción SEO actual: {meta_description}",
+                'options'      => [
+                    'response_format' => 'text',
+                    'temperature'     => 0.3,
+                    'max_tokens'      => 30000,
+                    'timeout'         => 180,
+                ],
+            ],
+
+            self::TRANSLATE_PAGE_SECTIONS => [
+                'label'        => 'Traducir página (secciones)',
+                'output'       => 'json',
+                'required'     => ['sections_json', 'language'],
+                'instruction'  =>
+                    "Eres traductor y redactor web. Recibes las secciones de una página como JSON y devuelves las MISMAS secciones traducidas.\n\n"
+                  . "MODO DE TRABAJO PARA ESTA PÁGINA:\n{translation_mode}\n\n"
+                  . "REGLAS:\n"
+                  . "- Devuelve EXACTAMENTE las mismas secciones, con el mismo `id` y en el mismo orden. No añadas ni quites ninguna.\n"
+                  . "- Dentro de cada `content`, conserva las MISMAS claves. Traduce solo los VALORES de texto.\n"
+                  . "- Los valores que sean URLs, rutas (`/algo`), nombres de archivo, códigos o booleanos se copian tal cual.\n"
+                  . "- NO inventes datos: ni cifras, ni fechas, ni servicios, ni testimonios que no estén en el original.\n"
+                  . "- Nombres propios, marcas, direcciones y datos legales se quedan como están.\n\n"
+                  . "Devuelve JSON con esta forma exacta:\n"
+                  . "{\"title\":\"…título de la página traducido (se ve en el menú)…\",\"sections\":[{\"id\":123,\"content\":{…}}],\"meta_title\":\"…\",\"meta_description\":\"…\"}"
+                  . self::languageRule(),
+                'user_template' =>
+                    "Página: \"{page_title}\"\n\n"
+                  . "Secciones actuales:\n{sections_json}\n\n"
+                  . "Título SEO actual: {meta_title}\n"
+                  . "Descripción SEO actual: {meta_description}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.3,
+                    'max_tokens'      => 20000,
+                    'timeout'         => 180,
+                ],
+            ],
+
             self::GENERATE_CUSTOM_BLOCK_FROM_REFERENCE => [
                 'label'        => 'Generar bloque PP-friendly desde referencia',
                 'output'       => 'json',
@@ -555,7 +674,8 @@ final class Actions
                   . "  }\n"
                   . "}\n\n"
                   . self::ppbGuardrails()
-                  . "- Si se te pasan errores de validación previos, corrige exactamente esos problemas.",
+                  . "- Si se te pasan errores de validación previos, corrige exactamente esos problemas."
+                  . self::languageRule(),
                 'user_template' =>
                     "Página: \"{page_title}\"\n"
                   . "Objetivo del bloque: {block_goal}\n"
@@ -596,7 +716,8 @@ final class Actions
                   . "- Las imágenes listadas en el outline pertenecen a SU sección: úsalas ahí y solo ahí, máximo una vez cada una.\n"
                   . "- Textos específicos del negocio: titulares ≤80 chars, párrafos de 1-3 frases CON SUSTANCIA (argumentos, beneficios concretos), no frases de relleno de 8 palabras. Una página 'completa pero escueta' se percibe vacía: cada sección debe poder sostenerse sola.\n"
                   . "- Los nombres `data-pp-field` solo deben ser únicos DENTRO de cada sección (cada sección es un bloque independiente).\n\n"
-                  . self::ppbGuardrails(),
+                  . self::ppbGuardrails()
+                  . self::languageRule(),
                 'user_template' =>
                     "Página: \"{page_title}\"\n"
                   . "Objetivo de la página: {page_goal}\n"
@@ -663,6 +784,7 @@ final class Actions
                   . "- FAQ/acordeón: `<div data-pp-behavior=\"accordion\"><details><summary>Pregunta</summary><p>Respuesta</p></details>…</div>` (ya viene estilado; solo uno abierto a la vez).\n"
                   . "- Aparición al hacer scroll: añade `data-pp-behavior=\"reveal\"` a tarjetas/bloques (escalonado con `data-pp-reveal-delay=\"1..5\"`). Úsalo con intención en 2-3 secciones, no en todo.\n"
                   . "- Carrusel (testimonios/galería con 3+ items): `<div data-pp-behavior=\"slider\"><div>…slide…</div>…</div>` (flechas y deslizamiento automáticos).\n"
+                  . "  Disposición con `data-pp-slider`: `strip` (por defecto, varias tarjetas en fila), `single` (UNA a la vez a todo el ancho, con puntos — el mejor para galerías de fotos grandes) o `vertical` (pila con flechas arriba/abajo). Para una galería de fotografías usa `single` salvo que se pidan miniaturas.\n"
                   . "- Cifra animada: `<span data-pp-behavior=\"counter\">120</span>` SOLO con cifras reales del contexto.\n"
                   . "- Además puedes usar animaciones CSS puras (@keyframes) para marquees o detalles sutiles.\n\n"
                   . "CALIDAD (los fallos que el cliente ya ha penalizado — evítalos):\n"
@@ -674,7 +796,8 @@ final class Actions
                   . "- Elementos centrados de verdad (max-width + margin auto); aire generoso entre secciones; alterna fondos (claro/tintado/oscuro/foto) según el ritmo de la referencia.\n"
                   . "- VARIEDAD ENTRE PÁGINAS: si el contexto incluye 'HERO DE LA HOME', estás diseñando una página interior — su hero NO puede ser un clon del de la home: cambia la composición (altura más contenida, banner compacto, split asimétrico, alineación distinta, con/sin foto) manteniendo el mismo lenguaje de marca. Al navegar entre páginas debe notarse que son páginas distintas de la misma web.\n\n"
                   . self::canvasDesignCraft()
-                  . self::canvasAntiSlop(),
+                  . self::canvasAntiSlop()
+                  . self::languageRule(),
                 'user_template' =>
                     "Página: \"{page_title}\"\n"
                   . "Objetivo: {page_goal}\n"
@@ -714,11 +837,13 @@ final class Actions
                   . "- El HTML cumple el contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed. Formularios solo vía {{form:REF}}.\n"
                   . "- `<pp-css>`: solo reglas nuevas o que SOBRESCRIBEN a las existentes (van después en la cascada). Reutiliza los nombres de clase existentes cuando modificas algo; usa tokens de marca (var(--pp-*)) para colores/tipos.\n"
                   . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → aplícala con CSS (`background-image: url(/ruta...)`) en `<pp-css>` y deja `<pp-html>` vacío (no reescribas el HTML, sobre todo si la sección tiene SVG/ilustraciones). Imagen de CONTENIDO (foto dentro del texto) → devuélvela como <img> en el HTML. Si ninguna encaja, mantén la actual y dilo en `<pp-reply>`.\n"
+                  . "- CAPAS/VELOS sobre una foto de fondo (\"pon una capa blanca encima\", \"oscurece la foto\", \"que se lea mejor el texto\"): añádelos como capa EXTRA del `background-image` del MISMO elemento que lleva la foto — `background-image: linear-gradient(rgba(255,255,255,.6),rgba(255,255,255,.6)), url(/misma-ruta...)` — o con un `::before` superpuesto. NUNCA elimines la capa `url(...)` ni envuelvas el contenido en una caja opaca para simular el velo: eso deja la foto fuera del alcance de los controles manuales del usuario.\n"
                   . "- PROHIBIDO: emojis, datos de contacto inventados, placeholders. Responsive intacto.\n"
                   . "- Mantén el nivel de diseño: nada de clichés de IA (eyebrows en cada titular, verbos hueco como 'impulsa/transforma', datos inventados, raya larga —, 3 tarjetas iguales). Texto humano y concreto.\n"
-                  . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
+                  . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (en el carrusel, `data-pp-slider=\"strip|single|vertical\"` elige la disposición: en fila, una a una o vertical) (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
                   . "- Si la petición es imposible o peligrosa (p. ej. 'añade un vídeo de YouTube'), NO lo simules: haz la mejor alternativa válida y explícalo en `reply` con naturalidad.\n"
-                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos (nada de 'CSS', 'HTML', 'clases'): habla de lo visual ('el titular', 'el fondo', 'el botón').",
+                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos (nada de 'CSS', 'HTML', 'clases'): habla de lo visual ('el titular', 'el fondo', 'el botón')."
+                  . self::languageRule(),
                 'user_template' =>
                     "Petición del cliente: \"{instruction}\"\n\n"
                   . "Sección actual:\n```html\n{section_html}\n```\n\n"
@@ -752,9 +877,11 @@ final class Actions
                   . "- AÑADIR sección nueva: si piden insertar/añadir una sección, devuelve el HTML COMPLETO de la página con la nueva `<section data-pp-section=\"ID-unico\">…</section>` colocada en la posición pedida (encima/debajo de la sección de referencia indicada). El nuevo `data-pp-section` debe ser único, en minúsculas-con-guiones y descriptivo (p. ej. `parallax-frase`). No dupliques ids existentes ni borres otras secciones.\n"
                   . "- Contrato Canvas: sin <script>/<iframe>/<form> crudos, sin on*, sin position:fixed; formularios solo vía {{form:REF}}; tokens de marca para color/tipo; responsive intacto; cero emojis.\n"
                   . "- Imágenes: usa solo rutas de `available_images`. Imagen de FONDO → con CSS (`background-image`) y `<pp-html>` vacío; imagen de CONTENIDO → como <img> en el HTML.\n"
+                  . "- CAPAS/VELOS sobre una foto de fondo: capa EXTRA del `background-image` del mismo elemento (`linear-gradient(rgba(...),rgba(...)), url(/misma-ruta...)`) o un `::before` superpuesto. NUNCA quites la capa `url(...)` ni envuelvas el contenido en una caja opaca para simular el velo.\n"
                   . "- Mantén el nivel de diseño: nada de clichés de IA (eyebrows en cada titular, verbos hueco como 'impulsa/transforma', datos inventados, raya larga —, 3 tarjetas iguales).\n"
-                  . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
-                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos.",
+                  . "- Si piden interacción (acordeón, carrusel, animación al scroll, cifra animada), usa `data-pp-behavior=\"accordion|slider|reveal|counter\"` (en el carrusel, `data-pp-slider=\"strip|single|vertical\"` elige la disposición: en fila, una a una o vertical) (acordeón = `<div data-pp-behavior=\"accordion\"><details><summary>…</summary><p>…</p></details>…</div>`); NUNCA escribas JS. El comportamiento YA VIENE ESTILADO: NO añadas tu propio icono +/− ni reglas `::after`/`::before` sobre el `summary` (la plataforma dibuja el chevron).\n"
+                  . "- `<pp-reply>` máximo 2 frases, sin tecnicismos."
+                  . self::languageRule(),
                 'user_template' =>
                     "Petición del cliente: \"{instruction}\"\n\n"
                   . "Página actual:\n```html\n{page_html}\n```\n\n"
@@ -1037,6 +1164,7 @@ final class Actions
             self::EXTRACT_BUSINESS_PROFILE,
             self::PROPOSE_LAYOUT_VARIATIONS => self::TIER_LIGHT,
             self::SUGGEST_RELATED_ARTICLES => self::TIER_LIGHT,
+            self::DESCRIBE_IMAGE           => self::TIER_LIGHT,
             self::INFER_BRAND_PERSONALITY  => self::TIER_LIGHT,
             default                               => self::TIER_MAIN,
         };

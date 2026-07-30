@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Booking;
 
+use App\Services\DateFormat;
 use App\Services\FormSubmissionService;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use App\Services\Mail\MailMessage;
 use App\Services\Mail\MailService;
 use Core\Database;
@@ -35,45 +38,50 @@ final class BookingMailer
         }
         [$booking, $service, $siteName, $tz] = $ctx;
 
+        $lang = self::language($siteId, $booking);
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
         $confirmed = (string) $booking['status'] === 'confirmed';
-        $when = self::humanWhen($booking, $tz);
+        $when = self::humanWhen($booking, $tz, $lang);
         $cancelUrl = base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']);
 
-        $subject = $confirmed
-            ? 'Reserva confirmada: ' . $service['name'] . ' — ' . $when
-            : 'Hemos recibido tu reserva: ' . $service['name'] . ' — ' . $when;
+        $subject = $t($confirmed ? 'mail.booking.confirmed_subject' : 'mail.booking.received_subject', [
+            'service' => (string) $service['name'],
+            'when'    => $when,
+        ]);
         $lines = [
-            'Hola ' . $booking['customer_name'] . ',',
+            $t('mail.greeting', ['name' => $booking['customer_name']]),
             '',
-            $confirmed
-                ? 'Tu reserva está confirmada. Aquí tienes los detalles:'
-                : 'Hemos recibido tu solicitud de reserva. Te avisaremos por email cuando quede confirmada. Detalles:',
+            $t($confirmed ? 'mail.booking.confirmed_intro' : 'mail.booking.received_intro'),
             '',
-            '• Servicio: ' . $service['name'],
-            '• Fecha y hora: ' . $when,
+            '• ' . $t('mail.booking.field_service') . ': ' . $service['name'],
+            '• ' . $t('mail.booking.field_when') . ': ' . $when,
             '',
-            'Si necesitas cancelarla, puedes hacerlo aquí:',
+            $t('mail.booking.cancel_intro'),
             $cancelUrl,
             '',
             $siteName,
         ];
         $msg = new MailMessage((string) $booking['customer_email'], $subject, implode("\n", $lines), '', (string) $booking['customer_name']);
         if ($confirmed) {
-            $msg->attach(self::buildIcs($booking, $service, $siteName), 'reserva.ics', 'text/calendar; method=REQUEST');
+            $msg->attach(self::buildIcs($booking, $service, $siteName, $lang), 'reserva.ics', 'text/calendar; method=REQUEST');
         }
         self::deliverToCustomer($siteId, (int) $booking['id'], $msg);
 
+        // El aviso al admin va ENTERO en castellano, fecha incluida: el panel
+        // es castellano y una fecha en francés dentro de un texto español
+        // quedaba a medio camino.
+        $whenAdmin = self::humanWhen($booking, $tz);
         self::notifyAdmin($siteId, sprintf(
             "Nueva reserva %s\n\nServicio: %s\nFecha: %s\nCliente: %s <%s>%s%s\n\nGestión: %s",
             $confirmed ? '(confirmada automáticamente)' : '(pendiente de confirmar)',
             $service['name'],
-            $when,
+            $whenAdmin,
             $booking['customer_name'],
             $booking['customer_email'],
             $booking['customer_phone'] !== null ? "\nTeléfono: " . $booking['customer_phone'] : '',
             $booking['notes'] !== null ? "\nNotas: " . $booking['notes'] : '',
             base_url('admin/booking/reservas')
-        ), 'Nueva reserva: ' . $service['name'] . ' — ' . $when);
+        ), 'Nueva reserva: ' . $service['name'] . ' — ' . $whenAdmin);
     }
 
     /** Email al cliente cuando el admin confirma o cancela. */
@@ -84,20 +92,27 @@ final class BookingMailer
             return;
         }
         [$booking, $service, $siteName, $tz] = $ctx;
-        $when = self::humanWhen($booking, $tz);
+        $lang = self::language($siteId, $booking);
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
+        $when = self::humanWhen($booking, $tz, $lang);
+        $vars = ['service' => (string) $service['name'], 'when' => $when];
 
         if ($newStatus === 'confirmed') {
-            $subject = 'Reserva confirmada: ' . $service['name'] . ' — ' . $when;
-            $body = "Hola " . $booking['customer_name'] . ",\n\n"
-                . "Tu reserva ya está confirmada:\n\n• Servicio: " . $service['name'] . "\n• Fecha y hora: " . $when . "\n\n"
-                . "Si necesitas cancelarla: " . base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']) . "\n\n" . $siteName;
+            $subject = $t('mail.booking.confirmed_subject', $vars);
+            $body = $t('mail.greeting', ['name' => $booking['customer_name']]) . "\n\n"
+                . $t('mail.booking.confirmed_now') . "\n\n"
+                . '• ' . $t('mail.booking.field_service') . ': ' . $service['name'] . "\n"
+                . '• ' . $t('mail.booking.field_when') . ': ' . $when . "\n\n"
+                . $t('mail.booking.cancel_inline', [
+                    'url' => base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']),
+                ]) . "\n\n" . $siteName;
             $msg = new MailMessage((string) $booking['customer_email'], $subject, $body, '', (string) $booking['customer_name']);
-            $msg->attach(self::buildIcs($booking, $service, $siteName), 'reserva.ics', 'text/calendar; method=REQUEST');
+            $msg->attach(self::buildIcs($booking, $service, $siteName, $lang), 'reserva.ics', 'text/calendar; method=REQUEST');
         } else {
-            $subject = 'Reserva cancelada: ' . $service['name'] . ' — ' . $when;
-            $body = "Hola " . $booking['customer_name'] . ",\n\n"
-                . "Tu reserva del " . $when . " (" . $service['name'] . ") ha sido cancelada.\n\n"
-                . "Si quieres buscar otro hueco, puedes reservar de nuevo en nuestra web.\n\n" . $siteName;
+            $subject = $t('mail.booking.cancelled_subject', $vars);
+            $body = $t('mail.greeting', ['name' => $booking['customer_name']]) . "\n\n"
+                . $t('mail.booking.cancelled_body', $vars) . "\n\n"
+                . $t('mail.booking.book_again') . "\n\n" . $siteName;
             $msg = new MailMessage((string) $booking['customer_email'], $subject, $body, '', (string) $booking['customer_name']);
         }
         self::deliverToCustomer($siteId, (int) $booking['id'], $msg);
@@ -125,7 +140,7 @@ final class BookingMailer
      * Evento iCalendar mínimo (texto plano, RFC 5545). DTSTART/DTEND en UTC;
      * UID estable por reserva para que reenvíos actualicen el mismo evento.
      */
-    public static function buildIcs(array $booking, array $service, string $siteName): string
+    public static function buildIcs(array $booking, array $service, string $siteName, string $lang = 'es'): string
     {
         $fmt = static fn (string $utc): string =>
             (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->format('Ymd\THis\Z');
@@ -144,7 +159,10 @@ final class BookingMailer
             'DTSTART:' . $fmt((string) $booking['starts_at_utc']),
             'DTEND:' . $fmt((string) $booking['ends_at_utc']),
             'SUMMARY:' . $esc((string) $service['name'] . ' — ' . $siteName),
-            'DESCRIPTION:' . $esc('Reserva a nombre de ' . $booking['customer_name']),
+            // El .ics acaba en el calendario del CLIENTE: va en su idioma.
+            'DESCRIPTION:' . $esc(Microcopy::t('mail.booking.ics_description', $lang, [
+                'name' => (string) $booking['customer_name'],
+            ])),
             'STATUS:CONFIRMED',
             'END:VEVENT',
             'END:VCALENDAR',
@@ -182,19 +200,34 @@ final class BookingMailer
     }
 
     /** "lunes 6 de julio de 2026, 09:00" en la zona del sitio. */
-    private static function humanWhen(array $booking, string $tz): string
+    /**
+     * Fecha larga en el idioma del destinatario.
+     *
+     * Antes formateaba siempre con `es_ES` y un patrón que llevaba el `'de'`
+     * castellano dentro: en un email en francés salía «mercredi 29 de juillet
+     * de 2026». Ahora lo resuelve DateFormat, que además respeta el patrón
+     * castellano exacto para no cambiar los sitios que ya funcionan.
+     */
+    private static function humanWhen(array $booking, string $tz, string $lang = 'es'): string
     {
-        $local = (new DateTimeImmutable((string) $booking['starts_at_utc'], new DateTimeZone('UTC')))
-            ->setTimezone(new DateTimeZone($tz));
-        if (class_exists(\IntlDateFormatter::class)) {
-            $f = new \IntlDateFormatter('es_ES', \IntlDateFormatter::FULL, \IntlDateFormatter::SHORT, $tz);
-            $f->setPattern("EEEE d 'de' MMMM 'de' y, HH:mm");
-            $out = $f->format($local);
-            if (is_string($out) && $out !== '') {
-                return $out;
-            }
-        }
-        return $local->format('d/m/Y H:i');
+        return DateFormat::humanDateTime(
+            new DateTimeImmutable((string) $booking['starts_at_utc'], new DateTimeZone('UTC')),
+            $lang,
+            $tz
+        );
+    }
+
+    /**
+     * Idioma del email al cliente. Igual que en CommerceMailer: hoy el del
+     * sitio; cuando la fase 1 (T1.2) añada `language` a `booking_bookings`,
+     * mandará el idioma con el que el cliente reservó.
+     *
+     * @param array<string,mixed> $booking
+     */
+    private static function language(int $siteId, array $booking): string
+    {
+        $stored = trim((string) ($booking['language'] ?? ''));
+        return $stored !== '' ? LanguageService::normalize($stored) : LanguageService::codeFor($siteId);
     }
 
     /** Envía al cliente y refleja el resultado en email_status/email_error. */

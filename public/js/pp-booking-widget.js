@@ -80,7 +80,14 @@
 
     function fmtDay(dateStr) {
         var d = new Date(dateStr + 'T12:00:00');
-        var wd = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()];
+        // El día de la semana lo pone el navegador con el locale del sitio:
+        // antes era un array fijo en castellano.
+        var wd;
+        try {
+            wd = d.toLocaleDateString(state.lang || undefined, { weekday: 'short' });
+        } catch (e) {
+            wd = d.toLocaleDateString(undefined, { weekday: 'short' });
+        }
         return { top: wd, bottom: d.getDate() + '/' + (d.getMonth() + 1) };
     }
 
@@ -90,11 +97,30 @@
         return iso.substring(11, 16);
     }
 
-    var state = { service: null, days: [], selDay: null, selSlot: null, tzLabel: '' };
+    var state = { service: null, days: [], selDay: null, selSlot: null, tzLabel: '', texts: {}, lang: '' };
+
+    /**
+     * Texto del widget. Los sirve la API en el idioma del sitio (el widget es
+     * estático y puede vivir en una web ajena, así que no puede deducirlo).
+     * El fallback solo entra en juego antes de la primera respuesta.
+     */
+    function T(key, fallback) {
+        var v = state.texts[key];
+        return (typeof v === 'string' && v !== '') ? v : (fallback || '');
+    }
+
+    /** Sustituye {token} por su valor, igual que Microcopy en PHP. */
+    function Tv(key, fallback, vars) {
+        var out = T(key, fallback);
+        Object.keys(vars).forEach(function (k) {
+            out = out.split('{' + k + '}').join(vars[k]);
+        });
+        return out;
+    }
 
     function render() {
         root.innerHTML = '';
-        if (!state.service) { root.appendChild(h('p', 'ppbk-sub', 'Cargando disponibilidad…')); return; }
+        if (!state.service) { root.appendChild(h('p', 'ppbk-sub', T('loading', 'Cargando disponibilidad…'))); return; }
 
         root.appendChild(h('h3', null, state.service.name));
         var sub = state.service.duration_min + ' min';
@@ -102,7 +128,7 @@
         root.appendChild(h('p', 'ppbk-sub', sub));
 
         if (!state.days.length) {
-            root.appendChild(h('p', 'ppbk-sub', 'Ahora mismo no hay huecos disponibles. Vuelve a intentarlo más adelante.'));
+            root.appendChild(h('p', 'ppbk-sub', T('no_slots')));
             return;
         }
 
@@ -112,7 +138,7 @@
             var b = h('button', 'ppbk-day' + (state.selDay === d.date ? ' on' : ''));
             b.type = 'button';
             b.appendChild(h('strong', null, f.top + ' ' + f.bottom));
-            b.appendChild(h('span', null, d.slots.length + (d.slots.length === 1 ? ' hueco' : ' huecos')));
+            b.appendChild(h('span', null, Tv(d.slots.length === 1 ? 'slots_one' : 'slots_many', '', { n: d.slots.length })));
             b.addEventListener('click', function () { state.selDay = d.date; state.selSlot = null; render(); });
             daysBar.appendChild(b);
         });
@@ -134,12 +160,12 @@
             var form = h('form');
             var msg = h('div');
             form.appendChild(msg);
-            var name = h('input'); name.placeholder = 'Tu nombre *'; name.required = true; name.maxLength = 120;
-            var email = h('input'); email.type = 'email'; email.placeholder = 'Tu email *'; email.required = true; email.maxLength = 190;
-            var phone = h('input'); phone.type = 'tel'; phone.placeholder = 'Teléfono (opcional)'; phone.maxLength = 40;
-            var notes = h('textarea'); notes.placeholder = 'Notas (opcional)'; notes.rows = 2; notes.maxLength = 2000;
+            var name = h('input'); name.placeholder = T('ph_name'); name.required = true; name.maxLength = 120;
+            var email = h('input'); email.type = 'email'; email.placeholder = T('ph_email'); email.required = true; email.maxLength = 190;
+            var phone = h('input'); phone.type = 'tel'; phone.placeholder = T('ph_phone'); phone.maxLength = 40;
+            var notes = h('textarea'); notes.placeholder = T('ph_notes'); notes.rows = 2; notes.maxLength = 2000;
             var hp = h('input', 'ppbk-hp'); hp.name = 'company_url'; hp.tabIndex = -1; hp.autocomplete = 'off';
-            var submit = h('button', 'ppbk-submit', 'Reservar ' + fmtTime(state.selSlot));
+            var submit = h('button', 'ppbk-submit', Tv('book_at', '', { time: fmtTime(state.selSlot) }));
             submit.type = 'submit';
             [name, email, phone, notes, hp, submit].forEach(function (el) { form.appendChild(el); });
 
@@ -156,35 +182,35 @@
                 }).then(function (r) {
                     if (r.status === 201) {
                         root.innerHTML = '';
-                        root.appendChild(h('h3', null, '¡Reserva enviada!'));
-                        var ok = h('div', 'ppbk-msg ok', r.data.message || 'Reserva registrada.');
+                        root.appendChild(h('h3', null, T('sent_title')));
+                        var ok = h('div', 'ppbk-msg ok', r.data.message || T('registered'));
                         root.appendChild(ok);
                     } else if (r.status === 409) {
                         msg.className = 'ppbk-msg err';
-                        msg.textContent = 'Ese hueco se acaba de ocupar. Elige otro, por favor.';
+                        msg.textContent = T('slot_taken');
                         submit.disabled = false;
                         load(); // refresca la agenda
                     } else if (r.status === 429) {
                         msg.className = 'ppbk-msg err';
-                        msg.textContent = 'Demasiados intentos seguidos. Espera unos minutos.';
+                        msg.textContent = T('too_many');
                         submit.disabled = false;
                     } else {
                         var fields = (r.data && r.data.fields) || {};
                         var first = Object.keys(fields)[0];
                         msg.className = 'ppbk-msg err';
-                        msg.textContent = first ? fields[first] : 'No se pudo completar la reserva. Revisa los datos.';
+                        msg.textContent = first ? fields[first] : T('failed');
                         submit.disabled = false;
                     }
                 }).catch(function () {
                     msg.className = 'ppbk-msg err';
-                    msg.textContent = 'Error de conexión. Inténtalo de nuevo.';
+                    msg.textContent = T('network');
                     submit.disabled = false;
                 });
             });
             root.appendChild(form);
         }
 
-        if (state.tzLabel) root.appendChild(h('p', 'ppbk-soft', 'Horario local: ' + state.tzLabel));
+        if (state.tzLabel) root.appendChild(h('p', 'ppbk-soft', Tv('local_time', '', { tz: state.tzLabel })));
     }
 
     function load() {
@@ -206,17 +232,22 @@
             })
             .catch(function () {
                 root.innerHTML = '';
-                root.appendChild(h('p', 'ppbk-sub', 'No se pudo cargar la disponibilidad.'));
+                root.appendChild(h('p', 'ppbk-sub', T('load_failed')));
             });
     }
 
     render();
-    req('GET', api + '/services').then(function (r) {
+    // Se indica el servicio para recibir los textos en SU idioma (en una web
+    // multi-idioma, cada idioma tiene su propio servicio).
+    req('GET', api + '/services?service=' + serviceId).then(function (r) {
         if (r.status !== 200) throw new Error('services ' + r.status);
+        // Idioma y textos del sitio, servidos por la API.
+        state.texts = r.data.texts || {};
+        state.lang = r.data.lang || '';
         state.service = (r.data.services || []).find(function (s) { return s.id === serviceId; }) || null;
         if (!state.service) {
             root.innerHTML = '';
-            root.appendChild(h('p', 'ppbk-sub', 'Este servicio no está disponible.'));
+            root.appendChild(h('p', 'ppbk-sub', T('service_unavailable')));
             return;
         }
         render();

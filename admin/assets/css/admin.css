@@ -1948,6 +1948,28 @@ body.pp-editor-mode #pp-page-form > .pp-ai-page-builder {
 /* ============================================================
    Media library
    ============================================================ */
+/* STUDIO-2 C4b — aviso y acción para describir las imágenes que no lo están. */
+.pp-media-describe {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    background: color-mix(in srgb, var(--pp-primary) 6%, var(--pp-surface));
+    border: 1px solid color-mix(in srgb, var(--pp-primary) 28%, var(--pp-border));
+    border-radius: var(--pp-radius-lg);
+}
+.pp-media-describe__text { flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px; }
+.pp-media-describe__text strong { font-size: .95rem; }
+.pp-media-describe__text span { font-size: .82rem; color: var(--pp-text-muted); line-height: 1.5; }
+.pp-media-describe .pp-btn { flex: none; }
+/* Descripción recién puesta por la IA: se nota que ha cambiado algo. */
+.pp-media-card__alt-input.is-filled {
+    border-color: color-mix(in srgb, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in srgb, var(--pp-primary) 5%, transparent);
+}
+
 .pp-media-upload {
     margin-bottom: 28px;
     padding: 18px;
@@ -9217,18 +9239,52 @@ body.pp-login-page {
 /* FORMS F5 — control "Insertar formulario" en el composer del Studio */
 .cvstudio-insert{position:relative;margin-bottom:8px}
 .cvstudio-insert__btn{width:100%;justify-content:center;font-size:.8rem}
-.cvstudio-insert__pop{top:auto;bottom:calc(100% + 6px);left:0;right:0;max-height:240px;overflow:auto}
+/* En la barra lateral el menú se abre hacia ABAJO (antes salía del composer). */
+.cvstudio-insert__pop{top:calc(100% + 6px);bottom:auto;left:0;right:0;max-height:240px;overflow:auto}
 .cvstudio-insert__meta{margin-left:auto;color:#9ca3af;font-size:.72rem;font-weight:500}
 .cvstudio-insert__empty{padding:10px;font-size:.82rem;color:#6b7280}
 .cvstudio-insert .cvstudio-menu__item{justify-content:flex-start;gap:8px}
 
 .cvstudio-main{flex:1;display:flex;min-height:0}
-.cvstudio-stage{flex:1;display:flex;align-items:stretch;justify-content:center;padding:16px;min-width:0}
+.cvstudio-stage{flex:1;position:relative;display:flex;align-items:stretch;justify-content:center;padding:16px;min-width:0}
 .cvstudio-frame{flex:1;max-width:100%;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(17,24,39,.08),0 8px 24px rgba(17,24,39,.06);overflow:hidden;transition:max-width .25s ease;margin:0 auto}
 .cvstudio-frame.is-mobile{max-width:390px}
 .cvstudio-frame iframe{display:block;width:100%;height:100%;border:0}
 
-.cvstudio-chat{width:380px;flex:none;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e5e7eb}
+/* STUDIO-2 A1 — barra lateral: solo edición manual, con sitio para crecer. */
+.cvstudio-side{width:380px;flex:none;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e5e7eb;overflow-y:auto}
+.cvstudio-side__empty{padding:18px 16px;display:flex;flex-direction:column;gap:20px}
+/* `hidden` no gana a `display:flex`: sin esto, panel y ayuda se pintan a la vez. */
+.cvstudio-side__empty[hidden],.cvstudio-panel[hidden]{display:none}
+.cvstudio-side__intro strong{display:block;font-size:.95rem;color:#111827;margin-bottom:6px}
+.cvstudio-side__intro p{margin:0;font-size:.82rem;line-height:1.55;color:#4b5563}
+.cvstudio-side__intro b{font-weight:700;color:#111827}
+.cvstudio-side__title{margin:0 0 8px;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
+.cvstudio-side__hint{font-size:.8rem;color:#6b7280}
+/* Lista de partes de la página: navegar sin tener que acertar con el ratón. */
+.cvstudio-seclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.cvstudio-seclist button{width:100%;display:flex;align-items:center;gap:9px;border:1px solid transparent;background:none;border-radius:9px;padding:9px 10px;font:inherit;font-size:.85rem;font-weight:600;color:#374151;text-align:left;cursor:pointer}
+.cvstudio-seclist button:hover{background:#f3f4f6;border-color:#e5e7eb;color:#111827}
+.cvstudio-seclist button.is-current{background:color-mix(in srgb,var(--cv-accent,#111827) 10%,#fff);border-color:color-mix(in srgb,var(--cv-accent,#111827) 35%,#fff);color:#111827}
+.cvstudio-seclist__num{display:grid;place-items:center;width:20px;height:20px;flex:none;border-radius:6px;background:#eceef1;color:#6b7280;font-size:.68rem;font-weight:700}
+.cvstudio-seclist button.is-current .cvstudio-seclist__num{background:var(--cv-accent,#111827);color:var(--cv-accent-ink,#fff)}
+
+/* STUDIO-2 A3 — el chat, flotando sobre el lienzo. */
+.cvstudio-dock{position:absolute;right:26px;bottom:22px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
+.cvstudio-dock > *{pointer-events:auto}
+.cvstudio-dock__pill{display:inline-flex;align-items:center;gap:9px;max-width:340px;border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:999px;padding:11px 18px;font:inherit;font-size:.85rem;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(17,24,39,.14);transition:transform .12s ease,box-shadow .12s ease}
+.cvstudio-dock__pill:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(17,24,39,.18)}
+.cvstudio-dock__icon{color:var(--cv-accent,#6366f1);font-size:.95rem;flex:none}
+.cvstudio-dock__label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cvstudio-dock__dot{width:8px;height:8px;flex:none;border-radius:50%;background:var(--cv-accent,#6366f1)}
+.cvstudio-dock__panel{width:min(390px,calc(100vw - 60px));max-height:min(560px,72dvh);display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 48px rgba(17,24,39,.22);overflow:hidden}
+.cvstudio-dock__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid #e5e7eb;background:#fafafa}
+.cvstudio-dock__head strong{font-size:.86rem;color:#111827}
+.cvstudio-dock__head button{border:0;background:transparent;font-size:1rem;line-height:1;color:#6b7280;cursor:pointer;padding:2px 6px;border-radius:6px}
+.cvstudio-dock__head button:hover{background:#eceef1;color:#111827}
+/* Plegado: la pastilla es lo único visible. */
+.cvstudio-dock:not(.is-open) .cvstudio-dock__panel{display:none}
+.cvstudio-dock.is-open .cvstudio-dock__pill{display:none}
 .cvstudio-chat__messages{flex:1 1 auto;min-height:96px;overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:12px}
 .pp-chat-msg{max-width:92%;padding:11px 14px;border-radius:14px;font-size:.88rem;line-height:1.55}
 .pp-chat-msg p{margin:0 0 6px}
@@ -9271,6 +9327,15 @@ body.pp-login-page {
 .cvstudio-insert__source input{border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font:inherit;font-size:.78rem;font-weight:400;outline:none}
 .cvstudio-insert__source input:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
 
+/* Pantallas estrechas: la barra se superpone al lienzo en vez de estrujarlo. */
+@media (max-width:1100px){
+  .cvstudio-side{position:absolute;top:0;right:0;bottom:0;width:min(340px,86vw);z-index:45;box-shadow:-12px 0 32px rgba(17,24,39,.12)}
+  .cvstudio-main{position:relative}
+  /* La barra se superpone al lienzo: el chat se aparta para no quedar debajo. */
+  .cvstudio-dock{right:calc(min(340px,86vw) + 16px);bottom:16px}
+  .cvstudio-dock__panel{width:min(360px,calc(100vw - min(340px,86vw) - 34px))}
+}
+
 .cvstudio-modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:grid;place-items:center;z-index:50}
 .cvstudio-modal__panel{width:min(440px,92vw);max-height:78dvh;overflow:auto;background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 24px 60px rgba(17,24,39,.25)}
 .cvstudio-modal__head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
@@ -9285,12 +9350,20 @@ body.pp-login-page {
 .cvstudio-vkind{font-style:normal;font-weight:700;color:#4b5563;background:#f3f4f6;border-radius:5px;padding:1px 7px;font-size:.68rem;text-transform:uppercase;letter-spacing:.03em}
 
 /* FH7 — panel contextual de edición directa */
-.cvstudio-panel{flex:none;border-bottom:1px solid #e5e7eb;background:#fafafa;padding:14px 16px;max-height:50%;overflow-y:auto}
+/* Ocupa la barra entera: ya no comparte columna con el chat (STUDIO-2 A1). */
+.cvstudio-panel{flex:1 1 auto;background:#fff;padding:14px 16px;overflow-y:auto}
 .cvstudio-panel[hidden]{display:none}
 .cvstudio-panel__head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .cvstudio-panel__head strong{font-size:.92rem;color:#111827}
 .cvstudio-panel__head small{font-size:.72rem;color:#6b7280;flex:1}
 .cvstudio-panel__head button{border:0;background:transparent;font-size:.95rem;color:#6b7280;cursor:pointer;padding:2px 4px}
+/* Migas de ámbito: permiten subir de elemento a bloque y a sección cuando el
+   clic cae dentro de una caja que envuelve el contenido. */
+.cvstudio-crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:2px;flex:1;min-width:0}
+.cvstudio-crumbs i{color:#c3c8d0;font-style:normal;font-size:.78rem}
+.cvstudio-crumb{border:0;background:transparent;padding:2px 5px;border-radius:6px;font-size:.78rem;font-weight:600;color:#6b7280;cursor:pointer;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis}
+button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
+.cvstudio-crumb.is-active{color:#111827;background:#eceef1;cursor:default}
 .cvstudio-panel__body{display:flex;flex-direction:column;gap:12px}
 .cvstudio-field{display:flex;flex-direction:column;gap:5px}
 .cvstudio-field>label{font-size:.74rem;font-weight:600;color:#4b5563}
@@ -9378,6 +9451,12 @@ body.pp-login-page {
 .cvstudio-media-search input:focus{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}
 .cvstudio-media-item.is-busy{opacity:.55;pointer-events:none}
 .cvstudio-media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px}
+/* STUDIO-2 C5 — filtro Tus fotos / De banco y distintivo de foto propia. */
+.cvstudio-media-filter{display:flex;gap:6px;margin-top:12px}
+.cvstudio-media-filter button{border:1px solid #e5e7eb;background:#fff;color:#6b7280;border-radius:999px;padding:5px 13px;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.cvstudio-media-filter button:hover{background:#f3f4f6;color:#111827}
+.cvstudio-media-filter button.is-active{background:#111827;border-color:#111827;color:#fff}
+.cvstudio-media-item__own{position:absolute;top:12px;left:12px;z-index:1;background:#111827;color:#fff;font-style:normal;font-size:.62rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:999px;pointer-events:none}
 .cvstudio-media-item{display:flex;flex-direction:column;gap:6px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:8px;cursor:pointer;text-align:left;transition:border-color .12s ease,transform .12s ease}
 .cvstudio-media-item:hover{border-color:#111827;transform:translateY(-1px)}
 .cvstudio-media-item img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block}
@@ -10562,3 +10641,298 @@ body.pp-login-page {
 .ppa-progress__row--failed .ppa-progress__icon { color: #dc2626; }
 .ppa-item__link { margin-left: auto; font-size: 0.82rem; color: var(--pp-admin-primary, #4f46e5); text-decoration: none; font-weight: 600; }
 .ppa-item__link:hover { text-decoration: underline; }
+
+/* I18N-FULL T1.3 — Idiomas adicionales del sitio (Ajustes) */
+.pp-form-help--muted{opacity:.85}
+.pp-lang-list{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.pp-lang-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--pp-border);border-radius:10px;background:var(--pp-surface)}
+.pp-lang-name{font-weight:600}
+.pp-lang-tag{font-size:.8rem;color:var(--pp-text-muted);background:var(--pp-bg);border-radius:6px;padding:2px 8px}
+.pp-lang-item .pp-btn-link{margin-left:auto}
+.pp-btn-link{background:none;border:0;padding:0;font:inherit;color:var(--pp-text-muted);cursor:pointer;text-decoration:underline}
+.pp-btn-link:hover{color:var(--pp-text)}
+.pp-btn-link--danger:hover{color:#b91c1c}
+.pp-lang-add{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.pp-hidden-form{display:none}
+.pp-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* I18N-FULL T5.3 — Traducción de páginas desde el listado */
+.pp-tr-cell{white-space:nowrap;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pp-tr-own{font-size:.78rem;font-weight:600;color:var(--pp-text-muted)}
+.pp-tr-chip{font:inherit;font-size:.76rem;line-height:1;padding:5px 9px;border-radius:999px;border:1px solid var(--pp-border);background:var(--pp-surface);color:var(--pp-text-muted);cursor:pointer;text-decoration:none;display:inline-block}
+.pp-tr-chip.is-missing:hover{border-color:var(--pp-primary);color:var(--pp-primary)}
+.pp-tr-chip.is-done{border-style:solid;background:var(--pp-bg);color:var(--pp-text);cursor:pointer}
+.pp-tr-chip.is-done:hover{border-color:var(--pp-primary)}
+.pp-tr-chip:disabled{cursor:default;opacity:.75}
+.pp-tr-help{margin:14px 0 0;color:var(--pp-text-muted);font-size:.86rem;line-height:1.5}
+.pp-tr-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:grid;place-items:center;z-index:60;padding:20px}
+/* OJO: `display:grid/flex` pisa el atributo HTML `hidden`. Sin estas dos
+   reglas el diálogo se ve siempre, sin haber pulsado nada. */
+.pp-tr-overlay[hidden]{display:none}
+.pp-tr-dialog{background:var(--pp-surface);border:1px solid var(--pp-border);border-radius:14px;padding:24px;max-width:460px;width:100%;box-shadow:0 20px 50px -20px rgba(0,0,0,.4)}
+.pp-tr-dialog h3{margin:0 0 12px;font-size:1.1rem}
+.pp-tr-body{margin:0 0 16px;line-height:1.55;color:var(--pp-text)}
+.pp-tr-progress{display:flex;align-items:center;gap:10px;color:var(--pp-text-muted);font-size:.9rem;margin-bottom:4px}
+.pp-tr-progress[hidden]{display:none}
+.pp-tr-spinner{width:16px;height:16px;border:2px solid var(--pp-border);border-top-color:var(--pp-primary);border-radius:50%;animation:pp-tr-spin .8s linear infinite;flex:0 0 auto}
+@keyframes pp-tr-spin{to{transform:rotate(360deg)}}
+.pp-tr-actions{display:flex;gap:8px;justify-content:flex-end}
+.pp-tr-actions[hidden]{display:none}
+
+/* I18N-FULL T5.4 — Resumen de traducciones del sitio */
+.pp-tr-summary{margin:18px 0 6px;padding:16px 18px;border:1px solid var(--pp-border);border-radius:12px;background:var(--pp-surface);display:flex;flex-direction:column;gap:14px}
+.pp-tr-summary__head{display:flex;flex-direction:column;gap:2px}
+.pp-tr-summary__head span{color:var(--pp-text-muted);font-size:.85rem}
+.pp-tr-lang{display:flex;flex-direction:column;gap:6px}
+.pp-tr-lang.is-filtered{padding:10px 12px;margin:-10px -12px;border-radius:10px;background:var(--pp-bg)}
+.pp-tr-lang__top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.pp-tr-lang__name{font-weight:600}
+.pp-tr-lang__count{color:var(--pp-text-muted);font-size:.85rem}
+.pp-tr-bar{height:7px;border-radius:999px;background:var(--pp-border);overflow:hidden}
+.pp-tr-bar>span{display:block;height:100%;background:var(--pp-primary);border-radius:999px;transition:width .3s ease}
+.pp-tr-lang__foot{font-size:.84rem}
+.pp-tr-lang__foot a{color:var(--pp-primary)}
+.pp-tr-done-msg{color:var(--pp-text-muted)}
+.pp-tr-filter-banner{margin:10px 0 0;padding:10px 14px;border-radius:10px;background:var(--pp-bg);border:1px solid var(--pp-border);font-size:.88rem;color:var(--pp-text)}
+.pp-tr-filter-banner a{margin-left:8px;color:var(--pp-primary)}
+.pp-tr-bulk-btn{margin-left:12px;font:inherit;font-size:.84rem;background:none;border:0;padding:0;color:var(--pp-primary);text-decoration:underline;cursor:pointer}
+.pp-tr-joblist{list-style:none;margin:0 0 16px;padding:0;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;font-size:.86rem}
+.pp-tr-joblist[hidden]{display:none}
+.pp-tr-jobitem{color:var(--pp-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-tr-jobitem.is-done{color:var(--pp-text)}
+.pp-tr-jobitem.is-failed{color:#b91c1c}
+.pp-tr-jobitem.is-running{color:var(--pp-text);font-weight:600}
+
+/* I18N-FULL T5.7 — Edición del chrome por idioma */
+.pp-chrome-langbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 12px;padding:14px 16px;border:1px solid var(--pp-border);border-radius:12px;background:var(--pp-surface)}
+.pp-chrome-langbar__label{display:flex;flex-direction:column;gap:2px}
+.pp-chrome-langbar__label span{color:var(--pp-text-muted);font-size:.82rem;max-width:52ch}
+.pp-chrome-langbar__tabs{display:flex;gap:6px;flex-wrap:wrap}
+.pp-chrome-langtab{font:inherit;font-size:.85rem;padding:7px 13px;border-radius:999px;border:1px solid var(--pp-border);background:var(--pp-bg);color:var(--pp-text-muted);cursor:pointer}
+.pp-chrome-langtab:hover{color:var(--pp-text)}
+.pp-chrome-langtab.is-active{background:var(--pp-primary);border-color:var(--pp-primary);color:#fff;font-weight:600}
+.pp-chrome-langhint{margin:0 0 14px;padding:10px 14px;border-radius:10px;background:var(--pp-bg);border:1px solid var(--pp-border);color:var(--pp-text);font-size:.85rem;line-height:1.5}
+.pp-chrome-langhint[hidden]{display:none}
+/* Al traducir, lo común se ve claramente inerte */
+.pp-chrome-translating input:disabled,.pp-chrome-translating select:disabled,.pp-chrome-translating button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ============================================================
+   FONTS — Tipografías propias del cliente (/admin/design#fonts)
+   ============================================================ */
+.pp-design-fonts-pointer{
+    margin:14px 0 0;
+    padding:10px 12px;
+    border:1px dashed var(--pp-border,#e5e7eb);
+    border-radius:var(--pp-radius-md,10px);
+    color:var(--pp-text-muted,#6b7280);
+    font-size:.86rem;
+}
+.pp-design-fonts-pointer a{font-weight:700}
+
+.pp-fonts-card{
+    margin:24px 0;
+    padding:20px;
+    border:1px solid var(--pp-border,#e5e7eb);
+    border-radius:var(--pp-radius-lg,14px);
+    background:var(--pp-surface,#fff);
+    scroll-margin-top:80px;
+}
+.pp-fonts-card__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.pp-fonts-card__head h3{margin:0 0 6px}
+.pp-fonts-card__head p{max-width:70ch;margin:0;color:var(--pp-text-muted,#6b7280);font-size:.9rem;line-height:1.55}
+.pp-fonts-card__count{
+    flex:0 0 auto;padding:4px 10px;border-radius:999px;
+    background:#f1f5f9;color:var(--pp-text-muted,#6b7280);font-size:.78rem;font-weight:700;
+}
+.pp-fonts-warn{
+    margin:16px 0 0;padding:12px 14px;border-radius:var(--pp-radius-md,10px);
+    border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-size:.88rem;line-height:1.55;
+}
+.pp-fonts-empty{margin:18px 0 0;color:var(--pp-text-muted,#6b7280);font-size:.9rem}
+
+.pp-fonts-list{margin:18px 0 0;padding:0;list-style:none;display:grid;gap:14px}
+.pp-fonts-family{
+    padding:14px 16px;border:1px solid var(--pp-border,#e5e7eb);
+    border-radius:var(--pp-radius-md,10px);background:#fff;
+}
+.pp-fonts-family.is-unused{background:#fafafa}
+.pp-fonts-family__head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.pp-fonts-family__id{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pp-fonts-family__id strong{font-size:1.15rem;line-height:1.25}
+.pp-fonts-family__id small{color:var(--pp-text-muted,#6b7280);font-size:.8rem}
+.pp-fonts-family__empty{margin:10px 0 0;color:var(--pp-text-muted,#6b7280);font-size:.85rem}
+.pp-fonts-role{display:inline-flex;align-items:center;gap:8px}
+.pp-fonts-role label{color:var(--pp-text-muted,#6b7280);font-size:.82rem;font-weight:600}
+.pp-fonts-role select{padding:6px 10px;border:1px solid var(--pp-border,#d1d5db);border-radius:8px;font-size:.85rem;background:#fff}
+
+.pp-fonts-cuts{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+.pp-fonts-cut{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:8px 10px;border:1px solid #f1f5f9;border-radius:8px;background:#fbfcfe;
+}
+.pp-fonts-cut__sample{
+    flex:0 0 46px;width:46px;text-align:center;font-size:1.4rem;line-height:1.2;
+    color:var(--pp-text,#1f2937);
+}
+.pp-fonts-cut__form{display:inline-flex;gap:6px}
+.pp-fonts-cut__form select{padding:5px 8px;border:1px solid var(--pp-border,#d1d5db);border-radius:7px;font-size:.82rem;background:#fff}
+.pp-fonts-cut__file{
+    flex:1 1 140px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:var(--pp-text-muted,#6b7280);font-size:.8rem;
+}
+.pp-fonts-cut__del{margin-left:auto}
+.pp-fonts-x{
+    width:28px;height:28px;border:1px solid var(--pp-border,#e5e7eb);border-radius:7px;
+    background:#fff;color:var(--pp-text-muted,#6b7280);font-size:1.1rem;line-height:1;cursor:pointer;
+}
+.pp-fonts-x:hover{border-color:var(--pp-danger,#dc2626);color:var(--pp-danger,#dc2626)}
+
+.pp-fonts-family__foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
+.pp-fonts-add{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pp-fonts-add button:disabled{cursor:not-allowed;opacity:.45}
+.pp-fonts-remove{
+    border:0;background:none;padding:0;color:var(--pp-text-muted,#6b7280);
+    font-size:.82rem;text-decoration:underline;cursor:pointer;
+}
+.pp-fonts-remove:hover{color:var(--pp-danger,#dc2626)}
+
+.pp-fonts-picker{
+    position:relative;display:inline-flex;align-items:center;padding:8px 12px;
+    border:1px solid var(--pp-border,#d1d5db);border-radius:var(--pp-radius-md,8px);
+    background:#fff;font-size:.86rem;font-weight:700;cursor:pointer;
+}
+.pp-fonts-picker input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pp-fonts-filename{
+    max-width:260px;overflow:hidden;color:var(--pp-text-muted,#6b7280);
+    font-size:.82rem;text-overflow:ellipsis;white-space:nowrap;
+}
+
+.pp-fonts-new{margin-top:20px;padding-top:18px;border-top:1px solid var(--pp-border,#e5e7eb)}
+.pp-fonts-new h4{margin:0 0 12px}
+.pp-fonts-new__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.pp-fonts-field{display:flex;flex-direction:column;gap:6px}
+.pp-fonts-field > span{font-size:.85rem;font-weight:700}
+.pp-fonts-field small{color:var(--pp-text-muted,#6b7280);font-size:.78rem;line-height:1.45}
+.pp-fonts-field input[type=text],.pp-fonts-field select{
+    padding:9px 11px;border:1px solid var(--pp-border,#d1d5db);
+    border-radius:var(--pp-radius-md,8px);font-size:.9rem;background:#fff;
+}
+.pp-fonts-field--file{gap:8px}
+.pp-fonts-new__actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px}
+.pp-fonts-new__actions button:disabled{cursor:not-allowed;opacity:.45}
+.pp-fonts-legal{color:var(--pp-text-muted,#6b7280);font-size:.78rem}
+
+@media (max-width:640px){
+    .pp-fonts-family__head,.pp-fonts-family__foot{align-items:stretch;flex-direction:column}
+    .pp-fonts-cut__file{flex-basis:100%}
+}
+
+/* FONTS — Tipografía propia en el onboarding (paso 2) */
+.pp-onboarding-fonts{padding:12px 14px;border:1px dashed #cbd5e1;border-radius:14px;background:#f8fafc}
+.pp-onboarding-fonts summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none}
+.pp-onboarding-fonts summary::-webkit-details-marker{display:none}
+.pp-onboarding-fonts summary::after{content:"▾";color:var(--pp-text-muted);font-size:.9em;transition:transform 200ms ease}
+.pp-onboarding-fonts[open] summary::after{transform:rotate(180deg)}
+.pp-onboarding-fonts summary small{color:var(--pp-text-muted);font-size:.8rem;text-align:right}
+.pp-onboarding-fonts__body{display:grid;gap:12px;margin-top:14px}
+.pp-onboarding-fonts__file{display:grid;grid-template-columns:52px minmax(0,1fr);gap:4px 12px;align-items:center;padding:12px;border:1px dashed #cbd5e1;border-radius:14px;background:#fff;cursor:pointer}
+.pp-onboarding-fonts__file input{display:none}
+.pp-onboarding-fonts__file>span{grid-row:1 / 4;width:52px;height:52px;display:grid;place-items:center;border:1px solid var(--pp-border);border-radius:12px;background:#f8fafc;font-size:1.35rem;color:var(--pp-text-muted)}
+.pp-onboarding-fonts__file>span::before{content:"Aa"}
+.pp-onboarding-fonts__file strong{color:var(--pp-text)}
+.pp-onboarding-fonts__file small,.pp-onboarding-fonts__file em{color:var(--pp-text-muted);font-size:.82rem;font-style:normal;line-height:1.35}
+.pp-onboarding-fonts__file em.is-success{color:#166534;font-weight:800}
+.pp-onboarding-fonts__legal{margin:0;color:var(--pp-text-muted);font-size:.78rem}
+
+/* Canvas Studio — selección múltiple de fotos para una galería */
+.cvstudio-media-item{position:relative}
+.cvstudio-media-item.is-picked{border-color:var(--pp-primary,#ea580c);box-shadow:0 0 0 2px color-mix(in srgb,var(--pp-primary,#ea580c) 25%,transparent)}
+.cvstudio-media-item__num{
+    position:absolute;top:6px;right:6px;display:grid;place-items:center;
+    width:22px;height:22px;border-radius:50%;background:var(--pp-primary,#ea580c);
+    color:#fff;font-size:.72rem;font-weight:800;font-style:normal;
+}
+.cvstudio-gallery-bar{
+    position:sticky;bottom:0;z-index:2;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    margin-top:12px;padding:12px;border-top:1px solid #e5e7eb;background:#fff;
+    box-shadow:0 -6px 14px -10px rgba(0,0,0,.35);
+}
+.cvstudio-gallery-bar span{color:#6b7280;font-size:.82rem}
+.cvstudio-gallery-bar button{
+    padding:9px 16px;border:0;border-radius:9px;cursor:pointer;
+    background:var(--pp-primary,#ea580c);color:#fff;font-size:.86rem;font-weight:700;
+}
+.cvstudio-gallery-bar button:disabled{opacity:.45;cursor:not-allowed}
+.cvstudio-hint{display:block;margin-top:6px;color:#6b7280;font-size:.76rem;line-height:1.45}
+.pp-fonts-warn--info{border-color:#bfdbfe;background:#eff6ff;color:#1e40af}
+
+/* Medios — cola de subida múltiple */
+.pp-media-upload__hint{display:block;margin-top:6px;color:var(--pp-text-muted,#6b7280);font-size:.78rem;line-height:1.45}
+.pp-media-queue{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:6px}
+.pp-media-queue__item{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:8px 12px;border:1px solid var(--pp-border,#e5e7eb);border-radius:9px;background:#fff;font-size:.86rem;
+}
+.pp-media-queue__name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.pp-media-queue__state{flex:0 0 auto;font-size:.78rem;font-weight:700;color:var(--pp-text-muted,#6b7280)}
+.pp-media-queue__item.is-uploading{border-color:#bfdbfe;background:#eff6ff}
+.pp-media-queue__item.is-uploading .pp-media-queue__state{color:#1d4ed8}
+.pp-media-queue__item.is-done{border-color:#bbf7d0;background:#f0fdf4}
+.pp-media-queue__item.is-done .pp-media-queue__state{color:#166534}
+.pp-media-queue__item.is-error{border-color:#fecaca;background:#fef2f2}
+.pp-media-queue__item.is-error .pp-media-queue__state{color:#b91c1c}
+.pp-media-queue__summary{margin-top:4px;color:var(--pp-text-muted,#6b7280);font-size:.82rem}
+
+/* LOGO2 — Logo por tipo de fondo (claro / oscuro) */
+.pp-logo-card{margin-bottom:24px;padding:18px;border:1px solid var(--pp-border,#e5e7eb);border-radius:var(--pp-radius-lg,14px);background:var(--pp-surface,#fff)}
+.pp-logo-card__head h3{margin:0 0 6px}
+.pp-logo-card__head p{max-width:74ch;margin:0;color:var(--pp-text-muted,#6b7280);font-size:.9rem;line-height:1.55}
+.pp-logo-card__hint{margin:14px 0 0;color:var(--pp-text-muted,#6b7280);font-size:.82rem}
+.pp-logo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px}
+.pp-logo-slot{padding:14px;border:1px solid var(--pp-border,#e5e7eb);border-radius:var(--pp-radius-md,10px);background:#fff}
+.pp-logo-slot.is-primary{border-color:var(--pp-primary,#ea580c);box-shadow:0 0 0 1px color-mix(in srgb,var(--pp-primary,#ea580c) 30%,transparent)}
+.pp-logo-slot__head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pp-logo-slot__head strong{font-size:.95rem}
+.pp-logo-slot__badge{padding:3px 9px;border-radius:999px;background:var(--pp-primary,#ea580c);color:#fff;font-size:.7rem;font-weight:800}
+.pp-logo-slot__preview{display:grid;place-items:center;height:110px;padding:12px;border-radius:var(--pp-radius-md,10px);color:var(--pp-text-muted,#6b7280);font-size:.85rem}
+.pp-logo-slot--light .pp-logo-slot__preview{background:#f8fafc;border:1px solid #eef2f7}
+.pp-logo-slot--dark .pp-logo-slot__preview{background:#1f2937;color:#9ca3af}
+.pp-logo-slot__preview img{max-width:100%;max-height:100%;object-fit:contain}
+.pp-logo-slot__warning{margin:8px 0 0;color:var(--pp-danger,#dc2626);font-size:.82rem;font-weight:600}
+.pp-logo-slot__form{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pp-logo-slot__form button:disabled{cursor:not-allowed;opacity:.45}
+.pp-logo-slot__actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.pp-logo-picker{position:relative;display:inline-flex;align-items:center;padding:8px 12px;border:1px solid var(--pp-border,#d1d5db);border-radius:var(--pp-radius-md,8px);background:#fff;font-size:.86rem;font-weight:700;cursor:pointer}
+.pp-logo-picker input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pp-logo-filename{max-width:100%;overflow:hidden;color:var(--pp-text-muted,#6b7280);font-size:.8rem;text-overflow:ellipsis;white-space:nowrap}
+.pp-logo-link{border:0;background:none;padding:0;color:var(--pp-text-muted,#6b7280);font-size:.82rem;text-decoration:underline;cursor:pointer}
+.pp-logo-link:hover{color:var(--pp-text,#1f2937)}
+.pp-logo-link--danger:hover{color:var(--pp-danger,#dc2626)}
+
+/* CANCEL — Botón "Parar" del chat del Studio (solo visible mientras genera) */
+.cvstudio-cancel-btn{
+    align-self:flex-end;margin-left:8px;padding:8px 14px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--cv-line,#e5e7eb);background:#fff;color:var(--cv-ink,#1f2937);
+    font-size:.84rem;font-weight:700;transition:border-color .12s ease,color .12s ease;
+}
+.cvstudio-cancel-btn:hover{border-color:#dc2626;color:#dc2626}
+.cvstudio-cancel-btn:disabled{opacity:.5;cursor:progress}
+
+/* UPD — Actualizar desde archivo + copias de seguridad */
+.pp-update-manual,.pp-update-backups{margin-top:20px;padding-top:18px;border-top:1px solid var(--pp-border,#e5e7eb)}
+.pp-update-manual h4,.pp-update-backups h4{margin:0 0 8px}
+.pp-update-manual__intro{max-width:78ch;margin:0 0 14px;color:var(--pp-text-muted,#6b7280);font-size:.88rem;line-height:1.6}
+.pp-update-manual__form{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.pp-update-file{position:relative;display:inline-flex;align-items:center;padding:9px 14px;border:1px solid var(--pp-border,#d1d5db);border-radius:var(--pp-radius-md,8px);background:#fff;font-size:.86rem;font-weight:700;cursor:pointer}
+.pp-update-file input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pp-update-filename{max-width:280px;overflow:hidden;color:var(--pp-text-muted,#6b7280);font-size:.82rem;text-overflow:ellipsis;white-space:nowrap}
+.pp-update-checksum{display:flex;flex-direction:column;gap:4px;flex:1 1 320px;min-width:240px}
+.pp-update-checksum > span{font-size:.8rem;font-weight:700}
+.pp-update-checksum em{font-style:normal;font-weight:500;color:var(--pp-text-muted,#6b7280)}
+.pp-update-checksum input{padding:9px 11px;border:1px solid var(--pp-border,#d1d5db);border-radius:var(--pp-radius-md,8px);font-size:.85rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pp-update-manual__form button:disabled{cursor:not-allowed;opacity:.45}
+.pp-update-backup-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pp-update-backup-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--pp-border,#e5e7eb);border-radius:9px;background:#fff}
+.pp-update-backup-list strong{display:block;font-size:.9rem}
+.pp-update-backup-list small{color:var(--pp-text-muted,#6b7280);font-size:.78rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}

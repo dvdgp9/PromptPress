@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Commerce;
 
+use App\Services\LanguageService;
 use Core\Database;
 
 /**
@@ -69,15 +70,18 @@ final class OrderStore
 
             $ins = $pdo->prepare(
                 'INSERT INTO commerce_orders
-                    (site_id, order_number, status, payment_method, access_key, currency,
+                    (site_id, order_number, status, payment_method, access_key, currency, language,
                      subtotal_cents, shipping_cents, tax_cents, total_cents,
                      customer_name, customer_email, customer_phone,
                      ship_address, ship_city, ship_postcode, ship_province,
                      notes, ip_hash, created_at, updated_at)
-                 VALUES (?, ?, \'pending_payment\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                 VALUES (?, ?, \'pending_payment\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $ins->execute([
+                // El idioma con el que el cliente compró: es el que usarán sus
+                // emails, aunque el sitio cambie de idioma después.
                 $siteId, $number, $paymentMethod, $accessKey, CommerceSettings::CURRENCY,
+                LanguageService::codeFor($siteId),
                 $totals['subtotal_cents'], $totals['shipping_cents'], $totals['tax_cents'], $totals['total_cents'],
                 mb_substr(trim((string) $customer['name']), 0, 120),
                 mb_substr(trim((string) $customer['email']), 0, 190),

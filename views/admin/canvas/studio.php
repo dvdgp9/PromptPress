@@ -46,6 +46,7 @@ $icon = static function (string $name): string {
       data-page-id="<?= $pageId ?>"
       data-preview-url="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>"
       data-chat-url="<?= e(base_url('admin/canvas/' . $pageId . '/chat')) ?>"
+      data-cancel-url="<?= e(base_url('admin/canvas/' . $pageId . '/cancel')) ?>"
       data-versions-url="<?= e(base_url('admin/canvas/' . $pageId . '/versions')) ?>"
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
       data-publish-url="<?= e(base_url('admin/canvas/' . $pageId . '/publish')) ?>"
@@ -131,69 +132,107 @@ $icon = static function (string $name): string {
     <div class="cvstudio-frame" id="studio-frame-wrap">
       <iframe id="studio-iframe" src="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>" title="Vista previa de la página"></iframe>
     </div>
+
+    <!-- STUDIO-2 A3 — el chat vive flotando sobre la página, no en la barra:
+         así la barra lateral queda entera para la edición manual. -->
+    <div class="cvstudio-dock" id="chat-dock">
+      <button type="button" class="cvstudio-dock__pill" id="chat-pill" aria-expanded="false" aria-controls="chat-panel">
+        <span class="cvstudio-dock__icon" aria-hidden="true">✦</span>
+        <span class="cvstudio-dock__label" id="chat-pill-label">Pídeme un cambio</span>
+        <span class="cvstudio-dock__dot" id="chat-pill-dot" hidden aria-hidden="true"></span>
+      </button>
+
+      <section class="cvstudio-dock__panel" id="chat-panel" aria-label="Asistente de diseño">
+        <header class="cvstudio-dock__head">
+          <strong>Cuéntame qué quieres cambiar</strong>
+          <button type="button" id="chat-minimize" title="Ocultar la conversación" aria-label="Ocultar la conversación">▾</button>
+        </header>
+
+        <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
+          <div class="pp-chat-msg pp-chat-msg--assistant">
+            <p>Esta es tu página, en vivo.</p>
+            <p class="pp-chat-hint">Haz clic en un texto para corregirlo al momento, o en una foto para cambiarla. Para cambios de diseño, cuéntamelo aquí: si antes haces clic en una parte de la página, el cambio se aplicará solo ahí.</p>
+          </div>
+        </div>
+
+        <div class="cvstudio-chat__composer">
+          <div class="cvstudio-context" id="chat-context" hidden>
+            <span>Cambiando: <strong id="chat-context-label"></strong></span>
+            <button type="button" id="chat-context-clear" title="Quitar selección — el cambio afectará a toda la página">✕</button>
+          </div>
+          <form id="chat-form">
+            <textarea id="chat-input" rows="2" maxlength="1200"
+              placeholder="Ej.: haz esta sección como «metodología» de la página Inicio"></textarea>
+            <p class="cvstudio-insert__hint">También puedes usar una sección de otra página como referencia; sus textos solo se copian si lo pides.</p>
+            <div class="cvstudio-chat__formfoot">
+              <?php if (!empty($aiModels)): ?>
+              <label class="cvstudio-model" title="Modelo de IA usado para aplicar el cambio">
+                <span class="cvstudio-model__icon" aria-hidden="true">✦</span>
+                <select id="chat-model" aria-label="Modelo de IA para este cambio">
+                  <?php foreach ($aiModels as $m): ?>
+                  <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <?php endif; ?>
+              <button type="submit" id="chat-send" class="cvstudio-primary-btn">Aplicar cambio</button>
+              <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden>Parar</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
   </div>
 
-  <aside class="cvstudio-chat">
+  <aside class="cvstudio-side">
     <!-- FH7 — panel contextual de edición directa (se muestra al seleccionar) -->
     <div class="cvstudio-panel" id="edit-panel" hidden></div>
 
-    <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
-      <div class="pp-chat-msg pp-chat-msg--assistant">
-        <p>Esta es tu página, en vivo.</p>
-        <p class="pp-chat-hint">Haz clic en un texto para corregirlo al momento, o en una foto para cambiarla. Para cambios de diseño, cuéntamelo aquí: si antes haces clic en una parte de la página, el cambio se aplicará solo ahí.</p>
+    <!-- STUDIO-2 A1 — la barra nunca está vacía: sin selección explica cómo se
+         edita y ofrece las partes de la página para llegar a cada una. -->
+    <div class="cvstudio-side__empty" id="side-empty">
+      <div class="cvstudio-side__intro">
+        <strong>Edita tu página a mano</strong>
+        <p>Toca cualquier cosa de la página: un <b>texto</b> para escribir encima, una <b>foto</b> para cambiarla, una <b>franja</b> para su fondo y su espaciado. Los controles aparecerán aquí.</p>
       </div>
-    </div>
 
-    <div class="cvstudio-chat__composer">
-      <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
-      <div class="cvstudio-insert" id="studio-insert-form">
-        <button type="button" class="cvstudio-ghost-btn cvstudio-insert__btn" id="studio-insert-btn"
-                aria-haspopup="true" aria-expanded="false">+ Insertar formulario</button>
-        <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="menu">
-          <strong class="cvstudio-insert__title">Usar uno existente</strong>
-          <div id="studio-existing-forms">
-          <?php if (empty($forms)): ?><p class="cvstudio-insert__empty">Todavia no tienes formularios.</p><?php else: foreach ($forms as $f): ?>
-            <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>" role="menuitem">
-              <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= (int) $f['field_count'] ?> campos</span>
-            </button>
-          <?php endforeach; endif; ?>
+      <div class="cvstudio-side__block">
+        <h3 class="cvstudio-side__title">Partes de esta página</h3>
+        <ul class="cvstudio-seclist" id="side-sections">
+          <li class="cvstudio-side__hint">Cargando…</li>
+        </ul>
+      </div>
+
+      <div class="cvstudio-side__block">
+        <h3 class="cvstudio-side__title">Añadir a la página</h3>
+        <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
+        <div class="cvstudio-insert" id="studio-insert-form">
+          <button type="button" class="cvstudio-ghost-btn cvstudio-insert__btn" id="studio-insert-btn"
+                  aria-haspopup="true" aria-expanded="false">+ Formulario</button>
+          <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="menu">
+            <strong class="cvstudio-insert__title">Usar uno existente</strong>
+            <div id="studio-existing-forms">
+            <?php if (empty($forms)): ?><p class="cvstudio-insert__empty">Todavia no tienes formularios.</p><?php else: foreach ($forms as $f): ?>
+              <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>" role="menuitem">
+                <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= (int) $f['field_count'] ?> campos</span>
+              </button>
+            <?php endforeach; endif; ?>
+            </div>
+            <strong class="cvstudio-insert__title">Crear desde plantilla</strong>
+            <?php foreach (($formTemplates ?? []) as $key => $template): ?>
+              <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>" role="menuitem">
+                <?= e((string) ($template['label'] ?? $key)) ?>
+                <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
+              </button>
+            <?php endforeach; ?>
+            <label class="cvstudio-insert__source">
+              <span>Etiqueta de origen (opcional)</span>
+              <input type="text" id="studio-form-source" maxlength="160" placeholder="Ej.: Contacto desde servicios">
+            </label>
+            <p class="cvstudio-insert__hint" id="studio-insert-hint">Selecciona una parte de la pagina para insertarlo justo despues.</p>
           </div>
-          <strong class="cvstudio-insert__title">Crear desde plantilla</strong>
-          <?php foreach (($formTemplates ?? []) as $key => $template): ?>
-            <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>" role="menuitem">
-              <?= e((string) ($template['label'] ?? $key)) ?>
-              <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
-            </button>
-          <?php endforeach; ?>
-          <label class="cvstudio-insert__source">
-            <span>Etiqueta de origen (opcional)</span>
-            <input type="text" id="studio-form-source" maxlength="160" placeholder="Ej.: Contacto desde servicios">
-          </label>
-          <p class="cvstudio-insert__hint" id="studio-insert-hint">Selecciona una parte de la pagina para insertarlo justo despues.</p>
         </div>
       </div>
-      <div class="cvstudio-context" id="chat-context" hidden>
-        <span>Cambiando: <strong id="chat-context-label"></strong></span>
-        <button type="button" id="chat-context-clear" title="Quitar selección — el cambio afectará a toda la página">✕</button>
-      </div>
-      <form id="chat-form">
-        <textarea id="chat-input" rows="2" maxlength="1200"
-          placeholder="Ej.: haz esta sección como «metodología» de la página Inicio"></textarea>
-        <p class="cvstudio-insert__hint">También puedes usar una sección de otra página como referencia; sus textos solo se copian si lo pides.</p>
-        <div class="cvstudio-chat__formfoot">
-          <?php if (!empty($aiModels)): ?>
-          <label class="cvstudio-model" title="Modelo de IA usado para aplicar el cambio">
-            <span class="cvstudio-model__icon" aria-hidden="true">✦</span>
-            <select id="chat-model" aria-label="Modelo de IA para este cambio">
-              <?php foreach ($aiModels as $m): ?>
-              <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <?php endif; ?>
-          <button type="submit" id="chat-send" class="cvstudio-primary-btn">Aplicar cambio</button>
-        </div>
-      </form>
     </div>
   </aside>
 </div>

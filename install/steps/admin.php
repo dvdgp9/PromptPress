@@ -13,15 +13,8 @@ use Core\Request;
 use Core\Response;
 use Core\Session;
 
-$languages = [
-    'es' => 'Español',
-    'en' => 'English',
-    'ca' => 'Català',
-    'gl' => 'Galego',
-    'eu' => 'Euskara',
-    'fr' => 'Français',
-    'pt' => 'Português',
-];
+// Catálogo compartido con Ajustes y con el pipeline de generación IA.
+$languages = \App\Services\LanguageService::LANGUAGES;
 
 $timezones = [
     'Europe/Madrid'    => 'Europa / Madrid',
@@ -124,6 +117,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 $stmt->execute([$siteName, $siteUrl, $language, $timezone]);
                 $siteId = (int) $pdo->lastInsertId();
+
+                // Idioma principal del sitio en el catálogo multi-idioma. La
+                // migración lo rellena para los sitios que YA existen; una
+                // instalación nueva crea el sitio después de migrar, así que su
+                // fila hay que ponerla aquí.
+                try {
+                    $pdo->prepare(
+                        'INSERT INTO site_languages (site_id, code, is_primary, sort_order) VALUES (?, ?, 1, 0)'
+                    )->execute([$siteId, $language]);
+                } catch (\Throwable $e) {
+                    // Si la tabla no existiera, el sitio sigue funcionando como
+                    // monolingüe (LanguageService cae al idioma de `sites`).
+                }
 
                 $pdo->commit();
 

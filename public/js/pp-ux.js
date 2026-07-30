@@ -8,8 +8,11 @@
  *               (details nativo; este JS solo cierra los hermanos al abrir uno)
  *   reveal    → data-pp-behavior="reveal" [data-pp-reveal-delay="1..5"]
  *               aparición suave al entrar en viewport (IntersectionObserver)
- *   slider    → <div data-pp-behavior="slider"><div>slide</div>…</div>
+ *   slider    → <div data-pp-behavior="slider" [data-pp-slider="strip|single|vertical"]><div>slide</div>…</div>
  *               carrusel con scroll-snap + flechas inyectadas
+ *               strip (defecto) = tira horizontal de varias tarjetas
+ *               single          = una diapositiva a la vez, a todo el ancho, con puntos
+ *               vertical        = pila vertical, flechas arriba/abajo
  *   counter   → <span data-pp-behavior="counter">120</span>
  *               anima la cifra de 0 al valor al hacerse visible
  *
@@ -69,14 +72,34 @@
   // slider — scroll-snap + flechas
   // ------------------------------------------------------------------
   function initSlider(el) {
+    // Defensa: si una versión guardada trae el andamiaje de una sesión anterior
+    // (el Studio serializa el DOM vivo), lo deshacemos antes de montar. Sin
+    // esto el carrusel quedaría congelado y con flechas muertas.
+    var stale = el.querySelector(':scope > .pp-ux-slider__track');
+    if (stale) {
+      while (stale.firstChild) el.insertBefore(stale.firstChild, stale);
+      el.removeChild(stale);
+      all(':scope > .pp-ux-slider__arrow, :scope > .pp-ux-slider__dots', el).forEach(function (n) { el.removeChild(n); });
+      el.removeAttribute('data-pp-ux-ready');
+      // Las clases de disposición de la vuelta anterior tienen que irse: si no,
+      // al cambiar de "en fila" a "vertical" quedarían las dos puestas.
+      Array.prototype.slice.call(el.classList).forEach(function (c) {
+        if (c.indexOf('pp-ux-slider') === 0) el.classList.remove(c);
+      });
+    }
     if (el.dataset.ppUxReady) return;
     el.dataset.ppUxReady = '1';
+
+    // Disposición: tira horizontal (por defecto), una a una, o vertical.
+    var layout = (el.getAttribute('data-pp-slider') || 'strip').toLowerCase();
+    if (['strip', 'single', 'vertical'].indexOf(layout) === -1) layout = 'strip';
+    var vertical = layout === 'vertical';
 
     var track = document.createElement('div');
     track.className = 'pp-ux-slider__track';
     while (el.firstChild) track.appendChild(el.firstChild);
     el.appendChild(track);
-    el.classList.add('pp-ux-slider');
+    el.classList.add('pp-ux-slider', 'pp-ux-slider--' + layout);
 
     if (track.children.length < 2) return;
 
@@ -90,18 +113,55 @@
         : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
       b.addEventListener('click', function () {
         var slide = track.children[0];
-        var step = slide ? slide.getBoundingClientRect().width + 24 : track.clientWidth * 0.8;
-        track.scrollBy({ left: dir * step, behavior: reduceMotion ? 'auto' : 'smooth' });
+        if (vertical) {
+          var stepY = slide ? slide.getBoundingClientRect().height + 24 : track.clientHeight * 0.8;
+          track.scrollBy({ top: dir * stepY, behavior: reduceMotion ? 'auto' : 'smooth' });
+        } else {
+          var stepX = slide ? slide.getBoundingClientRect().width + 24 : track.clientWidth * 0.8;
+          track.scrollBy({ left: dir * stepX, behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
       });
       return b;
     }
     el.appendChild(arrow(-1));
     el.appendChild(arrow(1));
 
+    // Puntos de posición: con una diapositiva a la vez son la única pista de
+    // cuántas hay y en cuál estás.
+    var dots = null;
+    if (layout === 'single') {
+      dots = document.createElement('div');
+      dots.className = 'pp-ux-slider__dots';
+      all('*', track).filter(function (n) { return n.parentNode === track; }).forEach(function (slide, i) {
+        var dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'pp-ux-slider__dot';
+        dot.setAttribute('aria-label', 'Ir a ' + (i + 1));
+        dot.addEventListener('click', function () {
+          track.scrollTo({ left: slide.offsetLeft - track.offsetLeft, behavior: reduceMotion ? 'auto' : 'smooth' });
+        });
+        dots.appendChild(dot);
+      });
+      el.appendChild(dots);
+    }
+
     function syncArrows() {
-      var max = track.scrollWidth - track.clientWidth - 4;
-      el.classList.toggle('pp-ux-slider--at-start', track.scrollLeft <= 4);
-      el.classList.toggle('pp-ux-slider--at-end', track.scrollLeft >= max);
+      var max = vertical
+        ? track.scrollHeight - track.clientHeight - 4
+        : track.scrollWidth - track.clientWidth - 4;
+      var pos = vertical ? track.scrollTop : track.scrollLeft;
+      el.classList.toggle('pp-ux-slider--at-start', pos <= 4);
+      el.classList.toggle('pp-ux-slider--at-end', pos >= max);
+      if (dots) {
+        var slides = track.children;
+        var current = 0;
+        for (var i = 0; i < slides.length; i++) {
+          if (slides[i].offsetLeft - track.offsetLeft <= track.scrollLeft + 8) current = i;
+        }
+        all('.pp-ux-slider__dot', dots).forEach(function (d, i) {
+          d.classList.toggle('is-current', i === current);
+        });
+      }
     }
     track.addEventListener('scroll', syncArrows, { passive: true });
     window.addEventListener('resize', syncArrows, { passive: true });
@@ -117,6 +177,10 @@
     if (!match) return;
     var target = parseFloat(match[0].replace(/\./g, '').replace(',', '.'));
     if (!isFinite(target) || reduceMotion || !('IntersectionObserver' in window)) return;
+
+    // La cifra final queda anotada para que, si el Studio guarda la sección a
+    // media animación, el servidor pueda restaurarla al serializar.
+    el.setAttribute('data-pp-counter-raw', raw);
 
     var prefix = raw.slice(0, match.index);
     var suffix = raw.slice(match.index + match[0].length);
@@ -298,15 +362,29 @@
   }
 
   // ------------------------------------------------------------------
+  function mount(el) {
+    switch (el.getAttribute('data-pp-behavior')) {
+      case 'accordion': initAccordion(el); break;
+      case 'reveal': initReveal(el); break;
+      case 'slider': initSlider(el); break;
+      case 'counter': initCounter(el); break;
+    }
+  }
+
+  // El Studio necesita re-montar un comportamiento tras cambiarlo en caliente
+  // (p. ej. al cambiar la disposición del carrusel o sus fotos). `initSlider`
+  // ya deshace su propio andamiaje, así que volver a llamar es seguro.
+  window.ppUx = {
+    mount: mount,
+    remount: function (el) {
+      if (!el) return;
+      el.removeAttribute('data-pp-ux-ready');
+      mount(el);
+    }
+  };
+
   ready(function () {
-    all('[data-pp-behavior]').forEach(function (el) {
-      switch (el.getAttribute('data-pp-behavior')) {
-        case 'accordion': initAccordion(el); break;
-        case 'reveal': initReveal(el); break;
-        case 'slider': initSlider(el); break;
-        case 'counter': initCounter(el); break;
-      }
-    });
+    all('[data-pp-behavior]').forEach(mount);
     initSiteNav();
     all('[data-pp-file-field]').forEach(initFormFile);
     all('.pp-form__form[data-pp-form-id]').forEach(initAjaxForm);

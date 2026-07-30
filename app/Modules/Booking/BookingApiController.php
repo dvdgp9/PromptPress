@@ -6,6 +6,8 @@ namespace App\Modules\Booking;
 
 use App\Modules\ModuleRegistry;
 use App\Services\FormSubmissionService;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use Core\App;
 use Core\Crypto;
 use Core\Database;
@@ -39,12 +41,31 @@ final class BookingApiController
             Response::json(['error' => 'origin_not_allowed'], 403);
         }
         $rows = Database::select(
-            'SELECT id, name, description, duration_min, capacity, price_label
+            'SELECT id, name, description, duration_min, capacity, price_label, language
                FROM booking_services WHERE site_id = ? AND active = 1 ORDER BY name',
             [$siteId]
         );
+        // El widget es un JS estático (también embebible fuera de este sitio):
+        // no puede conocer el idioma, así que idioma y textos viajan aquí.
+        //
+        // En una web multi-idioma cada idioma tiene SU servicio, y el widget
+        // sabe cuál está pintando: si lo indica (`?service=N`), los textos van
+        // en el idioma de ESE servicio. Sin el parámetro, el del sitio — así
+        // los embebidos antiguos siguen funcionando igual.
+        $lang = LanguageService::codeFor($siteId);
+        $wanted = (int) Request::get('service', 0);
+        if ($wanted > 0) {
+            foreach ($rows as $row) {
+                if ((int) $row['id'] === $wanted) {
+                    $lang = BookingService::serviceLanguage($siteId, $row);
+                    break;
+                }
+            }
+        }
         Response::json([
             'timezone' => BookingService::siteTimezone($siteId),
+            'lang'     => $lang,
+            'texts'    => self::widgetTexts($lang),
             'services' => array_map(static fn (array $r): array => [
                 'id'           => (int) $r['id'],
                 'name'         => (string) $r['name'],
@@ -52,6 +73,7 @@ final class BookingApiController
                 'duration_min' => (int) $r['duration_min'],
                 'capacity'     => (int) $r['capacity'],
                 'price_label'  => $r['price_label'] !== null ? (string) $r['price_label'] : null,
+                'language'     => BookingService::serviceLanguage($siteId, $r),
             ], $rows),
         ]);
     }
@@ -99,7 +121,7 @@ final class BookingApiController
 
         // Honeypot (mismo criterio que formularios): responder ok sin crear nada.
         if (trim((string) ($data['company_url'] ?? '')) !== '') {
-            Response::json(['id' => 0, 'status' => 'pending', 'message' => 'Te hemos enviado un email con los detalles.'], 201);
+            Response::json(['id' => 0, 'status' => 'pending', 'message' => Microcopy::site($siteId, 'booking.email_sent')], 201);
         }
 
         // FEAT-4 AB5 — time-trap. Ausente o caducado → se acepta (el API
@@ -111,7 +133,7 @@ final class BookingApiController
             $tsCheck = \App\Services\Security\BotGuard::verifyTimestamp($ppTs);
             if ($tsCheck === \App\Services\Security\BotGuard::TOO_FAST
                 || $tsCheck === \App\Services\Security\BotGuard::INVALID) {
-                Response::json(['id' => 0, 'status' => 'pending', 'message' => 'Te hemos enviado un email con los detalles.'], 201);
+                Response::json(['id' => 0, 'status' => 'pending', 'message' => Microcopy::site($siteId, 'booking.email_sent')], 201);
             }
         }
 
@@ -159,9 +181,10 @@ final class BookingApiController
             'start'   => $booking['start'],
             'end'     => $booking['end'],
             'cancel_token' => $booking['cancel_token'],
-            'message' => $status === 'confirmed'
-                ? 'Reserva confirmada. Te hemos enviado un email con los detalles.'
-                : 'Reserva recibida, pendiente de confirmación. Te avisaremos por email.',
+            'message' => Microcopy::t(
+                $status === 'confirmed' ? 'booking.created_confirmed' : 'booking.created_pending',
+                (string) ($booking['language'] ?? LanguageService::codeFor($siteId))
+            ),
         ], 201);
     }
 
@@ -194,6 +217,33 @@ final class BookingApiController
             Response::json(['error' => 'origin_not_allowed'], 403);
         }
         Response::noContent();
+    }
+
+    /**
+     * Textos que el widget necesita, en el idioma dado.
+     *
+     * Las claves son las del widget SIN el prefijo `booking.`: el JS pide
+     * `T('ph_name')`. `tests/booking_microcopy.php` verifica que todo lo que
+     * el JS pide está aquí — si falta algo, el widget se queda en castellano
+     * sin avisar.
+     *
+     * @return array<string,string>
+     */
+    public static function widgetTexts(string $lang): array
+    {
+        $keys = [
+            'loading', 'no_slots', 'slots_one', 'slots_many',
+            'ph_name', 'ph_email', 'ph_phone', 'ph_notes', 'book_at',
+            'sent_title', 'registered', 'slot_taken', 'too_many', 'failed',
+            'network', 'load_failed', 'service_unavailable', 'local_time',
+        ];
+        $out = [];
+        foreach ($keys as $key) {
+            // template() y no t(): el widget interpola {n}, {time} y {tz} en
+            // el navegador, así que los tokens tienen que llegar intactos.
+            $out[$key] = Microcopy::template('booking.' . $key, $lang);
+        }
+        return $out;
     }
 
     // ======================================================================

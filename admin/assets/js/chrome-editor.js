@@ -2,6 +2,50 @@
 (function () {
     'use strict';
     var cfg = window.PP_CHROME || {};
+
+    /* -----------------------------------------------------------------
+       I18N-FULL T5.7 — Edición de textos por idioma.
+
+       Regla: al editar un idioma que NO es el principal solo se toca su capa
+       de texto (`cfg.i18n[lang]`). El diseño, los bordes, las redes y los datos
+       de contacto son COMUNES: se bloquean para que nadie crea que está
+       cambiando solo «la versión francesa» del color.
+
+       Un campo vacío significa «usa el texto del idioma principal», y así se le
+       dice al usuario con el placeholder.
+       ----------------------------------------------------------------- */
+    var langBar   = document.getElementById('pp-chrome-langbar');
+    var langHint  = document.getElementById('pp-chrome-langhint');
+    var primaryLang = langBar ? langBar.getAttribute('data-primary') : '';
+    var editingLang = primaryLang;
+
+    /** Campos de TEXTO traducibles: id del input → ruta en la capa de idioma. */
+    var TRANSLATABLE = {
+        cta_label:          ['header', 'cta', 'label'],
+        f_brand_name:       ['footer', 'brand', 'name'],
+        f_tagline:          ['footer', 'tagline'],
+        f_copyright:        ['footer', 'copyright'],
+        f_label_nav:        ['footer', 'labels', 'nav'],
+        f_label_legal:      ['footer', 'labels', 'legal'],
+        f_label_contact:    ['footer', 'labels', 'contact'],
+        f_label_social:     ['footer', 'labels', 'social'],
+        f_label_newsletter: ['footer', 'labels', 'newsletter'],
+        n_heading:          ['footer', 'newsletter', 'heading'],
+        n_cta_label:        ['footer', 'newsletter', 'cta_label']
+    };
+
+    function dig(obj, path) {
+        return path.reduce(function (acc, k) { return (acc && acc[k] != null) ? acc[k] : null; }, obj);
+    }
+    function plant(obj, path, value) {
+        var node = obj;
+        for (var i = 0; i < path.length - 1; i++) {
+            if (!node[path[i]]) node[path[i]] = {};
+            node = node[path[i]];
+        }
+        node[path[path.length - 1]] = value;
+    }
+    function isPrimary() { return editingLang === primaryLang; }
     var pages = window.PP_PAGES || [];
     var baseUrl = window.PP_BASEURL || '';
     var csrf = window.PP_CSRF || '';
@@ -246,7 +290,34 @@
         };
     }
 
+    /**
+     * Config que se envía al servidor.
+     *
+     * En el idioma principal, la de siempre. En un idioma secundario, la BASE
+     * intacta con su capa `i18n` actualizada: editar una traducción no puede
+     * modificar el original.
+     */
     function buildConfig() {
+        if (!isPrimary()) {
+            var layer = {};
+            Object.keys(TRANSLATABLE).forEach(function (id) {
+                var v = val(id).trim();
+                if (v !== '') plant(layer, TRANSLATABLE[id], v);
+            });
+            var menu = readItems(menuList);
+            if (menu.length) plant(layer, ['header', 'menu'], menu);
+            var fnav = readItems(footerNavList);
+            if (fnav.length) plant(layer, ['footer', 'nav'], fnav);
+
+            var out = JSON.parse(JSON.stringify(cfg));
+            out.i18n = out.i18n || {};
+            out.i18n[editingLang] = layer;
+            return out;
+        }
+        return buildBaseConfig();
+    }
+
+    function buildBaseConfig() {
         var blocks = [];
         Array.prototype.forEach.call(footerBlocks.querySelectorAll('.pp-fblock'), function (block) {
             var on = block.querySelector('.pp-fblock-on');
@@ -292,12 +363,112 @@
                 contact: { address: val('c_address').trim(), phone: val('c_phone').trim(), email: val('c_email').trim(), hours: val('c_hours').trim() },
                 social: social,
                 newsletter: { enabled: blocks.indexOf('newsletter') !== -1, heading: val('n_heading').trim(), form_ref: val('n_form').trim(), cta_label: val('n_cta_label').trim() }
-            }
+            },
+            // Las capas de idioma no se tocan al editar el principal.
+            i18n: cfg.i18n || {}
         };
     }
 
     /* ---------- Vista previa ---------- */
     var previewTimer = null;
+    /* ---------- Conmutador de idioma (T5.7) ---------- */
+
+    /** Controles que NO se traducen: son comunes a todos los idiomas. */
+    function sharedControls() {
+        var ids = ['h_sticky', 'h_transparent', 'h_density', 'h_logo', 'h_width', 'h_nav_alignment',
+                   'h_mobile_cta', 'h_bg', 'h_brand_url', 'cta_mode', 'cta_url', 'cta_style',
+                   'f_bg', 'f_columns', 'n_form',
+                   'c_address', 'c_phone', 'c_email', 'c_hours'];
+        var nodes = [];
+        ids.forEach(function (id) { var n = document.getElementById(id); if (n) nodes.push(n); });
+        ['[data-border-editor]', '.pp-fblock', '#social-list'].forEach(function (sel) {
+            Array.prototype.forEach.call(document.querySelectorAll(sel), function (box) {
+                Array.prototype.forEach.call(box.querySelectorAll('input,select,button,textarea'), function (n) {
+                    nodes.push(n);
+                });
+            });
+        });
+        // Botones de «añadir» de las listas comunes.
+        ['[data-add-social]', '#social-list ~ button'].forEach(function (sel) {
+            Array.prototype.forEach.call(document.querySelectorAll(sel), function (n) { nodes.push(n); });
+        });
+        return nodes;
+    }
+
+    function applyLanguage(lang) {
+        editingLang = lang;
+        var layer = (cfg.i18n && cfg.i18n[lang]) || {};
+
+        // Textos: valor de la capa, y el del idioma principal como pista.
+        Object.keys(TRANSLATABLE).forEach(function (id) {
+            var node = document.getElementById(id);
+            if (!node) return;
+            var path = TRANSLATABLE[id];
+            if (isPrimary()) {
+                node.value = dig(cfg, path) || '';
+                node.placeholder = node.getAttribute('data-ph-original') || node.placeholder;
+            } else {
+                if (!node.getAttribute('data-ph-original')) {
+                    node.setAttribute('data-ph-original', node.placeholder || '');
+                }
+                node.value = dig(layer, path) || '';
+                var base = dig(cfg, path);
+                node.placeholder = base ? base : 'Se usará el texto en ' + primaryLabel();
+            }
+        });
+
+        // Menús: cada idioma tiene el suyo (apunta a otras páginas).
+        menuList.innerHTML = '';
+        footerNavList.innerHTML = '';
+        var menuSrc = isPrimary()
+            ? ((cfg.header && cfg.header.menu) || [])
+            : ((layer.header && layer.header.menu) || []);
+        var navSrc = isPrimary()
+            ? ((cfg.footer && cfg.footer.nav) || [])
+            : ((layer.footer && layer.footer.nav) || []);
+        menuSrc.forEach(function (it) { if (it) menuList.appendChild(itemRow(it, menuList, true)); });
+        navSrc.forEach(function (it) { if (it) footerNavList.appendChild(itemRow(it, footerNavList, false)); });
+
+        // Lo común se bloquea: cambiarlo aquí confundiría (afecta a todos).
+        sharedControls().forEach(function (n) { n.disabled = !isPrimary(); });
+        document.body.classList.toggle('pp-chrome-translating', !isPrimary());
+
+        if (langHint) {
+            if (isPrimary()) {
+                langHint.hidden = true;
+            } else {
+                langHint.hidden = false;
+                langHint.innerHTML = 'Estás editando los textos en <strong>' + langLabel(lang) + '</strong>. '
+                    + 'Lo que dejes en blanco usará el texto en ' + primaryLabel() + '. '
+                    + 'El diseño y los datos de contacto están bloqueados porque son iguales en todos los idiomas.';
+            }
+        }
+        preview();
+    }
+
+    function langLabel(code) {
+        var btn = langBar ? langBar.querySelector('[data-lang="' + code + '"]') : null;
+        return btn ? btn.textContent.replace(' · principal', '').trim() : code;
+    }
+    function primaryLabel() { return langLabel(primaryLang); }
+
+    if (langBar) {
+        langBar.addEventListener('click', function (ev) {
+            var tab = ev.target.closest ? ev.target.closest('[data-lang]') : null;
+            if (!tab) return;
+            if (dirty && !window.confirm('Tienes cambios sin guardar. Si cambias de idioma se perderán. ¿Seguir?')) {
+                return;
+            }
+            Array.prototype.forEach.call(langBar.querySelectorAll('[data-lang]'), function (b) {
+                var on = b === tab;
+                b.classList.toggle('is-active', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            applyLanguage(tab.getAttribute('data-lang'));
+            setDirty(false);
+        });
+    }
+
     function preview() {
         if (initialized) markDirty();
         clearTimeout(previewTimer);
@@ -305,6 +476,7 @@
             var body = new URLSearchParams();
             body.set('_csrf', csrf);
             body.set('config_json', JSON.stringify(buildConfig()));
+            body.set('lang', editingLang);
             fetch(baseUrl + '/admin/chrome/preview', {
                 method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString(), credentials: 'same-origin'

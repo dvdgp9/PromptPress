@@ -5,10 +5,34 @@ namespace App\Services;
 use App\Services\Compliance\ComplianceService;
 use App\Services\Compliance\CookieBanner;
 use App\Services\Compliance\TrackingCatalog;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use Core\Database;
 
 final class BrandService
 {
+    /**
+     * Idioma del sitio que se está renderizando. Lo fijan `publicHeader()` y
+     * `publicFooter()`; los helpers privados de columna no reciben `$siteId`,
+     * así que se comparte por aquí (mismo patrón que
+     * SectionRenderer::setSiteContext).
+     */
+    private static string $lang = LanguageService::DEFAULT;
+
+    /**
+     * Página que se está sirviendo (para el selector de idioma). Vacía cuando
+     * se pinta el chrome fuera del contexto de una página.
+     *
+     * @var array<string,mixed>
+     */
+    private static array $currentPage = [];
+
+    /** Texto de microcopy ya escapado para meter en un atributo HTML. */
+    private static function aria(string $key): string
+    {
+        return htmlspecialchars(Microcopy::t($key, self::$lang), ENT_QUOTES, 'UTF-8');
+    }
+
     /** Glyphs de marca (Simple Icons, viewBox 24, currentColor) para el footer. */
     private const SOCIAL_ICONS = [
         'instagram' => 'M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077',
@@ -29,45 +53,130 @@ final class BrandService
         'pinteres' => 'pinterest', 'tik' => 'tiktok',
     ];
 
+    /**
+     * LOGO2 — Claves de ajuste de cada variante. Se nombran por el FONDO donde
+     * va el logo, no por su color: "logo oscuro" es ambiguo (¿de tinta oscura o
+     * para fondo oscuro?) y ahí es donde el cliente se equivoca al subirlo.
+     */
+    public const LOGO_VARIANTS = [
+        'light' => ['setting' => 'site_logo_path',      'label' => 'Para fondos claros'],
+        'dark'  => ['setting' => 'site_logo_dark_path', 'label' => 'Para fondos oscuros'],
+    ];
+
     public static function data(int $siteId): array
     {
         $site = Database::selectOne('SELECT name FROM sites WHERE id = ? LIMIT 1', [$siteId]) ?: [];
-        $logo = Database::selectOne(
-            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
-            [$siteId, 'site_logo_path']
+
+        $rows = Database::select(
+            "SELECT setting_key, setting_value FROM settings
+             WHERE site_id = ? AND setting_key IN ('site_logo_path', 'site_logo_dark_path', 'site_logo_primary')",
+            [$siteId]
         );
+        $settings = [];
+        foreach ($rows as $r) $settings[(string) $r['setting_key']] = trim((string) $r['setting_value']);
+
+        $primary = ($settings['site_logo_primary'] ?? 'light') === 'dark' ? 'dark' : 'light';
 
         return [
             'site_id' => $siteId,
             'name' => trim((string) ($site['name'] ?? 'PromptPress')) ?: 'PromptPress',
-            'logo_path' => trim((string) ($logo['setting_value'] ?? '')),
+            'logo_path' => (string) ($settings['site_logo_path'] ?? ''),
+            'logo_dark_path' => (string) ($settings['site_logo_dark_path'] ?? ''),
+            'logo_primary' => $primary,
         ];
     }
 
-    public static function logoUrl(int $siteId): string
+    /**
+     * LOGO2 — Ruta del logo adecuada para un fondo.
+     *
+     * `$background`: 'light' | 'dark' | 'auto' (el principal). Si la variante
+     * pedida no existe, se devuelve la otra: mejor un logo con menos contraste
+     * que ningún logo.
+     */
+    public static function logoPathFor(int $siteId, string $background = 'auto', ?array $data = null): string
     {
-        $data = self::data($siteId);
-        return self::publicLogoUrl($siteId, $data['logo_path']);
+        $data = $data ?? self::data($siteId);
+        if ($background === 'auto' || !isset(self::LOGO_VARIANTS[$background])) {
+            $background = (string) $data['logo_primary'];
+        }
+
+        $paths = [
+            'light' => (string) $data['logo_path'],
+            'dark'  => (string) $data['logo_dark_path'],
+        ];
+        $other = $background === 'dark' ? 'light' : 'dark';
+
+        foreach ([$background, $other] as $candidate) {
+            $path = ltrim($paths[$candidate], '/');
+            if ($path !== '' && is_file(PP_ROOT . '/' . $path)) return $path;
+        }
+        return '';
     }
 
-    public static function publicLogoUrl(int $siteId, string $path): string
+    /**
+     * LOGO2 — Bloque de contexto para la IA con los logos disponibles.
+     * Cadena vacía si el sitio no tiene ninguno: así no se le sugiere insertar
+     * un `<img>` con una ruta que no existe.
+     */
+    public static function logoHintForAi(int $siteId): string
+    {
+        $data = self::data($siteId);
+        $lines = [];
+
+        foreach (self::LOGO_VARIANTS as $variant => $meta) {
+            $path = $variant === 'dark' ? (string) $data['logo_dark_path'] : (string) $data['logo_path'];
+            $path = ltrim($path, '/');
+            if ($path === '' || !is_file(PP_ROOT . '/' . $path)) continue;
+            $lines[] = '- ' . ($variant === 'dark' ? 'Sobre fondo OSCURO' : 'Sobre fondo CLARO')
+                . ': ' . self::publicLogoUrl($siteId, $path, $variant);
+        }
+
+        if ($lines === []) return '';
+
+        return "LOGOS DE LA MARCA (rutas reales, no inventes otras):\n"
+            . implode("\n", $lines) . "\n"
+            . "- Insértalos con `<img src=\"…\" alt=\"" . str_replace('"', '', (string) $data['name']) . "\">`.\n"
+            . "- Elige SIEMPRE la variante que contraste con el fondo de esa sección. Si solo hay una, úsala solo donde se lea bien.\n"
+            . "- No pongas el logo en la cabecera ni en el pie: la plataforma ya los pinta.";
+    }
+
+    /** LOGO2 — Variante realmente disponible para un fondo ('' si no hay logo). */
+    public static function logoVariantFor(int $siteId, string $background = 'auto', ?array $data = null): string
+    {
+        $data = $data ?? self::data($siteId);
+        $path = self::logoPathFor($siteId, $background, $data);
+        if ($path === '') return '';
+        return $path === ltrim((string) $data['logo_dark_path'], '/') ? 'dark' : 'light';
+    }
+
+    public static function logoUrl(int $siteId, string $background = 'auto'): string
+    {
+        $data = self::data($siteId);
+        $variant = self::logoVariantFor($siteId, $background, $data);
+        if ($variant === '') return '';
+        return self::publicLogoUrl($siteId, self::logoPathFor($siteId, $background, $data), $variant);
+    }
+
+    public static function publicLogoUrl(int $siteId, string $path, string $variant = 'light'): string
     {
         $path = ltrim(trim($path), '/');
         $prefix = 'storage/uploads/' . $siteId . '/brand/';
         if ($path === '' || !str_starts_with($path, $prefix) || !is_file(PP_ROOT . '/' . $path)) return '';
-        return base_url('brand-assets/' . $siteId . '/logo');
+        return base_url('brand-assets/' . $siteId . '/logo' . ($variant === 'dark' ? '/dark' : ''));
     }
 
     /**
      * D-MB2 R4 — Logo solo si el archivo existe en disco (un path huérfano en
      * settings producía un <img> roto + alt duplicando el nombre del sitio).
      */
-    private static function brandMark(array $data): string
+    private static function brandMark(array $data, string $background = 'auto'): string
     {
         $name = htmlspecialchars($data['name'], ENT_QUOTES, 'UTF-8');
-        $path = ltrim($data['logo_path'], '/');
-        if ($path !== '' && is_file(PP_ROOT . '/' . $path)) {
-            return '<img class="pp-site-header__logo-img" src="' . htmlspecialchars(self::publicLogoUrl((int) ($data['site_id'] ?? 0), $path), ENT_QUOTES, 'UTF-8') . '" alt="' . $name . '">';
+        $siteId = (int) ($data['site_id'] ?? 0);
+        $path = self::logoPathFor($siteId, $background, $data);
+        if ($path !== '') {
+            $variant = self::logoVariantFor($siteId, $background, $data);
+            return '<img class="pp-site-header__logo-img" src="' . htmlspecialchars(self::publicLogoUrl($siteId, $path, $variant), ENT_QUOTES, 'UTF-8') . '" alt="' . $name . '">';
         }
         return '<span class="pp-site-header__logo-fallback" aria-hidden="true">'
              . htmlspecialchars(mb_strtoupper(mb_substr($data['name'], 0, 1)), ENT_QUOTES, 'UTF-8')
@@ -83,15 +192,19 @@ final class BrandService
     private static function navPages(int $siteId, int $limit = 6): array
     {
         try {
+            // El menú es el del idioma que se está sirviendo: en `/fr/` no
+            // pueden colarse las páginas castellanas. Se excluye además la home
+            // del propio idioma, cuyo slug es el prefijo (`fr`).
             $rows = Database::select(
                 "SELECT title, slug, page_type FROM pages
                  WHERE site_id = ? AND status = 'published'
+                   AND language = ?
                    AND page_type NOT IN ('legal', 'article')
                    AND (parent_id IS NULL OR parent_id = 0)
-                   AND slug NOT IN ('', 'inicio', 'home')
+                   AND slug NOT IN ('', 'inicio', 'home', ?)
                  ORDER BY tree_sort_order ASC, sort_order ASC, id ASC
                  LIMIT " . (int) $limit,
-                [$siteId]
+                [$siteId, self::$lang, self::$lang]
             );
         } catch (\Throwable $e) {
             return [];
@@ -103,10 +216,14 @@ final class BrandService
         ], $rows);
     }
 
-    public static function publicHeader(int $siteId, ?array $config = null): string
+    public static function publicHeader(int $siteId, ?array $config = null, ?string $lang = null): string
     {
+        // El idioma de render lo manda quien sirve la página (puede no ser el
+        // del sitio: en `/fr/contact` es el francés). Si no se indica, el del sitio.
+        self::$lang = $lang !== null ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
         $data = self::data($siteId);
-        $config = $config ?? ChromeService::load($siteId);
+        // I18N-FULL T5.1 — capa de texto del idioma que se está sirviendo.
+        $config = ChromeService::localized($config ?? ChromeService::load($siteId), self::$lang);
         [$links, $cta] = self::headerNav($siteId, $config);
 
         // CHROME-EDITOR — clases de estilo SOLO cuando difieren del defecto, para
@@ -135,10 +252,94 @@ final class BrandService
              . '<a class="pp-site-header__brand" href="' . $brandHref . '">'
              . self::brandMark($data)
              . '</a>'
-             . ($links !== '' ? '<nav class="pp-site-header__nav" aria-label="Navegación principal">' . $links . '</nav>' : '')
+             . ($links !== '' ? '<nav class="pp-site-header__nav" aria-label="' . self::aria('nav.primary_aria') . '">' . $links . '</nav>' : '')
+             . self::languageSwitcher($siteId)
              . $cta
              . '</div>'
              . '</header>';
+    }
+
+    /**
+     * Selector de idioma (I18N-FULL T3.2).
+     *
+     * Solo aparece si el sitio sirve más de un idioma: una web monolingüe no ve
+     * ni rastro. Los idiomas se nombran con su ENDÓNIMO («Français», no
+     * «Francés»): quien busca la versión francesa reconoce su idioma escrito
+     * como lo escribe él.
+     *
+     * El destino de cada enlace lo resuelve `languageSwitchTarget()` sobre la
+     * página que se está sirviendo; aquí solo se conoce el idioma, así que los
+     * enlaces apuntan a la home de cada idioma salvo que el renderizador haya
+     * fijado la página actual con `setCurrentPage()`.
+     */
+    private static function languageSwitcher(int $siteId): string
+    {
+        if (!LanguageService::isMultilingual($siteId)) {
+            return '';
+        }
+
+        $items = '';
+        foreach (LanguageService::activeFor($siteId) as $code) {
+            $isCurrent = $code === self::$lang;
+            $href = htmlspecialchars(
+                self::languageSwitchTarget($siteId, self::$currentPage, $code),
+                ENT_QUOTES,
+                'UTF-8'
+            );
+            $items .= '<a class="pp-site-header__lang-item' . ($isCurrent ? ' is-current' : '') . '"'
+                . ' href="' . $href . '" hreflang="' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '"'
+                . ($isCurrent ? ' aria-current="true"' : '') . '>'
+                . htmlspecialchars(LanguageService::label($code), ENT_QUOTES, 'UTF-8')
+                . '</a>';
+        }
+
+        return '<nav class="pp-site-header__lang" aria-label="'
+             . self::aria('nav.language_aria') . '">' . $items . '</nav>';
+    }
+
+    /**
+     * URL equivalente de una página en otro idioma.
+     *
+     * Si existe la traducción (misma `translation_group`), se enlaza a ella.
+     * Si no, a la HOME de ese idioma: un selector que lleva a un 404 es peor
+     * que uno que lleva a la portada.
+     *
+     * @param array<string,mixed> $page
+     */
+    public static function languageSwitchTarget(int $siteId, array $page, string $targetLang): string
+    {
+        $targetLang = LanguageService::normalize($targetLang);
+        $group = trim((string) ($page['translation_group'] ?? ''));
+
+        if ($group !== '') {
+            try {
+                $row = Database::selectOne(
+                    "SELECT slug FROM pages
+                     WHERE site_id = ? AND translation_group = ? AND language = ? AND status = 'published'
+                     LIMIT 1",
+                    [$siteId, $group, $targetLang]
+                );
+                if ($row !== null) {
+                    return base_url(ltrim((string) $row['slug'], '/'));
+                }
+            } catch (\Throwable $e) {
+                // sin traducción localizable: caemos a la home
+            }
+        }
+
+        $prefix = LanguageService::prefixFor($siteId, $targetLang);
+        return base_url($prefix === '' ? '/' : $prefix);
+    }
+
+    /**
+     * Página que se está sirviendo, para que el selector pueda enlazar a su
+     * traducción. La fija el renderizador antes de pintar el header.
+     *
+     * @param array<string,mixed> $page
+     */
+    public static function setCurrentPage(array $page): void
+    {
+        self::$currentPage = $page;
     }
 
     /**
@@ -270,9 +471,10 @@ final class BrandService
      * Renderiza solo las páginas con `page_type='legal'` que estén `published`.
      * Si no hay ninguna, devuelve un footer mínimo (©/marca) sin enlaces.
      */
-    public static function publicFooter(int $siteId, ?array $config = null): string
+    public static function publicFooter(int $siteId, ?array $config = null, ?string $lang = null): string
     {
-        $config = $config ?? ChromeService::load($siteId);
+        self::$lang = $lang !== null ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
+        $config = ChromeService::localized($config ?? ChromeService::load($siteId), self::$lang);
         $siteName = self::data($siteId)['name'];
         $footerBrandName = trim((string) ($config['footer']['brand']['name'] ?? ''));
         $name = htmlspecialchars($footerBrandName !== '' ? $footerBrandName : $siteName, ENT_QUOTES, 'UTF-8');
@@ -281,8 +483,9 @@ final class BrandService
             $legal = Database::select(
                 "SELECT title, slug FROM pages
                  WHERE site_id = ? AND page_type = 'legal' AND status = 'published'
+                   AND language = ?
                  ORDER BY title ASC",
-                [$siteId]
+                [$siteId, self::$lang]
             );
         } catch (\Throwable $e) {
             $legal = [];
@@ -300,9 +503,9 @@ final class BrandService
         $manifest = ComplianceService::manifest($siteId);
         $needsBanner = TrackingCatalog::needsBanner($manifest);
         $reopenLink = $needsBanner
-            ? '<a class="pp-site-footer__link" href="#" data-cb-reopen>Configurar cookies</a>'
+            ? '<a class="pp-site-footer__link" href="#" data-cb-reopen>' . self::aria('cookies.reopen') . '</a>'
             : '';
-        $bannerHtml = CookieBanner::render($manifest);
+        $bannerHtml = CookieBanner::render($manifest, self::$lang);
 
         // D-MB2 R4 — footer "de agencia": banda oscura con marca + tagline,
         // navegación principal y enlaces legales; barra inferior con ©.
@@ -343,15 +546,25 @@ final class BrandService
         }
 
         // CHROME-EDITOR — columnas por bloque, en el orden configurado.
+        // LOGO2 — El pie va sobre fondo oscuro: si hay logo para ese fondo, se usa
+        // en lugar del nombre en texto. Si no lo hay, se mantiene el nombre (un
+        // logo de tinta oscura sobre fondo oscuro no se vería).
+        $footerLogo = '';
+        if (BrandService::logoVariantFor($siteId, 'dark') === 'dark') {
+            $footerLogo = '<img class="pp-site-footer__logo" src="'
+                . htmlspecialchars(self::logoUrl($siteId, 'dark'), ENT_QUOTES, 'UTF-8')
+                . '" alt="' . $name . '">';
+        }
+
         $brandCol = '<div class="pp-site-footer__brandcol">'
-              . '<span class="pp-site-footer__name">' . $name . '</span>'
+              . ($footerLogo !== '' ? $footerLogo : '<span class="pp-site-footer__name">' . $name . '</span>')
               . ($tagline !== '' ? '<p class="pp-site-footer__tagline">' . htmlspecialchars($tagline, ENT_QUOTES, 'UTF-8') . '</p>' : '')
               . '</div>';
         $navCol = $navLinks !== ''
-            ? '<nav class="pp-site-footer__col" aria-label="Navegación"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'nav', 'Explora') . '</span>' . $navLinks . '</nav>'
+            ? '<nav class="pp-site-footer__col" aria-label="' . self::aria('nav.footer_aria') . '"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'nav', 'footer.explore') . '</span>' . $navLinks . '</nav>'
             : '';
         $legalCol = ($links !== '' || $reopenLink !== '')
-            ? '<nav class="pp-site-footer__col" aria-label="Enlaces legales"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'legal', 'Legal') . '</span>' . $links . $reopenLink . '</nav>'
+            ? '<nav class="pp-site-footer__col" aria-label="' . self::aria('nav.legal_aria') . '"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'legal', 'footer.legal') . '</span>' . $links . $reopenLink . '</nav>'
             : '';
 
         $colMap = [
@@ -425,7 +638,7 @@ final class BrandService
         if ($email !== '') $items .= '<a class="pp-site-footer__link" href="mailto:' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '</a>';
         if ($hours !== '') $items .= '<span class="pp-site-footer__contact-item">' . htmlspecialchars($hours, ENT_QUOTES, 'UTF-8') . '</span>';
         if ($items === '') return '';
-        return '<div class="pp-site-footer__col pp-site-footer__contact" aria-label="Contacto"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'contact', 'Contacto') . '</span>' . $items . '</div>';
+        return '<div class="pp-site-footer__col pp-site-footer__contact" aria-label="' . self::aria('footer.contact') . '"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'contact', 'footer.contact') . '</span>' . $items . '</div>';
     }
 
     /** Columna de redes sociales (icono de marca + fallback a texto). '' si no hay. */
@@ -454,7 +667,7 @@ final class BrandService
             }
         }
         if ($links === '') return '';
-        return '<div class="pp-site-footer__col pp-site-footer__social" aria-label="Redes sociales"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'social', 'Síguenos') . '</span><div class="pp-site-footer__social-row">' . $links . '</div></div>';
+        return '<div class="pp-site-footer__col pp-site-footer__social" aria-label="' . self::aria('footer.social_aria') . '"><span class="pp-site-footer__col-title">' . self::footerLabel($config, 'social', 'footer.social') . '</span><div class="pp-site-footer__social-row">' . $links . '</div></div>';
     }
 
     /** Columna de newsletter (titular + CTA). '' si no está activada. */
@@ -462,20 +675,29 @@ final class BrandService
     {
         $n = (array) ($config['footer']['newsletter'] ?? []);
         if (empty($n['enabled'])) return '';
-        $heading = trim((string) ($n['heading'] ?? '')) ?: 'Suscríbete a nuestra newsletter';
-        $label = trim((string) ($n['cta_label'] ?? '')) ?: 'Suscribirme';
+        $heading = Microcopy::resolve((string) ($n['heading'] ?? ''), 'footer.newsletter_heading', self::$lang);
+        $label = Microcopy::resolve((string) ($n['cta_label'] ?? ''), 'footer.newsletter_cta', self::$lang);
         $url = trim((string) ($n['form_ref'] ?? '')) !== '' ? self::href((string) $n['form_ref']) : self::href('/contacto');
         return '<div class="pp-site-footer__col pp-site-footer__newsletter" aria-label="Newsletter">'
-             . '<span class="pp-site-footer__col-title">' . self::footerLabel($config, 'newsletter', 'Newsletter') . '</span>'
+             . '<span class="pp-site-footer__col-title">' . self::footerLabel($config, 'newsletter', 'footer.newsletter') . '</span>'
              . '<p class="pp-site-footer__newsletter-text">' . htmlspecialchars($heading, ENT_QUOTES, 'UTF-8') . '</p>'
              . '<a class="pp-btn pp-btn--primary pp-btn--sm pp-site-footer__newsletter-cta" href="' . $url . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a>'
              . '</div>';
     }
 
-    private static function footerLabel(array $config, string $key, string $fallback): string
+    /**
+     * Título de columna del footer. `$microcopyKey` es la clave del texto
+     * automático: se usa cuando el usuario no ha puesto etiqueta propia (o
+     * cuando lo guardado es el default castellano histórico).
+     */
+    private static function footerLabel(array $config, string $key, string $microcopyKey): string
     {
-        $label = trim((string) ($config['footer']['labels'][$key] ?? ''));
-        return htmlspecialchars($label !== '' ? $label : $fallback, ENT_QUOTES, 'UTF-8');
+        $stored = (string) ($config['footer']['labels'][$key] ?? '');
+        return htmlspecialchars(
+            Microcopy::resolve($stored, $microcopyKey, self::$lang),
+            ENT_QUOTES,
+            'UTF-8'
+        );
     }
 
     private static function borderStyle(array $border): string

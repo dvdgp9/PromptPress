@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Commerce;
 
+use App\Services\Microcopy;
+
 use Core\Database;
 
 /**
@@ -46,15 +48,15 @@ final class CartService
         if ($p === null || (int) $p['active'] !== 1) {
             unset($cart[$productId]);
             self::persist($siteId, $cart);
-            return 'Ese producto ya no está disponible.';
+            return Microcopy::site($siteId, 'shop.warn_unavailable');
         }
         $qty = min($qty, 99);
         $warning = null;
         if ($p['stock'] !== null && $qty > (int) $p['stock']) {
             $qty = (int) $p['stock'];
             $warning = $qty > 0
-                ? 'Solo quedan ' . $qty . ' unidades de «' . (string) $p['name'] . '».'
-                : '«' . (string) $p['name'] . '» está agotado.';
+                ? Microcopy::site($siteId, 'shop.warn_only_left', ['n' => $qty, 'product' => (string) $p['name']])
+                : Microcopy::site($siteId, 'shop.warn_sold_out', ['product' => (string) $p['name']]);
         }
         if ($qty > 0) {
             $cart[$productId] = $qty;
@@ -173,7 +175,7 @@ final class CartService
     {
         $count = array_sum(self::items($siteId));
         return '<a class="pp-btn pp-btn--ghost" href="' . e(base_url('tienda/carrito')) . '">'
-            . 'Carrito' . ($count > 0 ? ' (' . $count . ')' : '') . '</a>';
+            . e(Microcopy::site($siteId, 'shop.cart')) . ($count > 0 ? ' (' . $count . ')' : '') . '</a>';
     }
 
     /** @param array<int,int> $cart */

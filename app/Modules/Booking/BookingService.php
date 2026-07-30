@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Booking;
 
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use Core\Database;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -42,13 +44,13 @@ final class BookingService
         $phone = mb_substr(trim((string) ($input['phone'] ?? '')), 0, 40);
         $notes = mb_substr(trim((string) ($input['notes'] ?? '')), 0, 2000);
         if ($name === '') {
-            $fields['name'] = 'El nombre es obligatorio.';
+            $fields['name'] = Microcopy::site($siteId, 'booking.err_name');
         }
         if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $fields['email'] = 'Necesitamos un email válido para confirmar la reserva.';
+            $fields['email'] = Microcopy::site($siteId, 'booking.err_email');
         }
         if ($serviceId <= 0 || $start === '') {
-            $fields['start'] = 'Falta el servicio o la hora de inicio.';
+            $fields['start'] = Microcopy::site($siteId, 'booking.err_start');
         }
         if ($fields !== []) {
             return ['ok' => false, 'error' => 'validation', 'fields' => $fields];
@@ -114,13 +116,18 @@ final class BookingService
             $token  = bin2hex(random_bytes(16));
             $ins = $pdo->prepare(
                 'INSERT INTO booking_bookings
-                    (site_id, service_id, starts_at_utc, ends_at_utc, status,
+                    (site_id, service_id, starts_at_utc, ends_at_utc, status, language,
                      customer_name, customer_email, customer_phone, notes,
                      cancel_token, ip_hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $ins->execute([
+                // Idioma con el que el cliente reservó: manda en sus emails y en
+                // su página de cancelación. Sale del SERVICIO, porque en una web
+                // multi-idioma cada idioma tiene el suyo y el visitante reservó
+                // desde la página de ese idioma.
                 $siteId, $serviceId, $slot['start_utc'], $slot['end_utc'], $status,
+                self::serviceLanguage($siteId, $service),
                 $name, $email, $phone !== '' ? $phone : null, $notes !== '' ? $notes : null,
                 $token, $ipHash,
             ]);
@@ -138,6 +145,7 @@ final class BookingService
             'booking' => [
                 'id'           => $id,
                 'status'       => $status,
+                'language'     => self::serviceLanguage($siteId, $service),
                 'service'      => (string) $service['name'],
                 'start'        => self::toLocalIso($slot['start_utc'], $timezone),
                 'end'          => self::toLocalIso($slot['end_utc'], $timezone),
@@ -174,6 +182,18 @@ final class BookingService
     }
 
     /** Zona horaria del sitio (columna sites.timezone, fallback Madrid). */
+    /**
+     * Idioma de un servicio reservable. Si la fila no lo tiene (anterior a la
+     * migración multi-idioma), el del sitio.
+     *
+     * @param array<string,mixed> $service
+     */
+    public static function serviceLanguage(int $siteId, array $service): string
+    {
+        $lang = trim((string) ($service['language'] ?? ''));
+        return $lang !== '' ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
+    }
+
     public static function siteTimezone(int $siteId): string
     {
         $row = Database::selectOne('SELECT timezone FROM sites WHERE id = ? LIMIT 1', [$siteId]);

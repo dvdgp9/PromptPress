@@ -2,6 +2,10 @@
 
 namespace App\Controllers\Admin;
 
+use App\Services\LanguageService;
+use App\Services\TranslationJobs;
+use App\Services\TranslationWriter;
+use App\Services\PageTranslator;
 use App\Services\CacheService;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
@@ -57,7 +61,7 @@ class PageController
 
         $pages = Database::select(
             'SELECT id, title, slug, page_type, parent_id, nav_label, tree_sort_order,
-                    status, updated_at, published_at
+                    status, updated_at, published_at, language, translation_group, render_mode
              FROM pages WHERE site_id = ? AND slug <> ?
              ORDER BY tree_sort_order ASC, sort_order ASC, updated_at DESC',
             [$siteId, '__forms']
@@ -71,6 +75,60 @@ class PageController
         $data['csrf']        = CSRF::token();
         $data['aiMeta']      = AIProviderFactory::currentMeta($siteId);
         $data['hasMemory']   = self::siteHasMemory($siteId);
+
+        // I18N-FULL T5.3 — estado de traducción por página. Solo se calcula (y
+        // solo se muestra) si el sitio tiene más de un idioma: quien no usa
+        // esto no ve una columna nueva que no entiende.
+        $data['isMultilingual']    = LanguageService::isMultilingual($siteId);
+        $data['languageLabels']    = LanguageService::LANGUAGES;
+        $data['translationStatus'] = [];
+        $data['translationCoverage'] = [];
+        $data['untranslatedFilter']  = '';
+        if ($data['isMultilingual']) {
+            foreach ($pages as $p) {
+                $data['translationStatus'][(int) $p['id']] = TranslationWriter::statusFor($siteId, $p);
+            }
+
+            // Resumen «cuánto me queda» por idioma. Solo cuentan las páginas del
+            // idioma PRINCIPAL: las que ya son traducciones no se traducen a su
+            // vez, y contarlas daría un porcentaje que no significa nada.
+            $primary = LanguageService::primaryFor($siteId);
+            foreach (LanguageService::activeFor($siteId) as $code) {
+                if ($code === $primary) {
+                    continue;
+                }
+                $total = 0;
+                $done  = 0;
+                foreach ($pages as $p) {
+                    if (LanguageService::forPage($p, $siteId) !== $primary) {
+                        continue;
+                    }
+                    $total++;
+                    if (!empty($data['translationStatus'][(int) $p['id']][$code]['exists'])) {
+                        $done++;
+                    }
+                }
+                $data['translationCoverage'][$code] = [
+                    'total'   => $total,
+                    'done'    => $done,
+                    'missing' => $total - $done,
+                    'percent' => $total > 0 ? (int) round($done * 100 / $total) : 100,
+                ];
+            }
+
+            // Filtro «enséñame solo lo que falta en X».
+            $filter = strtolower(trim((string) Request::get('sin_traducir', '')));
+            if ($filter !== '' && isset($data['translationCoverage'][$filter])) {
+                $data['untranslatedFilter'] = $filter;
+                $pages = array_values(array_filter($pages, static function (array $p) use ($data, $filter, $siteId, $primary): bool {
+                    if (LanguageService::forPage($p, $siteId) !== $primary) {
+                        return false;
+                    }
+                    return empty($data['translationStatus'][(int) $p['id']][$filter]['exists']);
+                }));
+                $data['pages'] = $pages;
+            }
+        }
 
         View::send('admin/pages/index', $data);
     }
@@ -429,30 +487,9 @@ class PageController
             ]);
         }
 
-        $now = date('Y-m-d H:i:s');
-        Database::execute(
-            'INSERT INTO pages
-                (site_id, title, slug, page_type, meta_title, meta_description,
-                 seo_noindex, seo_exclude_sitemap, canonical_url,
-                 status, sort_order, created_by, created_at, updated_at, published_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-                $siteId,
-                $input['title'],
-                $input['slug'],
-                $input['page_type'],
-                $input['meta_title'] ?: null,
-                $input['meta_description'] ?: null,
-                (int) $input['seo_noindex'],
-                (int) $input['seo_exclude_sitemap'],
-                $input['canonical_url'] ?: null,
-                $input['status'],
-                0,
-                Auth::id(),
-                $now, $now,
-                $input['status'] === 'published' ? $now : null,
-            ]
-        );
+        // I18N-FULL T6.1 — la creación pasa por un único sitio que resuelve
+        // idioma, prefijo de slug y grupo de traducción.
+        self::createPageRow($siteId, $input);
 
         Session::flash('success', 'Página creada correctamente.');
         Response::redirect(base_url('admin/pages'));
@@ -1422,6 +1459,14 @@ class PageController
     {
         $data = DashboardController::getCommonData();
         $page = $ctx['page'] ?? [];
+
+        // I18N-FULL T6.1 — el selector de idioma solo existe si el sitio sirve
+        // más de uno: en una web monolingüe sería un desplegable sin sentido.
+        $formSiteId = Auth::siteId() ?? 0;
+        $data['isMultilingual'] = $formSiteId > 0 && LanguageService::isMultilingual($formSiteId);
+        $data['siteLanguages']  = $formSiteId > 0 ? LanguageService::activeFor($formSiteId) : [];
+        $data['primaryLang']    = $formSiteId > 0 ? LanguageService::primaryFor($formSiteId) : LanguageService::DEFAULT;
+        $data['languageLabels'] = LanguageService::LANGUAGES;
         $pageId = (int) ($page['id'] ?? 0);
         $isArticle = ($page['page_type'] ?? '') === 'article';
 
@@ -1500,6 +1545,7 @@ class PageController
             'seo_exclude_sitemap' => Request::post('seo_exclude_sitemap', '') === '1' ? 1 : 0,
             'canonical_url'    => trim((string) Request::post('canonical_url', '')),
             'status'           => (string) Request::post('status', 'draft'),
+            'language'         => (string) Request::post('language', ''),
         ];
         // Auto-slug desde el título si el usuario lo dejó vacío
         if ($input['slug'] === '' && $input['title'] !== '') {
@@ -1562,6 +1608,28 @@ class PageController
             $exists = Database::selectOne($sql . ' LIMIT 1', $params);
             if ($exists) {
                 $errors['slug'] = 'Ya existe una página con ese slug.';
+            }
+        }
+
+        // I18N-FULL T2.1 — el espacio de nombres de un idioma activo es suyo:
+        // una página en otro idioma no puede colgar de `/fr/...` porque dejaría
+        // sin sitio (o sin home) al francés.
+        if (!isset($errors['slug']) && $input['slug'] !== '') {
+            $pageLang = (string) ($input['language'] ?? '');
+            if ($pageLang === '' && $id !== null) {
+                $existing = Database::selectOne('SELECT language FROM pages WHERE id = ? LIMIT 1', [$id]);
+                $pageLang = (string) ($existing['language'] ?? '');
+            }
+            if ($pageLang === '') {
+                $pageLang = LanguageService::primaryFor($siteId);
+            }
+            if (LanguageService::slugCollidesWithLanguage($siteId, $input['slug'], $pageLang)) {
+                $first = explode('/', trim($input['slug'], '/'))[0];
+                $errors['slug'] = sprintf(
+                    '«%s/» está reservado para las páginas en %s. Elige otro slug o cambia el idioma de la página.',
+                    $first,
+                    LanguageService::label($first)
+                );
             }
         }
 
@@ -2029,11 +2097,191 @@ class PageController
         return implode("\n", $out);
     }
 
-    public static function uniqueSlug(int $siteId, string $base, ?int $ignoreId = null): string
+    /**
+     * Slug único dentro del sitio.
+     *
+     * `$lang` (I18N-FULL T2.1): si se indica, el slug se coloca en el espacio
+     * de nombres de ese idioma — sin prefijo para el principal, `xx/...` para
+     * los secundarios.
+     */
+    /**
+     * POST /admin/pages/{id}/translate — traduce una página a otro idioma
+     * (I18N-FULL T5.3).
+     *
+     * Responde JSON porque el navegador lo llama sin recargar: traducir tarda
+     * (es una llamada a IA) y dejar la página congelada sin explicación es la
+     * peor experiencia posible. La respuesta siempre trae un `message` escrito
+     * para alguien no técnico.
+     */
+    public function translate(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $page = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+        $lang = (string) Request::post('language', '');
+
+        $isCanvas = ((string) ($page['render_mode'] ?? 'sections')) === 'canvas';
+        $editUrlFor = static fn (int $id): string => $isCanvas
+            ? base_url('admin/canvas/' . $id)
+            : base_url('admin/pages/' . $id . '/edit');
+
+        // Las comprobaciones van ANTES de llamar a la IA: traducir a un idioma
+        // inactivo, o una página ya traducida, no debe costar una llamada.
+        $blocked = TranslationWriter::precheck($siteId, $page, $lang);
+        if ($blocked !== null) {
+            Response::json([
+                'ok'       => false,
+                'message'  => (string) $blocked['message'],
+                'edit_url' => isset($blocked['page_id']) ? $editUrlFor((int) $blocked['page_id']) : null,
+            ], 409);
+        }
+
+        // Puede tardar bastantes segundos: la IA reescribe la página entera.
+        @set_time_limit(240);
+
+        try {
+            $translation = $isCanvas
+                ? PageTranslator::translateCanvas($siteId, $page, $lang)
+                : PageTranslator::translateSections($siteId, $page, $lang);
+
+            if (!($translation['ok'] ?? false)) {
+                Response::json([
+                    'ok'      => false,
+                    'message' => (string) ($translation['message'] ?? 'No hemos podido traducir esta página.'),
+                ], 422);
+            }
+
+            $saved = $isCanvas
+                ? TranslationWriter::createCanvas($siteId, $page, $lang, $translation)
+                : TranslationWriter::createSections($siteId, $page, $lang, $translation);
+
+            if (!($saved['ok'] ?? false)) {
+                Response::json([
+                    'ok'      => false,
+                    'message' => (string) ($saved['message'] ?? 'No hemos podido guardar la traducción.'),
+                    'edit_url' => isset($saved['page_id']) ? $editUrlFor((int) $saved['page_id']) : null,
+                ], 409);
+            }
+
+            $newId = (int) $saved['page_id'];
+            Response::json([
+                'ok'       => true,
+                'page_id'  => $newId,
+                'message'  => sprintf(
+                    'Listo: ya tienes esta página en %s. La hemos guardado como BORRADOR para que la revises '
+                    . 'antes de publicarla — tu página original no ha cambiado.',
+                    LanguageService::label($lang)
+                ),
+                'edit_url' => $editUrlFor($newId),
+            ]);
+        } catch (AIException $e) {
+            Response::json([
+                'ok'      => false,
+                'message' => 'La traducción no ha llegado a completarse. No se ha guardado nada, '
+                    . 'así que puedes volver a intentarlo sin perder nada.',
+            ], 502);
+        }
+    }
+
+    /**
+     * POST /admin/pages/translate-all — crea el trabajo de traducción masiva.
+     *
+     * No traduce nada aquí: solo prepara la lista. El navegador va llamando a
+     * `translate-job/{id}/step`, una página por petición, para que ninguna
+     * petición se eternice y el usuario vea avanzar el trabajo.
+     */
+    public function translateAll(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $lang = (string) Request::post('language', '');
+
+        $result = TranslationJobs::createJob($siteId, $lang, Auth::id());
+        if (!($result['ok'] ?? false)) {
+            Response::json(['ok' => false, 'message' => (string) ($result['message'] ?? 'No se pudo iniciar.')], 422);
+        }
+
+        Response::json([
+            'ok'      => true,
+            'job_id'  => (int) $result['job_id'],
+            'count'   => (int) $result['count'],
+            'job'     => TranslationJobs::jobState((int) $result['job_id'], $siteId),
+        ]);
+    }
+
+    /** POST /admin/pages/translate-job/{id}/step — traduce UNA página del trabajo. */
+    public function translateJobStep(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        @set_time_limit(240);
+
+        $result = TranslationJobs::stepJob((int) ($params['id'] ?? 0), $siteId);
+        if (!($result['ok'] ?? false)) {
+            Response::json(['ok' => false, 'message' => (string) ($result['error'] ?? 'Error.')], 404);
+        }
+        Response::json(['ok' => true, 'job' => $result['job']]);
+    }
+
+    /**
+     * Inserta una página resolviendo idioma, prefijo de slug y grupo de
+     * traducción (I18N-FULL T6.1).
+     *
+     * Un idioma que no esté activo en el sitio cae al principal: vale más una
+     * página en el idioma de la casa que una en un idioma que la web no sirve.
+     *
+     * @param array<string,mixed> $input
+     */
+    public static function createPageRow(int $siteId, array $input): int
+    {
+        $lang = trim((string) ($input['language'] ?? ''));
+        $lang = ($lang !== '' && LanguageService::isActive($siteId, $lang))
+            ? LanguageService::normalize($lang)
+            : LanguageService::primaryFor($siteId);
+
+        $slug = self::uniqueSlug($siteId, (string) ($input['slug'] ?? ''), null, $lang);
+        $now  = date('Y-m-d H:i:s');
+        $status = (string) ($input['status'] ?? 'draft');
+
+        Database::execute(
+            'INSERT INTO pages
+                (site_id, title, slug, page_type, language, translation_group,
+                 meta_title, meta_description, seo_noindex, seo_exclude_sitemap, canonical_url,
+                 status, sort_order, created_by, created_at, updated_at, published_at)
+             VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                $siteId,
+                (string) ($input['title'] ?? ''),
+                $slug,
+                (string) ($input['page_type'] ?? 'landing'),
+                $lang,
+                ($input['meta_title'] ?? '') ?: null,
+                ($input['meta_description'] ?? '') ?: null,
+                (int) ($input['seo_noindex'] ?? 0),
+                (int) ($input['seo_exclude_sitemap'] ?? 0),
+                ($input['canonical_url'] ?? '') ?: null,
+                $status,
+                0,
+                Auth::id(),
+                $now, $now,
+                $status === 'published' ? $now : null,
+            ]
+        );
+
+        return (int) Database::lastInsertId();
+    }
+
+    public static function uniqueSlug(int $siteId, string $base, ?int $ignoreId = null, ?string $lang = null): string
     {
         $base = trim($base, '/');
         if ($base === '' || !preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*$#', $base)) {
             $base = 'pagina-' . date('Ymd-His');
+        }
+        if ($lang !== null) {
+            $base = LanguageService::applySlugPrefix($siteId, $base, $lang);
+            if ($base === '') {
+                $base = 'pagina-' . date('Ymd-His');
+            }
         }
 
         $slug = $base;

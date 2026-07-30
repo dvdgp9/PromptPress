@@ -326,6 +326,22 @@
             }
         });
 
+        // FONTS — Feedback al elegir archivos de tipografía propia.
+        var fontsInput = root.querySelector('[data-onboarding-fonts]');
+        var fontsState = root.querySelector('[data-onboarding-fonts-state]');
+        if (fontsInput && fontsState) fontsInput.addEventListener('change', function () {
+            var files = fontsInput.files ? Array.prototype.slice.call(fontsInput.files) : [];
+            if (!files.length) {
+                fontsState.textContent = 'Ningún archivo seleccionado.';
+                fontsState.className = '';
+                return;
+            }
+            var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+            fontsState.textContent = files.length + (files.length === 1 ? ' archivo' : ' archivos')
+                + ' · ' + formatBytes(total) + ' · Se guardarán al continuar';
+            fontsState.className = 'is-success';
+        });
+
         var referenceInput = root.querySelector('[data-reference-dropzone] input[type="file"]');
         var referenceWrap = root.querySelector('[data-reference-dropzone]');
         var referenceState = root.querySelector('[data-reference-state]');

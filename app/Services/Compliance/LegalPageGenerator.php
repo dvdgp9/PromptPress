@@ -10,6 +10,7 @@ use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
 use App\Services\CacheService;
+use App\Services\LanguageService;
 use Core\Auth;
 use Core\Database;
 
@@ -204,26 +205,12 @@ final class LegalPageGenerator
 
     private static function siteLanguage(int $siteId): string
     {
-        try {
-            $row = Database::selectOne('SELECT language FROM sites WHERE id = ? LIMIT 1', [$siteId]);
-            return (string) ($row['language'] ?? 'es');
-        } catch (\Throwable $e) {
-            return 'es';
-        }
+        return LanguageService::codeFor($siteId);
     }
 
     private static function languageLabel(string $code): string
     {
-        return match (strtolower($code)) {
-            'es' => 'español',
-            'en' => 'English',
-            'pt' => 'português',
-            'fr' => 'français',
-            'it' => 'italiano',
-            'de' => 'Deutsch',
-            'ca' => 'català',
-            default => $code,
-        };
+        return LanguageService::promptLabel($code);
     }
 
     private static function formatControllerData(array $c): string

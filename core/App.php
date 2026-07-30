@@ -80,6 +80,17 @@ final class App
                 redirect(base_url('install/'));
             }
 
+            // UPD — Modo mantenimiento: mientras se despliega una actualización,
+            // el público ve un 503 amable. El panel sigue abierto para que quien
+            // actualiza pueda seguir (y restaurar si algo sale mal).
+            if (!str_starts_with($path, '/admin') && \App\Services\MaintenanceMode::isActive()) {
+                http_response_code(503);
+                header('Retry-After: 120');
+                header('Content-Type: text/html; charset=UTF-8');
+                echo \App\Services\MaintenanceMode::render();
+                return;
+            }
+
             $router = new Router();
             require PP_APP . '/routes.php'; // espera $router en scope
             $router->dispatch(Request::method(), Request::path());

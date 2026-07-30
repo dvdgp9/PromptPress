@@ -207,6 +207,44 @@ $groups = [
                                     <?php endforeach; ?>
                                 </select>
                             </label>
+                            <?php /* FONTS — Tipografía propia del cliente. Plegado para no
+                                     recargar el paso: quien no tiene manual de marca ni lo abre. */ ?>
+                            <?php $ownFonts = (array) ($brandValues['custom_fonts'] ?? []); ?>
+                            <details class="pp-onboarding-fonts" <?= $ownFonts !== [] ? 'open' : '' ?>>
+                                <summary>
+                                    <strong>¿Tu marca tiene su propia tipografía?</strong>
+                                    <small><?= $ownFonts !== [] ? e((string) $ownFonts[0]['name']) . ' · ' . count($ownFonts[0]['files']) . ' peso' . (count($ownFonts[0]['files']) === 1 ? '' : 's') : 'Súbela y la usaremos en toda la web' ?></small>
+                                </summary>
+                                <div class="pp-onboarding-fonts__body">
+                                    <label class="pp-onboarding-field">
+                                        <span>Nombre <em>opcional</em></span>
+                                        <input type="text" name="custom_font_name" maxlength="120" placeholder="Ej. Helvetica Now Display"
+                                               value="<?= e((string) ($ownFonts[0]['name'] ?? '')) ?>">
+                                    </label>
+                                    <label class="pp-onboarding-field">
+                                        <span>¿Dónde se usará?</span>
+                                        <select name="custom_font_role">
+                                            <option value="both" <?= (($ownFonts[0]['role'] ?? 'both') === 'both') ? 'selected' : '' ?>>Títulos y textos</option>
+                                            <option value="heading" <?= (($ownFonts[0]['role'] ?? '') === 'heading') ? 'selected' : '' ?>>Solo títulos</option>
+                                            <option value="body" <?= (($ownFonts[0]['role'] ?? '') === 'body') ? 'selected' : '' ?>>Solo textos</option>
+                                        </select>
+                                    </label>
+                                    <label class="pp-onboarding-fonts__file">
+                                        <input type="file" name="custom_fonts[]" accept=".woff2,.woff,.ttf,.otf" multiple data-onboarding-fonts>
+                                        <span aria-hidden="true"></span>
+                                        <strong>Subir archivos de fuente</strong>
+                                        <small>WOFF2, WOFF, TTF u OTF · hasta 3 MB cada uno. Sube un archivo por peso (Regular, Bold…): detectamos el peso por el nombre.</small>
+                                        <em data-onboarding-fonts-state>
+                                            <?php if ($ownFonts !== []): ?>
+                                                <?= count($ownFonts[0]['files']) ?> archivo<?= count($ownFonts[0]['files']) === 1 ? '' : 's' ?> guardado<?= count($ownFonts[0]['files']) === 1 ? '' : 's' ?>. Puedes añadir más.
+                                            <?php else: ?>
+                                                Ningún archivo seleccionado.
+                                            <?php endif; ?>
+                                        </em>
+                                    </label>
+                                    <p class="pp-onboarding-fonts__legal">Necesitas licencia de uso web (webfont) para los archivos que subas. Si prefieres, puedes hacerlo luego desde Diseño.</p>
+                                </div>
+                            </details>
                             <div class="pp-onboarding-field">
                                 <span>Esquinas <em>opcional</em></span>
                                 <div class="pp-onboarding-radius-control">

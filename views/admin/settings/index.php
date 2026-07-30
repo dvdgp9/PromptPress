@@ -2,6 +2,8 @@
 /**
  * @var array $site
  * @var array $languages
+ * @var array $activeLanguages
+ * @var string $primaryLanguage
  * @var array $timezones
  * @var array $errors
  * @var ?string $notice
@@ -109,6 +111,61 @@
     </div>
 
     <div class="pp-form-card">
+        <h3>Idiomas adicionales</h3>
+        <p class="pp-form-help">
+            Por defecto tu web tiene un solo idioma: el principal de arriba. Puedes añadir más y
+            tener la misma web en varios idiomas a la vez. El idioma principal <strong>mantiene sus
+            URLs actuales</strong> (<code>/contacto</code>); cada idioma adicional vive bajo su
+            prefijo (<code>/fr/contact</code>), así que activar uno no cambia ni una URL de las que ya tienes.
+        </p>
+
+        <ul class="pp-lang-list">
+            <?php foreach ($activeLanguages as $code): ?>
+                <li class="pp-lang-item">
+                    <span class="pp-lang-name"><?= e($languages[$code] ?? $code) ?></span>
+                    <?php if ($code === $primaryLanguage): ?>
+                        <span class="pp-lang-tag">principal · sin prefijo</span>
+                    <?php else: ?>
+                        <span class="pp-lang-tag">/<?= e($code) ?>/</span>
+                        <button type="submit" form="pp-lang-remove-<?= e($code) ?>" class="pp-btn-link pp-btn-link--danger">
+                            Desactivar
+                        </button>
+                    <?php endif; ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+
+        <?php foreach ($activeLanguages as $code): ?>
+            <?php if ($code !== $primaryLanguage): ?>
+                <form id="pp-lang-remove-<?= e($code) ?>" method="post"
+                      action="<?= e(base_url('admin/settings/languages/remove')) ?>" class="pp-hidden-form">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="code" value="<?= e($code) ?>">
+                </form>
+            <?php endif; ?>
+        <?php endforeach; ?>
+
+        <?php $available = array_diff(array_keys($languages), $activeLanguages); ?>
+        <?php if ($available !== []): ?>
+            <form method="post" action="<?= e(base_url('admin/settings/languages/add')) ?>" class="pp-lang-add">
+                <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                <label for="pp-lang-new" class="pp-sr-only">Idioma a añadir</label>
+                <select id="pp-lang-new" name="code">
+                    <?php foreach ($available as $code): ?>
+                        <option value="<?= e($code) ?>"><?= e($languages[$code]) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit" class="pp-btn pp-btn--secondary">Añadir idioma</button>
+            </form>
+        <?php endif; ?>
+
+        <p class="pp-form-help pp-form-help--muted">
+            Desactivar un idioma <strong>nunca borra contenido</strong>: si todavía tiene páginas,
+            te lo diremos y no se hará nada.
+        </p>
+    </div>
+
+    <div class="pp-form-card">
         <h3>Contenido editorial</h3>
 
         <div class="pp-form-group">
@@ -161,7 +218,82 @@
     <?php if (!empty($updateStatus['changelog_url'])): ?>
         <p><a href="<?= e((string) $updateStatus['changelog_url']) ?>" target="_blank" rel="noopener noreferrer">Ver changelog</a></p>
     <?php endif; ?>
+
+    <?php /* UPD — Actualizar subiendo el ZIP a mano. */ ?>
+    <div class="pp-update-manual">
+        <h4>Actualizar desde un archivo</h4>
+        <p class="pp-update-manual__intro">
+            Si tienes el ZIP de una versión, súbelo aquí y la plataforma se actualiza sola:
+            hace una copia de seguridad, sustituye el código y aplica los cambios de base de datos.
+            <strong>No toca</strong> tu configuración, tus imágenes ni tus páginas.
+            Mientras dura, los visitantes ven un aviso de «volvemos enseguida»; tú puedes seguir aquí.
+        </p>
+
+        <form method="POST" action="<?= e(base_url('admin/settings/upload-update')) ?>"
+              enctype="multipart/form-data" class="pp-update-manual__form"
+              onsubmit="return confirm('Se va a sustituir el código de la plataforma. Antes se guarda una copia de seguridad para poder volver. ¿Continuar?');">
+            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+
+            <label class="pp-update-file">
+                <span>Elegir ZIP</span>
+                <input type="file" name="package" accept=".zip,application/zip" required data-update-file>
+            </label>
+            <span class="pp-update-filename" data-update-filename>Ningún archivo seleccionado</span>
+
+            <label class="pp-update-checksum">
+                <span>Checksum SHA-256 <em>opcional</em></span>
+                <input type="text" name="checksum" maxlength="80" placeholder="Pégalo si lo tienes, para comprobar que el ZIP llegó entero">
+            </label>
+
+            <button type="submit" class="pp-btn pp-btn--primary" data-update-submit disabled>Actualizar la plataforma</button>
+        </form>
+    </div>
+
+    <?php /* UPD — Copias de seguridad para volver atrás. */ ?>
+    <div class="pp-update-backups">
+        <h4>Copias de seguridad</h4>
+        <?php if (empty($updateBackups)): ?>
+            <p class="pp-update-manual__intro">Todavía no hay ninguna. Se crea una automáticamente cada vez que actualizas.</p>
+        <?php else: ?>
+            <p class="pp-update-manual__intro">
+                Restaurar devuelve los <strong>archivos</strong> al estado de esa copia: sustituye los que cambiaron,
+                pero no borra los que la versión nueva añadió. La <strong>base de datos no vuelve atrás</strong>,
+                así que úsalo para deshacer una actualización que ha roto algo, cuanto antes mejor.
+                Antes de restaurar guardamos el estado actual, por si acaso.
+            </p>
+            <ul class="pp-update-backup-list">
+                <?php foreach ($updateBackups as $b): ?>
+                <li>
+                    <div>
+                        <strong><?= e((string) $b['created_at']) ?></strong>
+                        <small><?= e((string) $b['name']) ?> · <?= e((string) $b['size_human']) ?></small>
+                    </div>
+                    <form method="POST" action="<?= e(base_url('admin/settings/restore-update')) ?>"
+                          onsubmit="return confirm('Se van a restaurar los archivos de esta copia. El estado actual se guardará antes por si necesitas volver. ¿Continuar?');">
+                        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                        <input type="hidden" name="backup" value="<?= e((string) $b['name']) ?>">
+                        <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Restaurar</button>
+                    </form>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </div>
 </section>
+
+<script>
+(function () {
+    var input = document.querySelector('[data-update-file]');
+    if (!input) return;
+    var name = document.querySelector('[data-update-filename]');
+    var submit = document.querySelector('[data-update-submit]');
+    input.addEventListener('change', function () {
+        var f = input.files && input.files[0];
+        if (name) name.textContent = f ? (f.name + ' · ' + Math.round(f.size / 1024 / 1024 * 10) / 10 + ' MB') : 'Ningún archivo seleccionado';
+        if (submit) submit.disabled = !f;
+    });
+})();
+</script>
 <?php endif; ?>
 
 <section class="pp-danger-zone" id="pp-reset-site">

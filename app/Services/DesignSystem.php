@@ -49,6 +49,18 @@ final class DesignSystem
     ];
 
     /**
+     * FONTS — Opciones de fuente para un sitio: las curadas + las propias del
+     * cliente (brandbook), que viajan como `custom:{slug}`.
+     *
+     * @return array<string,string> valor => label
+     */
+    public static function fontOptions(?int $siteId = null): array
+    {
+        if ($siteId === null) return self::FONT_OPTIONS;
+        return self::FONT_OPTIONS + CustomFontService::fontOptions($siteId);
+    }
+
+    /**
      * Schema completo del design system.
      * Retorna array categoría => [label, icon, fields[]].
      */
@@ -180,7 +192,7 @@ final class DesignSystem
      * Valida y limpia los valores recibidos del form para una categoría.
      * Devuelve [tokens, errors]. Los tokens devueltos están normalizados a sus tipos esperados.
      */
-    public static function validateCategory(string $category, array $input): array
+    public static function validateCategory(string $category, array $input, ?int $siteId = null): array
     {
         $schema = self::schema()[$category] ?? null;
         if ($schema === null) {
@@ -192,7 +204,7 @@ final class DesignSystem
             $key = $f['key'];
             $raw = $input[$key] ?? null;
             $val = self::normalizeValue($f, $raw);
-            $err = self::validateValue($f, $val);
+            $err = self::validateValue($f, $val, $siteId);
             if ($err !== null) {
                 $errors[$key] = $err;
                 // Aun así guardamos el valor para re-render
@@ -222,7 +234,7 @@ final class DesignSystem
         }
     }
 
-    private static function validateValue(array $f, $val): ?string
+    private static function validateValue(array $f, $val, ?int $siteId = null): ?string
     {
         switch ($f['type']) {
             case 'color':
@@ -239,7 +251,7 @@ final class DesignSystem
                 if (!isset($f['options'][$val])) return 'Valor no válido.';
                 break;
             case 'font':
-                if (!isset(self::FONT_OPTIONS[$val])) return 'Fuente no reconocida.';
+                if (!isset(self::fontOptions($siteId)[$val])) return 'Fuente no reconocida.';
                 break;
         }
         return null;
@@ -249,7 +261,7 @@ final class DesignSystem
      * Convierte los tokens cargados en un array plano [css_var => value_with_unit].
      * Usado por T5.2 (preview) y T5.3 (generación CSS).
      */
-    public static function toCssVars(array $loadedTokens): array
+    public static function toCssVars(array $loadedTokens, ?int $siteId = null): array
     {
         $vars = [];
         foreach (self::schema() as $cat => $def) {
@@ -265,7 +277,7 @@ final class DesignSystem
                         $val = $val . ($unit === '' ? '' : $unit);
                         break;
                     case 'font':
-                        $val = self::fontCssValue((string) $val);
+                        $val = self::fontCssValue((string) $val, $siteId);
                         break;
                 }
                 $vars[$f['css_var']] = $val;
@@ -277,11 +289,20 @@ final class DesignSystem
     /**
      * Compone el valor CSS para una fuente (incluye fallback).
      */
-    public static function fontCssValue(string $fontKey): string
+    public static function fontCssValue(string $fontKey, ?int $siteId = null): string
     {
         $systemStack = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
         if ($fontKey === '' || $fontKey === 'system') {
             return $systemStack;
+        }
+
+        // FONTS — Fuente propia del cliente: `custom:{slug}` → familia real.
+        if (str_starts_with($fontKey, 'custom:')) {
+            $slug = substr($fontKey, 7);
+            $family = $siteId !== null ? CustomFontService::familyBySlug($siteId, $slug) : null;
+            // Si la familia ya no existe (borrada), caemos al stack del sistema
+            // en vez de dejar una `font-family` rota en la página pública.
+            return $family !== null ? CustomFontService::cssValue($family) : $systemStack;
         }
         // Las Google Fonts siempre con fallback a system
         $isSerif = in_array($fontKey, ['Playfair Display', 'Merriweather', 'Lora'], true);
@@ -313,9 +334,9 @@ final class DesignSystem
      * Los tokens que no son valores CSS directos (e.g. buttons.shadow = 'sm')
      * se traducen a su preset real.
      */
-    public static function renderCssVars(array $loadedTokens): string
+    public static function renderCssVars(array $loadedTokens, ?int $siteId = null): string
     {
-        $vars = self::toCssVars($loadedTokens);
+        $vars = self::toCssVars($loadedTokens, $siteId);
 
         // Shadow preset → valor CSS real
         if (isset($vars['--pp-btn-shadow'])) {
@@ -369,9 +390,23 @@ final class DesignSystem
             $tokens = self::applySkinToTokens($tokens, $skin);
         }
 
+        // FONTS — Si el cliente ha subido tipografías de marca y les ha dado un
+        // rol, mandan ellas: por encima de los tokens, del skin inferido y de la
+        // dirección visual. Un brandbook no es una sugerencia.
+        $tokens = self::applyCustomFontsToTokens($siteId, $tokens);
+
         $fonts  = self::renderFontsLink($tokens);
         $styleSlug = $visualStyleSlug !== null ? VisualStyleService::normalizeSlug($visualStyleSlug) : null;
         $styleFonts = $styleSlug !== null ? VisualStyleService::fontsLink($styleSlug) : '';
+
+        // FONTS — Si las fuentes propias cubren títulos Y textos, la dirección
+        // visual no va a pintar ninguna letra: pedir sus Google Fonts sería
+        // descargar dos familias que nadie llega a ver.
+        if ($styleFonts !== ''
+            && CustomFontService::familyForRole($siteId, 'heading') !== null
+            && CustomFontService::familyForRole($siteId, 'body') !== null) {
+            $styleFonts = '';
+        }
 
         // Si hay skin compuesto, no aplicamos VisualStyle (entrarían en conflicto).
         $styleCss = ($skin === null && $styleSlug !== null)
@@ -383,13 +418,97 @@ final class DesignSystem
 
         // Si hay skin compuesto, emitimos un `<style>` inline con las vars
         // sobreescritas. Esto garantiza prioridad sobre cualquier preset.
-        $skinCss = $skin !== null ? "<style>\n" . self::renderCssVars($tokens) . "</style>" : '';
+        $skinCss = $skin !== null ? "<style>\n" . self::renderCssVars($tokens, $siteId) . "</style>" : '';
 
-        return ($fonts !== '' ? $fonts . "\n" : '')
+        // FONTS — Va el ÚLTIMO a propósito: la dirección visual declara sus
+        // fuentes con un selector de clase (`.pp-visual-style--x`), así que un
+        // `:root` no bastaría. Mismo peso de selector + posterior en el documento
+        // = gana este.
+        $customFontCss = self::renderCustomFontCss($siteId, $tokens);
+
+        // FONTS — Preload de los cortes que se ven en la primera pantalla. Va
+        // ARRIBA del todo: sin él, el navegador no descubre la fuente hasta
+        // haber leído el CSS, y ese retraso es el parpadeo de la tipografía
+        // genérica a la de marca.
+        $preload = CustomFontService::renderPreloadLinks($siteId, $tokens);
+
+        return $preload
+             . ($fonts !== '' ? $fonts . "\n" : '')
              . ($styleFonts !== '' ? $styleFonts . "\n" : '')
              . $cssLink
              . ($skinCss !== '' ? "\n" . $skinCss : '')
-             . ($styleCss !== '' ? "\n" . $styleCss : '');
+             . ($styleCss !== '' ? "\n" . $styleCss : '')
+             . ($customFontCss !== '' ? "\n" . $customFontCss : '');
+    }
+
+    /**
+     * FONTS — Escribe en los tokens la familia propia asignada a cada rol.
+     * Si no hay familia para un rol, el token se queda como estaba.
+     */
+    public static function applyCustomFontsToTokens(int $siteId, array $tokens): array
+    {
+        foreach (['heading' => 'font_heading', 'body' => 'font_body'] as $role => $key) {
+            $family = CustomFontService::familyForRole($siteId, $role);
+            if ($family !== null) {
+                $tokens['typography'][$key] = $family['token'];
+            }
+        }
+        return $tokens;
+    }
+
+    /**
+     * FONTS — Persiste en los tokens la asignación de roles de las fuentes
+     * propias. Sin esto, el desplegable de Tipografía seguiría enseñando "Inter"
+     * mientras la web se ve con la fuente de marca: el usuario deja de entender
+     * quién manda.
+     *
+     * Cuando un rol se queda sin familia propia, el token vuelve al default en
+     * vez de apuntar a un `custom:` inexistente.
+     */
+    public static function syncCustomFontTokens(int $siteId): void
+    {
+        $tokens = self::load($siteId);
+        $typo = $tokens['typography'];
+        $defaults = self::defaults()['typography'];
+
+        foreach (['heading' => 'font_heading', 'body' => 'font_body'] as $role => $key) {
+            $family = CustomFontService::familyForRole($siteId, $role);
+            if ($family !== null) {
+                $typo[$key] = $family['token'];
+            } elseif (str_starts_with((string) ($typo[$key] ?? ''), 'custom:')) {
+                $typo[$key] = $defaults[$key];
+            }
+        }
+
+        if ($typo !== $tokens['typography']) {
+            self::saveCategory($siteId, 'typography', $typo);
+        }
+    }
+
+    /**
+     * FONTS — `<style>` final con los `@font-face` del sitio y la asignación de
+     * roles. Cadena vacía si el sitio no tiene fuentes propias.
+     */
+    public static function renderCustomFontCss(int $siteId, ?array $tokens = null): string
+    {
+        $faces = CustomFontService::renderFontFaceCss($siteId);
+        if ($faces === '') return '';
+
+        $tokens = $tokens ?? self::applyCustomFontsToTokens($siteId, self::load($siteId));
+        $typo = $tokens['typography'] ?? [];
+
+        $lines = [];
+        foreach (['font_heading' => '--pp-font-heading', 'font_body' => '--pp-font-body'] as $key => $cssVar) {
+            $val = (string) ($typo[$key] ?? '');
+            if (!str_starts_with($val, 'custom:')) continue;
+            $lines[] = '    ' . $cssVar . ': ' . self::fontCssValue($val, $siteId) . ';';
+        }
+
+        $override = $lines === []
+            ? ''
+            : ':root,[class*="pp-visual-style--"]{' . "\n" . implode("\n", $lines) . "\n}\n";
+
+        return '<style id="pp-custom-fonts">' . "\n" . $faces . $override . '</style>';
     }
 
     /**
@@ -471,6 +590,9 @@ final class DesignSystem
         $typo = $loadedTokens['typography'] ?? [];
         foreach (['font_heading', 'font_body'] as $k) {
             $f = $typo[$k] ?? null;
+            // FONTS — Las fuentes propias se sirven desde el propio sitio: pedirlas
+            // a Google devolvería un 404 silencioso y el texto caería al fallback.
+            if (is_string($f) && str_starts_with($f, 'custom:')) continue;
             if ($f && $f !== 'system' && !in_array($f, $fonts, true)) {
                 $fonts[] = $f;
             }
@@ -590,6 +712,13 @@ p{margin:0 0 1em}
 .pp-site-header__inner > .pp-site-header__cta{margin-left:0}
 .pp-site-header__inner > .pp-site-header__cta:first-of-type{margin-left:auto}
 .pp-site-header__nav + .pp-site-header__cta{margin-left:0}
+/* I18N-FULL T3.2 — selector de idioma del header (solo en webs multi-idioma) */
+.pp-site-header__lang{display:flex;align-items:center;gap:8px;margin-left:clamp(12px,2vw,24px);font-size:.86rem}
+.pp-site-header__lang-item{color:inherit;opacity:.6;text-decoration:none;padding:2px 4px;border-radius:6px;transition:opacity .15s ease}
+.pp-site-header__lang-item:hover{opacity:1}
+.pp-site-header__lang-item.is-current{opacity:1;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.pp-site-header__lang + .pp-site-header__cta{margin-left:14px}
+@media (max-width:720px){.pp-site-header__lang{margin-left:auto;font-size:.8rem}}
 @media (max-width:720px){.pp-site-header{position:relative}.pp-site-header__nav{display:none}.pp-site-header__inner > .pp-site-header__cta{margin-left:auto}.pp-site-header__cta--mobile-hidden{display:none}}
 
 /* Public footer (E-GDPR G3 — enlaces legales) */
@@ -598,6 +727,7 @@ p{margin:0 0 1em}
 .pp-site-footer__brandcol{display:flex;flex-direction:column;gap:12px;flex:1 1 280px;max-width:420px}
 .pp-site-footer__col{flex:0 1 auto;min-width:150px}
 .pp-site-footer__name{color:var(--pp-on-text);font-family:var(--pp-font-heading);font-weight:800;font-size:1.25rem}
+.pp-site-footer__logo{display:block;max-width:180px;max-height:56px;width:auto;height:auto;object-fit:contain}
 .pp-site-footer__tagline{margin:0;line-height:1.6;max-width:34em}
 .pp-site-footer__col{display:flex;flex-direction:column;gap:10px}
 .pp-site-footer__col-title{color:var(--pp-on-text);font-weight:700;font-size:.82rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
@@ -837,6 +967,23 @@ span[data-ppb-icon] .pp-icon{display:block}
 .pp-ux-slider__arrow--prev{left:-8px}
 .pp-ux-slider__arrow--next{right:-8px}
 .pp-ux-slider--at-start .pp-ux-slider__arrow--prev,.pp-ux-slider--at-end .pp-ux-slider__arrow--next{opacity:0;pointer-events:none}
+
+/* slider · single — una diapositiva a la vez, a todo el ancho, con puntos */
+.pp-ux-slider--single .pp-ux-slider__track{gap:0}
+.pp-ux-slider--single .pp-ux-slider__track > *{width:100%}
+.pp-ux-slider--single .pp-ux-slider__track > * img{width:100%;height:100%;object-fit:cover}
+.pp-ux-slider__dots{display:flex;justify-content:center;gap:8px;margin-top:14px}
+.pp-ux-slider__dot{width:9px;height:9px;padding:0;border:0;border-radius:50%;cursor:pointer;background:color-mix(in srgb,var(--pp-text) 22%,transparent);transition:background .2s ease,transform .2s ease}
+.pp-ux-slider__dot.is-current{background:var(--pp-primary);transform:scale(1.25)}
+
+/* slider · vertical — pila con desplazamiento vertical y flechas arriba/abajo */
+.pp-ux-slider--vertical .pp-ux-slider__track{flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y mandatory;max-height:min(78vh,620px)}
+.pp-ux-slider--vertical .pp-ux-slider__track > *{width:100%;flex:0 0 auto}
+.pp-ux-slider--vertical .pp-ux-slider__arrow{top:auto;left:50%;right:auto;transform:translateX(-50%)}
+.pp-ux-slider--vertical .pp-ux-slider__arrow:hover{transform:translateX(-50%) scale(1.06)}
+.pp-ux-slider--vertical .pp-ux-slider__arrow--prev{top:-8px}
+.pp-ux-slider--vertical .pp-ux-slider__arrow--next{bottom:-8px}
+.pp-ux-slider--vertical .pp-ux-slider__arrow svg{transform:rotate(90deg)}
 
 /* accordion — details/summary con tokens (también sin JS) */
 [data-pp-behavior="accordion"] details{border:1px solid color-mix(in srgb,var(--pp-text) 10%,transparent);border-radius:var(--pp-radius-md);background:var(--pp-bg);margin:0 0 10px;overflow:hidden}

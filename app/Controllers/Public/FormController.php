@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Public;
 
 use App\Services\FormSubmissionService;
+use App\Services\Microcopy;
 use App\Services\Security\BotGuard;
 use App\Services\Mail\MailMessage;
 use App\Services\Mail\MailService;
@@ -32,9 +33,11 @@ final class FormController
         $target = $this->redirectTarget($sectionId);
         $content = json_decode((string) ($section['content'] ?? '{}'), true);
         $content = is_array($content) ? $content : [];
-        $successMessage = trim((string) ($content['success_message'] ?? '')) ?: 'Gracias, hemos recibido tu mensaje.';
+        $formSiteId = (int) ($section['site_id'] ?? 0);
+        $successMessage = trim((string) ($content['success_message'] ?? ''))
+            ?: Microcopy::site($formSiteId, 'form.success');
         if (!CSRF::validate(is_string(Request::post('_csrf')) ? Request::post('_csrf') : null)) {
-            $this->respond($target, $sectionId, 'error', 'La sesión ha caducado. Recarga la página e inténtalo de nuevo.', 419);
+            $this->respond($target, $sectionId, 'error', Microcopy::site($formSiteId, 'form.session_expired'), 419);
         }
 
         if (trim((string) Request::post('company_url', '')) !== '') {

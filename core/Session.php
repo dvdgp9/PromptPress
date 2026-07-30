@@ -25,6 +25,25 @@ final class Session
         session_start();
     }
 
+    /**
+     * Cierra la sesión para escritura liberando su bloqueo.
+     *
+     * PHP mantiene un lock exclusivo del fichero de sesión durante TODA la
+     * petición, así que dos peticiones del mismo visitante se sirven en serie.
+     * En rutas que solo escupen un archivo (logo, fuentes) eso hace que los
+     * assets esperen a la petición de la página: con fuentes propias se ve como
+     * un parpadeo largo de la tipografía genérica a la de marca.
+     *
+     * Tras llamar a esto, `$_SESSION` se sigue pudiendo leer pero los cambios
+     * ya no se guardan: úsalo solo cuando no quede nada que escribir.
+     */
+    public static function close(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
     public static function get(string $key, mixed $default = null): mixed
     {
         return $_SESSION[$key] ?? $default;

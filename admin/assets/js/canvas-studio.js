@@ -25,8 +25,59 @@
 
   var selectedSection = null;
   var selectedElementContext = '';
+  var selectedElementPath = '';
   var busy = false;
   var lastScrollY = 0;
+  // STUDIO-2 B1 — últimos turnos de la conversación (se envían como contexto).
+  var chatHistory = [];
+  // STUDIO-2 B3 — sección que acaba de cambiar, para señalarla tras recargar.
+  var pendingFlash = '';
+
+  // ----------------------------------------------------------------
+  // STUDIO-2 A3 — Chat flotante: pastilla plegada / panel desplegado.
+  // La barra lateral queda entera para la edición manual; el chat se pliega
+  // cuando no se usa y devuelve el ancho al lienzo.
+  // ----------------------------------------------------------------
+  var dock = document.getElementById('chat-dock');
+  var chatPill = document.getElementById('chat-pill');
+  var chatPillLabel = document.getElementById('chat-pill-label');
+  var chatPillDot = document.getElementById('chat-pill-dot');
+  var chatMinimize = document.getElementById('chat-minimize');
+  var DOCK_KEY = 'pp-studio-chat-open';
+
+  function pillText() {
+    if (busy) return 'Aplicando el cambio…';
+    if (selectedSection) return 'Cambiar «' + (ctxLabel.textContent || 'esta parte') + '»';
+    return 'Pídeme un cambio';
+  }
+
+  function refreshPill() {
+    chatPillLabel.textContent = pillText();
+    chatPill.title = 'Abrir la conversación';
+  }
+
+  function setDock(open, remember) {
+    dock.classList.toggle('is-open', open);
+    chatPill.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      chatPillDot.hidden = true;
+      messages.scrollTop = messages.scrollHeight;
+    }
+    if (remember !== false) {
+      try { localStorage.setItem(DOCK_KEY, open ? '1' : '0'); } catch (e) { /* modo privado */ }
+    }
+    refreshPill();
+  }
+
+  function dockIsOpen() { return dock.classList.contains('is-open'); }
+
+  // Abierto la primera vez (así se ve de qué va); después, lo que eligió el usuario.
+  var dockPref = '1';
+  try { dockPref = localStorage.getItem(DOCK_KEY) || '1'; } catch (e) { /* modo privado */ }
+  setDock(dockPref !== '0', false);
+
+  chatPill.addEventListener('click', function () { setDock(true); input.focus(); });
+  chatMinimize.addEventListener('click', function () { setDock(false); });
 
   // ----------------------------------------------------------------
   // Mensajes del chat
@@ -37,6 +88,8 @@
     div.innerHTML = html;
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
+    // Con el chat plegado, un punto avisa de que hay respuesta esperando.
+    if (kind.indexOf('assistant') === 0 && dock && !dockIsOpen()) chatPillDot.hidden = false;
     return div;
   }
   function esc(s) {
@@ -69,20 +122,25 @@
       ctxLabel.textContent = d.label;
       ctxBox.hidden = false;
       input.placeholder = 'Ej.: cambia el titular de esta parte';
+      markCurrentSection();
+      refreshPill();
       // Si el usuario está editando texto EN la página, el foco es suyo:
-      // robárselo aquí era el bug que impedía escribir inline.
-      if (!d.editing) input.focus();
+      // robárselo aquí era el bug que impedía escribir inline. Y con el chat
+      // plegado no hay dónde escribir: tampoco se toca el foco.
+      if (!d.editing && dockIsOpen()) input.focus();
     }
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
     if (d.type === 'image-clicked') openMediaModal();
     if (d.type === 'element-selected') {
       selectedElementContext = (d.kind || 'elemento') + (d.props && d.props.text ? ' con texto "' + d.props.text.slice(0, 180) + '"' : '');
+      selectedElementPath = d.elementPath || '';
       openPanel(d);
     }
-    if (d.type === 'element-deselected') { selectedElementContext = ''; closePanel(); }
+    if (d.type === 'element-deselected') { selectedElementContext = ''; selectedElementPath = ''; closePanel(); }
     if (d.type === 'ready') {
       if (d.palette) brandPalette = d.palette;
+      renderSectionList(d.sections || []);
       if (lastScrollY > 0) {
         iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'scroll-to', y: lastScrollY }, '*');
         if (selectedSection) {
@@ -90,8 +148,72 @@
         }
         lastScrollY = 0;
       }
+      // El destello va después del scroll restaurado: manda la vista a lo que
+      // ha cambiado, que es lo que el usuario quiere ver.
+      if (pendingFlash) {
+        tellIframe({ type: 'flash', id: pendingFlash });
+        pendingFlash = '';
+      }
     }
   });
+
+  // ----------------------------------------------------------------
+  // STUDIO-2 A1 — Barra lateral: panel de controles cuando hay algo
+  // seleccionado; si no, ayuda + las partes de la página para llegar a cada una
+  // sin tener que acertar con el ratón.
+  // ----------------------------------------------------------------
+  var sideEmpty = document.getElementById('side-empty');
+  var sectionList = document.getElementById('side-sections');
+  var pageSections = [];
+
+  // "cta-final" → "Cta final" (misma regla que el overlay del iframe).
+  function sectionLabel(id) {
+    var s = String(id || '').replace(/[-_]+/g, ' ').trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sección';
+  }
+
+  function tellIframe(msg) {
+    if (iframe.contentWindow) {
+      msg.source = 'pp-studio-parent';
+      iframe.contentWindow.postMessage(msg, '*');
+    }
+  }
+
+  function renderSectionList(ids) {
+    pageSections = Array.isArray(ids) ? ids : [];
+    if (!sectionList) return;
+    if (!pageSections.length) {
+      sectionList.innerHTML = '<li class="cvstudio-side__hint">Esta página todavía no tiene partes editables.</li>';
+      return;
+    }
+    sectionList.innerHTML = '';
+    pageSections.forEach(function (id, i) {
+      var li = document.createElement('li');
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.section = id;
+      btn.innerHTML = '<span class="cvstudio-seclist__num">' + (i + 1) + '</span><span>' + esc(sectionLabel(id)) + '</span>';
+      btn.addEventListener('click', function () { tellIframe({ type: 'select', id: id, panel: true }); });
+      btn.addEventListener('mouseenter', function () { tellIframe({ type: 'highlight', id: id, on: true }); });
+      btn.addEventListener('mouseleave', function () { tellIframe({ type: 'highlight', on: false }); });
+      li.appendChild(btn);
+      sectionList.appendChild(li);
+    });
+    markCurrentSection();
+  }
+
+  function markCurrentSection() {
+    if (!sectionList) return;
+    sectionList.querySelectorAll('button[data-section]').forEach(function (b) {
+      b.classList.toggle('is-current', b.dataset.section === selectedSection);
+    });
+  }
+
+  // La barra enseña una cosa u otra, nunca las dos ni ninguna.
+  function showSide(which) {
+    panel.hidden = which !== 'panel';
+    if (sideEmpty) sideEmpty.hidden = which === 'panel';
+  }
 
   // ----------------------------------------------------------------
   // FH7 — Panel contextual de edición directa
@@ -105,7 +227,7 @@
     iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'apply', op: op, value: value, preview: !!preview }, '*');
   }
 
-  function closePanel() { panel.hidden = true; panel.innerHTML = ''; }
+  function closePanel() { panel.innerHTML = ''; showSide('empty'); }
 
   // ---- Utilidades de color (comparar el color actual con la paleta) ----
   function toHex(c) {
@@ -250,14 +372,46 @@
       : '<div class="cvstudio-field"><label>Imagen de fondo</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
           + '<button type="button" id="ep-bg-add">Poner imagen de fondo</button>'
         + '</div></div>';
+    // Galería/carrusel: disposición y fotos. Solo aparece si la sección lleva uno.
+    var galleryBlock = props.slider
+      ? '<div class="cvstudio-field"><label>Galería · cómo se ven las fotos</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('sliderlayout', 'strip', props.slider, 'En fila')
+          + seg('sliderlayout', 'single', props.slider, 'Una a una')
+          + seg('sliderlayout', 'vertical', props.slider, 'En vertical')
+        + '</div></div>'
+        + '<div class="cvstudio-field"><label>Fotos de la galería</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + '<button type="button" id="ep-gallery-pick">Elegir fotos' + (props.sliderPhotos ? ' (' + props.sliderPhotos + ')' : '') + '</button>'
+        + '</div><small class="cvstudio-hint">Elige varias de tu biblioteca y sustituirán a las actuales. Para cambiar solo una, haz clic sobre ella.</small></div>'
+      : '';
+
     return ''
       + colorField('Color de fondo', 'bgcolor', { current: props.bgcolor })
+      + galleryBlock
       + bgImageBlock
       + '<div class="cvstudio-field"><label>Espaciado vertical</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
         + seg('pad', 'compact', props.pad, 'Compacto') + seg('pad', 'normal', props.pad, 'Normal')
         + seg('pad', 'roomy', props.pad, 'Amplio') + seg('pad', 'default', props.pad, 'Auto')
       + '</div></div>'
       + '<label class="cvstudio-check"><input type="checkbox" id="ep-reveal"' + (props.reveal ? ' checked' : '') + '> Aparecer suavemente al bajar</label>';
+  }
+
+  // Migas de ámbito: Página ▸ Sección ▸ Bloque ▸ elemento. Sin ellas, cuando la
+  // IA envuelve el contenido en una caja (un velo blanco sobre la foto de
+  // fondo, por ejemplo) el clic cae en esa caja y los controles de la sección
+  // —los únicos que cambian la imagen de fondo— se vuelven inalcanzables.
+  var CRUMB_LABELS = { text: 'Texto', box: 'Bloque', link: 'Botón', image: 'Imagen', section: 'Sección' };
+  var panelState = { chain: [], index: -1, sectionLabel: '' };
+
+  function renderCrumbs(chain, active, sectionLabel) {
+    var parts = ['<button type="button" class="cvstudio-crumb" data-scope="-1" title="Quitar la selección: el cambio afectará a toda la página">Página</button>'];
+    chain.forEach(function (c, i) {
+      var label = c.kind === 'section' ? (sectionLabel || 'Sección') : (CRUMB_LABELS[c.kind] || 'Elemento');
+      parts.push(i === active
+        ? '<strong class="cvstudio-crumb is-active">' + esc(label) + '</strong>'
+        : '<button type="button" class="cvstudio-crumb" data-scope="' + i + '">' + esc(label) + '</button>');
+    });
+    return '<nav class="cvstudio-crumbs" aria-label="Ámbito de edición">'
+      + parts.join('<i aria-hidden="true">›</i>') + '</nav>';
   }
 
   function openPanel(d) {
@@ -269,20 +423,40 @@
       : d.kind === 'image' ? imageControls(p)
       : sectionControls(p);
 
+    var chain = Array.isArray(d.chain) ? d.chain : [];
+    panelState = { chain: chain, index: typeof d.chainIndex === 'number' ? d.chainIndex : -1, sectionLabel: d.sectionLabel || '' };
+
     panel.innerHTML = ''
       + '<div class="cvstudio-panel__head">'
-        + '<strong>' + esc(titles[d.kind] || 'Elemento') + '</strong>'
-        + '<small>' + esc(d.sectionLabel || '') + '</small>'
+        + (chain.length
+            ? renderCrumbs(chain, panelState.index, d.sectionLabel)
+            : '<strong>' + esc(titles[d.kind] || 'Elemento') + '</strong><small>' + esc(d.sectionLabel || '') + '</small>')
         + '<button type="button" id="ep-close" title="Cerrar">✕</button>'
       + '</div>'
       + '<div class="cvstudio-panel__body">' + bodyHtml + '</div>'
-      + '<p class="pp-chat-hint">¿Algo más complejo? Descríbelo en el chat de abajo.</p>';
-    panel.hidden = false;
+      + '<p class="pp-chat-hint">¿Algo más complejo? Pídemelo en la conversación de abajo a la derecha.</p>';
+    showSide('panel');
     wirePanel(d.kind);
   }
 
+  // Sube un nivel de ámbito (Esc). Desde la sección, cierra el panel.
+  function climbScope() {
+    if (panel.hidden) return false;
+    if (panelState.index > 0) { selectScope(panelState.index - 1); return true; }
+    closePanel();
+    clearSelection(true);
+    return true;
+  }
+
+  function selectScope(index) {
+    if (index < 0) { closePanel(); clearSelection(true); return; }
+    if (iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'select-scope', index: index }, '*');
+    }
+  }
+
   // Operaciones segmentadas (toggle visual de "activo" entre hermanas).
-  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1 };
+  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1 };
 
   function wirePanel(kind) {
     panel.querySelectorAll('[data-op]').forEach(function (btn) {
@@ -332,6 +506,10 @@
       inp.addEventListener('change', function () { applyOp(inp.dataset.cinput, inp.value); markColor(inp.dataset.cinput, lbl); lbl.style.background = inp.value; showSaved('Guardado'); });
     });
 
+    panel.querySelectorAll('[data-scope]').forEach(function (btn) {
+      btn.addEventListener('click', function () { selectScope(parseInt(btn.dataset.scope, 10)); });
+    });
+
     var close = panel.querySelector('#ep-close');
     if (close) close.addEventListener('click', function () { closePanel(); clearSelection(true); });
 
@@ -363,6 +541,8 @@
       if (bgChange) bgChange.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
       if (bgAdd) bgAdd.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
       if (bgRemove) bgRemove.addEventListener('click', function () { applyOp('bgimg', 'remove'); showSaved('Guardado'); });
+      var galleryPick = panel.querySelector('#ep-gallery-pick');
+      if (galleryPick) galleryPick.addEventListener('click', function () { openMediaModal(true); });
     }
   }
 
@@ -374,37 +554,88 @@
     if (notifyIframe !== false && iframe.contentWindow) {
       iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'deselect' }, '*');
     }
+    markCurrentSection();
+    refreshPill();
   }
   ctxClear.addEventListener('click', function () { clearSelection(true); });
 
   // ----------------------------------------------------------------
   // Enviar petición
   // ----------------------------------------------------------------
+  // CANCEL — "Parar" no basta con abortar el fetch: el servidor seguiría
+  // trabajando y guardaría el cambio. Se manda también un aviso con el mismo
+  // request_id y el pipeline lo comprueba antes de tocar la página.
+  var cancelBtn = document.getElementById('chat-cancel');
+  var currentRequest = null;   // AbortController de la generación en curso
+  var currentRequestId = '';
+
+  // STUDIO-2 B4 — Espera honesta: segundos transcurridos y, cuando se alarga,
+  // por qué. Antes eran tres puntitos durante 40 s sin decir nada.
+  function startWaitTimer(msgEl, scoped) {
+    var t0 = Date.now();
+    var slot = msgEl.querySelector('[data-wait]');
+    var iv = setInterval(function () {
+      // Si el mensaje ya no está en pantalla (se paró o terminó), fuera.
+      if (!slot || !msgEl.isConnected) { clearInterval(iv); return; }
+      var s = Math.round((Date.now() - t0) / 1000);
+      var note = '';
+      if (s >= 45) note = scoped ? ' · está tardando; puedes pulsar «Parar»' : ' · una página entera tarda más; puedes pulsar «Parar»';
+      else if (s >= 15) note = scoped ? ' · suele tardar unos segundos' : ' · cambiar la página entera tarda algo más';
+      slot.textContent = 'Aplicando el cambio… ' + s + ' s' + note;
+    }, 1000);
+    return iv;
+  }
+
+  function newRequestId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g, '');
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function setBusy(on) {
+    busy = on;
+    sendBtn.disabled = on;
+    if (cancelBtn) cancelBtn.hidden = !on;
+    refreshPill();   // plegado, la pastilla dice si se está aplicando algo
+  }
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     var text = input.value.trim();
     if (text === '' || busy) return;
 
-    busy = true;
-    sendBtn.disabled = true;
+    setBusy(true);
     input.value = '';
 
     var scopeNote = selectedSection
       ? ' <span class="pp-chat-scope">en “' + esc(ctxLabel.textContent) + '”</span>'
       : '';
     addMsg('user', esc(text) + scopeNote);
-    var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> Aplicando el cambio…');
+    var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> <span data-wait>Aplicando el cambio…</span>');
+    var waitTimer = startWaitTimer(thinking, !!selectedSection);
+
+    var scopeLabel = selectedSection ? (ctxLabel.textContent || '') : '';
 
     var fd = new FormData();
     fd.append('_csrf', csrf);
     fd.append('instruction', text);
     if (selectedSection) fd.append('section', selectedSection);
     if (selectedElementContext) fd.append('element_context', selectedElementContext);
+    if (selectedElementPath) fd.append('element_path', selectedElementPath);
+    if (chatHistory.length) fd.append('history', JSON.stringify(chatHistory.slice(-4)));
     if (modelSelect && modelSelect.value) fd.append('model', modelSelect.value);
 
-    fetch(body.dataset.chatUrl, { method: 'POST', body: fd })
+    currentRequestId = newRequestId();
+    currentRequest = ('AbortController' in window) ? new AbortController() : null;
+    fd.append('request_id', currentRequestId);
+
+    fetch(body.dataset.chatUrl, {
+      method: 'POST',
+      body: fd,
+      signal: currentRequest ? currentRequest.signal : undefined
+    })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (data) {
+        clearInterval(waitTimer);
         thinking.remove();
         if (!data.ok) {
           addMsg('assistant pp-chat-msg--error',
@@ -422,18 +653,50 @@
           + ' <button type="button" class="pp-chat-undo">Deshacer</button>');
         bindUndo();
         applyHistory(data.history);
+        // B1 — el turno entra en la memoria de la conversación.
+        chatHistory.push({ q: text, a: String(data.reply || ''), scope: scopeLabel });
+        if (chatHistory.length > 8) chatHistory = chatHistory.slice(-8);
+        // B3 — al recargar, señalar la parte tocada.
+        pendingFlash = String(data.changed_section || '');
         reloadPreview();
       })
-      .catch(function () {
+      .catch(function (err) {
+        clearInterval(waitTimer);
         thinking.remove();
+        if (err && err.name === 'AbortError') return; // ya lo hemos contado al parar
         addMsg('assistant pp-chat-msg--error', 'No hay conexión ahora mismo. Tu página no ha cambiado.');
       })
       .finally(function () {
-        busy = false;
-        sendBtn.disabled = false;
+        currentRequest = null;
+        currentRequestId = '';
+        setBusy(false);
         input.focus();
       });
   });
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function () {
+      if (!busy || !currentRequestId) return;
+      var id = currentRequestId;
+      cancelBtn.disabled = true;
+
+      // 1) Avisar al servidor ANTES de abortar: es lo que impide que se guarde.
+      var fd = new FormData();
+      fd.append('_csrf', csrf);
+      fd.append('request_id', id);
+      fetch(body.dataset.cancelUrl, { method: 'POST', body: fd, keepalive: true })
+        .catch(function () { /* si falla, el abort de abajo al menos libera la UI */ })
+        .finally(function () {
+          // 2) Y cortar la espera en el navegador.
+          if (currentRequest) currentRequest.abort();
+          cancelBtn.disabled = false;
+          var t = messages.querySelector('.pp-chat-msg:last-child');
+          if (t && t.textContent.indexOf('Aplicando el cambio') >= 0) t.remove();
+          addMsg('assistant', 'Cambio cancelado. Tu página no se ha tocado.');
+          setBusy(false);
+        });
+    });
+  }
 
   // Enter envía, Shift+Enter hace salto de línea.
   input.addEventListener('keydown', function (e) {
@@ -482,7 +745,7 @@
         }
       })
       .catch(function () { showSaved('Sin conexión', true); })
-      .finally(function () { busy = false; });
+      .finally(function () { setBusy(false); });
   }
 
   function doUndo(srcBtn) { historyStep(body.dataset.undoUrl, 'deshacer', srcBtn || undoBtn); }
@@ -493,6 +756,13 @@
 
   // Estado inicial de los botones (lo pinta el servidor en data-can-*).
   applyHistory({ can_undo: body.dataset.canUndo === '1', can_redo: body.dataset.canRedo === '1' });
+
+  // Esc sube un nivel de ámbito (elemento → bloque → sección → página).
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || panel.hidden) return;
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '')) return;
+    if (climbScope()) e.preventDefault();
+  });
 
   // Atajos de teclado (cuando el foco NO está editando texto en el iframe).
   document.addEventListener('keydown', function (e) {
@@ -518,7 +788,7 @@
         else { showSaved(data.error || 'No se pudo recuperar', true); }
       })
       .catch(function () { showSaved('No se pudo recuperar ahora mismo', true); })
-      .finally(function () { busy = false; });
+      .finally(function () { setBusy(false); });
   }
 
   function reloadPreview() {
@@ -576,28 +846,102 @@
     try { return new URL(it.url, location.href).pathname; } catch (e) { return it.url || ''; }
   }
   // Aplica la imagen elegida al destino marcado (imagen de contenido o fondo).
+  // Selección múltiple: activa al elegir las fotos de una galería completa.
+  var galleryMode = false;
+  var gallerySelection = [];
+
   function useMedia(it) {
+    if (galleryMode) { toggleGalleryPick(it); return; }
     mediaModal.hidden = true;
     iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'replace-image', src: mediaPath(it), alt: it.alt_text || '' }, '*');
+  }
+
+  function toggleGalleryPick(it) {
+    var src = mediaPath(it);
+    var i = gallerySelection.findIndex(function (p) { return p.src === src; });
+    if (i >= 0) gallerySelection.splice(i, 1);
+    else gallerySelection.push({ src: src, alt: it.alt_text || '' });
+    syncGalleryPicks();
+  }
+
+  function syncGalleryPicks() {
+    var bar = document.getElementById('cvstudio-gallery-bar');
+    mediaGrid.querySelectorAll('.cvstudio-media-item').forEach(function (btn) {
+      var pos = gallerySelection.findIndex(function (p) { return p.src === btn.dataset.mediaSrc; });
+      btn.classList.toggle('is-picked', pos >= 0);
+      var badge = btn.querySelector('.cvstudio-media-item__num');
+      if (pos >= 0) {
+        if (!badge) {
+          badge = document.createElement('i');
+          badge.className = 'cvstudio-media-item__num';
+          btn.appendChild(badge);
+        }
+        badge.textContent = String(pos + 1);
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+    if (bar) {
+      var n = gallerySelection.length;
+      bar.querySelector('button').disabled = n === 0;
+      bar.querySelector('button').textContent = n === 0 ? 'Elige al menos una foto' : 'Usar ' + n + (n === 1 ? ' foto' : ' fotos');
+    }
+  }
+
+  function applyGallerySelection() {
+    if (!gallerySelection.length) return;
+    iframe.contentWindow.postMessage({
+      source: 'pp-studio-parent', type: 'apply', op: 'gallery', value: gallerySelection.slice()
+    }, '*');
+    showSaved('Galería actualizada');
+    closeGalleryMode();
+    mediaModal.hidden = true;
+  }
+
+  function closeGalleryMode() {
+    galleryMode = false;
+    gallerySelection = [];
+    var bar = document.getElementById('cvstudio-gallery-bar');
+    if (bar) bar.remove();
   }
 
   function setMediaTab(tab) {
     mediaTabs.forEach(function (b) { b.classList.toggle('is-active', b.dataset.mediaTab === tab); });
     mediaSearchForm.hidden = tab !== 'unsplash';
+    var filterBar = document.getElementById('media-filter');
+    if (filterBar) filterBar.hidden = tab !== 'library';
     if (tab === 'unsplash') {
       mediaHint.textContent = 'Busca una foto en Unsplash; al elegirla se añade a tu biblioteca.';
       mediaGrid.innerHTML = '<p class="pp-chat-hint">Escribe qué foto necesitas y pulsa «Buscar».</p>';
       if (mediaSearchInput) mediaSearchInput.focus();
     } else {
-      mediaHint.textContent = 'Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.';
+      mediaHint.textContent = galleryMode
+        ? 'Elige las fotos de la galería: se colocarán en el orden en que las toques.'
+        : 'Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.';
       loadLibrary();
     }
   }
 
-  function openMediaModal() {
+  function openMediaModal(forGallery) {
+    galleryMode = !!forGallery;
+    gallerySelection = [];
+    mediaFilter = 'own';   // cada apertura vuelve a la prioridad: tus fotos
     mediaModal.hidden = false;
+    if (galleryMode && !document.getElementById('cvstudio-gallery-bar')) {
+      var bar = document.createElement('div');
+      bar.id = 'cvstudio-gallery-bar';
+      bar.className = 'cvstudio-gallery-bar';
+      bar.innerHTML = '<span>Toca las fotos en el orden que quieras verlas.</span><button type="button" disabled>Elige al menos una foto</button>';
+      bar.querySelector('button').addEventListener('click', applyGallerySelection);
+      mediaGrid.parentNode.insertBefore(bar, mediaGrid.nextSibling);
+    }
+    if (!galleryMode) closeGalleryMode();
     setMediaTab('library');
   }
+
+  // STUDIO-2 C5 — filtro "Tus fotos / De banco". Por defecto, tus fotos: son
+  // la prioridad del producto. Sin fotos propias, se muestran todas.
+  var mediaFilter = 'own';
 
   function loadLibrary() {
     if (mediaCache) { renderLibrary(mediaCache); return; }
@@ -611,20 +955,56 @@
       .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo cargar la biblioteca.</p>'; });
   }
 
+  function isOwn(it) { return (it.source || 'upload') === 'upload'; }
+
+  function renderFilterChips(hasOwn, hasBank) {
+    var bar = document.getElementById('media-filter');
+    if (!hasOwn || !hasBank) { if (bar) bar.remove(); return; }   // un solo origen: sin filtro
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'media-filter';
+      bar.className = 'cvstudio-media-filter';
+      mediaGrid.parentNode.insertBefore(bar, mediaGrid);
+    }
+    bar.innerHTML = '';
+    [['own', 'Tus fotos'], ['bank', 'De banco'], ['all', 'Todas']].forEach(function (f) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = f[1];
+      b.className = mediaFilter === f[0] ? 'is-active' : '';
+      b.addEventListener('click', function () { mediaFilter = f[0]; renderLibrary(mediaCache || []); });
+      bar.appendChild(b);
+    });
+  }
+
   function renderLibrary(items) {
     if (!items.length) {
+      renderFilterChips(false, false);
       mediaGrid.innerHTML = '<p class="pp-chat-hint">Tu biblioteca está vacía. Sube una imagen o busca en Unsplash.</p>';
       return;
     }
+    var hasOwn = items.some(isOwn);
+    var hasBank = items.some(function (it) { return !isOwn(it); });
+    if (mediaFilter === 'own' && !hasOwn) mediaFilter = 'all';
+    renderFilterChips(hasOwn, hasBank);
+
+    var visible = items.filter(function (it) {
+      if (mediaFilter === 'own') return isOwn(it);
+      if (mediaFilter === 'bank') return !isOwn(it);
+      return true;
+    });
     mediaGrid.innerHTML = '';
-    items.forEach(function (it) {
+    visible.forEach(function (it) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'cvstudio-media-item';
-      btn.innerHTML = '<img src="' + it.url + '" alt="" loading="lazy"><span>' + esc(it.alt_text || it.name || '') + '</span>';
+      btn.dataset.mediaSrc = mediaPath(it);
+      var badge = isOwn(it) && hasBank && mediaFilter !== 'own' ? '<i class="cvstudio-media-item__own">Tu foto</i>' : '';
+      btn.innerHTML = badge + '<img src="' + it.url + '" alt="" loading="lazy"><span>' + esc(it.alt_text || it.name || '') + '</span>';
       btn.addEventListener('click', function () { useMedia(it); });
       mediaGrid.appendChild(btn);
     });
+    if (galleryMode) syncGalleryPicks();
   }
 
   // ---- Subir desde el equipo ----
@@ -842,6 +1222,7 @@
         var formId = item.dataset.formId;
         var template = item.dataset.formTemplate;
         closeInsertMenu();
+        setDock(true);   // el progreso y el resultado se cuentan en la conversación
         var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> Insertando el formulario…');
         var fd = new FormData();
         fd.append('_csrf', csrf);

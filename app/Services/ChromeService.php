@@ -73,6 +73,11 @@ final class ChromeService
                 'newsletter' => ['enabled' => false, 'form_ref' => '', 'heading' => '', 'cta_label' => ''],
                 'copyright'  => '', // vacío => "© AÑO · Nombre"
             ],
+            // I18N-FULL T5.1 — capa de TEXTO por idioma. Solo copy: el layout,
+            // los colores y los bordes son compartidos a propósito (si se
+            // duplicaran, cambiar un color solo afectaría a un idioma).
+            // Forma: ['fr' => ['header' => [...], 'footer' => [...]]]
+            'i18n' => [],
         ];
     }
 
@@ -143,18 +148,10 @@ final class ChromeService
         $enum = static fn($v, array $opts, string $def): string => in_array($v, $opts, true) ? (string) $v : $def;
 
         // Menú header (cap 14 ítems, hijos cap 8). Permite desplegables.
-        $menu = [];
-        foreach (array_slice((array) ($h['menu'] ?? []), 0, 14) as $it) {
-            $item = self::sanitizeMenuItem((array) $it, $cut, $enum, false);
-            if ($item !== null) $menu[] = $item;
-        }
+        $menu = self::sanitizeMenu((array) ($h['menu'] ?? []), false);
 
         // Navegación del pie (cap 14): solo página/enlace, sin desplegables.
-        $footerNav = [];
-        foreach (array_slice((array) ($f['nav'] ?? []), 0, 14) as $it) {
-            $item = self::sanitizeMenuItem((array) $it, $cut, $enum, true);
-            if ($item !== null) $footerNav[] = $item;
-        }
+        $footerNav = self::sanitizeMenu((array) ($f['nav'] ?? []), true);
 
         // Bloques footer (subconjunto único)
         $allowedBlocks = ['brand', 'nav', 'legal', 'contact', 'social', 'newsletter'];
@@ -232,7 +229,129 @@ final class ChromeService
                 ],
                 'copyright'  => $cut($f['copyright'] ?? '', 160),
             ],
+            'i18n' => self::sanitizeI18n((array) ($raw['i18n'] ?? []), $cut),
         ];
+    }
+
+    /**
+     * Sanea la capa de texto por idioma.
+     *
+     * Solo se admiten idiomas soportados y solo los campos de TEXTO: nada de
+     * layout, estilo ni bordes. Los campos vacíos se descartan para que la
+     * resolución caiga limpiamente a la base.
+     *
+     * @param array<string,mixed> $raw
+     * @return array<string,array<string,mixed>>
+     */
+    private static function sanitizeI18n(array $raw, callable $cut): array
+    {
+        $out = [];
+        foreach ($raw as $lang => $layer) {
+            $lang = strtolower(trim((string) $lang));
+            if (!LanguageService::isSupported($lang) || !is_array($layer)) {
+                continue;
+            }
+            $h = (array) ($layer['header'] ?? []);
+            $f = (array) ($layer['footer'] ?? []);
+            $fl = (array) ($f['labels'] ?? []);
+            $fn = (array) ($f['newsletter'] ?? []);
+
+            $entry = [];
+
+            $ctaLabel = $cut(((array) ($h['cta'] ?? []))['label'] ?? '', 60);
+            if ($ctaLabel !== '') {
+                $entry['header']['cta']['label'] = $ctaLabel;
+            }
+            if (isset($h['menu']) && is_array($h['menu'])) {
+                $menu = self::sanitizeMenu((array) $h['menu'], false);
+                if ($menu !== []) {
+                    $entry['header']['menu'] = $menu;
+                }
+            }
+
+            foreach (['tagline' => 200, 'copyright' => 160] as $key => $max) {
+                $val = $cut($f[$key] ?? '', $max);
+                if ($val !== '') {
+                    $entry['footer'][$key] = $val;
+                }
+            }
+            $brandName = $cut(((array) ($f['brand'] ?? []))['name'] ?? '', 120);
+            if ($brandName !== '') {
+                $entry['footer']['brand']['name'] = $brandName;
+            }
+            foreach (['nav', 'legal', 'contact', 'social', 'newsletter'] as $labelKey) {
+                $val = $cut($fl[$labelKey] ?? '', 60);
+                if ($val !== '') {
+                    $entry['footer']['labels'][$labelKey] = $val;
+                }
+            }
+            foreach (['heading' => 120, 'cta_label' => 60] as $key => $max) {
+                $val = $cut($fn[$key] ?? '', $max);
+                if ($val !== '') {
+                    $entry['footer']['newsletter'][$key] = $val;
+                }
+            }
+            if (isset($f['nav']) && is_array($f['nav'])) {
+                $nav = self::sanitizeMenu((array) $f['nav'], true);
+                if ($nav !== []) {
+                    $entry['footer']['nav'] = $nav;
+                }
+            }
+
+            if ($entry !== []) {
+                $out[$lang] = $entry;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Config resuelta para un idioma: la base con la capa de ese idioma encima.
+     *
+     * El idioma principal usa la base tal cual. Un campo no traducido cae a la
+     * base — vale más una etiqueta en el idioma original que un hueco.
+     *
+     * @param array<string,mixed> $config
+     * @return array<string,mixed>
+     */
+    public static function localized(array $config, string $lang): array
+    {
+        $layer = (array) ($config['i18n'][LanguageService::normalize($lang)] ?? []);
+        if ($layer === []) {
+            return $config;
+        }
+        // El menú se sustituye ENTERO, no etiqueta a etiqueta: en otro idioma
+        // apunta a otras páginas.
+        $merged = self::mergeDeep($config, $layer);
+        if (isset($layer['header']['menu'])) {
+            $merged['header']['menu'] = $layer['header']['menu'];
+        }
+        if (isset($layer['footer']['nav'])) {
+            $merged['footer']['nav'] = $layer['footer']['nav'];
+        }
+        return $merged;
+    }
+
+    /**
+     * Sanea una lista de ítems de menú (header o pie). Extraído de `sanitize()`
+     * para que la capa de idioma (T5.1) reutilice exactamente las mismas reglas.
+     *
+     * @param array<int,mixed> $items
+     * @return array<int,array<string,mixed>>
+     */
+    private static function sanitizeMenu(array $items, bool $flat): array
+    {
+        $cut = static fn($v, int $n): string => mb_substr(trim((string) $v), 0, $n);
+        $enum = static fn($v, array $opts, string $def): string => in_array($v, $opts, true) ? (string) $v : $def;
+
+        $out = [];
+        foreach (array_slice($items, 0, 14) as $it) {
+            $item = self::sanitizeMenuItem((array) $it, $cut, $enum, $flat);
+            if ($item !== null) {
+                $out[] = $item;
+            }
+        }
+        return $out;
     }
 
     private static function sanitizeMenuItem(array $it, callable $cut, callable $enum, bool $isChild): ?array

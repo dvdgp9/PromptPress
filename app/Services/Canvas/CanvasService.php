@@ -566,6 +566,88 @@ final class CanvasService
             }
         }
 
+        self::stripRuntimeBehaviorMarkup($doc, $root);
+
+        $out = '';
+        foreach ($root->childNodes as $child) $out .= $doc->saveHTML($child);
+        return trim($out);
+    }
+
+    /**
+     * Quita el andamiaje que `pp-ux.js` inyecta en tiempo de ejecución.
+     *
+     * El Studio guarda el `outerHTML` del DOM VIVO, y para entonces pp-ux ya ha
+     * envuelto los slides en `.pp-ux-slider__track`, ha añadido dos `<button>` de
+     * flechas y ha marcado el contenedor con `data-pp-ux-ready`. Si eso se
+     * persiste, al recargar `initSlider` ve la marca de "ya inicializado", sale
+     * sin enganchar listeners y el carrusel queda como una tira horizontal
+     * congelada con dos flechas muertas: no se puede pasar de slide ni, por
+     * tanto, seleccionar las fotos que quedan fuera de pantalla.
+     *
+     * Lo mismo con `reveal` (clases `pp-ux-reveal`/`pp-ux-in`, que dejarían la
+     * animación quemada) y con `counter` (que estaría guardando la cifra a medio
+     * animar).
+     *
+     * La fuente de verdad es SIEMPRE `data-pp-behavior`; el resto se reconstruye
+     * en cada carga.
+     */
+    public static function stripRuntimeBehaviorMarkup(\DOMDocument $doc, \DOMElement $root): void
+    {
+        $xpath = new \DOMXPath($doc);
+
+        // 1. Flechas inyectadas.
+        $arrows = [];
+        foreach ($xpath->query('.//button[contains(concat(" ", normalize-space(@class), " "), " pp-ux-slider__arrow ")]', $root) as $node) {
+            $arrows[] = $node;
+        }
+        foreach ($arrows as $node) $node->parentNode?->removeChild($node);
+
+        // 2. Track: subir los slides un nivel y quitar el envoltorio.
+        $tracks = [];
+        foreach ($xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), " pp-ux-slider__track ")]', $root) as $node) {
+            $tracks[] = $node;
+        }
+        foreach ($tracks as $track) {
+            $parent = $track->parentNode;
+            if ($parent === null) continue;
+            while ($track->firstChild !== null) {
+                $parent->insertBefore($track->firstChild, $track);
+            }
+            $parent->removeChild($track);
+        }
+
+        // 3. Marcas y clases de runtime + cifra original del contador.
+        foreach ($root->getElementsByTagName('*') as $el) {
+            if (!$el instanceof \DOMElement) continue;
+
+            if ($el->hasAttribute('data-pp-ux-ready')) $el->removeAttribute('data-pp-ux-ready');
+
+            if ($el->hasAttribute('data-pp-counter-raw')) {
+                $el->textContent = $el->getAttribute('data-pp-counter-raw');
+                $el->removeAttribute('data-pp-counter-raw');
+            }
+
+            $classes = preg_split('/\s+/', trim($el->getAttribute('class'))) ?: [];
+            $kept = array_values(array_filter($classes, static fn ($c) => $c !== '' && !str_starts_with($c, 'pp-ux-')));
+            if ($kept !== $classes) {
+                $kept === [] ? $el->removeAttribute('class') : $el->setAttribute('class', implode(' ', $kept));
+            }
+        }
+    }
+
+    /**
+     * Igual que lo anterior pero sobre un fragmento de HTML suelto.
+     * Lo usan la reparación de páginas ya guardadas y los tests.
+     */
+    public static function cleanRuntimeBehaviorMarkup(string $html): string
+    {
+        if ($html === '' || !str_contains($html, 'pp-ux-')) return $html;
+
+        [$doc, $root] = self::domFromHtml($html);
+        if (!$root) return $html;
+
+        self::stripRuntimeBehaviorMarkup($doc, $root);
+
         $out = '';
         foreach ($root->childNodes as $child) $out .= $doc->saveHTML($child);
         return trim($out);

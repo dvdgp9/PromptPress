@@ -8,6 +8,7 @@ use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
 use App\Services\FormTemplates;
+use App\Services\LanguageService;
 use Core\Database;
 
 /**
@@ -36,13 +37,19 @@ final class CanvasGenerator
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
                 $extraContext = (string) ($input['extra_context'] ?? '');
+                // LOGO2 — La IA solo puede usar el logo si sabe que existe y en
+                // qué fondo se lee.
+                $logoHint = \App\Services\BrandService::logoHintForAi($siteId);
+                if ($logoHint !== '') {
+                    $extraContext = trim($extraContext . "\n\n" . $logoHint);
+                }
                 if ($validationFeedback !== '') {
                     $extraContext = trim($extraContext . "\n\nREINTENTO OBLIGATORIO POR VALIDACIÓN INTERNA:\n" . $validationFeedback);
                 }
                 $result = AIActionRunner::run(Actions::COMPOSE_CANVAS_PAGE, [
                     'page_title' => $input['title'],
                     'page_goal' => $input['goal'],
-                    'language' => $input['language'] ?? 'es',
+                    'language' => $input['language'] ?? LanguageService::promptLabelFor($siteId),
                     'design_language' => trim((string) ($input['design_language'] ?? '')) !== ''
                         ? (string) $input['design_language']
                         : '(sin referencia: diseña con un aire sobrio, contemporáneo y profesional)',

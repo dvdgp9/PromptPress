@@ -43,9 +43,10 @@ use App\Controllers\Public\BrandAssetController;
 $router->get('/design.css', function () {
     $site = \Core\Database::selectOne('SELECT id FROM sites ORDER BY id ASC LIMIT 1');
     $siteId = $site ? (int) $site['id'] : 0;
-    $tokens = DesignSystem::load($siteId);
+    $tokens = DesignSystem::applyCustomFontsToTokens($siteId, DesignSystem::load($siteId));
     $css = "/* PromptPress — design system tokens (site={$siteId}) */\n"
-         . DesignSystem::renderCssVars($tokens)
+         . \App\Services\CustomFontService::renderFontFaceCss($siteId)
+         . DesignSystem::renderCssVars($tokens, $siteId)
          . "\n" . DesignSystem::renderSectionBaseCss();
     header('Content-Type: text/css; charset=UTF-8');
     header('Cache-Control: public, max-age=60');
@@ -57,6 +58,11 @@ $router->get('/', [PublicPageController::class, 'home']);
 $router->get('/sitemap.xml', [PublicSeoController::class, 'sitemap']);
 $router->get('/robots.txt', [PublicSeoController::class, 'robots']);
 $router->get('/brand-assets/{site}/logo', [BrandAssetController::class, 'logo']);
+// LOGO2 — Variante para fondos oscuros (footer, secciones en negativo).
+$router->get('/brand-assets/{site}/logo/dark', [BrandAssetController::class, 'logoDark']);
+// FONTS — Los archivos de fuente viven fuera del docroot (storage/), igual que
+// el logo: se sirven por PHP con su MIME real y cabeceras de caché largas.
+$router->get('/brand-assets/{site}/font/{id}', [BrandAssetController::class, 'font']);
 
 // Home pública (fallback demo) — conservado para instalación nueva sin home
 $router->get('/__demo', function () {
@@ -153,6 +159,10 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/pages/ai-brief',      [PageController::class, 'aiBrief']);
     $r->post('/pages/ai-create',     [PageController::class, 'aiCreate']);
     $r->post('/pages/ai-from-reference', [PageController::class, 'aiCreateFromReference']); // D-MB: recrear desde captura
+    // I18N-FULL T5.5 — OJO: van ANTES de `/pages/{id}`, que si no captura
+    // «translate-all» como si fuera un id de página y devuelve 404.
+    $r->post('/pages/translate-all',  [PageController::class, 'translateAll']);
+    $r->post('/pages/translate-job/{id}/step', [PageController::class, 'translateJobStep']);
     $r->post('/pages/{id}/ai-variations', [PageController::class, 'aiVariations']);
     $r->post('/pages/{id}/ai-variations/apply', [PageController::class, 'applyVariation']);
     // Preview de plantilla: la usan las previews de estilo visual en /admin/design
@@ -166,6 +176,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/canvas/{id}',           [CanvasController::class, 'studio']);
     $r->get('/canvas/{id}/preview',   [CanvasController::class, 'preview']);
     $r->post('/canvas/{id}/chat',     [CanvasController::class, 'chat']);
+    $r->post('/canvas/{id}/cancel',   [CanvasController::class, 'cancel']); // CANCEL — parar una generación
     $r->post('/canvas/{id}/section',  [CanvasController::class, 'updateSection']); // FH4 edición directa
     $r->post('/canvas/{id}/insert-form', [CanvasController::class, 'insertForm']); // FORMS F5
     $r->get('/canvas/{id}/versions',  [CanvasController::class, 'versions']);
@@ -194,6 +205,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/posts/{id}/featured/auto', [PostController::class, 'autoFeatured']);
     $r->post('/posts/{id}/delete',     [PostController::class, 'destroy']);
     $r->post('/pages/{id}/delete',   [PageController::class, 'destroy']);
+    $r->post('/pages/{id}/translate', [PageController::class, 'translate']);  // I18N-FULL T5.3
 
     // SEO — redirecciones, 404 y auditorías accionables
     $r->get('/seo',                         [SeoController::class, 'index']);
@@ -220,6 +232,9 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/media',                    [MediaController::class, 'index']);
     $r->get('/media/library',            [MediaController::class, 'library']);
     $r->post('/media',                   [MediaController::class, 'upload']);
+    // STUDIO-2 C4b — describe por lotes las imágenes sin texto alternativo.
+    // Antes de /media/{id}/*: si no, "describe-missing" entraría como un {id}.
+    $r->post('/media/describe-missing',  [MediaController::class, 'describeMissing']);
     $r->post('/media/{id}/alt',          [MediaController::class, 'updateAlt']);
     $r->post('/media/{id}/delete',       [MediaController::class, 'destroy']);
     // T18.4 — banco de imágenes (Unsplash). bank/search debe ir antes de /media/{id}/* hipotéticos.
@@ -253,6 +268,13 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/design',       [DesignController::class, 'update']);
     $r->post('/design/logo',  [DesignController::class, 'updateLogo']);
     $r->post('/design/logo/delete', [DesignController::class, 'deleteLogo']);
+    $r->post('/design/logo/primary', [DesignController::class, 'updateLogoPrimary']);
+    // FONTS — Tipografías propias del cliente (brandbook).
+    $r->post('/design/fonts',              [DesignController::class, 'uploadFont']);
+    $r->post('/design/fonts/role',         [DesignController::class, 'updateFontRole']);
+    $r->post('/design/fonts/file/delete',  [DesignController::class, 'deleteFontFile']);
+    $r->post('/design/fonts/file/cut',     [DesignController::class, 'updateFontCut']);
+    $r->post('/design/fonts/delete',       [DesignController::class, 'deleteFontFamily']);
     $r->post('/design/reset', [DesignController::class, 'reset']);
     $r->post('/design/regenerate', [DesignController::class, 'regenerate']);
     // Solo dev: showcase de los 8 skin anchors curados.
@@ -298,7 +320,12 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/settings',     [SettingsController::class, 'update']);
     $r->post('/settings/check-updates', [SettingsController::class, 'checkUpdates']);
     $r->post('/settings/apply-update', [SettingsController::class, 'applyUpdate']);
+    // UPD — Actualizar subiendo el ZIP a mano + volver a una copia de seguridad.
+    $r->post('/settings/upload-update',  [SettingsController::class, 'uploadUpdate']);
+    $r->post('/settings/restore-update', [SettingsController::class, 'restoreUpdate']);
     $r->post('/settings/reset-site', [SettingsController::class, 'resetSite']);
+    $r->post('/settings/languages/add',    [SettingsController::class, 'addLanguage']);    // I18N-FULL T1.3
+    $r->post('/settings/languages/remove', [SettingsController::class, 'removeLanguage']);
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
     $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install

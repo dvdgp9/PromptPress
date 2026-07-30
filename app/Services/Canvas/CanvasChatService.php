@@ -8,7 +8,8 @@ use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
 use App\Services\ImageBankService;
-use Core\Database;
+use App\Services\LanguageService;
+use App\Services\MediaLibraryService;
 
 /**
  * FEAT-5 F5-T4 — Pipeline de edición conversacional de una página canvas,
@@ -38,9 +39,16 @@ final class CanvasChatService
         string $sectionId = '',
         string $elementContext = '',
         string $origin = 'chat',
-        string $summaryPrefix = ''
+        string $summaryPrefix = '',
+        string $requestId = '',
+        array $context = []
     ): array {
         $pageId = (int) $page['id'];
+        // STUDIO-2 B1/B2 — contexto opcional del chat: turnos anteriores y el
+        // camino exacto del elemento seleccionado. Los otros llamadores (el
+        // asistente central) no los mandan y siguen funcionando igual.
+        $history = is_array($context['history'] ?? null) ? $context['history'] : [];
+        $elementPath = trim((string) ($context['element_path'] ?? ''));
 
         $canvas = CanvasService::get($pageId);
         if ($canvas === null) {
@@ -49,12 +57,19 @@ final class CanvasChatService
 
         $requiresImages = self::requestsImages($instruction);
         if ($requiresImages) {
-            $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
-            // Si Unsplash falla pero el sitio YA tiene imágenes en su biblioteca,
-            // no bloqueamos: la IA puede usar esas (van en `available_images`).
-            // Solo bloqueamos si no hay ninguna imagen utilizable en absoluto.
-            if (!$prepared['ok'] && !self::hasLibraryImages($siteId)) {
-                return ['ok' => false, 'error' => (string) $prepared['error'], 'http' => 503];
+            // STUDIO-2 C2 — Las fotos del negocio son la PRIMERA opción. Antes se
+            // llamaba a Unsplash en cuanto la petición mencionaba una foto, así
+            // que el material propio del cliente quedaba enterrado bajo stock
+            // recién importado. Ahora solo se recurre al banco si no hay fotos
+            // propias o si el usuario lo pide explícitamente.
+            if (self::requestsImageBank($instruction) || !MediaLibraryService::hasOwnImages($siteId)) {
+                $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
+                // Si Unsplash falla pero el sitio YA tiene imágenes en su biblioteca,
+                // no bloqueamos: la IA puede usar esas (van en `available_images`).
+                // Solo bloqueamos si no hay ninguna imagen utilizable en absoluto.
+                if (!$prepared['ok'] && !MediaLibraryService::hasAnyImages($siteId)) {
+                    return ['ok' => false, 'error' => (string) $prepared['error'], 'http' => 503];
+                }
             }
         }
 
@@ -65,12 +80,23 @@ final class CanvasChatService
         $wantsNewSection = self::requestsNewSection($instruction);
 
         $effectiveInstruction = $instruction;
+        // B1 — Los turnos anteriores van DELANTE de la petición: son contexto
+        // para entender referencias ("ahora un poco más grande", "ese botón"),
+        // no peticiones pendientes.
+        $effectiveInstruction = self::historyBlock($history) . $effectiveInstruction;
         $crossPageReference = CanvasCrossPageReference::resolve($siteId, $page, $instruction);
         if ($crossPageReference !== null) {
             $effectiveInstruction .= CanvasCrossPageReference::promptBlock($crossPageReference);
         }
+        // B2 — El elemento elegido se marca en el propio HTML (data-pp-target).
+        // La descripción en prosa se mantiene como apoyo: si el camino no se
+        // puede resolver, el modelo todavía sabe de qué elemento se habla.
+        $markTarget = !$wantsNewSection && $sectionId !== '' && $elementPath !== '';
         if (!$wantsNewSection && $sectionId !== '' && $elementContext !== '') {
             $effectiveInstruction .= "\n\nElemento concreto seleccionado por el usuario: " . mb_substr($elementContext, 0, 240) . '. Aplica el cambio a ese elemento, no al conjunto de la sección.';
+        }
+        if ($markTarget) {
+            $effectiveInstruction .= "\n\nESE ELEMENTO VIENE MARCADO en el HTML con el atributo `data-pp-target=\"1\"`: es exactamente el que debes cambiar (si hay varios elementos parecidos, no te equivoques de uno). Quita ese atributo en el HTML que devuelvas.";
         }
         if ($wantsNewSection && $sectionId !== '') {
             $effectiveInstruction .= "\n\nUbica el cambio respecto a la sección de referencia \"" . self::sectionLabel($sectionId) . "\" (data-pp-section=\"" . $sectionId . "\"). A la sección NUEVA dale un data-pp-section único y descriptivo; conserva intactas todas las demás secciones.";
@@ -80,14 +106,20 @@ final class CanvasChatService
         // grandes solo para una imagen de FONDO es lento y trunca: con CSS es
         // instantáneo. La verificación posterior cuenta imágenes en HTML y en CSS.
         if ($requiresImages) {
+            $effectiveInstruction .= MediaLibraryService::hasOwnImages($siteId)
+                ? "\n\nPRIORIDAD DE IMÁGENES: este negocio tiene fotos propias en su biblioteca. Usa una de ellas siempre que encaje razonablemente, aunque no sea perfecta; una foto real del negocio vale más que una de banco. Recurre al banco solo si ninguna propia tiene sentido para lo que se pide."
+                : '';
             $effectiveInstruction .= "\n\nHay imágenes disponibles para esta petición. Si es una imagen de FONDO, aplícala con CSS (`background-image: url(...)` apuntando a una ruta de las imágenes disponibles) sobre la sección o el elemento, y deja \"html\":\"\" (NO reescribas el HTML, sobre todo si hay ilustraciones o SVG). Si la imagen forma parte del CONTENIDO (una foto dentro del texto), devuelve el HTML con la etiqueta <img>.";
         }
 
         if ($sectionId !== '' && !$wantsNewSection) {
-            $result = self::applySectionEdit($siteId, $page, $canvas, $sectionId, $effectiveInstruction);
+            $result = self::applySectionEdit($siteId, $page, $canvas, $sectionId, $effectiveInstruction, $markTarget ? $elementPath : '');
         } else {
             $result = self::applyPageEdit($siteId, $page, $canvas, $effectiveInstruction);
         }
+
+        // Por si el modelo no quitó la marca: nunca debe llegar a la página.
+        $result['html'] = self::stripTargetMarks($result['html']);
 
         if ($requiresImages) {
             // Rechazamos solo si el resultado se queda SIN ninguna imagen (la IA
@@ -104,6 +136,18 @@ final class CanvasChatService
                     'http' => 422,
                 ];
             }
+        }
+
+        // CANCEL — Último control antes de tocar la página: si el usuario pulsó
+        // "Parar" mientras la IA trabajaba, se descarta el resultado. Aquí es el
+        // único sitio honesto para mirarlo: es la línea que modifica la página.
+        if ($requestId !== '' && CanvasCancelToken::isCancelled($siteId, $requestId)) {
+            return [
+                'ok'        => false,
+                'cancelled' => true,
+                'error'     => 'Cambio cancelado. Tu página no se ha tocado.',
+                'http'      => 409,
+            ];
         }
 
         $scope = $sectionId !== '' ? self::sectionLabel($sectionId) : 'Toda la página';
@@ -130,24 +174,27 @@ final class CanvasChatService
     // ==================================================================
 
     /** @return array{html:string,css:string,reply:string} */
-    private static function applySectionEdit(int $siteId, array $page, array $canvas, string $sectionId, string $instruction): array
+    private static function applySectionEdit(int $siteId, array $page, array $canvas, string $sectionId, string $instruction, string $elementPath = ''): array
     {
         $sectionHtml = CanvasService::extractSection($canvas['html'], $sectionId);
         if ($sectionHtml === null) {
             throw new \RuntimeException('Sección no encontrada: ' . $sectionId);
         }
+        $promptHtml = $elementPath !== '' ? self::markTarget($sectionHtml, $elementPath) : $sectionHtml;
 
-        $result = AIActionRunner::run(Actions::EDIT_CANVAS_SECTION, [
+        $data = self::runEdit(Actions::EDIT_CANVAS_SECTION, [
             'instruction' => $instruction,
-            'section_html' => $sectionHtml,
+            'section_html' => $promptHtml,
             'page_css' => mb_substr($canvas['css'], 0, 14000),
             'page_title' => (string) $page['title'],
-            'language' => 'es',
+            // El idioma lo manda la PÁGINA: en una web bilingüe, pedirle un
+            // cambio a una página francesa debe devolver francés aunque el
+            // idioma principal del sitio sea otro.
+            'language' => LanguageService::promptLabel(LanguageService::forPage($page, $siteId)),
             'available_images' => self::availableImages($siteId),
             'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
-        $data = self::parseEditEnvelope((string) ($result['data'] ?? ''));
         // Cambio solo de estilo: el modelo deja "html" vacío y manda únicamente
         // css_append. Conservamos la sección original intacta (no reescribir el
         // HTML protege ilustraciones SVG y evita truncados en secciones grandes).
@@ -170,17 +217,19 @@ final class CanvasChatService
     /** @return array{html:string,css:string,reply:string} */
     private static function applyPageEdit(int $siteId, array $page, array $canvas, string $instruction): array
     {
-        $result = AIActionRunner::run(Actions::EDIT_CANVAS_PAGE, [
+        $data = self::runEdit(Actions::EDIT_CANVAS_PAGE, [
             'instruction' => $instruction,
             'page_html' => $canvas['html'],
             'page_css' => $canvas['css'],
             'page_title' => (string) $page['title'],
-            'language' => 'es',
+            // El idioma lo manda la PÁGINA: en una web bilingüe, pedirle un
+            // cambio a una página francesa debe devolver francés aunque el
+            // idioma principal del sitio sea otro.
+            'language' => LanguageService::promptLabel(LanguageService::forPage($page, $siteId)),
             'available_images' => self::availableImages($siteId),
             'modules_hint' => CanvasService::modulesHint($siteId),
         ], $siteId);
 
-        $data = self::parseEditEnvelope((string) ($result['data'] ?? ''));
         // Cambio global solo de estilo: si el modelo deja "html" vacío, conservamos
         // el HTML actual de la página y aplicamos únicamente el CSS devuelto.
         $newPageHtml = trim((string) ($data['html'] ?? ''));
@@ -195,6 +244,122 @@ final class CanvasChatService
     {
         $reply = trim((string) ($data['reply'] ?? ''));
         return $reply !== '' ? mb_substr($reply, 0, 400) : 'Hecho, cambio aplicado.';
+    }
+
+    /**
+     * STUDIO-2 B4 — Ejecuta una acción de edición y parsea el sobre, con UN
+     * reintento si el sobre viene mal. Es el fallo más común y el más tonto:
+     * el modelo escribe el cambio bien pero se come una etiqueta, y el usuario
+     * veía "la IA no devolvió un cambio válido" teniendo que repetirlo a mano.
+     *
+     * @param array<string,mixed> $input
+     * @return array{html:string,css:string,reply:string}
+     * @throws AIException
+     */
+    private static function runEdit(string $action, array $input, int $siteId): array
+    {
+        $lastError = null;
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $payload = $input;
+            if ($attempt > 1) {
+                $payload['instruction'] .= "\n\nAVISO: tu respuesta anterior no traía el sobre completo. Devuelve OBLIGATORIAMENTE los tres bloques <pp-html>…</pp-html>, <pp-css>…</pp-css> y <pp-reply>…</pp-reply>, sin markdown ni texto fuera de las etiquetas.";
+            }
+            $result = AIActionRunner::run($action, $payload, $siteId);
+            try {
+                return self::parseEditEnvelope((string) ($result['data'] ?? ''));
+            } catch (AIException $e) {
+                $lastError = $e;
+                error_log('[canvas chat] envelope_retry action=' . $action . ' attempt=' . $attempt . ': ' . $e->getMessage());
+            }
+        }
+        throw $lastError ?? new AIException('La edición no devolvió un sobre válido.');
+    }
+
+    /**
+     * STUDIO-2 B1 — Bloque de conversación reciente. Sin esto, cada mensaje
+     * viajaba solo y "ahora un poco más grande" no tenía a qué referirse.
+     *
+     * @param array<int,array{q?:string,a?:string,scope?:string}> $turns
+     */
+    private static function historyBlock(array $turns): string
+    {
+        $lines = [];
+        foreach (array_slice($turns, -4) as $turn) {
+            $q = trim((string) ($turn['q'] ?? ''));
+            if ($q === '') continue;
+            $a = trim((string) ($turn['a'] ?? ''));
+            $scope = trim((string) ($turn['scope'] ?? ''));
+            $lines[] = '- Pidió: "' . mb_substr($q, 0, 200) . '"'
+                . ($scope !== '' ? ' (en "' . mb_substr($scope, 0, 60) . '")' : '')
+                . ($a !== '' ? ' → hiciste: "' . mb_substr($a, 0, 200) . '"' : '');
+        }
+        if ($lines === []) return '';
+
+        return "CONVERSACIÓN RECIENTE con este cliente sobre esta página, de lo más antiguo a lo más nuevo. Es CONTEXTO para entender a qué se refiere ahora (\"un poco más grande\", \"ese botón\", \"déjalo como antes\"), NO son peticiones pendientes: no vuelvas a aplicarlas.\n"
+            . implode("\n", $lines)
+            . "\n\nPETICIÓN ACTUAL (la única que debes aplicar):\n";
+    }
+
+    /**
+     * STUDIO-2 B2 — Marca con `data-pp-target="1"` el elemento que el usuario
+     * tenía seleccionado. El camino son índices de hijos desde la sección, tal
+     * como los calcula el overlay del preview ("2.0.1").
+     *
+     * Antes el elemento viajaba solo como prosa ("texto con texto ...") y con
+     * dos titulares parecidos el modelo podía cambiar el que no era.
+     */
+    public static function markTarget(string $sectionHtml, string $path): string
+    {
+        // El formato se valida ANTES de convertir: `intval('')` es 0, así que un
+        // camino vacío o con basura habría marcado el primer hijo — peor que no
+        // marcar nada, porque el modelo cambiaría el elemento equivocado.
+        $path = trim($path);
+        if ($path === '' || !preg_match('/^\d+(\.\d+)*$/', $path)) return $sectionHtml;
+        $steps = array_map('intval', explode('.', $path));
+        if (count($steps) > 12) return $sectionHtml;
+
+        $previous = libxml_use_internal_errors(true);
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        $loaded = $doc->loadHTML(
+            '<!doctype html><meta charset="utf-8"><div id="pp-root">' . $sectionHtml . '</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        if (!$loaded) return $sectionHtml;
+
+        $root = $doc->getElementById('pp-root');
+        if (!$root) return $sectionHtml;
+
+        // El primer hijo elemento de la raíz es la propia <section>.
+        $node = null;
+        foreach ($root->childNodes as $child) {
+            if ($child instanceof \DOMElement) { $node = $child; break; }
+        }
+        if ($node === null) return $sectionHtml;
+
+        foreach ($steps as $index) {
+            $children = [];
+            foreach ($node->childNodes as $child) {
+                if ($child instanceof \DOMElement) $children[] = $child;
+            }
+            if (!isset($children[$index])) return $sectionHtml;   // camino obsoleto: sin marca
+            $node = $children[$index];
+        }
+        $node->setAttribute('data-pp-target', '1');
+
+        $out = '';
+        foreach ($root->childNodes as $child) {
+            $out .= $doc->saveHTML($child);
+        }
+        return trim($out) !== '' ? $out : $sectionHtml;
+    }
+
+    /** Quita cualquier marca de objetivo que el modelo se haya dejado puesta. */
+    public static function stripTargetMarks(string $html): string
+    {
+        if (stripos($html, 'data-pp-target') === false) return $html;
+        return (string) preg_replace('/\s*data-pp-target\s*=\s*(["\'])[^"\']*\1/i', '', $html);
     }
 
     /**
@@ -292,6 +457,17 @@ final class CanvasChatService
         return preg_match('/\b(?:' . $img . ')\b/u', $t) === 1;
     }
 
+    /**
+     * ¿El usuario pide EXPLÍCITAMENTE buscar fuera (banco de imágenes)? Solo
+     * entonces se va a Unsplash teniendo fotos propias: "pon una foto de fondo"
+     * debe resolverse con el material del negocio.
+     */
+    public static function requestsImageBank(string $instruction): bool
+    {
+        $t = ' ' . mb_strtolower($instruction) . ' ';
+        return preg_match('/\b(unsplash|banco de im[áa]genes|imagen de banco|de internet|en internet|stock|gratuita?s?)\b/u', $t) === 1;
+    }
+
     /** @return array{ok:bool,error:?string} */
     private static function prepareRequestedImages(int $siteId, string $pageTitle, string $instruction): array
     {
@@ -329,30 +505,19 @@ final class CanvasChatService
         return count($matches[0]);
     }
 
-    /** ¿El sitio tiene al menos una imagen en su biblioteca de medios? */
-    private static function hasLibraryImages(int $siteId): bool
-    {
-        $row = Database::selectOne(
-            "SELECT 1 FROM media WHERE site_id = ? AND mime_type LIKE 'image/%' LIMIT 1",
-            [$siteId]
-        );
-        return $row !== null;
-    }
-
-    /** Últimas imágenes de la biblioteca del sitio, para "cambia la foto". */
+    /**
+     * Imágenes de la biblioteca para "cambia la foto", con las propias del
+     * negocio SIEMPRE por delante (STUDIO-2 C1).
+     */
     private static function availableImages(int $siteId): string
     {
-        $rows = Database::select(
-            "SELECT path, alt_text FROM media
-             WHERE site_id = ? AND mime_type LIKE 'image/%'
-             ORDER BY id DESC LIMIT 12",
-            [$siteId]
-        );
-        if ($rows === []) return '(ninguna en la biblioteca)';
-        $lines = [];
-        foreach ($rows as $r) {
-            $lines[] = '- /' . ltrim((string) $r['path'], '/') . ' — ' . trim((string) ($r['alt_text'] ?? ''));
-        }
-        return implode("\n", $lines);
+        $library = MediaLibraryService::forAi($siteId);
+
+        // LOGO2 — Los logos de marca viajan con las imágenes disponibles: así el
+        // chat puede atender "pon el logo aquí" y elegir la variante que
+        // contrasta con el fondo de esa sección.
+        $logoHint = \App\Services\BrandService::logoHintForAi($siteId);
+
+        return $logoHint !== '' ? $library . "\n\n" . $logoHint : $library;
     }
 }

@@ -42,7 +42,7 @@ final class SeoController
         $site = self::site($siteId);
         $base = self::siteBaseUrl($site);
         $pages = Database::select(
-            "SELECT id, slug, page_type, updated_at, published_at
+            "SELECT id, slug, page_type, language, translation_group, updated_at, published_at
              FROM pages
              WHERE site_id = ? AND status = 'published'
                AND COALESCE(seo_noindex, 0) = 0
@@ -55,9 +55,29 @@ final class SeoController
         );
 
         $out = ['<?xml version="1.0" encoding="UTF-8"?>'];
-        $out[] = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+        $out[] = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+               . ' xmlns:xhtml="http://www.w3.org/1999/xhtml">';
+        $primaryLang = \App\Services\LanguageService::primaryFor($siteId);
+        // Solo UNA página por idioma se sirve realmente en la raíz (la que
+        // resuelve el controlador público). Si el sitio tiene varias marcadas
+        // como `home` —pasa con páginas de prueba—, las demás deben listarse con
+        // su slug propio, no colapsar todas en `/`.
+        $rootPageIds = [];
+        foreach (\App\Services\LanguageService::activeFor($siteId) as $activeLang) {
+            $rootPage = \App\Controllers\Public\PageController::homePageFor($siteId, $activeLang);
+            if ($rootPage !== null) {
+                $rootPageIds[(int) $rootPage['id']] = true;
+            }
+        }
+        // Un sitemap no debe declarar dos veces la misma URL. Puede pasar si el
+        // sitio tiene varias páginas marcadas como `home` (todas apuntan a `/`).
+        $seen = [];
         foreach ($pages as $page) {
-            $loc = self::pageUrl($base, $page);
+            $loc = self::pageUrl($base, $page, $site, isset($rootPageIds[(int) $page['id']]));
+            if (isset($seen[$loc])) {
+                continue;
+            }
+            $seen[$loc] = true;
             $lastmod = self::lastmod($page);
             $priority = (($page['page_type'] ?? '') === 'home') ? '1.0' : ((($page['page_type'] ?? '') === 'article') ? '0.7' : '0.8');
 
@@ -68,6 +88,12 @@ final class SeoController
             }
             $out[] = '    <changefreq>' . ((($page['page_type'] ?? '') === 'article') ? 'weekly' : 'monthly') . '</changefreq>';
             $out[] = '    <priority>' . $priority . '</priority>';
+            // I18N-FULL T4.2 — versiones idiomáticas de esta misma página.
+            $alternates = \App\Services\SeoHreflangService::alternatesFor($siteId, $page, $site);
+            $links = \App\Services\SeoHreflangService::sitemapLinks($alternates, $primaryLang);
+            if ($links !== '') {
+                $out[] = $links;
+            }
             $out[] = '  </url>';
         }
         $out[] = '</urlset>';
@@ -75,9 +101,12 @@ final class SeoController
         return implode("\n", $out) . "\n";
     }
 
-    private static function pageUrl(string $base, array $page): string
+    /** @param array<string,mixed> $page @param array<string,mixed> $site */
+    private static function pageUrl(string $base, array $page, array $site = [], bool $isRootPage = true): string
     {
-        if (($page['page_type'] ?? '') === 'home') {
+        // Solo la home del idioma principal vive en la raíz: la home francesa es
+        // `/fr`. Y solo si esta página es la que de verdad se sirve ahí.
+        if ($isRootPage && \App\Services\SeoIndexingService::isPrimaryHome($site, $page)) {
             return $base . '/';
         }
         return $base . '/' . ltrim((string) ($page['slug'] ?? ''), '/');
@@ -93,10 +122,12 @@ final class SeoController
 
     private static function site(?int $siteId = null): array
     {
+        // `language` es imprescindible: sin él no se puede distinguir la home
+        // del idioma principal (que vive en `/`) de la de un idioma secundario.
         if ($siteId !== null && $siteId > 0) {
-            return Database::selectOne('SELECT id, url FROM sites WHERE id = ? LIMIT 1', [$siteId]) ?? [];
+            return Database::selectOne('SELECT id, url, language FROM sites WHERE id = ? LIMIT 1', [$siteId]) ?? [];
         }
-        return Database::selectOne('SELECT id, url FROM sites ORDER BY id ASC LIMIT 1') ?? [];
+        return Database::selectOne('SELECT id, url, language FROM sites ORDER BY id ASC LIMIT 1') ?? [];
     }
 
     private static function siteId(): int

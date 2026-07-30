@@ -7,6 +7,7 @@ namespace App\Services\Renderer;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
+use App\Services\LanguageService;
 
 /**
  * Genera y normaliza bloques `custom_block` usando la accion IA PP-friendly.
@@ -30,9 +31,16 @@ final class CustomBlockGenerator
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $runInput = $input;
             $runInput['validation_feedback'] = $feedback;
+            // Idioma: si el llamante lo impone (bloque para una página en otro
+            // idioma), gana el suyo; si no, el del sitio.
+            if (trim((string) ($input['language'] ?? '')) === '') {
+                unset($runInput['language']);
+            }
+            // `+=` solo rellena lo que falte: si el llamante impone `language`
+            // (p. ej. porque el bloque es para una página en otro idioma), gana.
             $runInput += [
                 'section_role' => '',
-                'language' => 'es',
+                'language' => LanguageService::promptLabelFor($siteId),
                 'available_images' => '',
             ];
 

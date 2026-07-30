@@ -98,7 +98,15 @@ try {
         [$siteId, $homeSlug, $now, $now, $now, $siteId, $articleSlug, $now, $now, $now, $siteId, $draftSlug, $now, $now]
     );
     $xml = PublicSeoController::sitemapXml($siteId);
-    check_seo('sitemap_has_urlset', str_contains($xml, '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'));
+    // I18N-FULL T4.2: el <urlset> declara además el namespace xhtml para los
+    // <xhtml:link rel="alternate"> de las versiones idiomáticas, así que ya no
+    // es una etiqueta literal cerrada. Se comprueba la intención: es un urlset
+    // con el namespace de sitemaps.
+    check_seo(
+        'sitemap_has_urlset',
+        str_contains($xml, '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'),
+        substr($xml, 0, 200)
+    );
     check_seo('sitemap_home_uses_root', str_contains($xml, '<loc>http://localhost/</loc>') || preg_match('#<loc>https?://[^<]+/</loc>#', $xml) === 1, $xml);
     check_seo('sitemap_includes_published_article', str_contains($xml, '/' . $articleSlug . '</loc>'), $xml);
     check_seo('sitemap_excludes_draft', !str_contains($xml, $draftSlug), $xml);

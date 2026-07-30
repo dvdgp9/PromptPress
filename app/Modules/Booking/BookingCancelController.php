@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Booking;
 
 use App\Modules\ModuleRegistry;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use Core\Database;
 use Core\Request;
 use Core\Response;
@@ -27,24 +29,32 @@ final class BookingCancelController
     {
         [$booking, $service, $tz] = $this->load($params);
         $when = $this->when($booking, $tz);
+        $siteId = (int) $booking['site_id'];
+        // El idioma es el de la RESERVA: el cliente llegó aquí desde el email
+        // que recibió en su idioma.
+        $lang = self::bookingLanguage($booking, $siteId);
+        $t = static fn (string $key): string => Microcopy::t('booking.' . $key, $lang);
 
         if ((string) $booking['status'] === 'cancelled') {
-            $this->page('Reserva ya cancelada', '<p>Esta reserva ya estaba cancelada. No tienes que hacer nada más.</p>');
+            $this->page($siteId, $t('cancel_already_title'), '<p>' . e($t('cancel_already_body')) . '</p>', $lang);
         }
 
-        $this->page('Cancelar reserva', sprintf(
-            '<p>¿Seguro que quieres cancelar esta reserva?</p>
+        $this->page($siteId, $t('cancel_title'), sprintf(
+            '<p>%s</p>
              <p class="detail"><strong>%s</strong><br>%s</p>
              <form method="post" action="%s">
                  <input type="hidden" name="token" value="%s">
-                 <button type="submit">Sí, cancelar la reserva</button>
+                 <button type="submit">%s</button>
              </form>
-             <p class="soft">Si has llegado aquí por error, simplemente cierra esta página.</p>',
+             <p class="soft">%s</p>',
+            e($t('cancel_confirm')),
             e((string) $service['name']),
             e($when),
             e(base_url('_booking/cancel/' . (int) $booking['id'])),
-            e((string) Request::get('token', ''))
-        ));
+            e((string) Request::get('token', '')),
+            e($t('cancel_button')),
+            e($t('cancel_mistake'))
+        ), $lang);
     }
 
     public function cancel(array $params = []): void
@@ -60,7 +70,14 @@ final class BookingCancelController
         } catch (\Throwable) {
             // el aviso nunca rompe la cancelación
         }
-        $this->page('Reserva cancelada', '<p>Tu reserva ha quedado cancelada. Gracias por avisar.</p><p class="soft">Si quieres buscar otro hueco, puedes reservar de nuevo cuando quieras.</p>');
+        $lang = self::bookingLanguage($booking, $siteId);
+        $this->page(
+            $siteId,
+            Microcopy::t('booking.cancelled_title', $lang),
+            '<p>' . e(Microcopy::t('booking.cancelled_body', $lang)) . '</p>'
+            . '<p class="soft">' . e(Microcopy::t('booking.cancelled_again', $lang)) . '</p>',
+            $lang
+        );
     }
 
     /** Carga y valida reserva+token (404 si no casan). @return array{0:array,1:array,2:string} */
@@ -79,7 +96,7 @@ final class BookingCancelController
         if ($booking === null || !hash_equals((string) $booking['cancel_token'], $token)) {
             Response::notFound();
         }
-        $service = Database::selectOne('SELECT name FROM booking_services WHERE id = ? LIMIT 1', [(int) $booking['service_id']]) ?? ['name' => 'Reserva'];
+        $service = Database::selectOne('SELECT name FROM booking_services WHERE id = ? LIMIT 1', [(int) $booking['service_id']]) ?? ['name' => Microcopy::site((int) $booking['site_id'], 'booking.fallback_service')];
         $tz = BookingService::siteTimezone($siteId);
         return [$booking, $service, $tz];
     }
@@ -90,10 +107,18 @@ final class BookingCancelController
             ->setTimezone(new DateTimeZone($tz))->format('d/m/Y H:i');
     }
 
-    private function page(string $title, string $bodyHtml): never
+    /** Idioma de una reserva; si la fila no lo tiene, el del sitio. @param array<string,mixed> $booking */
+    private static function bookingLanguage(array $booking, int $siteId): string
     {
+        $lang = trim((string) ($booking['language'] ?? ''));
+        return $lang !== '' ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
+    }
+
+    private function page(int $siteId, string $title, string $bodyHtml, ?string $lang = null): never
+    {
+        $lang = $lang !== null ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
         Response::html(
-            '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+            '<!doctype html><html lang="' . e($lang) . '"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="robots" content="noindex">'
             . '<title>' . e($title) . '</title>'

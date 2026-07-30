@@ -3,6 +3,7 @@
 namespace App\Controllers\Admin;
 
 use App\Services\ImageBankService;
+use App\Services\MediaLibraryService;
 use App\Services\MediaService;
 use Core\Auth;
 use Core\CSRF;
@@ -39,6 +40,8 @@ class MediaController
             'maxSize'    => MediaService::MAX_SIZE,
             'allowedExt' => array_values(MediaService::ALLOWED),
             'csrf'       => CSRF::token(),
+            // STUDIO-2 C4b — cuántas imágenes siguen sin descripción.
+            'missingAlt' => MediaLibraryService::countMissingAlt($siteId),
         ]);
         View::send('admin/media/index', $data);
     }
@@ -60,12 +63,15 @@ class MediaController
             $params[] = $needle;
         }
 
+        // STUDIO-2 C5 — las fotos propias del negocio, primero; `source` viaja
+        // al selector para poder filtrar "Tus fotos" / "De banco".
+        ImageBankService::ensureSchema();
         $items = Database::select(
             'SELECT m.id, m.original_name, m.mime_type, m.file_size, m.path,
-                    m.alt_text, m.width, m.height, m.created_at
+                    m.alt_text, m.width, m.height, m.created_at, m.source
              FROM media m
              ' . $where . '
-             ORDER BY m.id DESC
+             ORDER BY (m.source = \'upload\') DESC, m.id DESC
              LIMIT 120',
             $params
         );
@@ -83,6 +89,7 @@ class MediaController
                 'width'         => $m['width'] !== null ? (int) $m['width'] : null,
                 'height'        => $m['height'] !== null ? (int) $m['height'] : null,
                 'created_at'    => (string) $m['created_at'],
+                'source'        => (string) ($m['source'] ?? 'upload'),
             ];
         }, $items);
 
@@ -103,6 +110,15 @@ class MediaController
         $isAjax = self::wantsJson();
 
         $file = $_FILES['file'] ?? null;
+
+        // Sin JavaScript el navegador manda un array cuando el input es
+        // `multiple`. Se procesan todos en el mismo POST; con JS cada archivo
+        // llega en su propia petición y este camino no se usa.
+        if (is_array($file) && isset($file['name']) && is_array($file['name'])) {
+            $this->uploadBatch($file, $siteId, $userId);
+            return;
+        }
+
         $err  = MediaService::validate($file);
         if ($err !== null) {
             if ($isAjax) {
@@ -117,6 +133,11 @@ class MediaController
         $alt = trim((string) Request::post('alt_text', ''));
         try {
             $row = MediaService::store($file, $siteId, $userId, $alt !== '' ? $alt : null);
+            // STUDIO-2 C4 — sin descripción, la foto se describe con IA tras
+            // responder: es lo que permite priorizarla luego en generación/chat.
+            if ($alt === '') {
+                MediaLibraryService::describeAfterResponse((int) ($row['id'] ?? 0), $siteId);
+            }
             if ($isAjax) {
                 Response::json([
                     'ok'   => true,
@@ -145,11 +166,123 @@ class MediaController
         Response::redirect(base_url('admin/media'));
     }
 
+    /**
+     * Subida múltiple sin JavaScript: un archivo malo no debe invalidar los
+     * buenos, así que se procesan todos y se informa del resultado conjunto.
+     *
+     * @param array<string,mixed> $files entrada de $_FILES con arrays paralelos
+     */
+    private function uploadBatch(array $files, int $siteId, ?int $userId): void
+    {
+        $alt = trim((string) Request::post('alt_text', ''));
+        $ok = 0;
+        $errors = [];
+
+        foreach (array_keys($files['name']) as $i) {
+            if ((int) ($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+
+            $one = [
+                'name'     => (string) $files['name'][$i],
+                'type'     => (string) ($files['type'][$i] ?? ''),
+                'tmp_name' => (string) ($files['tmp_name'][$i] ?? ''),
+                'error'    => (int) ($files['error'][$i] ?? UPLOAD_ERR_OK),
+                'size'     => (int) ($files['size'][$i] ?? 0),
+            ];
+
+            $err = MediaService::validate($one);
+            if ($err !== null) {
+                $errors[] = $one['name'] . ': ' . $err;
+                continue;
+            }
+            try {
+                $row = MediaService::store($one, $siteId, $userId, $alt !== '' ? $alt : null);
+                if ($alt === '') {
+                    MediaLibraryService::describeAfterResponse((int) ($row['id'] ?? 0), $siteId);
+                }
+                $ok++;
+            } catch (\Throwable $e) {
+                error_log('[MediaController] batch upload error: ' . $e->getMessage());
+                $errors[] = $one['name'] . ': no se pudo procesar.';
+            }
+        }
+
+        if ($ok > 0) {
+            Session::flash('success', $ok === 1 ? 'Imagen subida correctamente.' : $ok . ' imágenes subidas correctamente.');
+        }
+        if ($errors !== []) {
+            Session::flash('error', implode(' · ', array_slice($errors, 0, 5)));
+        }
+        if ($ok === 0 && $errors === []) {
+            Session::flash('error', 'Selecciona al menos una imagen.');
+        }
+
+        Response::redirect(base_url('admin/media'));
+    }
+
     private static function wantsJson(): bool
     {
         $xhr    = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
         $accept = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
         return $xhr || stripos($accept, 'application/json') !== false;
+    }
+
+    // ----------------------------------------------------------------------
+    // POST /admin/media/describe-missing — describe con IA las imágenes que
+    // no tienen texto alternativo (STUDIO-2 C4b).
+    //
+    // Va POR LOTES pequeños y devuelve cuántas quedan: cada petición termina
+    // rápido (nada de un proceso de varios minutos que muere por timeout) y el
+    // navegador va llamando otra vez mientras muestra el progreso.
+    // ----------------------------------------------------------------------
+    public function describeMissing(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $batch = MediaLibraryService::idsMissingAlt($siteId, 3);
+        if ($batch === []) {
+            Response::json(['ok' => true, 'described' => 0, 'remaining' => 0, 'items' => []]);
+        }
+
+        @set_time_limit(180);
+        $items = [];
+        $failed = 0;       // falló la IA → merece reintento
+        $unavailable = 0;  // el archivo no está: nunca se va a poder describir
+        foreach ($batch as $mediaId) {
+            try {
+                $outcome = MediaLibraryService::describeOne($mediaId, $siteId);
+                if ($outcome['status'] === 'ok') {
+                    $items[] = ['id' => $mediaId, 'alt_text' => $outcome['alt']];
+                } elseif ($outcome['status'] === 'unavailable') {
+                    $unavailable++;
+                } elseif ($outcome['status'] === 'failed') {
+                    $failed++;
+                }
+            } catch (\Throwable $e) {
+                $failed++;
+                error_log('[MediaController] describe-missing media=' . $mediaId . ': ' . $e->getMessage());
+            }
+        }
+
+        // Nada salió y encima falló la IA: cortar con un mensaje honesto en vez
+        // de dejar al navegador pidiendo lotes en bucle.
+        if ($items === [] && $failed > 0) {
+            Response::json([
+                'ok' => false,
+                'error' => 'La IA no ha podido describir estas imágenes. Revisa Ajustes de IA e inténtalo de nuevo.',
+                'remaining' => MediaLibraryService::countMissingAlt($siteId),
+            ], 502);
+        }
+
+        Response::json([
+            'ok' => true,
+            'described' => count($items),
+            // Todo el lote eran archivos que ya no están: no hay avance posible.
+            'blocked' => $items === [] && $unavailable > 0,
+            'unavailable' => $unavailable,
+            'remaining' => MediaLibraryService::countMissingAlt($siteId),
+            'items' => $items,
+        ]);
     }
 
     // ----------------------------------------------------------------------

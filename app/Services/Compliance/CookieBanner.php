@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Compliance;
 
+use App\Services\LanguageService;
+use App\Services\Microcopy;
+
 /**
  * E-GDPR G4 — Renderer del banner público de cookies + scripts de tracking.
  *
@@ -29,8 +32,9 @@ final class CookieBanner
      * Genera el HTML+CSS+JS del banner. Pensado para inyectar antes de `</body>`.
      * Devuelve string vacía si no hay nada que gestionar (sin tracking activo).
      */
-    public static function render(array $manifest): string
+    public static function render(array $manifest, string $lang = LanguageService::DEFAULT): string
     {
+        $lang = LanguageService::normalize($lang);
         $needsBanner = TrackingCatalog::needsBanner($manifest);
         $enabledServices = TrackingCatalog::enabledForPublic($manifest);
         $activeCategories = TrackingCatalog::activeCategories($manifest);
@@ -39,12 +43,15 @@ final class CookieBanner
         // no haya tracking en este sitio. La UI del banner se muestra solo si
         // hay categorías opcionales pendientes de consent (controlado por el JS).
 
+        // Los textos del banner son editables desde el panel. Microcopy::resolve
+        // respeta lo que haya escrito el usuario y solo traduce cuando está
+        // vacío o es el default castellano que se guardó solo.
         $banner = (array) ($manifest['banner'] ?? []);
-        $title  = $banner['title']           ?? 'Cookies en este sitio';
-        $desc   = $banner['description']     ?? 'Usamos cookies necesarias para que la web funcione. Si lo aceptas, también usaremos otras para analítica y mejorar tu experiencia. Puedes cambiar tu decisión cuando quieras.';
-        $accept = $banner['accept_label']    ?? 'Aceptar todas';
-        $reject = $banner['reject_label']    ?? 'Rechazar opcionales';
-        $configure = $banner['configure_label'] ?? 'Configurar';
+        $title  = Microcopy::resolve($banner['title'] ?? null, 'cookies.title', $lang);
+        $desc   = Microcopy::resolve($banner['description'] ?? null, 'cookies.description', $lang);
+        $accept = Microcopy::resolve($banner['accept_label'] ?? null, 'cookies.accept', $lang);
+        $reject = Microcopy::resolve($banner['reject_label'] ?? null, 'cookies.reject', $lang);
+        $configure = Microcopy::resolve($banner['configure_label'] ?? null, 'cookies.configure', $lang);
         $version = (int) ($banner['version'] ?? 1);
 
         // Categorías que se ofrecen en el modal: las que tienen al menos un
@@ -54,8 +61,8 @@ final class CookieBanner
             if (!in_array($catKey, $activeCategories, true)) continue;
             $categories[] = [
                 'key'         => $catKey,
-                'label'       => $catDef['label'],
-                'description' => $catDef['description'],
+                'label'       => Microcopy::t('cookies.cat.' . $catKey, $lang) ?: $catDef['label'],
+                'description' => Microcopy::t('cookies.cat.' . $catKey . '_desc', $lang) ?: $catDef['description'],
                 'always_on'   => !empty($catDef['always_on']),
             ];
         }
@@ -77,10 +84,12 @@ final class CookieBanner
                 'accept'    => $accept,
                 'reject'    => $reject,
                 'configure' => $configure,
-                'save'      => 'Guardar elección',
-                'saveAll'   => 'Aceptar todas',
-                'modalTitle'=> 'Configurar cookies',
-                'reopenLink'=> 'Configurar cookies',
+                'save'      => Microcopy::t('cookies.save', $lang),
+                'saveAll'   => Microcopy::t('cookies.accept', $lang),
+                'modalTitle'=> Microcopy::t('cookies.modal_title', $lang),
+                'reopenLink'=> Microcopy::t('cookies.reopen', $lang),
+                'close'     => Microcopy::t('cookies.close', $lang),
+                'alwaysOn'  => Microcopy::t('cookies.always_on', $lang),
             ],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
@@ -260,7 +269,7 @@ final class CookieBanner
         + '<input type="checkbox" data-cb-cat="'+escapeHtml(c.key)+'" '+(checked?'checked':'')+' '+(disabled?'disabled':'')+'>'
         + '<span class="pp-cb-cat__switch" aria-hidden="true"></span>'
         + '<span class="pp-cb-cat__text">'
-        +   '<strong>'+escapeHtml(c.label)+(disabled?' <em>(siempre activas)</em>':'')+'</strong>'
+        +   '<strong>'+escapeHtml(c.label)+(disabled?' <em>('+escapeHtml(C.texts.alwaysOn||'siempre activas')+')</em>':'')+'</strong>'
         +   '<span>'+escapeHtml(c.description)+'</span>'
         + '</span>'
         + '</label>';
@@ -270,7 +279,7 @@ final class CookieBanner
       + '<div class="pp-cb-modal__panel">'
       +   '<header class="pp-cb-modal__head">'
       +     '<h2 id="pp-cb-modal-title">'+escapeHtml(C.texts.modalTitle)+'</h2>'
-      +     '<button type="button" class="pp-cb-modal__close" data-cb-action="close-modal" aria-label="Cerrar">&times;</button>'
+      +     '<button type="button" class="pp-cb-modal__close" data-cb-action="close-modal" aria-label="'+escapeHtml(C.texts.close||'Cerrar')+'">&times;</button>'
       +   '</header>'
       +   '<div class="pp-cb-modal__body">'+items+'</div>'
       +   '<footer class="pp-cb-modal__foot">'

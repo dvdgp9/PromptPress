@@ -27,9 +27,15 @@ foreach ($cssVars as $var => $val) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=<?= $families ?>&display=swap" rel="stylesheet">
 <?php endif; ?>
+<?php if (!empty($customFontCss)): ?>
+<?php /* FONTS — Los @font-face del sitio, para que el preview y las muestras
+         del panel se vean con la tipografía real y no con un sustituto. */ ?>
+<style id="pp-admin-custom-fonts"><?= $customFontCss ?></style>
+<?php endif; ?>
 <script>
 window.PP_DESIGN_SCHEMA = <?= json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTIONS, JSON_UNESCAPED_UNICODE) ?>;
+window.PP_DESIGN_FONTS = <?= json_encode($fontOptions, JSON_UNESCAPED_UNICODE) ?>;
+window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name', 'token'), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="<?= e(base_url('admin/assets/js/design-system.js')) ?>"></script>
 <?php \Core\View::end(); ?>
@@ -62,34 +68,76 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
     y se generarán como variables CSS para las páginas públicas.
 </p>
 
-<section class="pp-design-logo-card" aria-labelledby="pp-design-logo-title">
-    <div class="pp-design-logo-preview">
-        <?php if ($logoUrl !== ''): ?>
-            <img src="<?= e($logoUrl) ?>" alt="Logo actual">
-        <?php else: ?>
-            <span>Sin logo</span>
-        <?php endif; ?>
+<section class="pp-logo-card" aria-labelledby="pp-design-logo-title">
+    <header class="pp-logo-card__head">
+        <div>
+            <h3 id="pp-design-logo-title">Logo de la empresa</h3>
+            <p>
+                Puedes subir dos versiones: una para cuando el logo va sobre <strong>fondo claro</strong>
+                y otra para <strong>fondo oscuro</strong> (por ejemplo el pie de página). La IA usará
+                la que contraste con cada sección. PNG, JPG o WebP, hasta 2 MB.
+            </p>
+        </div>
+    </header>
+
+    <div class="pp-logo-grid">
+        <?php foreach ($logoSlots as $variant => $slot): ?>
+        <div class="pp-logo-slot pp-logo-slot--<?= e($variant) ?><?= $slot['primary'] ? ' is-primary' : '' ?>">
+            <div class="pp-logo-slot__head">
+                <strong><?= e($slot['label']) ?></strong>
+                <?php if ($slot['primary']): ?><span class="pp-logo-slot__badge">Principal</span><?php endif; ?>
+            </div>
+
+            <div class="pp-logo-slot__preview">
+                <?php if ($slot['url'] !== ''): ?>
+                    <img src="<?= e($slot['url']) ?>" alt="Logo <?= e(mb_strtolower($slot['label'])) ?>">
+                <?php else: ?>
+                    <span>Sin logo</span>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($slot['missing']): ?>
+            <p class="pp-logo-slot__warning">El archivo anterior ya no está en el servidor. Vuelve a subirlo.</p>
+            <?php endif; ?>
+
+            <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-logo-slot__form">
+                <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                <input type="hidden" name="variant" value="<?= e($variant) ?>">
+                <label class="pp-logo-picker">
+                    <span>Elegir archivo</span>
+                    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required data-logo-file>
+                </label>
+                <span class="pp-logo-filename" data-logo-filename>Ningún archivo seleccionado</span>
+                <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-logo-submit disabled>
+                    <?= $slot['url'] !== '' ? 'Sustituir' : 'Subir' ?>
+                </button>
+            </form>
+
+            <div class="pp-logo-slot__actions">
+                <?php if (!$slot['primary'] && $slot['url'] !== ''): ?>
+                <form method="POST" action="<?= e(base_url('admin/design/logo/primary')) ?>">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="variant" value="<?= e($variant) ?>">
+                    <button type="submit" class="pp-logo-link">Marcar como principal</button>
+                </form>
+                <?php endif; ?>
+                <?php if ($slot['url'] !== '' || $slot['missing']): ?>
+                <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>"
+                      onsubmit="return confirm('¿Eliminar este logo?');">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="variant" value="<?= e($variant) ?>">
+                    <button type="submit" class="pp-logo-link pp-logo-link--danger">Eliminar</button>
+                </form>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
     </div>
-    <div class="pp-design-logo-content">
-        <h3 id="pp-design-logo-title">Logo de la empresa</h3>
-        <p>Se utiliza en la cabecera pública y en el panel. PNG, JPG o WebP, hasta 2 MB.</p>
-        <?php if ($logoMissing): ?><p class="pp-design-logo-warning">El archivo del logo anterior ya no existe en el servidor. Vuelve a subirlo.</p><?php endif; ?>
-        <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-design-logo-form">
-            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <label class="pp-design-logo-picker">
-                <span>Elegir archivo</span>
-                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required data-logo-file>
-            </label>
-            <span class="pp-design-logo-filename" data-logo-filename>Ningún archivo seleccionado</span>
-            <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-logo-submit disabled><?= $logoUrl !== '' ? 'Subir nuevo logo' : 'Subir logo' ?></button>
-        </form>
-        <?php if ($logoUrl !== ''): ?>
-        <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>" onsubmit="return confirm('¿Eliminar el logo actual?');">
-            <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <button type="submit" class="pp-btn pp-btn--danger pp-btn--sm">Eliminar logo</button>
-        </form>
-        <?php endif; ?>
-    </div>
+
+    <p class="pp-logo-card__hint">
+        El <strong>principal</strong> es el que se usa cuando no se sabe de qué color será el fondo.
+        Si solo subes uno, se usará siempre ese.
+    </p>
 </section>
 
 <?php $flashSuccess = \Core\Session::flash('success'); $flashError = \Core\Session::flash('error'); ?>
@@ -134,7 +182,11 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
             $relocateToColors = ['buttons' => ['radius'], 'spacing' => ['radius_card']];
 
             /** Render de un único campo del design system. */
-            $renderField = function (string $cat, array $f) use ($tokens, $errors, $fontOptions) {
+            // FONTS — token `custom:{slug}` => nombre real, para poder pintar cada
+            // opción del desplegable con su propia tipografía.
+            $customFontNames = array_column($customFonts ?? [], 'name', 'token');
+
+            $renderField = function (string $cat, array $f) use ($tokens, $errors, $fontOptions, $customFontNames) {
                 $value = $tokens[$cat][$f['key']] ?? $f['default'];
                 $errKey = $cat . '.' . $f['key'];
                 $hasErr = isset($errors[$errKey]);
@@ -163,10 +215,13 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
                     <?php elseif ($f['type'] === 'font'): ?>
                         <select id="<?= e($fieldId) ?>" name="<?= e($fieldName) ?>"
                                 data-pp-design-input="font">
-                            <?php foreach ($fontOptions as $val => $label): ?>
+                            <?php foreach ($fontOptions as $val => $label):
+                                $familyName = $customFontNames[$val] ?? ($val === 'system' ? '' : $val);
+                                $optionFont = $familyName === '' ? 'system-ui, sans-serif' : "'" . e($familyName) . "', sans-serif";
+                            ?>
                             <option value="<?= e($val) ?>"
                                     <?= (string) $value === (string) $val ? 'selected' : '' ?>
-                                    style="font-family: <?= $val === 'system' ? 'system-ui, sans-serif' : '\'' . e($val) . '\', sans-serif' ?>">
+                                    style="font-family: <?= $optionFont ?>">
                                 <?= e($label) ?>
                             </option>
                             <?php endforeach; ?>
@@ -226,6 +281,13 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
                     <?php endforeach; ?>
                 </div>
 
+                <?php if ($cat === 'typography'): ?>
+                <p class="pp-design-fonts-pointer">
+                    ¿Tu marca tiene tipografías propias?
+                    <a href="#fonts">Súbelas aquí abajo</a> y aparecerán en estos desplegables.
+                </p>
+                <?php endif; ?>
+
                 <?php if ($cat === 'colors'): ?>
                 <div class="pp-design-shape">
                     <h4 class="pp-design-subhead">Esquinas y forma</h4>
@@ -270,7 +332,9 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
             </div>
 
             <div class="pp-design-preview-frame" id="pp-design-preview-frame" data-viewport="desktop">
-                <div class="pp-design-preview" id="pp-design-preview" style="<?= $previewInline ?>">
+<?php /* e() obligatorio: los valores de fuente llevan comillas dobles ("Inter", …)
+         y sin escapar cierran el atributo style, dejando el preview sin tipografía. */ ?>
+                <div class="pp-design-preview" id="pp-design-preview" style="<?= e($previewInline) ?>">
                     <!-- Navbar -->
                     <header class="pp-dp-nav">
                         <div class="pp-dp-nav__brand">Tu Marca</div>
@@ -432,6 +496,180 @@ window.PP_DESIGN_FONTS = <?= json_encode(\App\Services\DesignSystem::FONT_OPTION
     </details>
     <?php endif; ?>
 </form>
+
+<?php /* FONTS — Tipografías propias del cliente. Va fuera del <form> de diseño
+         a propósito: cada acción (subir, asignar, borrar) se aplica al momento,
+         sin depender de "Guardar diseño". */ ?>
+<section class="pp-fonts-card" id="fonts" aria-labelledby="pp-fonts-title">
+    <header class="pp-fonts-card__head">
+        <div>
+            <h3 id="pp-fonts-title">Tus tipografías de marca</h3>
+            <p>
+                Si tu manual de marca pide una tipografía concreta, súbela aquí y la web la usará
+                en lugar de las de la lista. Formatos: <strong>WOFF2, WOFF, TTF u OTF</strong>, hasta 3 MB por archivo.
+            </p>
+        </div>
+        <?php if (!empty($customFonts)): ?>
+        <span class="pp-fonts-card__count"><?= count($customFonts) ?> tipografía<?= count($customFonts) === 1 ? '' : 's' ?></span>
+        <?php endif; ?>
+    </header>
+
+    <?php foreach (($fontWeightGaps ?? []) as $gap): ?>
+    <p class="pp-fonts-warn">
+        <strong><?= e($gap['family']) ?></strong> se usa en <?= e($gap['role']) ?>, pero no has subido
+        <strong><?= e(implode(', ', $gap['missing'])) ?></strong>.
+        El navegador lo imitará engordando las letras y no se verá igual que en tu manual de marca:
+        sube ese archivo o cambia el peso en la pestaña Tipografía.
+    </p>
+    <?php endforeach; ?>
+
+    <?php if (!empty($fontHeavyFiles['files'])): ?>
+    <p class="pp-fonts-warn pp-fonts-warn--info">
+        Tus visitantes descargan <strong><?= e((string) $fontHeavyFiles['total']) ?></strong> de tipografías al abrir la web.
+        <?php $n = count($fontHeavyFiles['files']); ?>
+        <?= $n === 1 ? 'Este archivo pesa más de la cuenta' : 'Estos ' . $n . ' archivos pesan más de la cuenta' ?>:
+        <?php foreach ($fontHeavyFiles['files'] as $i => $f): ?>
+            <?= $i > 0 ? ' · ' : '' ?><strong><?= e($f['name']) ?> <?= e($f['label']) ?></strong> — <?= e($f['format']) ?>, <?= e($f['size']) ?><?php endforeach; ?>.
+        Convertidos a <strong>WOFF2</strong> ocuparían una décima parte y la web dejaría de mostrar
+        un instante la letra genérica antes que la tuya. Pídele a quien te pasó la tipografía los archivos en WOFF2.
+    </p>
+    <?php endif; ?>
+
+    <?php if (empty($customFonts)): ?>
+    <p class="pp-fonts-empty">Todavía no has subido ninguna. Sube el archivo de cada peso (Regular, Bold…) y nosotros los juntamos en una sola tipografía.</p>
+    <?php else: ?>
+    <ul class="pp-fonts-list">
+        <?php foreach ($customFonts as $fam): ?>
+        <li class="pp-fonts-family<?= $fam['role'] === 'none' ? ' is-unused' : '' ?>">
+            <div class="pp-fonts-family__head">
+                <div class="pp-fonts-family__id">
+                    <strong style="font-family: <?= e($fam['files'] === [] ? 'inherit' : '"' . $fam['name'] . '", sans-serif') ?>"><?= e($fam['name']) ?></strong>
+                    <small><?= count($fam['files']) ?> peso<?= count($fam['files']) === 1 ? '' : 's' ?><?= $fam['role'] === 'none' ? ' · sin usar en la web' : '' ?></small>
+                </div>
+                <form method="POST" action="<?= e(base_url('admin/design/fonts/role')) ?>" class="pp-fonts-role">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
+                    <label for="pp-font-role-<?= (int) $fam['id'] ?>">Usar en</label>
+                    <select name="role" id="pp-font-role-<?= (int) $fam['id'] ?>" onchange="this.form.submit()">
+                        <?php foreach ($customFontRoles as $value => $label): ?>
+                        <option value="<?= e($value) ?>" <?= $fam['role'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Aplicar</button></noscript>
+                </form>
+            </div>
+
+            <?php if ($fam['files'] === []): ?>
+            <p class="pp-fonts-family__empty">Esta tipografía no tiene archivos: añade al menos uno para poder usarla.</p>
+            <?php else: ?>
+            <ul class="pp-fonts-cuts">
+                <?php foreach ($fam['files'] as $file): ?>
+                <li class="pp-fonts-cut">
+                    <span class="pp-fonts-cut__sample"
+                          style="font-family:'<?= e($fam['name']) ?>', sans-serif; font-weight:<?= (int) $file['weight'] ?>; font-style:<?= e($file['style']) ?>;">Aa</span>
+                    <form method="POST" action="<?= e(base_url('admin/design/fonts/file/cut')) ?>" class="pp-fonts-cut__form">
+                        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                        <input type="hidden" name="file_id" value="<?= (int) $file['id'] ?>">
+                        <select name="weight" onchange="this.form.submit()" aria-label="Peso de <?= e($file['original_name']) ?>">
+                            <?php foreach ($customFontWeights as $w => $label): ?>
+                            <option value="<?= (int) $w ?>" <?= (int) $file['weight'] === (int) $w ? 'selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select name="style" onchange="this.form.submit()" aria-label="Estilo de <?= e($file['original_name']) ?>">
+                            <option value="normal" <?= $file['style'] === 'normal' ? 'selected' : '' ?>>Normal</option>
+                            <option value="italic" <?= $file['style'] === 'italic' ? 'selected' : '' ?>>Cursiva</option>
+                        </select>
+                        <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Aplicar</button></noscript>
+                    </form>
+                    <span class="pp-fonts-cut__file" title="<?= e($file['original_name']) ?>"><?= e($file['original_name']) ?></span>
+                    <form method="POST" action="<?= e(base_url('admin/design/fonts/file/delete')) ?>"
+                          onsubmit="return confirm('¿Eliminar este peso?');" class="pp-fonts-cut__del">
+                        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                        <input type="hidden" name="file_id" value="<?= (int) $file['id'] ?>">
+                        <button type="submit" class="pp-fonts-x" aria-label="Eliminar <?= e($file['label']) ?>">×</button>
+                    </form>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+
+            <footer class="pp-fonts-family__foot">
+                <form method="POST" action="<?= e(base_url('admin/design/fonts')) ?>" enctype="multipart/form-data" class="pp-fonts-add">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
+                    <label class="pp-fonts-picker">
+                        <span>+ Añadir otro peso</span>
+                        <input type="file" name="font_files[]" accept=".woff2,.woff,.ttf,.otf" multiple data-fonts-file>
+                    </label>
+                    <span class="pp-fonts-filename" data-fonts-filename></span>
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm" data-fonts-submit disabled>Subir</button>
+                </form>
+                <form method="POST" action="<?= e(base_url('admin/design/fonts/delete')) ?>"
+                      onsubmit="return confirm('¿Eliminar «<?= e($fam['name']) ?>» y todos sus pesos?');">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
+                    <button type="submit" class="pp-fonts-remove">Eliminar tipografía</button>
+                </form>
+            </footer>
+        </li>
+        <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+
+    <form method="POST" action="<?= e(base_url('admin/design/fonts')) ?>" enctype="multipart/form-data" class="pp-fonts-new">
+        <h4>Subir una tipografía nueva</h4>
+        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+        <div class="pp-fonts-new__grid">
+            <label class="pp-fonts-field">
+                <span>Nombre</span>
+                <input type="text" name="family_name" maxlength="120" placeholder="Ej. Helvetica Now Display" required>
+                <small>El nombre que aparece en tu manual de marca.</small>
+            </label>
+            <label class="pp-fonts-field">
+                <span>¿Dónde se usará?</span>
+                <select name="role">
+                    <option value="both">Títulos y textos</option>
+                    <option value="heading">Solo títulos</option>
+                    <option value="body">Solo textos</option>
+                    <option value="none">De momento, en ningún sitio</option>
+                </select>
+                <small>Puedes cambiarlo cuando quieras.</small>
+            </label>
+            <label class="pp-fonts-field pp-fonts-field--file">
+                <span>Archivos</span>
+                <label class="pp-fonts-picker">
+                    <span>Elegir archivos</span>
+                    <input type="file" name="font_files[]" accept=".woff2,.woff,.ttf,.otf" multiple required data-fonts-file>
+                </label>
+                <span class="pp-fonts-filename" data-fonts-filename>Ningún archivo seleccionado</span>
+                <small>Puedes seleccionar varios a la vez: detectamos el peso por el nombre (Regular, Bold, Light…) y luego puedes corregirlo.</small>
+            </label>
+        </div>
+        <div class="pp-fonts-new__actions">
+            <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-fonts-submit disabled>Subir tipografía</button>
+            <small class="pp-fonts-legal">Asegúrate de tener licencia de uso web (webfont) para los archivos que subas.</small>
+        </div>
+    </form>
+</section>
+
+<script>
+// FONTS — Feedback del selector de archivos: sin esto el usuario no sabe si
+// ha elegido algo, y el botón "Subir" deshabilitado no explica por qué.
+document.querySelectorAll('[data-fonts-file]').forEach(function (input) {
+    input.addEventListener('change', function () {
+        var wrap = input.closest('form');
+        if (!wrap) return;
+        var label = wrap.querySelector('[data-fonts-filename]');
+        var submit = wrap.querySelector('[data-fonts-submit]');
+        var n = input.files ? input.files.length : 0;
+        if (label) {
+            label.textContent = n === 0 ? 'Ningún archivo seleccionado'
+                : (n === 1 ? input.files[0].name : n + ' archivos seleccionados');
+        }
+        if (submit) submit.disabled = n === 0;
+    });
+});
+</script>
 
 <?php if (!empty($visualStyleCards)): ?>
 <script>

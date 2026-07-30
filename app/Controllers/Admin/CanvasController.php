@@ -7,6 +7,7 @@ namespace App\Controllers\Admin;
 use App\Services\AI\AIException;
 use App\Services\AI\AIProviderFactory;
 use App\Services\BrandService;
+use App\Services\Canvas\CanvasCancelToken;
 use App\Services\Canvas\CanvasChatService;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
@@ -21,6 +22,7 @@ use Core\CSRF;
 use Core\Database;
 use Core\Request;
 use Core\Response;
+use Core\Session;
 use Core\View;
 
 /**
@@ -112,6 +114,16 @@ final class CanvasController
             Response::json(['ok' => false, 'error' => 'Cuéntame el cambio en unas pocas frases.'], 422);
         }
 
+        // STUDIO-2 B1/B2 — memoria de la conversación y camino del elemento
+        // seleccionado. Ambos son opcionales y llegan del navegador: se validan
+        // y se acotan aquí antes de entrar en el prompt.
+        $chatContext = [
+            'history' => self::parseChatHistory((string) Request::post('history', '')),
+            'element_path' => preg_match('/^\d+(\.\d+){0,11}$/', (string) Request::post('element_path', ''))
+                ? (string) Request::post('element_path', '')
+                : '',
+        ];
+
         // Modelo elegido por el usuario para ESTE cambio (opcional). Solo se
         // acepta si está en la lista permitida del sitio: nunca un ID arbitrario.
         $chosenModel = trim((string) Request::post('model', ''));
@@ -119,21 +131,25 @@ final class CanvasController
             AIProviderFactory::setModelOverride($chosenModel);
         }
 
+        // CANCEL — Identificador de ESTA generación, para poder pararla.
+        $requestId = trim((string) Request::post('request_id', ''));
+        if (!CanvasCancelToken::isValidId($requestId)) $requestId = '';
+
+        // Liberamos el bloqueo de sesión antes de la llamada larga a la IA: si
+        // no, la petición de "Parar" se quedaría esperando precisamente a la
+        // generación que quiere cancelar.
+        Session::close();
+
         // F5-T4: el pipeline (imágenes, enrutado sección/página, verificación y
         // guardado) vive en CanvasChatService, compartido con el asistente central.
         // Margen para el timeout HTTP del proveedor (hasta 180s en página completa).
         @set_time_limit(240);
         try {
-            $outcome = CanvasChatService::applyInstruction($siteId, $page, $instruction, $sectionId, $elementContext, 'chat');
+            $outcome = CanvasChatService::applyInstruction($siteId, $page, $instruction, $sectionId, $elementContext, 'chat', '', $requestId, $chatContext);
         } catch (AIException $e) {
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
             error_log('[canvas chat] error_id=' . $errorId . ' page=' . $pageId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            $message = match (true) {
-                in_array($e->getHttpStatus(), [401, 403], true) => 'La configuración del proveedor de IA no es válida. Revisa Ajustes de IA.',
-                $e->getHttpStatus() === 429 => 'El proveedor de IA ha alcanzado temporalmente su límite. Espera un momento y vuelve a intentarlo.',
-                $e->getHttpStatus() >= 500 => 'El proveedor de IA no está disponible ahora mismo. Tu página no ha cambiado.',
-                default => 'La IA no devolvió un cambio válido. Tu página no ha cambiado.',
-            };
+            $message = self::chatErrorMessage($e, $sectionId !== '');
             Response::json(['ok' => false, 'error' => $message, 'error_id' => $errorId], 502);
         } catch (\Throwable $e) {
             error_log('[canvas chat] page=' . $pageId . ' ' . get_class($e) . ': ' . $e->getMessage());
@@ -152,7 +168,70 @@ final class CanvasController
             'reply' => $outcome['reply'],
             'history' => CanvasService::historyState($pageId),
             'sections' => CanvasService::listSections($outcome['saved']['html']),
+            // B3 — para que el Studio lleve al usuario a lo que ha cambiado.
+            'changed_section' => $sectionId,
         ]);
+    }
+
+    /**
+     * STUDIO-2 B4 — Mensaje de error por CAUSA, con la salida sugerida. Antes
+     * cualquier AIException sin status caía en "la IA no devolvió un cambio
+     * válido": ni ayudaba a diagnosticar ni le decía al usuario qué hacer.
+     *
+     * @param bool $scoped ¿el cambio iba sobre una sección concreta?
+     */
+    private static function chatErrorMessage(AIException $e, bool $scoped): string
+    {
+        $status = $e->getHttpStatus();
+        $detail = mb_strtolower($e->getMessage());
+        $isTimeout = $status === 408
+            || str_contains($detail, 'timeout')
+            || str_contains($detail, 'timed out')
+            || str_contains($detail, 'operation timed out')
+            || str_contains($detail, 'se agotó el tiempo');
+        // El sobre incompleto suele ser una respuesta truncada por longitud.
+        $isTruncated = str_contains($detail, 'sobre de texto')
+            || str_contains($detail, 'sobre válido')
+            || str_contains($detail, 'ni html ni estilos');
+
+        return match (true) {
+            in_array($status, [401, 403], true) => 'La configuración del proveedor de IA no es válida. Revisa Ajustes de IA.',
+            $status === 429 => 'El proveedor de IA ha alcanzado temporalmente su límite. Espera un momento y vuelve a intentarlo.',
+            $status >= 500 => 'El proveedor de IA no está disponible ahora mismo. Tu página no ha cambiado.',
+            $isTimeout => $scoped
+                ? 'El cambio ha tardado demasiado y lo he parado. Tu página no ha cambiado: prueba a pedir algo más concreto sobre esta parte.'
+                : 'El cambio ha tardado demasiado y lo he parado. Tu página no ha cambiado. Selecciona primero una parte concreta: así el cambio es mucho más rápido.',
+            $isTruncated => $scoped
+                ? 'La respuesta ha llegado cortada, así que no he tocado la página. Vuelve a intentarlo; si se repite, pide el cambio en dos pasos.'
+                : 'La respuesta ha llegado cortada porque esta página es grande. No he tocado nada: selecciona una parte concreta y pídelo ahí.',
+            default => 'La IA no devolvió un cambio válido. Tu página no ha cambiado.',
+        };
+    }
+
+    /**
+     * STUDIO-2 B1 — Turnos anteriores del chat, tal como los manda el navegador.
+     * Se acotan en número y longitud: es contexto, no un historial completo.
+     *
+     * @return array<int,array{q:string,a:string,scope:string}>
+     */
+    private static function parseChatHistory(string $raw): array
+    {
+        if ($raw === '' || strlen($raw) > 12000) return [];
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) return [];
+
+        $out = [];
+        foreach (array_slice($decoded, -4) as $turn) {
+            if (!is_array($turn)) continue;
+            $q = trim((string) ($turn['q'] ?? ''));
+            if ($q === '') continue;
+            $out[] = [
+                'q' => mb_substr($q, 0, 300),
+                'a' => mb_substr(trim((string) ($turn['a'] ?? '')), 0, 300),
+                'scope' => mb_substr(trim((string) ($turn['scope'] ?? '')), 0, 60),
+            ];
+        }
+        return $out;
     }
 
     /** FORMS-R T3 — Inserta uno existente o lo crea desde plantilla. */
@@ -232,6 +311,28 @@ final class CanvasController
         $summary = CanvasChatService::sectionLabel($sectionId) . ' — edición directa';
         CanvasService::save($pageId, $newHtml, $canvas['css'], 'inline', $summary);
         Response::json(['ok' => true, 'history' => CanvasService::historyState($pageId)]);
+    }
+
+    /**
+     * CANCEL — POST /admin/canvas/{id}/cancel
+     * Marca una generación en curso para que NO se guarde.
+     */
+    public function cancel(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        CSRF::check();
+
+        $requestId = trim((string) Request::post('request_id', ''));
+        if (!CanvasCancelToken::isValidId($requestId)) {
+            Response::json(['ok' => false, 'error' => 'Petición no reconocida.'], 422);
+        }
+
+        // Cerrar la sesión cuanto antes: esta petición solo escribe un fichero.
+        Session::close();
+        CanvasCancelToken::cancel($siteId, $requestId);
+
+        Response::json(['ok' => true]);
     }
 
     /** FH6 — Deshacer: mueve el puntero a la versión anterior. */
@@ -453,6 +554,10 @@ final class CanvasController
   .pp-studio-editing{outline:2px solid var(--pp-primary);outline-offset:3px;border-radius:2px;cursor:text}
   [data-pp-section] img:not([data-pp-no-edit]):hover{outline:2.5px solid var(--pp-primary);outline-offset:2px;cursor:pointer;filter:brightness(.92)}
   [data-pp-placeholder]{cursor:pointer}
+  /* STUDIO-2 B3 — destello sobre la parte que acaba de cambiar. */
+  @keyframes pp-studio-flash{0%{box-shadow:inset 0 0 0 3px var(--pp-primary,#111827)}60%{box-shadow:inset 0 0 0 3px var(--pp-primary,#111827)}100%{box-shadow:inset 0 0 0 3px transparent}}
+  .pp-studio-flash{animation:pp-studio-flash 1.8s ease-out}
+  @media (prefers-reduced-motion:reduce){.pp-studio-flash{animation:none}}
 </style>
 <script>
 (function(){
@@ -486,6 +591,11 @@ final class CanvasController
   }
 
   // ---------- Serializado y guardado de la sección editada ----------
+  // Re-monta un comportamiento de pp-ux tras cambiarlo en caliente.
+  function remountBehaviors(el){
+    if(window.ppUx && typeof window.ppUx.remount === 'function') window.ppUx.remount(el);
+  }
+
   function serializeAndSave(sec){
     var clone = sec.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(function(n){ n.removeAttribute('contenteditable'); });
@@ -553,14 +663,82 @@ final class CanvasController
     return null;
   }
 
+  // Separa las capas de un `background-image` respetando los paréntesis:
+  // "linear-gradient(a,b),url(x)" → ["linear-gradient(a,b)", "url(x)"].
+  function splitLayers(value){
+    var out = [], depth = 0, cur = '';
+    for(var i=0;i<value.length;i++){
+      var c = value.charAt(i);
+      if(c === '(') depth++;
+      else if(c === ')') depth--;
+      else if(c === ',' && depth === 0){ out.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    if(cur.trim() !== '') out.push(cur);
+    return out;
+  }
+
+  // Capas del fondo leídas del estilo COMPUTADO (no solo del inline): el velo
+  // que pone la IA suele vivir en la hoja de estilos de la página, y leer solo
+  // el inline lo perdía al cambiar la foto.
+  function bgLayers(el){
+    var bi = el ? (getComputedStyle(el).backgroundImage || '') : '';
+    if(bi === '' || bi === 'none') return { veils: [], url: null };
+    var veils = [], url = null;
+    splitLayers(bi).forEach(function(layer){
+      var l = layer.trim();
+      if(l === '' || l === 'none') return;   // 'none' no es un velo: es una capa vacía
+      if(/^url\(/i.test(l)){ if(url === null) url = l; }
+      else veils.push(l);
+    });
+    return { veils: veils, url: url };
+  }
+
   // Fondo aplicado por CSS (`background-image: url(...)`), inline o por hoja de
   // estilos. Devuelve la URL de la imagen (ignora capas linear-gradient de velo).
   function cssBgUrlOf(el){
-    if(!el) return null;
-    var bi = getComputedStyle(el).backgroundImage || '';
-    if(bi === 'none') return null;
-    var m = bi.match(/url\((['"]?)([^'")]+)\1\)/i);
+    var url = bgLayers(el).url;
+    if(!url) return null;
+    var m = url.match(/url\((['"]?)([^'")]+)\1\)/i);
     return m ? m[2] : null;
+  }
+
+  // El estilo computado devuelve URLs ABSOLUTAS. Guardarlas ataría la página al
+  // dominio actual (y rompería las imágenes al cambiar de dominio), así que las
+  // del propio sitio vuelven a ruta relativa antes de escribirlas.
+  function siteUrl(u){
+    try {
+      var p = new URL(u, location.href);
+      return p.origin === location.origin ? p.pathname + p.search : u;
+    } catch(e){ return u; }
+  }
+
+  // ¿Quién lleva DE VERDAD el fondo de esta sección? Puede ser la propia
+  // sección, un envoltorio interior (la IA suele crear un `.hero__bg`) o un
+  // <img> de cobertura. Asumir que siempre era la <section> dejaba el panel sin
+  // controles de fondo en cuanto la IA reestructuraba el hero.
+  function resolveBgTarget(sec){
+    if(!sec) return null;
+    var img = bgImageOf(sec);
+    if(img) return { el: img, kind: 'img' };
+    if(cssBgUrlOf(sec)) return { el: sec, kind: 'css' };
+    var sr = sec.getBoundingClientRect();
+    var nodes = sec.querySelectorAll('*');
+    for(var i=0;i<nodes.length;i++){
+      if(!cssBgUrlOf(nodes[i])) continue;
+      var r = nodes[i].getBoundingClientRect();
+      if(r.width >= sr.width * 0.85 && r.height >= sr.height * 0.5) return { el: nodes[i], kind: 'css' };
+    }
+    return null;
+  }
+
+  // Envoltorio con aire de "caja" (relleno, fondo o esquinas). Sirve para las
+  // migas de ámbito: son los saltos intermedios entre el elemento y la sección.
+  function isBoxLike(el){
+    if(!el || !el.matches || !el.matches('div,span,strong,small,article,aside,figure,header,footer')) return false;
+    var cs = getComputedStyle(el);
+    var bg = cs.backgroundColor && cs.backgroundColor !== 'transparent' && cs.backgroundColor !== 'rgba(0, 0, 0, 0)';
+    return !!bg || parseFloat(cs.borderRadius) > 0 || parseFloat(cs.paddingLeft) > 6 || parseFloat(cs.paddingTop) > 4;
   }
 
   // Lee las props editables del elemento para prerellenar el panel.
@@ -595,15 +773,69 @@ final class CanvasController
     if(kind === 'section'){
       p.pad = el.getAttribute('data-pp-pad') || 'default';
       p.reveal = el.getAttribute('data-pp-behavior') === 'reveal';
-      // El fondo puede ser un <img> de cobertura O un background-image por CSS.
-      p.hasBgImage = !!bgImageOf(el) || !!cssBgUrlOf(el);
+      // Carrusel dentro de la sección: disposición actual y nº de fotos, para
+      // poder ofrecer los controles de galería en el panel.
+      var slider = el.querySelector('[data-pp-behavior="slider"]');
+      p.slider = slider ? (slider.getAttribute('data-pp-slider') || 'strip') : '';
+      p.sliderPhotos = slider ? slider.querySelectorAll('img').length : 0;
+      // El fondo puede ser un <img> de cobertura, un background-image por CSS
+      // en la propia sección o en un envoltorio interior.
+      p.hasBgImage = !!resolveBgTarget(el);
       p.bgcolor = cs ? cs.backgroundColor : '';
     }
     return p;
   }
 
-  function reportSelection(el){
-    var kind = elementKind(el);
+  // ---------- Migas de ámbito (Sección ▸ Bloque ▸ elemento) ----------
+  // Cuando la IA envuelve el contenido en una caja (p. ej. un velo blanco sobre
+  // la foto de fondo), el clic cae SIEMPRE en esa caja y la sección —única con
+  // los controles de fondo— quedaba inalcanzable. La cadena permite subir.
+  var activeChain = [];
+
+  function buildChain(el){
+    var sec = sectionOf(el);
+    var chain = [];
+    var cur = el;
+    while(cur){
+      var k = elementKind(cur) || (isBoxLike(cur) ? 'box' : null);
+      if(k) chain.push({ el: cur, kind: k });
+      if(cur === sec) break;
+      cur = cur.parentElement;
+    }
+    if(sec && (chain.length === 0 || chain[chain.length - 1].el !== sec)){
+      chain.push({ el: sec, kind: 'section' });
+    }
+    chain.reverse();                      // de fuera hacia dentro
+    if(chain.length > 5) chain = [chain[0]].concat(chain.slice(chain.length - 4));
+    return chain;
+  }
+
+  function chainIndexOf(el){
+    for(var i = 0; i < activeChain.length; i++) if(activeChain[i].el === el) return i;
+    return -1;
+  }
+
+  // Camino del elemento dentro de su sección como índices de hijos ("2.0.1").
+  // El backend lo usa para marcar EXACTAMENTE ese nodo en el HTML que ve la IA:
+  // describirlo en prosa no distingue dos titulares iguales.
+  function pathWithinSection(el){
+    var sec = sectionOf(el);
+    if(!sec || el === sec) return '';
+    var parts = [];
+    var cur = el;
+    while(cur && cur !== sec){
+      var parent = cur.parentElement;
+      if(!parent) return '';
+      var idx = Array.prototype.indexOf.call(parent.children, cur);
+      if(idx < 0) return '';
+      parts.unshift(idx);
+      cur = parent;
+    }
+    return parts.length && parts.length <= 12 ? parts.join('.') : '';
+  }
+
+  function reportSelection(el, keepChain){
+    var kind = elementKind(el) || (isBoxLike(el) ? 'box' : null);
     if(!kind) return;
     activeTarget = el;
     var sec = sectionOf(el);
@@ -611,12 +843,34 @@ final class CanvasController
       if(selected) selected.classList.remove('pp-studio-selected');
       selected = sec; sec.classList.add('pp-studio-selected');
     }
+    if(!keepChain) activeChain = buildChain(el);
     post('element-selected', {
       kind: kind,
       props: describe(el, kind),
       sectionId: sec ? sec.getAttribute('data-pp-section') : '',
-      sectionLabel: sec ? label(sec.getAttribute('data-pp-section')) : ''
+      sectionLabel: sec ? label(sec.getAttribute('data-pp-section')) : '',
+      chain: activeChain.map(function(c){ return { kind: c.kind }; }),
+      chainIndex: chainIndexOf(el),
+      elementPath: pathWithinSection(el)
     });
+  }
+
+  // Cambio de ámbito desde las migas: mismo elemento activo, otra "altura".
+  function selectScope(index){
+    var item = activeChain[index];
+    if(!item || !item.el) return;
+    if(item.kind === 'box'){
+      document.querySelectorAll('[data-pp-edit-box]').forEach(function(n){ n.removeAttribute('data-pp-edit-box'); });
+      item.el.setAttribute('data-pp-edit-box','1');
+    }
+    if(item.kind === 'image'){
+      document.querySelectorAll('[data-pp-img-edit]').forEach(function(n){ n.removeAttribute('data-pp-img-edit'); });
+      item.el.setAttribute('data-pp-img-edit','1');
+    }
+    var sec = sectionOf(item.el) || item.el;
+    if(sec) selectSection(sec, false);
+    item.el.scrollIntoView({ block: 'nearest' });
+    reportSelection(item.el, true);
   }
 
   var PAD_PRESETS = { 'default':'', 'compact':'48', 'normal':'72', 'roomy':'112' };
@@ -635,7 +889,7 @@ final class CanvasController
   function applyToTarget(msg){
     var el = activeTarget;
     if(!el) return;
-    var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1 };
+    var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1, sliderlayout:1, gallery:1 };
 
     if(msg.op === 'size'){
       var cur = Math.round(parseFloat(getComputedStyle(el).fontSize)) || 16;
@@ -688,35 +942,72 @@ final class CanvasController
         if(msg.value === 'reset') sec.style.removeProperty('background-color');
         else sec.style.backgroundColor = colorCss(msg.value);
       } else if(msg.op === 'bgdim'){
-        var img = bgImageOf(sec);
-        if(img){ var f = DIM_PRESETS[msg.value] || ''; if(f) img.style.filter = f; else img.style.removeProperty('filter'); }
-        else { // fondo por CSS: atenuar con un velo translúcido encima de la imagen
-          var u = cssBgUrlOf(sec);
+        var dimTarget = resolveBgTarget(sec);
+        if(dimTarget && dimTarget.kind === 'img'){
+          var f = DIM_PRESETS[msg.value] || '';
+          if(f) dimTarget.el.style.filter = f; else dimTarget.el.style.removeProperty('filter');
+        } else if(dimTarget){ // fondo por CSS: velo translúcido sobre la imagen
+          var u = cssBgUrlOf(dimTarget.el);
           if(u){
+            u = siteUrl(u);
             var a = VEIL_PRESETS[msg.value] || 0;
-            sec.style.backgroundImage = a > 0
+            dimTarget.el.style.backgroundImage = a > 0
               ? 'linear-gradient(rgba(255,255,255,'+a+'),rgba(255,255,255,'+a+')),url("'+u+'")'
               : 'url("'+u+'")';
-            sec.style.backgroundSize = 'cover';
-            sec.style.backgroundPosition = 'center';
+            if(!dimTarget.el.style.backgroundSize) dimTarget.el.style.backgroundSize = 'cover';
+            if(!dimTarget.el.style.backgroundPosition) dimTarget.el.style.backgroundPosition = 'center';
+          }
+        }
+      } else if(msg.op === 'sliderlayout'){
+        // Disposición del carrusel: tira horizontal, una a una o vertical.
+        var sl = sec.querySelector('[data-pp-behavior="slider"]');
+        if(sl){
+          if(msg.value === 'strip') sl.removeAttribute('data-pp-slider');
+          else sl.setAttribute('data-pp-slider', msg.value);
+          remountBehaviors(sl);
+        }
+      } else if(msg.op === 'gallery'){
+        // Sustituye las fotos del carrusel por las elegidas en la biblioteca.
+        var slg = sec.querySelector('[data-pp-behavior="slider"]');
+        var photos = Array.isArray(msg.value) ? msg.value : [];
+        if(slg && photos.length){
+          var host = slg.querySelector('.pp-ux-slider__track') || slg;
+          var slides = Array.prototype.filter.call(host.children, function(n){ return n.nodeType === 1 && !n.classList.contains('pp-ux-slider__arrow') && !n.classList.contains('pp-ux-slider__dots'); });
+          var template = slides[0];
+          if(template){
+            // El primer slide hace de plantilla: así las fotos nuevas heredan
+            // el maquetado que ya tenía la galería (pies, estilos, proporción).
+            var frag = document.createDocumentFragment();
+            photos.forEach(function(ph){
+              var node = template.cloneNode(true);
+              var img = node.querySelector('img');
+              if(!img){ img = document.createElement('img'); node.insertBefore(img, node.firstChild); }
+              img.setAttribute('src', ph.src);
+              img.setAttribute('alt', ph.alt || '');
+              frag.appendChild(node);
+            });
+            slides.forEach(function(n){ n.parentNode.removeChild(n); });
+            host.appendChild(frag);
+            remountBehaviors(slg);
           }
         }
       } else if(msg.op === 'bgimg'){
-        var bg = bgImageOf(sec);
+        var bgT = resolveBgTarget(sec);
         if(msg.value === 'mark'){
           document.querySelectorAll('[data-pp-img-edit],[data-pp-bg-edit]').forEach(function(n){ n.removeAttribute('data-pp-img-edit'); n.removeAttribute('data-pp-bg-edit'); });
-          if(bg){ bg.setAttribute('data-pp-img-edit','1'); }
-          else { sec.setAttribute('data-pp-bg-edit','1'); } // fondo CSS (incl. cuando aún no hay ninguno)
+          if(bgT && bgT.kind === 'img'){ bgT.el.setAttribute('data-pp-img-edit','1'); }
+          else if(bgT){ bgT.el.setAttribute('data-pp-bg-edit','1'); }
+          else { sec.setAttribute('data-pp-bg-edit','1'); } // aún no hay fondo: lo estrena la sección
           return; // el padre abrirá la biblioteca; replace-image guardará
         }
         if(msg.value === 'remove'){
-          if(bg){
-            var wrap = bg.closest('[class*=overlay], [class*=bg], [class*=image], [class*=media]');
-            if(wrap && wrap !== sec && sectionOf(wrap) === sec) wrap.remove(); else bg.remove();
-          } else { // fondo CSS: quitarlo (none inline gana a la hoja de estilos)
-            sec.style.backgroundImage = 'none';
-            sec.style.removeProperty('background-size');
-            sec.style.removeProperty('background-position');
+          if(bgT && bgT.kind === 'img'){
+            var wrap = bgT.el.closest('[class*=overlay], [class*=bg], [class*=image], [class*=media]');
+            if(wrap && wrap !== sec && sectionOf(wrap) === sec) wrap.remove(); else bgT.el.remove();
+          } else if(bgT){ // fondo CSS: quitarlo (none inline gana a la hoja de estilos)
+            bgT.el.style.backgroundImage = 'none';
+            bgT.el.style.removeProperty('background-size');
+            bgT.el.style.removeProperty('background-position');
           }
         }
       }
@@ -839,11 +1130,38 @@ final class CanvasController
     var d = e.data || {};
     if(d.source !== 'pp-studio-parent') return;
     if(d.type === 'apply'){ applyToTarget(d); return; }
-    if(d.type === 'deselect' && selected){ selected.classList.remove('pp-studio-selected'); selected = null; activeTarget = null; }
+    if(d.type === 'select-scope'){ selectScope(d.index); return; }
+    if(d.type === 'deselect' && selected){ selected.classList.remove('pp-studio-selected'); selected = null; activeTarget = null; activeChain = []; }
     if(d.type === 'scroll-to' && d.y != null){ window.scrollTo(0, d.y); }
     if(d.type === 'select' && d.id){
       var el = document.querySelector('[data-pp-section="'+d.id+'"]');
-      if(el){ selectSection(el, false); el.scrollIntoView({behavior:'smooth', block:'start'}); }
+      if(el){
+        selectSection(el, false);
+        el.scrollIntoView({behavior:'smooth', block:'start'});
+        // Desde la lista de partes de la barra lateral: abrir también su panel.
+        if(d.panel) reportSelection(el);
+      }
+    }
+    // B3 — Tras aplicar un cambio: llevar la vista a la parte tocada y darle un
+    // destello. Sin esto la página se recargaba y el usuario tenía que buscar
+    // qué había cambiado.
+    if(d.type === 'flash' && d.id){
+      var fl = document.querySelector('[data-pp-section="'+d.id+'"]');
+      if(fl){
+        fl.scrollIntoView({behavior:'smooth', block:'center'});
+        fl.classList.remove('pp-studio-flash');
+        void fl.offsetWidth;                 // reinicia la animación
+        fl.classList.add('pp-studio-flash');
+        setTimeout(function(){ fl.classList.remove('pp-studio-flash'); }, 1800);
+      }
+    }
+    // Resalte al pasar el ratón por la lista de partes (sin seleccionar nada).
+    if(d.type === 'highlight'){
+      document.querySelectorAll('.pp-studio-hover').forEach(function(x){ x.classList.remove('pp-studio-hover'); });
+      if(d.id && d.on){
+        var hl = document.querySelector('[data-pp-section="'+d.id+'"]');
+        if(hl) hl.classList.add('pp-studio-hover');
+      }
     }
     if(d.type === 'replace-image' && d.src){
       var img = document.querySelector('[data-pp-img-edit]');
@@ -858,11 +1176,11 @@ final class CanvasController
       // Fondo por CSS: poner/cambiar la imagen como background-image inline.
       var bgEl = document.querySelector('[data-pp-bg-edit]');
       if(bgEl){
-        var prev = cssBgUrlOf(bgEl);
-        // Conserva el velo de atenuación si lo había (sustituye solo la url).
-        var biCur = getComputedStyle(bgEl).backgroundImage || '';
-        var veil = /linear-gradient/i.test(bgEl.style.backgroundImage || '') ? (bgEl.style.backgroundImage.match(/linear-gradient\([^)]*\)/i) || [''])[0] : '';
-        bgEl.style.backgroundImage = (veil ? veil + ',' : '') + 'url("'+d.src+'")';
+        // Conserva TODAS las capas que no son la foto (velos, degradados),
+        // vengan del inline o de la hoja de estilos: cambiar la foto no puede
+        // llevarse por delante la capa blanca que puso la IA.
+        var keep = bgLayers(bgEl).veils.join(',');
+        bgEl.style.backgroundImage = (keep !== '' ? keep + ',' : '') + 'url("'+d.src+'")';
         if(!bgEl.style.backgroundSize) bgEl.style.backgroundSize = 'cover';
         if(!bgEl.style.backgroundPosition) bgEl.style.backgroundPosition = 'center';
         bgEl.removeAttribute('data-pp-bg-edit');

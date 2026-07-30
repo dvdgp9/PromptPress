@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Commerce\Payments;
 
+use App\Services\Microcopy;
+
 use App\Modules\Commerce\CommerceSettings;
 use Core\Database;
 
@@ -28,7 +30,7 @@ final class StripeCheckout implements PaymentMethodInterface
 
     public function label(int $siteId): string
     {
-        return 'Tarjeta de crédito o débito (pago seguro con Stripe)';
+        return Microcopy::site($siteId, 'shop.pay_stripe');
     }
 
     public function isConfigured(int $siteId): bool

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Commerce\Payments;
 
+use App\Services\Microcopy;
+
 use App\Modules\Commerce\CommerceSettings;
 
 /**
@@ -22,7 +24,7 @@ final class ManualPayment implements PaymentMethodInterface
 
     public function label(int $siteId): string
     {
-        return 'Transferencia bancaria o pago acordado';
+        return Microcopy::site($siteId, 'shop.pay_manual');
     }
 
     /** Siempre disponible: es el método sin dependencias. */
@@ -40,14 +42,17 @@ final class ManualPayment implements PaymentMethodInterface
     public function pendingInstructions(int $siteId, array $order): ?string
     {
         $custom = trim(CommerceSettings::get($siteId, 'commerce_manual_instructions'));
-        $html = '<p>Tu pedido queda <strong>pendiente de pago</strong>.</p>';
+        // Los textos de Microcopy llevan <strong> inline y son contenido
+        // nuestro: van sin escapar. Las instrucciones del usuario sí se escapan.
+        $html = '<p>' . Microcopy::site($siteId, 'shop.manual_pending') . '</p>';
         if ($custom !== '') {
             $html .= '<p>' . nl2br(e($custom)) . '</p>';
         } else {
-            $html .= '<p>Te contactaremos por email con las instrucciones de pago.</p>';
+            $html .= '<p>' . e(Microcopy::site($siteId, 'shop.manual_contact')) . '</p>';
         }
-        $html .= '<p>Indica como concepto el número de pedido: <strong>'
-            . e((string) $order['order_number']) . '</strong>.</p>';
+        $html .= '<p>' . Microcopy::site($siteId, 'shop.manual_reference', [
+            'number' => e((string) $order['order_number']),
+        ]) . '</p>';
         return $html;
     }
 }

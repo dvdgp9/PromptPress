@@ -6,9 +6,12 @@ use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
 use App\Services\CacheService;
+use App\Services\CustomFontService;
 use App\Services\DesignSystem;
 use App\Services\DocumentSummarizer;
 use App\Services\ImageBankService;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use App\Services\PalettePresets;
 use App\Services\Renderer\CustomBlockGenerator;
 use App\Services\SectionSchemas;
@@ -536,7 +539,7 @@ final class OnboardingController
                 'site_map_context' => self::siteMapContext($siteId),
                 'intent_directive' => self::intentDirective($intent),
             ], $siteId);
-            $architecture = self::normalizeArchitecture((array) ($result['data'] ?? []), $intent);
+            $architecture = self::normalizeArchitecture((array) ($result['data'] ?? []), $intent, $siteId);
             // ONB-REV T3 — Con intent SEO, proponemos además ~12 entradas de
             // blog para que el usuario las revise y genere en el mismo flujo.
             $blogPosts = $intent === 'seo' ? self::suggestSeoBlogPosts($siteId, 12) : [];
@@ -561,7 +564,7 @@ final class OnboardingController
                 'ok' => true,
                 'fallback' => true,
                 'intent' => $intent,
-                'architecture' => self::fallbackArchitecture($intent),
+                'architecture' => self::fallbackArchitecture($intent, $siteId),
                 'blog_posts' => [],
                 'error_note' => $e->getMessage(),
             ]);
@@ -909,6 +912,10 @@ final class OnboardingController
         foreach (['colors', 'typography', 'buttons', 'spacing'] as $cat) {
             DesignSystem::saveCategory($siteId, $cat, $tokens[$cat]);
         }
+        // FONTS — Si el cliente sube su tipografía de marca aquí, manda sobre la
+        // pareja elegida arriba: para eso ha traído su manual de marca.
+        self::saveCustomFonts($siteId);
+
         $preset = (string) Request::post('palette_preset', PalettePresets::defaultSlug());
         PalettePresets::saveSelectedForSite($siteId, $preset);
 
@@ -1395,7 +1402,8 @@ final class OnboardingController
 
         // Input del generador por-bloque para un índice del plan (lo usan tanto
         // el fallback por bloques como los reintentos de la composición).
-        $blockInput = function (int $index) use ($plan, $totalBlocks, $title, $type, $goal, $context, $designLanguage, $outlineSummary, $item, $referenceImages): array {
+        $pageLanguage = LanguageService::promptLabelFor($siteId);
+        $blockInput = function (int $index) use ($plan, $totalBlocks, $title, $type, $goal, $context, $designLanguage, $outlineSummary, $item, $referenceImages, $pageLanguage): array {
             $block = $plan[$index] ?? [];
             $theme = trim((string) ($block['theme'] ?? ''));
             $availableImages = self::formatAvailableImages((array) ($block['images'] ?? []));
@@ -1403,7 +1411,7 @@ final class OnboardingController
                 'page_title' => $title,
                 'block_goal' => (string) ($block['goal'] ?? $goal),
                 'section_role' => (string) ($block['role'] ?? ''),
-                'language' => 'es',
+                'language' => $pageLanguage,
                 'available_images' => $availableImages,
                 'extra_context' => trim(
                     "Objetivo de la página: {$goal}\n"
@@ -1507,7 +1515,7 @@ final class OnboardingController
             $result = AIActionRunner::run(Actions::DESCRIBE_REFERENCE_LAYOUT, [
                 'page_title' => $title,
                 'block_goal' => $goal,
-                'language' => 'es',
+                'language' => LanguageService::promptLabelFor($siteId),
                 'extra_context' => $context,
                 '_images' => $referenceImages,
             ], $siteId);
@@ -1586,10 +1594,37 @@ final class OnboardingController
         $available = ImageBankService::isAvailable();
         $usedIds = [];
 
+        // STUDIO-2 C3 — Las fotos propias del negocio se reparten PRIMERO; el
+        // banco solo rellena lo que falte. Antes los briefs se resolvían
+        // únicamente contra Unsplash y el material del cliente no se miraba.
+        $ownPool = \App\Services\MediaLibraryService::images($siteId, 40, true);
+        $ownUsed = [];
+
         foreach ($plan as $i => $block) {
             $brief = $block['image_brief'] ?? null;
-            if ($available && is_array($brief)) {
-                $wanted = max(1, min(4, (int) ($brief['count'] ?? 1)));
+            if (is_array($brief) && $ownPool !== []) {
+                $wantedOwn = max(1, min(4, (int) ($brief['count'] ?? 1)));
+                while (count($plan[$i]['images']) < $wantedOwn) {
+                    $match = \App\Services\MediaLibraryService::bestMatch(
+                        $ownPool,
+                        (string) $brief['subject'],
+                        $ownUsed,
+                        (string) ($brief['orientation'] ?? '')
+                    );
+                    if ($match === null) break;
+                    $ownUsed[] = (int) $match['id'];
+                    $plan[$i]['images'][] = [
+                        'url' => '/' . ltrim((string) $match['path'], '/'),
+                        'alt' => trim((string) ($match['alt_text'] ?? '')) !== '' ? (string) $match['alt_text'] : (string) $brief['subject'],
+                        'orientation' => \App\Services\MediaLibraryService::orientationOf($match),
+                        'own' => true,
+                    ];
+                }
+            }
+
+            $wanted = is_array($brief) ? max(1, min(4, (int) ($brief['count'] ?? 1))) : 0;
+            // Solo se molesta al banco por lo que las fotos propias no cubren.
+            if ($available && is_array($brief) && count($plan[$i]['images']) < $wanted) {
                 try {
                     $results = ImageBankService::search((string) $brief['subject'], $wanted + 5, (string) $brief['orientation']);
                     foreach ($results as $result) {
@@ -1780,7 +1815,7 @@ final class OnboardingController
         $generated = \App\Services\Canvas\CanvasGenerator::generate($siteId, [
             'title' => $title,
             'goal' => $goal,
-            'language' => 'es',
+            'language' => LanguageService::promptLabelFor($siteId),
             'design_language' => $designLanguage,
             'sections_outline' => implode("\n", $outline),
             'base_design' => (string) ($options['base_design'] ?? ''),
@@ -1852,7 +1887,7 @@ final class OnboardingController
                 $result = AIActionRunner::run(Actions::COMPOSE_CUSTOM_PAGE_FROM_REFERENCE, [
                     'page_title' => $title,
                     'page_goal' => $goal,
-                    'language' => 'es',
+                    'language' => LanguageService::promptLabelFor($siteId),
                     'design_language' => $designLanguage !== '' ? $designLanguage : '(no derivado; usa un aire sobrio y profesional coherente)',
                     'sections_outline' => implode("\n", $outline),
                     'extra_context' => trim($densityNote . "\n" . $context),
@@ -1984,15 +2019,28 @@ final class OnboardingController
     }
 
     /**
-     * FH6 — Pool de 3-4 fotos genéricas del negocio (Unsplash) para la
-     * generación canvas SIN referencias. La query sale del sector inferido
-     * (personality) o de la memoria. Best-effort: sin key o sin memoria → [].
+     * FH6 — Pool de 3-6 fotos del negocio para la generación canvas SIN
+     * referencias. STUDIO-2 C3: primero las fotos PROPIAS de la biblioteca;
+     * Unsplash solo completa hasta 4 si faltan (la query sale del sector
+     * inferido o de la memoria). Best-effort: nunca lanza.
      *
      * @return array<int,array{url:string,alt:string,orientation:string}>
      */
     private static function genericBusinessImages(int $siteId): array
     {
-        if (!ImageBankService::isAvailable()) return [];
+        // Fotos propias: van todas las que haya (hasta 6), descritas u orientadas
+        // por MediaLibraryService para que el modelo sepa qué son.
+        $images = [];
+        foreach (\App\Services\MediaLibraryService::images($siteId, 6, true) as $own) {
+            $alt = trim((string) ($own['alt_text'] ?? ''));
+            $images[] = [
+                'url' => '/' . ltrim((string) $own['path'], '/'),
+                'alt' => ($alt !== '' ? $alt : (string) ($own['original_name'] ?? 'foto del negocio')) . ' (foto propia del negocio)',
+                'orientation' => \App\Services\MediaLibraryService::orientationOf($own),
+            ];
+        }
+        if (count($images) >= 4) return $images;
+        if (!ImageBankService::isAvailable()) return $images;
 
         $query = '';
         try {
@@ -2007,11 +2055,10 @@ final class OnboardingController
                 $query = mb_substr(trim((string) ($mem['field_value'] ?? '')), 0, 60);
             }
         } catch (\Throwable $e) {
-            return [];
+            return $images;
         }
-        if ($query === '') return [];
+        if ($query === '') return $images;
 
-        $images = [];
         try {
             foreach (ImageBankService::search($query, 6, 'landscape') as $result) {
                 if (count($images) >= 4) break;
@@ -2089,7 +2136,7 @@ final class OnboardingController
         ];
     }
 
-    private static function normalizeArchitecture(array $data, string $intent = ''): array
+    private static function normalizeArchitecture(array $data, string $intent = '', int $siteId = 0): array
     {
         $missing = [];
         foreach ((array) ($data['missing_pages'] ?? []) as $p) {
@@ -2115,16 +2162,16 @@ final class OnboardingController
                 'score' => max(0, min(100, (int) ($data['health']['score'] ?? 60))),
                 'label' => mb_substr(trim((string) ($data['health']['label'] ?? 'Estructura inicial')), 0, 120),
             ],
-            'missing_pages' => self::proposalPages($missing, $intent),
+            'missing_pages' => self::proposalPages($missing, $intent, $siteId),
         ];
     }
 
-    private static function fallbackArchitecture(string $intent = ''): array
+    private static function fallbackArchitecture(string $intent = '', int $siteId = 0): array
     {
         return [
             'summary' => 'No hemos podido analizar tu sitio en este momento. Puedes seguir con la propuesta básica o empezar desde el mapa vacío.',
             'health' => ['score' => 55, 'label' => 'Base preparada para empezar'],
-            'missing_pages' => self::proposalPages([], $intent),
+            'missing_pages' => self::proposalPages([], $intent, $siteId),
         ];
     }
 
@@ -2132,43 +2179,50 @@ final class OnboardingController
      * F22.T22.2 — La propuesta base ahora depende del intent del usuario.
      * Sirve también como fallback cuando la IA falla.
      */
-    private static function proposalPages(array $aiPages, string $intent = ''): array
+    /**
+     * F22.T22.2 — Los títulos del plan base van en el idioma del sitio: son los
+     * que acaban siendo títulos de página y, por tanto, el menú automático.
+     * Los `goal`/`reason` siguen en castellano: son contexto para la IA y para
+     * el panel, no texto público.
+     */
+    private static function proposalPages(array $aiPages, string $intent = '', int $siteId = 0): array
     {
+        $t = fn(string $key): string => $siteId > 0 ? Microcopy::site($siteId, $key) : Microcopy::t($key, LanguageService::DEFAULT);
         $base = match ($intent) {
             'presence' => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio en una sola página clara.', 'reason' => 'Lo mínimo viable para existir online.', 'priority' => 'high'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Permitir que te contacten.', 'reason' => 'Imprescindible.', 'priority' => 'high'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio en una sola página clara.', 'reason' => 'Lo mínimo viable para existir online.', 'priority' => 'high'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Permitir que te contacten.', 'reason' => 'Imprescindible.', 'priority' => 'high'],
             ],
             'services' => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio y guiar hacia el servicio principal.', 'reason' => 'Puerta de entrada con propuesta de valor.', 'priority' => 'high'],
-                ['title' => 'Servicios', 'page_type' => 'service', 'parent_slug' => 'inicio', 'goal' => 'Explicar el catálogo de servicios y abrir conversación.', 'reason' => 'Es la página que convierte.', 'priority' => 'high'],
-                ['title' => 'Sobre nosotros', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Generar confianza explicando quién está detrás.', 'reason' => 'Indispensable para servicios profesionales.', 'priority' => 'high'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Facilitar el contacto inicial.', 'reason' => 'Punto final de conversión.', 'priority' => 'high'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio y guiar hacia el servicio principal.', 'reason' => 'Puerta de entrada con propuesta de valor.', 'priority' => 'high'],
+                ['title' => $t('page.services'), 'page_type' => 'service', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Explicar el catálogo de servicios y abrir conversación.', 'reason' => 'Es la página que convierte.', 'priority' => 'high'],
+                ['title' => $t('page.about_us'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Generar confianza explicando quién está detrás.', 'reason' => 'Indispensable para servicios profesionales.', 'priority' => 'high'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Facilitar el contacto inicial.', 'reason' => 'Punto final de conversión.', 'priority' => 'high'],
             ],
             'seo' => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Posicionar las palabras clave principales del negocio.', 'reason' => 'Base SEO del sitio.', 'priority' => 'high'],
-                ['title' => 'Servicios', 'page_type' => 'service', 'parent_slug' => 'inicio', 'goal' => 'Página con keywords transaccionales.', 'reason' => 'Conversión orgánica.', 'priority' => 'high'],
-                ['title' => 'Sobre nosotros', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Información del negocio para SEO local y E-E-A-T.', 'reason' => 'Refuerza autoridad.', 'priority' => 'medium'],
-                ['title' => 'Blog', 'page_type' => 'article', 'parent_slug' => 'inicio', 'goal' => 'Hub de contenido para atraer tráfico orgánico de cola larga.', 'reason' => 'Eje central de la estrategia SEO.', 'priority' => 'high'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Capturar leads del tráfico orgánico.', 'reason' => 'Cierre.', 'priority' => 'high'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Posicionar las palabras clave principales del negocio.', 'reason' => 'Base SEO del sitio.', 'priority' => 'high'],
+                ['title' => $t('page.services'), 'page_type' => 'service', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Página con keywords transaccionales.', 'reason' => 'Conversión orgánica.', 'priority' => 'high'],
+                ['title' => $t('page.about_us'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Información del negocio para SEO local y E-E-A-T.', 'reason' => 'Refuerza autoridad.', 'priority' => 'medium'],
+                ['title' => $t('page.blog'), 'page_type' => 'article', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Hub de contenido para atraer tráfico orgánico de cola larga.', 'reason' => 'Eje central de la estrategia SEO.', 'priority' => 'high'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Capturar leads del tráfico orgánico.', 'reason' => 'Cierre.', 'priority' => 'high'],
             ],
             'portfolio' => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Selección visual de tu mejor trabajo y propuesta.', 'reason' => 'La primera impresión es el trabajo.', 'priority' => 'high'],
-                ['title' => 'Portfolio', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Mostrar todos los proyectos con detalle.', 'reason' => 'Centro del sitio.', 'priority' => 'high'],
-                ['title' => 'Sobre mí', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Historia, valores y formación.', 'reason' => 'Conecta con el visitante.', 'priority' => 'medium'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Encargo o briefing inicial.', 'reason' => 'Cierre comercial.', 'priority' => 'high'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Selección visual de tu mejor trabajo y propuesta.', 'reason' => 'La primera impresión es el trabajo.', 'priority' => 'high'],
+                ['title' => $t('page.portfolio'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Mostrar todos los proyectos con detalle.', 'reason' => 'Centro del sitio.', 'priority' => 'high'],
+                ['title' => $t('page.about_me'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Historia, valores y formación.', 'reason' => 'Conecta con el visitante.', 'priority' => 'medium'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Encargo o briefing inicial.', 'reason' => 'Cierre comercial.', 'priority' => 'high'],
             ],
             'product' => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Landing principal del producto con propuesta y CTA.', 'reason' => 'Único punto de conversión.', 'priority' => 'high'],
-                ['title' => 'Precios', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Comparativa de planes o tiers.', 'reason' => 'Cierre de decisión de compra.', 'priority' => 'high'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Resolver dudas previas a la compra.', 'reason' => 'Reduce fricción.', 'priority' => 'medium'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Landing principal del producto con propuesta y CTA.', 'reason' => 'Único punto de conversión.', 'priority' => 'high'],
+                ['title' => $t('page.pricing'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Comparativa de planes o tiers.', 'reason' => 'Cierre de decisión de compra.', 'priority' => 'high'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Resolver dudas previas a la compra.', 'reason' => 'Reduce fricción.', 'priority' => 'medium'],
             ],
             default => [
-                ['title' => 'Inicio', 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio y guiar hacia la acción principal.', 'reason' => 'La puerta de entrada del sitio.', 'priority' => 'high'],
-                ['title' => 'Servicios', 'page_type' => 'service', 'parent_slug' => 'inicio', 'goal' => 'Explicar lo que ofreces y convertir visitas en solicitudes.', 'reason' => 'Alta prioridad para que el visitante entienda tu oferta.', 'priority' => 'high'],
-                ['title' => 'Sobre nosotros', 'page_type' => 'landing', 'parent_slug' => 'inicio', 'goal' => 'Construir confianza y explicar quién está detrás del negocio.', 'reason' => 'Ayuda a que el sitio no parezca anónimo.', 'priority' => 'high'],
-                ['title' => 'Contacto', 'page_type' => 'contact', 'parent_slug' => 'inicio', 'goal' => 'Facilitar que los visitantes contacten.', 'reason' => 'Imprescindible para capturar oportunidades.', 'priority' => 'high'],
-                ['title' => 'Blog', 'page_type' => 'article', 'parent_slug' => 'inicio', 'goal' => 'Crear una base de contenido útil para SEO.', 'reason' => 'Baja prioridad, útil cuando quieras crecer en orgánico.', 'priority' => 'low'],
+                ['title' => $t('page.home'), 'page_type' => 'home', 'parent_slug' => '', 'goal' => 'Presentar el negocio y guiar hacia la acción principal.', 'reason' => 'La puerta de entrada del sitio.', 'priority' => 'high'],
+                ['title' => $t('page.services'), 'page_type' => 'service', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Explicar lo que ofreces y convertir visitas en solicitudes.', 'reason' => 'Alta prioridad para que el visitante entienda tu oferta.', 'priority' => 'high'],
+                ['title' => $t('page.about_us'), 'page_type' => 'landing', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Construir confianza y explicar quién está detrás del negocio.', 'reason' => 'Ayuda a que el sitio no parezca anónimo.', 'priority' => 'high'],
+                ['title' => $t('page.contact'), 'page_type' => 'contact', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Facilitar que los visitantes contacten.', 'reason' => 'Imprescindible para capturar oportunidades.', 'priority' => 'high'],
+                ['title' => $t('page.blog'), 'page_type' => 'article', 'parent_slug' => 'inicio', 'parent_title' => $t('page.home'), 'goal' => 'Crear una base de contenido útil para SEO.', 'reason' => 'Baja prioridad, útil cuando quieras crecer en orgánico.', 'priority' => 'low'],
             ],
         };
         $seen = [];
@@ -2208,20 +2262,54 @@ final class OnboardingController
             if ($byTitle > 0) return $byTitle;
         }
 
+        // Resolución por defecto de la jerarquía. Ojo: estas búsquedas eran
+        // 100% castellano ('inicio', 'servicios', 'blog'), así que en un sitio
+        // en otro idioma no encontraban nada y todas las páginas quedaban
+        // colgando de la raíz. Ahora se busca primero por el título del idioma
+        // del sitio (y la home, por `page_type`, que no depende del idioma) y
+        // el castellano queda como último recurso para sitios ya existentes.
         $titleKey = mb_strtolower(trim($title));
-        if ($type === 'service' && !in_array($titleKey, ['servicios', 'servicio'], true)) {
-            $services = self::findPageIdBySlug($siteId, 'servicios') ?: self::findPageIdByTitle($siteId, 'Servicios');
+        $localTitle = fn(string $key): string => Microcopy::site($siteId, $key);
+        $localHome = $localTitle('page.home');
+        $localServices = $localTitle('page.services');
+        $localBlog = $localTitle('page.blog');
+
+        if ($type === 'service' && !in_array($titleKey, ['servicios', 'servicio', mb_strtolower($localServices)], true)) {
+            $services = self::findPageIdBySlug($siteId, slugify($localServices))
+                ?: self::findPageIdByTitle($siteId, $localServices)
+                ?: self::findPageIdBySlug($siteId, 'servicios')
+                ?: self::findPageIdByTitle($siteId, 'Servicios');
             if ($services > 0) return $services;
         }
-        if ($type === 'article' && !in_array($titleKey, ['blog', 'artículos', 'articulos'], true)) {
-            $blog = self::findPageIdBySlug($siteId, 'blog') ?: self::findPageIdByTitle($siteId, 'Blog');
+        if ($type === 'article' && !in_array($titleKey, ['blog', 'artículos', 'articulos', mb_strtolower($localBlog)], true)) {
+            $blog = self::findPageIdBySlug($siteId, slugify($localBlog))
+                ?: self::findPageIdByTitle($siteId, $localBlog)
+                ?: self::findPageIdBySlug($siteId, 'blog')
+                ?: self::findPageIdByTitle($siteId, 'Blog');
             if ($blog > 0) return $blog;
         }
-        if ($type !== 'home' && $titleKey !== 'inicio') {
-            $home = self::findPageIdBySlug($siteId, 'inicio') ?: self::findPageIdByTitle($siteId, 'Inicio');
+        if ($type !== 'home' && !in_array($titleKey, ['inicio', mb_strtolower($localHome)], true)) {
+            $home = self::findPageIdByType($siteId, 'home')
+                ?: self::findPageIdBySlug($siteId, slugify($localHome))
+                ?: self::findPageIdByTitle($siteId, $localHome)
+                ?: self::findPageIdBySlug($siteId, 'inicio')
+                ?: self::findPageIdByTitle($siteId, 'Inicio');
             if ($home > 0) return $home;
         }
         return 0;
+    }
+
+    /**
+     * Busca una página por su tipo. Sirve para la home, que es única y cuyo
+     * `page_type` no depende del idioma (a diferencia del slug o el título).
+     */
+    private static function findPageIdByType(int $siteId, string $type): int
+    {
+        $row = Database::selectOne(
+            'SELECT id FROM pages WHERE site_id = ? AND page_type = ? ORDER BY id ASC LIMIT 1',
+            [$siteId, $type]
+        );
+        return (int) ($row['id'] ?? 0);
     }
 
     private static function pageIdBelongsToSite(int $siteId, int $pageId): bool
@@ -2275,6 +2363,52 @@ final class OnboardingController
         );
     }
 
+    /**
+     * FONTS — Procesa los archivos de fuente subidos en el paso 2.
+     * Silencioso a propósito: el onboarding no debe bloquearse porque un archivo
+     * venga mal; el usuario tiene la pantalla completa en Diseño para arreglarlo.
+     */
+    private static function saveCustomFonts(int $siteId): void
+    {
+        $raw = $_FILES['custom_fonts'] ?? null;
+        if (!is_array($raw) || !isset($raw['name'])) return;
+
+        $names = is_array($raw['name']) ? $raw['name'] : [$raw['name']];
+        $files = [];
+        foreach (array_keys($names) as $i) {
+            $error = is_array($raw['error']) ? ($raw['error'][$i] ?? UPLOAD_ERR_NO_FILE) : $raw['error'];
+            if ((int) $error !== UPLOAD_ERR_OK) continue;
+            $files[] = [
+                'name'     => (string) (is_array($raw['name']) ? $raw['name'][$i] : $raw['name']),
+                'tmp_name' => (string) (is_array($raw['tmp_name']) ? $raw['tmp_name'][$i] : $raw['tmp_name']),
+                'size'     => (int) (is_array($raw['size']) ? $raw['size'][$i] : $raw['size']),
+                'error'    => UPLOAD_ERR_OK,
+            ];
+        }
+        if ($files === []) return;
+
+        $name = trim((string) Request::post('custom_font_name', ''));
+        if ($name === '') {
+            // Sin nombre, usamos el del primer archivo: "AcmeSans-Bold.woff2" → "AcmeSans".
+            $base = pathinfo($files[0]['name'], PATHINFO_FILENAME);
+            $name = trim((string) preg_replace('/[-_](thin|extralight|ultralight|light|regular|book|medium|semibold|demibold|bold|extrabold|ultrabold|black|heavy|italic|oblique)+$/i', '', $base));
+            if ($name === '') $name = 'Tipografía de marca';
+        }
+
+        $role = (string) Request::post('custom_font_role', 'both');
+        $familyId = CustomFontService::ensureFamily($siteId, $name, $role);
+
+        $saved = 0;
+        foreach ($files as $file) {
+            $result = CustomFontService::addFile($siteId, $familyId, $file);
+            if ($result['ok']) $saved++;
+        }
+        if ($saved === 0) return;
+
+        CustomFontService::assignRole($siteId, $familyId, $role);
+        DesignSystem::syncCustomFontTokens($siteId);
+    }
+
     private static function loadDesignValues(int $siteId): array
     {
         $tokens = DesignSystem::load($siteId);
@@ -2297,6 +2431,8 @@ final class OnboardingController
             'name' => (string) ($site['name'] ?? ''),
             'logo_path' => (string) ($logo['setting_value'] ?? ''),
             'logo_url' => \App\Services\BrandService::publicLogoUrl($siteId, (string) ($logo['setting_value'] ?? '')),
+            // FONTS — tipografías propias ya subidas (para no pedirlas dos veces).
+            'custom_fonts' => CustomFontService::families($siteId),
         ];
     }
 

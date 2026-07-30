@@ -178,6 +178,27 @@ window.PP_PAGES = <?= json_encode(
                 <?php endif; ?>
             </div>
 
+            <?php if (!empty($isMultilingual)): ?>
+            <div class="pp-form-group">
+                <label for="language">Idioma de la página</label>
+                <?php $curLang = (string) ($page['language'] ?? $primaryLang); ?>
+                <select id="language" name="language"<?= !empty($page['id']) ? ' disabled' : '' ?>>
+                    <?php foreach ($siteLanguages as $code): ?>
+                        <option value="<?= e($code) ?>" <?= $curLang === $code ? 'selected' : '' ?>>
+                            <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' (principal)' : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if (!empty($page['id'])): ?>
+                    <small>El idioma no se cambia una vez creada la página: cambiarlo movería su URL.
+                    Si necesitas la misma página en otro idioma, tradúcela desde el listado.</small>
+                <?php else: ?>
+                    <small>Si eliges un idioma que no es el principal, la página vivirá bajo su
+                    prefijo (por ejemplo <code>/fr/…</code>).</small>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
             <div class="pp-form-group <?= isset($errors['status']) ? 'has-error' : '' ?>">
                 <label for="status">Estado</label>
                 <select id="status" name="status">

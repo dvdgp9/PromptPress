@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Commerce;
 
 use App\Services\FormSubmissionService;
+use App\Services\LanguageService;
+use App\Services\Microcopy;
 use App\Services\Mail\MailMessage;
 use App\Services\Mail\MailService;
 use Core\Database;
@@ -26,10 +28,14 @@ final class CommerceMailer
         }
         [$order, $siteName] = $ctx;
 
+        $lang = self::language($siteId, $order);
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
+        $number = (string) $order['order_number'];
+
         $lines = [
-            'Hola ' . $order['customer_name'] . ',',
+            $t('mail.greeting', ['name' => $order['customer_name']]),
             '',
-            'Hemos recibido tu pedido ' . $order['order_number'] . '. Resumen:',
+            $t('mail.shop.created_intro', ['number' => $number]),
             '',
         ];
         foreach ($order['items'] as $it) {
@@ -37,23 +43,25 @@ final class CommerceMailer
                 . ' — ' . CommerceSettings::format((int) $it['line_total_cents']);
         }
         if ((int) $order['shipping_cents'] > 0) {
-            $lines[] = '• Envío — ' . CommerceSettings::format((int) $order['shipping_cents']);
+            $lines[] = '• ' . $t('shop.shipping') . ' — ' . CommerceSettings::format((int) $order['shipping_cents']);
         }
         $lines[] = '';
-        $lines[] = 'Total: ' . CommerceSettings::format((int) $order['total_cents'])
-            . ' (incluye ' . CommerceSettings::format((int) $order['tax_cents']) . ' de IVA)';
+        $lines[] = $t('mail.shop.total_with_tax', [
+            'total' => CommerceSettings::format((int) $order['total_cents']),
+            'tax'   => CommerceSettings::format((int) $order['tax_cents']),
+        ]);
         $lines[] = '';
         if ($instructionsText !== '') {
             $lines[] = $instructionsText;
             $lines[] = '';
         }
-        $lines[] = 'Te avisaremos por email cuando el pedido avance.';
+        $lines[] = $t('mail.shop.will_notify');
         $lines[] = '';
         $lines[] = $siteName;
 
         $msg = new MailMessage(
             (string) $order['customer_email'],
-            'Pedido recibido: ' . $order['order_number'],
+            $t('mail.shop.created_subject', ['number' => $number]),
             implode("\n", $lines),
             '',
             (string) $order['customer_name']
@@ -82,26 +90,24 @@ final class CommerceMailer
         }
         [$order, $siteName] = $ctx;
 
-        $subjects = [
-            'paid'      => 'Pago recibido: pedido ' . $order['order_number'],
-            'shipped'   => 'Pedido enviado: ' . $order['order_number'],
-            'cancelled' => 'Pedido cancelado: ' . $order['order_number'],
-        ];
-        $bodies = [
-            'paid'      => 'Hemos recibido el pago de tu pedido. Lo estamos preparando.',
-            'shipped'   => 'Tu pedido está en camino.',
-            'cancelled' => 'Tu pedido ha sido cancelado. Si tienes dudas, responde a este email.',
-        ];
-        if (!isset($subjects[$newStatus])) {
+        if (!in_array($newStatus, ['paid', 'shipped', 'cancelled'], true)) {
             return;
         }
-        $body = 'Hola ' . $order['customer_name'] . ",\n\n" . $bodies[$newStatus]
-            . "\n\nPedido: " . $order['order_number']
-            . "\nTotal: " . CommerceSettings::format((int) $order['total_cents'])
+        $lang = self::language($siteId, $order);
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
+        $number = (string) $order['order_number'];
+
+        $subject = $t('mail.shop.' . $newStatus . '_subject', ['number' => $number]);
+        $body = $t('mail.greeting', ['name' => $order['customer_name']]) . "\n\n"
+            . $t('mail.shop.' . $newStatus . '_body')
+            . "\n\n" . $t('mail.shop.order_line', ['number' => $number])
+            . "\n" . $t('mail.shop.total_simple', [
+                'total' => CommerceSettings::format((int) $order['total_cents']),
+            ])
             . "\n\n" . $siteName;
         self::deliverToCustomer($siteId, $orderId, new MailMessage(
             (string) $order['customer_email'],
-            $subjects[$newStatus],
+            $subject,
             $body,
             '',
             (string) $order['customer_name']
@@ -111,6 +117,21 @@ final class CommerceMailer
     // ======================================================================
     // Internos
     // ======================================================================
+
+    /**
+     * Idioma del email al cliente.
+     *
+     * Hoy es el del sitio. Cuando la fase 1 (T1.2) añada `language` a
+     * `commerce_orders` —el idioma con el que el cliente compró—, esa columna
+     * manda automáticamente sin tocar este mailer.
+     *
+     * @param array<string,mixed> $order
+     */
+    private static function language(int $siteId, array $order): string
+    {
+        $stored = trim((string) ($order['language'] ?? ''));
+        return $stored !== '' ? LanguageService::normalize($stored) : LanguageService::codeFor($siteId);
+    }
 
     /** @return array{0:array<string,mixed>,1:string}|null */
     private static function context(int $siteId, int $orderId): ?array

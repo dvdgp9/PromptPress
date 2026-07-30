@@ -2,6 +2,7 @@
 
 namespace App\Services\Renderer;
 
+use App\Services\Microcopy;
 use App\Services\SectionSchemas;
 use Core\CSRF;
 use Core\Database;
@@ -39,15 +40,23 @@ final class SectionRenderer
     /** Sitio activo. F21.T21.3 lo usa para listar entradas publicadas. */
     private static int $siteId = 0;
 
+    /** Idioma con el que se está renderizando (I18N-FULL T3.3). */
+    private static string $lang = \App\Services\LanguageService::DEFAULT;
+
     /**
      * T18.4 — establece el sitio activo para que el renderer pueda inyectar
      * atribución a las imágenes provenientes de Unsplash. Llamar una vez antes
      * de `renderMany()`. Si nunca se llama, no se renderizan atribuciones (las
      * páginas que no usan banco no pagan coste extra de consulta).
      */
-    public static function setSiteContext(int $siteId): void
+    public static function setSiteContext(int $siteId, ?string $lang = null): void
     {
         self::$siteId = $siteId;
+        // Idioma de render: el de la PÁGINA que se está pintando, que en una
+        // web bilingüe no tiene por qué ser el del sitio.
+        self::$lang = $lang !== null
+            ? \App\Services\LanguageService::normalize($lang)
+            : \App\Services\LanguageService::codeFor($siteId);
         self::$attributions = [];
         if ($siteId <= 0) return;
 
@@ -332,7 +341,7 @@ final class SectionRenderer
     {
         $heading = self::str($c, 'heading');
         $desc    = self::str($c, 'description');
-        $submit  = self::str($c, 'submit_text', 'Enviar');
+        $submit  = self::str($c, 'submit_text', Microcopy::t('form.submit', self::$lang));
         $img     = self::cleanImage(self::str($c, 'image_url'));
         $fields  = is_array($c['fields'] ?? null) ? $c['fields'] : [];
 
@@ -367,9 +376,9 @@ final class SectionRenderer
         $statusSection = (int) Request::get('form_section', 0);
         if ($status !== '' && $statusSection === $sectionId) {
             $messages = [
-                'ok' => self::str($c, 'success_message', 'Gracias, hemos recibido tu mensaje.'),
-                'error' => 'No se pudo enviar el formulario. Revisa los campos e inténtalo de nuevo.',
-                'rate_limited' => 'Hemos recibido varios envíos seguidos. Espera unos minutos antes de volver a intentarlo.',
+                'ok' => self::str($c, 'success_message', Microcopy::t('form.success', self::$lang)),
+                'error' => Microcopy::t('form.error', self::$lang),
+                'rate_limited' => Microcopy::t('form.rate_limited', self::$lang),
             ];
             $kind = $status === 'ok' ? 'success' : 'error';
             $msg = $messages[$status] ?? $messages['error'];
@@ -914,9 +923,10 @@ final class SectionRenderer
                  FROM pages p
                  LEFT JOIN post_meta pm ON pm.page_id = p.id
                  WHERE p.site_id = ? AND p.page_type = 'article' AND p.status = 'published'
+                   AND p.language = ?
                  ORDER BY p.published_at DESC, p.id DESC
                  LIMIT " . $limit,
-                [$siteId]
+                [$siteId, self::$lang]
             );
         } catch (\Throwable $e) {
             error_log('[renderPostsListing] DB error: ' . $e->getMessage());

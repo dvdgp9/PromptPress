@@ -12,16 +12,19 @@
     var frame   = document.getElementById('pp-design-preview-frame');
     if (!form || !preview) return;
 
-    var logoFile = document.querySelector('[data-logo-file]');
-    var logoName = document.querySelector('[data-logo-filename]');
-    var logoSubmit = document.querySelector('[data-logo-submit]');
-    if (logoFile && logoName && logoSubmit) {
+    // LOGO2 — Hay un selector por variante (fondo claro / fondo oscuro), así que
+    // cada formulario gestiona el suyo en vez de un único par global.
+    document.querySelectorAll('[data-logo-file]').forEach(function (logoFile) {
+        var slot = logoFile.closest('form') || document;
+        var logoName = slot.querySelector('[data-logo-filename]');
+        var logoSubmit = slot.querySelector('[data-logo-submit]');
+        if (!logoName || !logoSubmit) return;
         logoFile.addEventListener('change', function () {
             var file = logoFile.files && logoFile.files[0];
             logoName.textContent = file ? file.name : 'Ningún archivo seleccionado';
             logoSubmit.disabled = !file;
         });
-    }
+    });
 
     // Reset scroll of preview frame to top on load
     if (frame) {
@@ -140,6 +143,12 @@
     function fontCssValue(fontKey) {
         var systemStack = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
         if (!fontKey || fontKey === 'system') return systemStack;
+        // FONTS — Fuente propia del cliente: el @font-face ya está inyectado en
+        // la página, solo hay que usar su nombre real.
+        if (fontKey.indexOf('custom:') === 0) {
+            var custom = (window.PP_CUSTOM_FONTS || {})[fontKey];
+            return custom ? '"' + custom + '", ' + systemStack : systemStack;
+        }
         var serifs = ['Playfair Display', 'Merriweather', 'Lora'];
         var fallback = serifs.indexOf(fontKey) !== -1
             ? 'Georgia, "Times New Roman", serif'
@@ -160,6 +169,7 @@
 
     function ensureGoogleFont(fontKey) {
         if (!fontKey || fontKey === 'system') return;
+        if (fontKey.indexOf('custom:') === 0) return; // se sirve desde el propio sitio
         if (loadedFonts[fontKey]) return;
         var family = fontKey.replace(/ /g, '+');
         var link = document.createElement('link');

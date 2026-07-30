@@ -400,3 +400,1168 @@ Una vez entregada la web, el cliente pide tandas de cambios que afectan a varias
 - Si una clase CSS fija `display:flex`, pisa el atributo HTML `hidden`; añadir `.clase[hidden]{display:none}`.
 - En zsh, `status` es una variable especial de solo lectura; no usarla como variable temporal en scripts de verificación. Usar un nombre específico como `task_http_code`.
 - El provider HTTP tenía timeout de 60s y las ediciones canvas largas (sobre todo PÁGINA COMPLETA) lo superaban → "Error de red ... timed out" (visto en dev y reproducido por el usuario en prod). **Arreglado (2026-07-17)**: los providers ya leían `options['timeout']` — se añadió por acción en Actions.php (EDIT_CANVAS_PAGE y COMPOSE_CANVAS_PAGE 180s, EDIT_CANVAS_SECTION 120s, PLAN_SITE_CHANGES 90s), reintento único automático en SiteAssistantJobs::applyWithRetry para fallos transitorios (status 0/429/5xx, sleep 2s), y set_time_limit ampliado (step 420s, canvas chat 240s). Verificado: rediseño full-page de Servicios vía job → done. OJO PROD: si el hosting usa PHP-FPM con `request_terminate_timeout` bajo, ese límite mata el request aunque set_time_limit sea mayor.
+
+---
+
+# [I18N-BASE · 27/07/2026] Idioma del sitio de verdad (pasos 1 y 2)
+
+## Background and Motivation (I18N)
+
+Al preparar una instalación nueva de producción surgió la pregunta de si se puede hacer una web en francés. Auditoría: `sites.language` existía y `fr` ya estaba en la lista, el renderizador público emitía `<html lang>` correcto y las páginas legales sí seguían el idioma — pero **todo el pipeline de generación IA pasaba `'language' => 'es'` literal**, y el microcopy del frontend (botón Enviar, columnas del footer, banner de cookies) estaba fijo en castellano. Resultado: web en francés con contenido en español.
+
+## Key Challenges and Analysis (I18N)
+
+1. **Pasar el idioma NO basta.** Verificado con IA real: con `sites.language = fr` y `Idioma: français` en el user_template, Gemini seguía escribiendo en castellano, porque la memoria del sitio, la instrucción del cliente y el HTML actual están en castellano y el modelo los imita. La orden de idioma tiene que ir en el **system prompt** y como regla dura.
+2. **Cambiar el idioma no puede ser destructivo.** Traducir automáticamente lo ya escrito sería silencioso e irreversible. Se separa: lo que se resuelve en cada render (microcopy) cambia solo; lo escrito (contenido, títulos, menú personalizado) NO se toca y se avisa por escrito en Ajustes.
+3. **El texto del usuario no se pisa nunca.** Los textos del banner de cookies son editables. `Microcopy::resolve()` respeta lo escrito salvo que sea vacío o exactamente el default castellano histórico (que nadie eligió: se guardó solo).
+4. **La jerarquía de páginas era 100% castellana.** `resolveParentIdForPage` buscaba `inicio`/`servicios`/`blog` por slug y título; en un sitio en otro idioma no encontraba nada y todas las páginas colgaban de la raíz.
+5. **El menú no se configura: se deriva.** El menú automático sale de los títulos de las páginas publicadas, así que basta con que los títulos nazcan en el idioma correcto (paso 1 + plan de reserva del onboarding traducido).
+
+## High-level Task Breakdown (I18N)
+
+- [x] **Paso 1 — Idioma real en la generación IA.**
+- [x] **Paso 2 — Microcopy del frontend por idioma + menú.**
+- [ ] **Paso 3 — Multi-idioma real** (idioma por página, rutas `/fr/`, `hreflang`, selector). Pendiente de planificar; es un proyecto en sí (routing + SEO + Studio).
+
+## Project Status Board (I18N)
+
+- [x] `LanguageService`: catálogo único de idiomas, `codeFor()` cacheado, `promptLabel()` (endónimo), `forget()`.
+- [x] Sustituidos los 7 `'language' => 'es'` del pipeline (Onboarding ×4, CanvasChatService ×2, CustomBlockGenerator; CanvasGenerator por defecto).
+- [x] `Actions::languageRule()` en el system prompt de las 5 acciones que escriben texto visible.
+- [x] Ajustes: catálogo compartido, `LanguageService::forget()` al guardar y aviso explícito de qué cambia y qué no.
+- [x] `Microcopy`: 33 claves × 7 idiomas (footer, formularios, banner de cookies, títulos de página base).
+- [x] Enchufado en SectionRenderer, FormController, BrandService (con `self::$lang`), CookieBanner (`render($manifest, $lang)`).
+- [x] `resolveParentIdForPage` busca la home por `page_type` y por título/slug del idioma del sitio; castellano como último recurso.
+- [x] Plan de reserva del onboarding con títulos localizados + `parent_title`.
+- [x] Tests: `tests/site_language.php` (11) y `tests/site_microcopy.php` (11).
+- [ ] Paso 3 (planner).
+- [ ] Commerce, Booking y emails transaccionales: siguen 100% en castellano (fuera del alcance acordado).
+
+## Current Status / Progress Tracking (I18N)
+
+**Pasos 1 y 2 completados y verificados (27/07/2026).**
+
+Verificación paso 1 con IA real: sitio 1 puesto en `fr`, `EDIT_CANVAS_SECTION` sobre un hero → antes del `languageRule()` devolvía castellano; después devuelve francés (`Préparez vos concours d'enseignement avec des experts`) manteniendo `<pp-reply>` en castellano (el panel es castellano). Prompts construidos vía `PromptBuilder::forAction` muestran `Idioma: français` en las tres acciones comprobadas.
+
+Verificación paso 2 en navegador con el sitio en `fr`: `<html lang="fr">`, columnas del footer `Explorer` / `Mentions légales`, aria-labels `Navigation principale` / `Liens légaux`, enlace `Paramètres des cookies`, banner completo en francés (título, descripción, `Tout accepter`, `Refuser les facultatifs`, `Personnaliser`) y modal con categorías `Nécessaires (toujours actifs)` / `Mesure d'audience`. Botón de formulario `Envoyer` verificado renderizando una sección form real. Regresión con el sitio en `es`: HTML idéntico al previo (`Explora`, `Legal`, `Aceptar todas`, `lang="es"`).
+
+Verificación del cambio desde Ajustes vía HTTP con sesión real: guardar `fr` devuelve 302, el select queda en `fr` y el aviso sale completo ("Idioma cambiado a Français: … El contenido ya escrito, los títulos de página y las etiquetas del menú NO se traducen solos"). Sitio restaurado a `es` y datos originales (`name`, `url`, `timezone`, `article_template`) devueltos a su valor previo.
+
+Suite: 14 tests PASS (chrome_config, canvas_runtime, canvas_edit_envelope, site_assistant_section_planning, custom_block_renderer/sanitizer, form_templates, form_inline_insert, page_internal_pages, seo_services, legal_page_own_analytics, modules_registry, site_language, site_microcopy). Sin migración de BD.
+
+## Executor's Feedback or Assistance Requests (I18N)
+
+- **Fuera de alcance, confirmado por auditoría:** Commerce (`ShopController`: `Añadir al carrito`, `Finalizar compra`, `Carrito`…), Booking y **todos los emails transaccionales** (`CommerceMailer`, `BookingMailer`) siguen en castellano — unas 60 cadenas más. Son módulos opcionales y los emails los recibe el cliente final, así que si la web francesa lleva tienda o reservas hay que hacer otra tanda. El `Microcopy` ya está preparado para absorberlas.
+- El panel de administración sigue siendo castellano-only (no hay capa i18n en `views/admin/`). No afecta a la web pública.
+
+## Lessons (I18N)
+
+- Instruir el idioma en el `user_template` NO funciona si la memoria del sitio y la instrucción están en otro idioma: el modelo imita el idioma dominante del contexto. La orden va en el **system prompt**, explícita y por encima del resto ("son fuente de HECHOS, no de idioma").
+- Pasar el **endónimo** (`français`) ancla mejor que el código ISO (`fr`).
+- Al verificar por HTTP contra el panel, un POST a `/admin/settings` sobrescribe TODOS los campos del formulario: capturar antes los valores originales (name, url, timezone, article_template) o se pierden. La tabla `settings` usa `setting_key`/`setting_value`, no `key`/`value`.
+- La página pública se sirve desde `CacheService`: tras cambiar idioma o microcopy hay que `CacheService::flush($siteId)` (lo hace Ajustes) y recargar sin caché en el navegador, o se ve el HTML viejo.
+
+---
+
+# [I18N-FULL · 27/07/2026] Multi-idioma real (paso 3) — PLAN
+
+## Background and Motivation (I18N-FULL)
+
+Con [I18N-BASE] cerrado, una web PromptPress puede ser **de un idioma cualquiera**: la IA genera en ese idioma y el microcopy del frontend base lo sigue. Lo que NO existe es que **una misma web tenga varios idiomas**: hoy un sitio = un idioma, sin idioma por página, sin rutas `/fr/`, sin `hreflang` y sin selector.
+
+Además queda pendiente lo que [I18N-BASE] dejó fuera a propósito: Commerce, Booking y los emails transaccionales siguen 100% en castellano. **El usuario confirma que la web de producción inminente llevará tienda o reservas**, así que eso deja de ser deuda futura y pasa a ser bloqueante.
+
+## Decisiones cerradas (usuario, 27/07/2026)
+
+1. **URLs**: idioma principal SIN prefijo (`/`, `/contacto`), idiomas secundarios CON prefijo (`/fr/`, `/fr/contact`). Motivo: las webs ya publicadas no cambian ni una URL — cero redirecciones, cero riesgo SEO.
+2. **Activación**: opt-in por sitio desde Ajustes. Un sitio monolingüe sigue viéndose y comportándose exactamente igual que hoy.
+3. **Creación de traducciones**: las dos vías — job "traducir el sitio a X" + botón "traducir esta página". Todo aterriza en borrador.
+4. **Módulos**: la web de prod lleva tienda o reservas → Commerce/Booking y emails entran en la PRIMERA fase, antes de abrir al público.
+
+## Key Challenges and Analysis (I18N-FULL)
+
+**1. El enrutado casi no hay que tocarlo.** `app/routes.php:340` ya expone `$router->get('/{slug:path}')` y `pages.slug` es `VARCHAR(500)` con `UNIQUE (site_id, slug)`, admitiendo barras (ya se usan para `/servicios/diseno-web`). Es decir: **el prefijo de idioma puede vivir dentro del propio slug** (`fr/contact`). No hace falta una capa de routing nueva. La única excepción real es la **home de cada idioma** (`/fr` y `/fr/`), que hoy no tiene forma de resolverse porque `/` está cableado a `PageController::home`.
+
+**2. El blog no es un caso aparte.** No existe tabla `posts`: las entradas son `pages` con `page_type='article'` + `post_meta`. Un solo modelo que versionar por idioma, no dos.
+
+**3. El idioma pasa de ser del SITIO a ser de la PÁGINA.** Hoy `LanguageService::codeFor($siteId)` decide todo. En multi-idioma quien manda es la página que se está sirviendo. Todo lo que hoy resuelve por sitio (microcopy, `<html lang>`, menú, legales del footer) tiene que pasar a resolver por idioma de render. `sites.language` sobrevive como **idioma principal** y como valor por defecto.
+
+**4. El menú y los legales se derivan, y hay que filtrarlos.** `BrandService::navPages()` y la consulta de legales del footer traen TODAS las páginas publicadas del sitio. Sin filtro por idioma, una web bilingüe mostraría el menú mezclado. Es un cambio pequeño pero está en varios sitios.
+
+**5. Los emails transaccionales tienen un idioma propio que NO es el del sitio.** El idioma correcto de un "Pedido recibido" es el del cliente que compró — es decir, el de la página desde la que compró. Si en la fase 0 lo resolvemos solo por `sites.language`, en cuanto exista multi-idioma habría que volver a migrar. **Conclusión: añadir `language` a `commerce_orders` y `booking_bookings` YA en la fase 1**, aunque hasta la fase 3 se rellene siempre con el idioma del sitio. Migrar una vez, no dos.
+
+**6. El catálogo es el límite honesto de v1.** `commerce_products` y `booking_services` tienen UN solo juego de nombre/descripción/slug (`uq_cp_slug`). Traducir el catálogo es otro modelo de datos (campos por idioma o filas hermanas), con impacto en carrito, pedidos y Stripe. **v1 traduce el ESCAPARATE, no el CATÁLOGO**: la tienda francesa tendrá botones, formularios y emails en francés, pero los nombres de producto tal y como se escribieron. Hay que decirlo claro antes de venderlo.
+
+**7. Las rutas de módulo están cableadas en castellano.** `/tienda`, `/tienda/carrito`, `/tienda/checkout` (`app/Modules/Commerce/routes.php`). Una web francesa tendría contenido en francés bajo URLs en castellano. No rompe nada, pero es feo. Fuera de v1; se arregla haciendo configurable el segmento base.
+
+**8. Coste de la traducción masiva.** Traducir un sitio de 8 páginas canvas son 8 llamadas IA largas. `SiteAssistantJobs` ya resuelve exactamente esto (un item por request, un fallo no detiene los demás, reintento en transitorios): el job de traducción debe montarse encima, no inventar una cola nueva.
+
+**9. Riesgo de colisión de slugs.** Con el prefijo dentro del slug, una página del idioma principal llamada "fr" chocaría con el espacio de nombres del francés. Hace falta una guarda al crear/renombrar.
+
+## High-level Task Breakdown (I18N-FULL)
+
+### FASE 0 — Módulos y emails en el idioma del sitio (BLOQUEANTE para la web de prod)
+No depende de nada del multi-idioma: sirve ya para una web monolingüe en francés.
+
+- **T0.1** Ampliar `Microcopy` con el escaparate de Commerce: catálogo, ficha, carrito, checkout, gracias, errores de validación públicos (`ShopController`, `CartService`).
+  *Criterio*: recorrer /tienda, /tienda/carrito y /tienda/checkout con el sitio en `fr` sin encontrar una sola cadena en castellano (grep sobre el HTML servido).
+- **T0.2** Ídem para Booking público: formulario de reserva, disponibilidad, cancelación (`BookingApiController`, `BookingCancelController`, validaciones de `BookingService`).
+  *Criterio*: mismo test sobre el flujo público de reservas.
+- **T0.3** Emails transaccionales por idioma: `CommerceMailer` (recibido/pago/enviado/cancelado) y `BookingMailer` (confirmada/cancelada). Asunto y cuerpo desde `Microcopy`, con placeholders para importes, números de pedido y nombres.
+  *Criterio*: disparar los 4 emails de Commerce y los 2 de Booking con el sitio en `fr` y verificar asunto y cuerpo en francés en `email_log`; con el sitio en `es`, texto byte-idéntico al actual (regresión).
+- **T0.4** Decidir el juego de idiomas a rellenar: `es` completo + los que se usen de verdad (hoy `fr`). El resto cae a `es` sin romper (`Microcopy` ya lo hace).
+  *Criterio*: `tests/site_microcopy.php` distingue claves "core" (obligatorias en los 7) de claves "módulo" (obligatorias solo en los idiomas declarados) y pasa.
+
+### FASE 1 — Modelo de datos
+- **T1.1** Migración: `pages.language` (CHAR(5), NOT NULL) + `pages.translation_group` (CHAR(36)) + índices `(site_id, language, status)` y `(translation_group)`. Backfill: toda página existente → idioma del sitio y grupo propio.
+  *Criterio*: en una BD con datos, tras migrar, `COUNT(*)` por idioma = total de páginas y cada página tiene grupo no vacío; la web sigue sirviéndose igual.
+- **T1.2** Migración: `language` en `commerce_orders` y `booking_bookings` (ver análisis #5), rellenado con el idioma del sitio.
+  *Criterio*: pedidos y reservas antiguos quedan con idioma no nulo.
+- **T1.3** Idiomas activos por sitio: `site_languages` (o JSON en `settings`) con lista + cuál es el principal. Opt-in desde Ajustes.
+  *Criterio*: un sitio sin configurar se comporta exactamente como hoy; añadir `fr` no cambia ninguna URL existente.
+- **T1.4** `LanguageService`: `activeFor($siteId)`, `primaryFor($siteId)`, `forPage($page)`, y prefijo de URL por idioma.
+  *Criterio*: tests unitarios de las cuatro funciones, incluido el caso "idioma principal no lleva prefijo".
+
+### FASE 2 — URLs y resolución
+- **T2.1** Slug con prefijo automático al crear/traducir en idioma secundario; guarda anti-colisión (análisis #9).
+  *Criterio*: crear una página `fr` produce slug `fr/...`; intentar crear una página del idioma principal con slug `fr` se rechaza con mensaje claro.
+- **T2.2** Home por idioma: `/fr` y `/fr/` resuelven a la home francesa; `/` sigue sirviendo la principal.
+  *Criterio*: las cuatro URLs (`/`, `/fr`, `/fr/`, `/fr/contact`) responden 200 con el idioma correcto en `<html lang>`.
+- **T2.3** Caché: clave de home por idioma (hoy `CacheService::HOME_KEY` es única).
+  *Criterio*: publicar un cambio en la home francesa no sirve la española cacheada, ni al revés.
+
+### FASE 3 — Chrome, navegación y microcopy por página
+- **T3.1** `navPages()`, legales del footer y listados de entradas filtran por el idioma de la página servida.
+  *Criterio*: navegando en `/fr/` el menú solo trae páginas `fr`; en `/` solo las principales.
+- **T3.2** Selector de idioma en el header (opcional, configurable en el editor de chrome): enlaza a la traducción equivalente vía `translation_group`; si no existe, a la home de ese idioma.
+  *Criterio*: desde `/contacto` el selector lleva a `/fr/contact`; desde una página sin traducir, a `/fr/`.
+- **T3.3** Microcopy pasa a resolverse por idioma de render, no por idioma de sitio (`Microcopy::site()` → variante por idioma explícito).
+  *Criterio*: en `/fr/` el botón de formulario es `Envoyer` aunque el idioma principal del sitio sea `es`.
+
+### FASE 4 — SEO
+- **T4.1** `hreflang` recíprocos + `x-default` en el `<head>` de cada página traducida.
+- **T4.2** Sitemap con `xhtml:link` alternates.
+- **T4.3** Repaso de `SeoIndexingService::canonicalForPage` con prefijos.
+  *Criterio (los tres)*: sitemap válido contra el XSD de sitemaps y hreflang recíprocos verificados a mano sobre un sitio de 2 idiomas y 3 páginas.
+
+### FASE 5 — Panel y creación de traducciones
+- **T5.1** Listado de páginas con idioma y traducciones agrupadas.
+  *Criterio*: se ve de un vistazo qué páginas faltan por traducir.
+- **T5.2** Acción IA `TRANSLATE_PAGE`: preserva estructura HTML/CSS, atributos `data-pp-*`, placeholders `{{form:REF}}` y reescribe enlaces internos al idioma destino. Reutiliza `Actions::languageRule()`.
+  *Criterio*: traducir una página canvas real produce el MISMO número de secciones y de `data-pp-field`, con los enlaces internos apuntando a `/fr/...`.
+- **T5.3** Botón "traducir esta página" → clona (secciones o canvas) y deja borrador.
+- **T5.4** Job "traducir el sitio a X" montado sobre `SiteAssistantJobs`.
+  *Criterio*: traducir un sitio de 3 páginas deja 3 borradores `fr` correctamente agrupados, y un fallo en una no impide las otras.
+
+### FASE 6 — Generación en sitios multi-idioma
+- **T6.1** Crear página nueva en un sitio multi-idioma pregunta el idioma; onboarding y asistente central respetan el idioma de la página.
+  *Criterio*: generar una página desde el Studio en un sitio bilingüe produce contenido en el idioma elegido y slug con el prefijo correcto.
+
+## FUERA de alcance v1 (explícito)
+
+- **Catálogo multi-idioma** (nombres/descripciones de productos y servicios de reserva). Ver análisis #6. La tienda francesa tendrá chrome y emails en francés y catálogo en el idioma en que se escribió.
+- **Rutas de módulo traducidas** (`/tienda` → `/boutique`). Ver análisis #7.
+- **Panel de administración multi-idioma.** Sigue en castellano.
+- **Detección automática de idioma del visitante** (Accept-Language / geo). Decisión consciente: es fuente clásica de problemas de SEO y de experiencias raras. El visitante elige.
+
+## Project Status Board (I18N-FULL)
+
+- [ ] T0.1 Escaparate Commerce por idioma
+- [ ] T0.2 Booking público por idioma
+- [ ] T0.3 Emails transaccionales por idioma
+- [ ] T0.4 Política de idiomas obligatorios en el diccionario
+- [ ] T1.1 · T1.2 · T1.3 · T1.4 Modelo de datos
+- [ ] T2.1 · T2.2 · T2.3 URLs y resolución
+- [ ] T3.1 · T3.2 · T3.3 Chrome y microcopy por página
+- [ ] T4.1 · T4.2 · T4.3 SEO
+- [ ] T5.1 · T5.2 · T5.3 · T5.4 Panel y traducción
+- [ ] T6.1 Generación multi-idioma
+
+## Executor's Feedback or Assistance Requests (I18N-FULL)
+
+- Pendiente de confirmar por el usuario antes de ejecutar: si la web de prod es **monolingüe en francés con tienda**, basta la FASE 0 para lanzar y el resto puede ir después sin prisa. Las fases 1-6 solo hacen falta cuando una misma web deba tener dos idiomas a la vez.
+
+### Actualización [I18N-FULL] · 27/07/2026 (posterior a las decisiones iniciales)
+
+Dos hechos nuevos del usuario. **Sustituyen** a lo que dicen los puntos indicados más arriba:
+
+5. **La web de producción será MULTILINGÜE**, no monolingüe en francés. Queda resuelta la pregunta abierta de "Executor's Feedback (I18N-FULL)": **no basta con la FASE 0**; hacen falta las fases 1-6. La fase 0 sigue siendo lo primero (es prerrequisito e independiente), pero ya no es el final del camino.
+
+6. **Catálogo: modelo preparado ahora, traducción después.** Sustituye al primer punto de "FUERA de alcance v1". El diseño de datos de la fase 1 debe contemplar traducciones de `commerce_products` y `booking_services` desde el principio; lo que se pospone es la UI y la traducción IA del catálogo, no el modelo. Mismo criterio que `language` en `commerce_orders` (análisis #5): **migrar una vez**.
+
+- **T1.5 (NUEVA)** Modelo de catálogo preparado para traducciones: filas hermanas o campos por idioma en `commerce_products` y `booking_services`, ligadas por grupo de traducción, más el repaso de `uq_cp_slug` (hoy único por `(site_id, slug)`, que impide dos variantes idiomáticas del mismo producto).
+  *Criterio*: la migración admite dos variantes idiomáticas del mismo producto sin romper el `UNIQUE`, y con una sola variante el carrito, el checkout, los pedidos y Stripe se comportan exactamente igual que hoy (regresión con `tests/commerce_checkout.php` y `commerce_stripe.php`).
+  *No incluye*: editor en el panel ni traducción IA del catálogo — eso es fase posterior, ya sin migración.
+
+Board: añadir `[ ] T1.5 Modelo de catálogo preparado para traducciones` al bloque de la FASE 1.
+
+## Current Status / Progress Tracking (I18N-FULL)
+
+**T0.1 completada y verificada (27/07/2026).** Escaparate de Commerce en el idioma del sitio.
+
+Alcance real: 53 claves `shop.*` nuevas en `Microcopy`, en 6 idiomas (`MODULE_LANGUAGES` = es, en, ca, gl, fr, pt). Se enchufan en `ShopController` (catálogo, ficha, carrito, checkout, gracias, errores de validación y desglose de totales), `CartService` (avisos de stock y badge del carrito) y —hallazgo durante la verificación en navegador, no estaba en el inventario inicial— `ManualPayment` y `StripeCheckout`: las etiquetas de método de pago y las instrucciones de pago manual son texto público que sale en el checkout, en la página de gracias Y en el email.
+
+Dos decisiones de diseño:
+- `Microcopy::t()` acepta ahora interpolación (`{n}`, `{product}`, `{rate}`, `{email}`, `{number}`). Los valores NO se escapan en el diccionario: escapar es responsabilidad del punto de render, que ya llama a `e()`. Escapar en ambos sitios produce «&amp;quot;» en nombres de producto con comillas o `&`. Los `{token}` que se queden sin valor se eliminan: un hueco es feo, un `{product}` crudo parece una web rota.
+- **`eu` queda fuera de `MODULE_LANGUAGES` a propósito.** En un checkout el texto tiene efectos contractuales y no puedo dar por revisado el euskera; prefiero castellano correcto. La maquinaria está: añadirlo es rellenar la columna. Las claves del NÚCLEO (footer, formularios, cookies) sí siguen completas en los 7.
+
+**Verificación E2E real en navegador**, sitio 1 puesto en `fr`, recorriendo el flujo completo con sesión y CSRF reales:
+- Catálogo: `Boutique`, badge `Panier`.
+- Ficha: `Ajouter au panier`, `Quantité`, `TVA (21 %) incluse`.
+- Carrito: `Votre panier`, cabeceras `Produit / Prix / Quantité / Total`, `Retirer`, `Mettre à jour le panier`, `Finaliser la commande`, totales `Sous-total` / `TVA incluse`.
+- Checkout: `Vos coordonnées`, `Nom et prénom`, `Notes de commande`, `Paiement`, `Passer la commande`, `Votre commande`; método de pago `Virement bancaire ou paiement convenu`.
+- Errores de validación con datos inválidos: `Le nom est obligatoire.`, `Nous avons besoin d'une adresse e-mail valide pour la commande.`, `Choisissez un moyen de paiement.`
+- Pedido real completado (PC-2026-0004): `Merci pour votre commande !`, `Nous avons envoyé un récapitulatif à jean@example.test.`, instrucciones de pago manual en francés (`en attente de paiement`, `Indiquez le numéro de commande en référence`), `Retour à la boutique`.
+- **Regresión**: sitio devuelto a `es` → catálogo y página de gracias vuelven a texto castellano idéntico al previo.
+- **Limpieza**: pedido de prueba y sus líneas borrados; stock del producto intacto (23, no se decrementa hasta el pago); idioma del sitio restaurado a `es`.
+
+Tests: `tests/commerce_microcopy.php` NUEVO (10/10) — cobertura del diccionario en los idiomas declarados, fallback del idioma no declarado, interpolación, no-escapado, ausencia de castellano fijo en el render, métodos de pago localizados y whitelist de claves con marcado inline. Regresión completa en verde: commerce_products, commerce_checkout, commerce_c7, commerce_orders_admin, commerce_stripe, site_microcopy, site_language, chrome_config, modules_registry. Sin migración.
+
+**T0.4 resuelta de paso**: la política de idiomas por grupo de claves (núcleo vs módulo) está implementada en `Microcopy::MODULE_LANGUAGES` + `isModuleKey()` + `missing()`, que es lo que la tarea pedía. No hizo falta tarea aparte.
+
+## Lessons (I18N-FULL)
+
+- El inventario por grep NO basta para el texto público de un módulo: las etiquetas de método de pago (`ManualPayment::label`) y las instrucciones de pago vivían en clases de `Payments/`, fuera de los ficheros "obvios", y solo aparecieron al recorrer el checkout de verdad en el navegador. Antes de dar por cerrada una tarea de traducción hay que **recorrer el flujo**, no solo leer el controlador.
+- En `ShopController` la variable `$t` ya era el array de totales: meter un traductor llamado `$t` colisiona en silencio. El traductor se llama `$tr`.
+- Un pedido de prueba en el checkout NO decrementa stock (eso ocurre al pagar), pero sí crea filas en `commerce_orders` y `commerce_order_items`: hay que borrarlas al terminar la verificación.
+
+**T0.2 completada y verificada (27/07/2026).** Flujo público de reservas en el idioma del sitio.
+
+Alcance: 30 claves `booking.*` en los 6 idiomas de `MODULE_LANGUAGES`, repartidas en tres superficies distintas —y cada una con su forma de recibir el idioma:
+
+1. **API pública** (`BookingApiController`, `BookingService`): mensajes de validación (`fields`), confirmación de reserva (`confirmed` / `pending`) y respuesta del honeypot. Resueltos con `Microcopy::site($siteId, …)`.
+2. **Páginas de cancelación** (`BookingCancelController`): las abre el cliente desde el email. Traducidas las tres pantallas (confirmar, ya cancelada, cancelada) y el `<html lang>`, que estaba fijo en `es`.
+3. **Widget** (`public/js/pp-booking-widget.js`): es un JS **estático** que también se embebe en webs externas, así que no puede leer `sites.language`. Decisión: **idioma y textos viajan desde la API** en `GET /api/booking/v1/services` (`lang` + `texts`), y el JS solo conserva fallback castellano para lo que pinta ANTES de esa respuesta (el "Cargando…" inicial y el error de conexión). Una sola fuente de verdad, la de PHP; nada de duplicar el diccionario en JS.
+
+De paso, los días de la semana dejan de estar cableados (`['dom','lun','mar','mié',…]`) y salen de `toLocaleDateString(lang, {weekday:'short'})`.
+
+**Bug encontrado al probar la API de verdad (no lo pillaron los tests unitarios):** `widgetTexts()` usaba `Microcopy::t()`, que limpia los `{token}` sin valor — así que «{n} créneaux» se servía al navegador como «créneaux» y «Réserver à {time}» como «Réserver à». Corregido con `Microcopy::template()`, que devuelve la plantilla CRUDA para clientes que interpolan ellos mismos. Test de regresión añadido (`widget_texts_keep_their_placeholders`).
+
+**Verificación E2E real:**
+- API en `fr`: `lang: fr` + paquete `texts` completo con placeholders intactos.
+- Widget embebido en una página de prueba: días `mer. 29/7` / `lun. 3/8`, `4 créneaux`, placeholders `Votre nom *` / `Votre e-mail *` / `Téléphone (facultatif)`, botón `Réserver à 10:00`, pie `Heure locale : Europe/Madrid`.
+- Validación contra la API con datos inválidos: los tres mensajes en francés.
+- Reserva real creada (#77): `Réservation reçue, en attente de confirmation…`.
+- Página de cancelación desde el enlace del email: `Annuler la réservation`, `Voulez-vous vraiment annuler cette réservation ?`, botón `Oui, annuler la réservation`; ejecutada la cancelación → `Réservation annulée` + `Votre réservation a été annulée. Merci de nous avoir prévenus.`; `<html lang="fr">`.
+- **Regresión** con el sitio en `es`: página de cancelación y API vuelven a castellano idéntico (`<html lang="es">`, `Tu nombre *`).
+- **Limpieza**: reserva de prueba borrada, `public/__widget-test.html` (página temporal de embebido) eliminada, idioma restaurado a `es`.
+
+Tests: `tests/booking_microcopy.php` NUEVO (9/9). Regresión en verde: booking_api, booking_availability, booking_services, booking_emails, commerce_*, site_*, chrome_config, modules_registry, canvas_runtime. `node --check` del widget OK. Sin migración.
+
+**Pendiente conocido, decidido a propósito:** los `detail` de error de la API (`'from/to deben ser fechas Y-m-d…'`, `'rango máximo N días'`) siguen en castellano. Son contrato de API para integradores, no texto de cliente final: el widget nunca los muestra (pinta su propio mensaje). Si algún día hay documentación pública de la API, se traducen ahí.
+
+### Lessons (T0.2)
+
+- `Microcopy::t()` y `Microcopy::template()` NO son intercambiables. `t()` es el texto final para renderizar (limpia placeholders sin valor); `template()` es la plantilla cruda para un cliente que interpola por su cuenta (el widget JS). Confundirlas es un bug silencioso: el texto sale bien formado pero sin el dato.
+- Cuando un asset es estático y embebible fuera del sitio, el idioma NO puede deducirse en el cliente: se sirve desde la API junto con los datos. El fallback en el JS solo cubre el hueco anterior a la primera respuesta.
+
+**T0.3 completada y verificada (27/07/2026).** Emails transaccionales en el idioma del cliente. **Con esto la FASE 0 queda cerrada.**
+
+Alcance: 28 claves `mail.*` en los 6 idiomas de `MODULE_LANGUAGES`, más un servicio nuevo `App\Services\DateFormat`.
+
+**Tres decisiones de diseño, las tres deliberadas:**
+
+1. **Los avisos al ADMINISTRADOR se quedan en castellano.** Los recibe el dueño del sitio, que gestiona un panel en castellano; traducirlos no ayuda a nadie y duplica la superficie de error en textos que nadie revisa. Mismo criterio que el `<pp-reply>` del Studio. Está en el test (`admin_notices_stay_in_spanish`) para que se lea como decisión y no como olvido. Detalle pulido tras ver los correos reales: el aviso al admin llevaba la fecha en francés dentro de un texto castellano — ahora usa `$whenAdmin` en castellano.
+
+2. **`DateFormat` nuevo, y el castellano no cambia ni un carácter.** `BookingMailer::humanWhen()` formateaba con `IntlDateFormatter('es_ES')` y patrón `EEEE d 'de' MMMM 'de' y, HH:mm`: el `'de'` va incrustado en el patrón, así que un email en francés habría salido «mercredi 29 de juillet de 2026». `DateFormat` usa patrón propio donde lo tengo claro (es, fr, pt, en) y **el formato largo de ICU donde no** — catalán y gallego apostrofan ante vocal («29 d'abril»), y un patrón escrito a mano con `'de'` fijo estaría mal la mitad de los meses. El patrón castellano se conserva EXACTO: test de regresión byte a byte.
+
+3. **Resolución de idioma preparada para la fase 1.** `CommerceMailer::language()` y `BookingMailer::language()` leen `$order['language']` / `$booking['language']` si existe y caen al idioma del sitio si no. Cuando T1.2 añada esas columnas, los emails pasan solos a usar el idioma con el que el cliente compró, sin volver a tocar los mailers.
+
+**Verificación E2E con emails REALES.** Levanté un SMTP de captura local (script en scratchpad) y configuré el sitio contra él, disparando los 6 emails de cliente + los 2 avisos de admin en francés y luego en castellano. 18 mensajes capturados y revisados uno a uno:
+- Cliente en `fr`: `Commande reçue`, `Paiement reçu`, `Commande expédiée`, `Commande annulée`, `Nous avons bien reçu votre réservation`, `Réservation confirmée/annulée`. Cuerpos completos correctos (`Bonjour Marie Durand,` · `Total : 20,00 € (dont 3,50 € de TVA)` · `Date et heure: mercredi 29 juillet 2026, 10:00`).
+- **El adjunto `.ics` decodificado**: `DESCRIPTION:Réservation au nom de Marie Durand` — el evento que acaba en el calendario del cliente también va en su idioma.
+- Admin en ambas tandas: `Nuevo pedido …`, `Nueva reserva: … — miércoles 29 de julio de 2026, 10:00` (castellano íntegro).
+- **Regresión en `es`**: cuerpos idénticos a los originales, incluida la fecha larga.
+- Limpieza verificada: 0 pedidos QA, 0 reservas de prueba, ajustes de correo restaurados a "ninguno" (como estaban), idioma `es`, SMTP de captura apagado.
+
+Tests: `tests/mail_microcopy.php` NUEVO (9/9). Regresión en verde (15 suites: booking_*, commerce_*, site_*, chrome_config, modules_registry). Sin migración.
+
+**Recomendación antes de vender esto en otros idiomas:** el francés lo doy por bueno; **catalán y gallego merecen una lectura de nativo** antes de usarlos comercialmente, sobre todo en los emails, que tienen valor contractual. El euskera sigue fuera de `MODULE_LANGUAGES` a propósito (cae a castellano). Añadir cualquiera de ellos es rellenar columnas: la maquinaria no cambia.
+
+### Lessons (T0.3)
+
+- Los patrones de fecha ICU escritos a mano NO son traducibles literalmente: el `'de'` castellano/portugués no vale en francés, y en catalán/gallego la contracción depende de la inicial del mes (`d'abril` vs `de maig`). Ante la duda, dejar que ICU ponga el formato largo del locale.
+- Un email tiene DOS destinatarios con idiomas distintos (cliente y administrador) construidos en la misma función. Al traducir hay que separar las variables desde el principio, o se cuelan mezclas como un texto castellano con la fecha en francés.
+- Para verificar emails de verdad no hace falta un servicio externo: un SMTP de captura de 40 líneas en Python permite leer los bytes exactos que recibiría el cliente, adjuntos `.ics` incluidos.
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 1)
+
+**FASE 1 completada y verificada (27/07/2026).** Modelo de datos del multi-idioma. T1.1 a T1.5.
+
+**Una sola migración**: `database/migrations/2026_07_27_multilanguage_model.sql`. NO se replica en `install/schema.sql` porque el instalador ya ejecuta el Migrator canónico sobre `database/migrations/` (verificado en `install/migrate.php`): la divergencia histórica está resuelta y duplicar aquí sería volver a abrirla.
+
+- **T1.1** `pages.language` (VARCHAR 5) + `pages.translation_group` (CHAR 36) + índices `(site_id, language, status)` y `(translation_group)`. Backfill con el idioma REAL de cada sitio (JOIN con `sites`), no un `'es'` a lo bruto, y `UUID()` por fila para que cada página arranque en su propio grupo. Verificado sobre la BD: 31 páginas, 31 grupos distintos, 0 huérfanas.
+- **T1.2** `language` en `commerce_orders` y `booking_bookings`, con backfill. Y lo que hacía falta para que sirva: `OrderStore::createFromCart()` y `BookingService::create()` lo **escriben** al crear. Verificado con una reserva real por API con el sitio en `fr` → fila guardada con `language=fr`. A partir de ahora los emails de ese cliente irán en francés aunque el sitio cambie de idioma después (los mailers ya leían la columna desde T0.3).
+- **T1.3** Tabla `site_languages` (site_id, code, is_primary, sort_order) con FK cascade y UNIQUE (site_id, code). Backfill: cada sitio existente estrena su idioma actual como principal. **El instalador también la rellena** al crear el sitio — una instalación nueva crea el sitio DESPUÉS de migrar, así que la migración no la cubre.
+- **T1.4** `LanguageService`: `activeFor()`, `primaryFor()`, `isMultilingual()`, `forPage()`, `prefixFor()`, `enable()`, `disable()`, con caché por request. `prefixFor()` implementa la decisión de URLs: **cadena vacía para el principal**, código para los demás.
+- **T1.5** `language` + `translation_group` en `commerce_products` y `booking_services`, y el UNIQUE `uq_cp_slug` pasa de `(site_id, slug)` a `(site_id, language, slug)`. Verificado con inserciones reales: dos variantes idiomáticas del mismo slug conviven, y el slug duplicado en el MISMO idioma se sigue rechazando. Solo el modelo: editor y traducción IA del catálogo son fase posterior.
+
+**UI de Ajustes (opt-in).** Nueva tarjeta "Idiomas adicionales" con lista de activos, el principal marcado como «sin prefijo», alta por selector y baja por idioma. Dos guardas, ambas probadas por HTTP con sesión real:
+- desactivar el idioma **principal** → rechazado ("dejaría el sitio sin home");
+- desactivar un idioma **con páginas** → rechazado, diciendo cuántas. Mensaje explícito: «desactivar un idioma nunca borra contenido».
+El copy de la tarjeta explica que el principal mantiene sus URLs y que los adicionales viven bajo prefijo, que es lo que evita romper webs publicadas.
+
+Tests: `tests/site_languages_model.php` NUEVO (21/21), contra la BD real y sin dejar basura. Regresión en verde (18 suites). Estado final verificado: `site_languages` con solo `es` principal, 31 páginas, 0 páginas `fr`, idioma del sitio `es`, `public/` sin ficheros temporales.
+
+### Lessons (Fase 1)
+
+- El instalador crea el sitio DESPUÉS de correr las migraciones. Cualquier tabla que necesite una fila por sitio no puede rellenarse solo desde la migración: hay que sembrarla también en `install/steps/admin.php`.
+- `UUID()` dentro de un `UPDATE` se evalúa **por fila**, que es justo lo que se quiere para dar un grupo propio a cada página. Con un valor fijo, todas las páginas quedarían hermanadas.
+- Cambiar un UNIQUE existente (`uq_cp_slug`) es seguro si el nuevo es MÁS laxo: si `(site_id, slug)` era único, `(site_id, language, slug)` también lo es, así que el DROP+ADD no puede fallar por duplicados.
+- Para revisar visualmente un bloque nuevo del panel sin meter credenciales en el navegador: obtener el HTML autenticado por curl, aislar el fragmento y servirlo con el CSS del panel y un `<base>`. El layout completo fuera de su contexto no cuadra, pero el fragmento sí.
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 2)
+
+**FASE 2 completada y verificada (27/07/2026).** URLs y resolución por idioma. T2.1, T2.2, T2.3.
+
+**Confirmado el análisis #1 del plan: no se ha tocado el enrutado.** El router ya normaliza la barra final (`/fr/` → `/fr`) y el catch-all `/{slug:path}` cubre todo. El prefijo de idioma vive DENTRO de `pages.slug`, que ya admitía barras.
+
+- **T2.1 · Prefijo en el slug.** `LanguageService::applySlugPrefix()` — sin prefijo para el principal, `xx/...` para los secundarios. Es **idempotente y reescribe**: aplicarlo dos veces no da `fr/fr/contact`, y cambiar de idioma sustituye el prefijo en vez de acumularlo. `PageController::uniqueSlug()` acepta ahora `?string $lang` y lo aplica.
+- **T2.1 · Guarda anti-colisión.** `slugCollidesWithLanguage()`: una página del idioma principal no puede ocupar `/fr/...` porque dejaría sin sitio (o sin home) al francés. Un idioma NO activo no reserva nada — `/pt/algo` es un slug legítimo mientras el portugués esté apagado. Enganchada en `PageController::validate()`, así que actúa también cuando el slug se escribe a mano. **Verificado por HTTP en el panel real**: crear una página castellana con slug `fr/robado` devuelve «`fr/` está reservado para las páginas en Français».
+- **T2.2 · Home por idioma.** `PageController::homePageFor($siteId, $lang)` + `serveHome()`. `/` sirve la home del principal; `/fr` y `/fr/` la francesa, detectadas por `languageFromHomeSlug()`. Compatibilidad cuidada: en un sitio MONOLINGÜE se sigue aceptando una home sin idioma asignado (fila anterior a la migración); en uno multi-idioma NO, porque serviría la home equivocada.
+- **T2.3 · Caché de home por idioma.** `CacheService::homeKey($siteId, $lang)`: el principal conserva la clave `__home` de siempre (los sitios monolingües no notan nada) y cada idioma adicional tiene la suya. `invalidatePage()` invalida la home del idioma de la página, no la del sitio. Verificado en disco: `__home.html` y `__home__fr.html` conviven.
+- **Extra no planificado pero necesario**: `<html lang>` de las páginas públicas pasa a salir de la PÁGINA (`LanguageService::forPage()`), no del sitio. Servir `/fr/contact` con `lang="es"` era un fallo de SEO y accesibilidad, y arreglarlo aquí es parte de servir bien la página.
+
+**Verificación E2E con una web bilingüe real** (home + página interior en francés, servidas por el servidor de desarrollo):
+
+| URL | HTTP | `<html lang>` | contenido |
+|---|---|---|---|
+| `/` | 200 | es | home castellana |
+| `/fr` | 200 | fr | Bienvenue chez nous |
+| `/fr/` | 200 | fr | Bienvenue chez nous |
+| `/fr/contact` | 200 | fr | Parlons de votre projet |
+
+Caché cruzada comprobada: segunda petición idéntica a la primera (viene de caché) en ambos idiomas, y `/` y `/fr` distintas entre sí. Regresión monolingüe: `/`, `/inicio`, `/canvas-demo` siguen en 200 con `lang=es` y `/no-existe` sigue devolviendo 404.
+
+Tests: `tests/site_language_urls.php` NUEVO (16/16). Regresión en verde (18 suites). Sin migración. Estado final: 31 páginas, `site_languages` solo con `es`, caché limpia.
+
+### Lessons (Fase 2)
+
+- El router ya hacía el trabajo: normaliza la barra final y tiene catch-all multi-segmento. Antes de añadir rutas para `/fr/`, mirar qué resuelve ya lo que hay — la fase entera se hizo sin tocar `routes.php`.
+- `page_sections.status` es `enum('editable','locked','deleted')`, NO `published`/`draft` como `pages.status`. Insertar secciones a mano con el vocabulario equivocado falla con «Data truncated for column 'status'».
+- Al añadir una dimensión (idioma) a una clave de caché, el valor por defecto debe conservar la clave ANTIGUA para el caso por defecto (`__home` para el idioma principal). Si todas las claves cambian, cada sitio ya publicado pierde su caché de golpe al desplegar.
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 3)
+
+**FASE 3 completada y verificada (27/07/2026).** Chrome, navegación y microcopy por idioma de PÁGINA. T3.1, T3.2, T3.3.
+
+El cambio conceptual de la fase: hasta aquí todo se resolvía por el idioma del SITIO. Ahora manda el idioma de la **página que se está sirviendo**, que en una web bilingüe no tiene por qué coincidir.
+
+- **T3.1 · Filtrado por idioma.** `BrandService::navPages()` y la consulta de legales del footer filtran por `language`, y el menú excluye además la home del propio idioma (cuyo slug es el prefijo). `SectionRenderer::renderPostsListing()` lista solo las entradas del idioma que se está pintando.
+- **T3.2 · Selector de idioma.** `BrandService::languageSwitcher()` — aparece **solo** si el sitio sirve más de un idioma; una web monolingüe no ve ni rastro. `languageSwitchTarget()` resuelve el destino por `translation_group`: si existe la traducción, enlaza a ella; si no, a la home de ese idioma (**nunca a un 404**). Los idiomas se nombran con su ENDÓNIMO («Français», no «Francés»): quien busca la versión francesa reconoce su idioma escrito como lo escribe él. Marca el actual con `aria-current` y cada enlace lleva `hreflang`. CSS en `DesignSystem` (el design system del front, no el del panel).
+- **T3.3 · Microcopy por idioma de render.** `publicHeader()`/`publicFooter()` aceptan `?string $lang`, `SectionRenderer::setSiteContext()` también, y las llamadas internas pasan de `Microcopy::site($siteId, …)` a `Microcopy::t($key, self::$lang)`. `PageController::render()` los alimenta con `LanguageService::forPage()`.
+
+**Verificación E2E en navegador con web bilingüe real:**
+- `/qa3-servicios` (castellano): menú solo con páginas castellanas, footer `EXPLORA` / `LEGAL` / `Configurar cookies`, selector con **Español** subrayado como actual.
+- `/fr/services`: menú solo con `Nos services`, footer `EXPLORER` / `MENTIONS LÉGALES` / `Paramètres des cookies`, banner de cookies en francés, selector con **Français** como actual.
+- Selector comprobado en ambos sentidos: desde la página castellana enlaza a `/fr/services` y desde la francesa a `/qa3-servicios` — la traducción EQUIVALENTE, no la home.
+- Regresión monolingüe: sin selector (0 ocurrencias), menú con sus 6 enlaces, `lang="es"`, footer `Explora`.
+
+Tests: `tests/site_language_chrome.php` NUEVO (11/11), repetible (limpia restos de ejecuciones interrumpidas al arrancar). Regresión en verde (18 suites). Sin migración.
+
+### Limitación conocida detectada al verificar (NO es un bug de esta fase)
+
+En la página francesa, el **tagline del footer** sigue en castellano. Sale de `site_memory` (la descripción del negocio): es CONTENIDO escrito una vez por sitio, no microcopy, así que cae del lado de «lo escrito no se traduce solo» — coherente con lo decidido, pero visible en una web bilingüe.
+
+Lo mismo aplicaría a: el nombre de marca del footer, las etiquetas de menú personalizadas y el `heading`/CTA de newsletter si el usuario los ha escrito. Todo eso vive en `ChromeService`/`site_memory` con UN valor por sitio.
+
+**Dónde encaja arreglarlo**: no en esta fase. O bien un «chrome por idioma» (guardar esas cadenas por idioma, migración pequeña), o bien que la herramienta de traducción de la FASE 5 las incluya. Conviene decidirlo antes de cerrar la fase 5.
+
+### Lessons (Fase 3)
+
+- Al ordenar un test que crea contenido y desactiva idiomas: **borrar las páginas ANTES de desactivar el idioma**. La guarda de la fase 1 (no desactivar un idioma con páginas) hizo fallar dos asserts, y tenía razón — el fallo estaba en el test.
+- El CSS del front vive en `DesignSystem.php`, no en `admin/assets/css/admin.css`. Añadir estilos del sitio público al CSS del panel no rompe nada pero no se aplica: el usuario ve el HTML sin estilar.
+- `page_sections` de prueba: recordar el `enum('editable','locked','deleted')` de su columna `status` (ver lección de la fase 2).
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 4)
+
+**FASE 4 completada y verificada (27/07/2026).** SEO multi-idioma. T4.1, T4.2, T4.3.
+
+**Esta fase encontró el fallo más grave de todo el proyecto**, y estaba en código anterior al multi-idioma:
+
+> `SeoIndexingService::canonicalForPage()` devolvía la raíz del sitio para CUALQUIER página con `page_type='home'`. Con una home francesa (`page_type='home'`, slug `fr`), su canonical apuntaba a `/` — es decir, le decía a Google **«soy un duplicado de la home castellana»**. Eso es la forma más rápida de que te desindexen la versión traducida. Corregido con `isPrimaryHome()`: solo la home del idioma principal vive en la raíz.
+
+- **T4.1 · hreflang.** Nuevo `SeoHreflangService`: `alternatesFor()` (versiones publicadas del `translation_group`, excluyendo `noindex`), `renderTags()` para el `<head>` y `sitemapLinks()` para el sitemap. Reglas respetadas: **recíprocos** (todas las versiones se declaran entre sí, incluida a sí misma), URLs **absolutas**, `x-default` al idioma principal, y **nada si la página no tiene traducciones** — declararse sola es ruido.
+- **T4.2 · Sitemap.** Namespace `xhtml` + `<xhtml:link rel="alternate">` por URL. De paso, dos correcciones necesarias:
+  - `self::site()` no seleccionaba `language`, así que no podía distinguir la home principal de la secundaria (la francesa se listaba como `/`);
+  - **deduplicación por `<loc>`** y resolución de "qué página se sirve REALMENTE en la raíz" vía `PageController::homePageFor()`. La BD de desarrollo tiene 22 páginas marcadas como `home`: antes el sitemap listaba `/` veintidós veces y esas páginas nunca aparecían con su URL real. Ahora la raíz sale una vez y cada página con su slug (26 URLs).
+- **T4.3 · Canonical.** Ver arriba. La home principal sigue devolviendo `/`; las demás, su slug.
+
+**Divergencia detectada y corregida de camino (bug de la fase 1):** cambiar el «Idioma principal» en Ajustes actualizaba `sites.language` pero NO `site_languages`, así que `primaryFor()` seguía devolviendo el idioma viejo y los prefijos de URL dejaban de cuadrar. Nuevo `LanguageService::setPrimary()`, llamado desde Ajustes, con una guarda: **en una web multi-idioma el cambio se rechaza**, porque reescribiría las URLs de todas las páginas (el idioma sin prefijo pasaría a tenerlo). Primero hay que desactivar los adicionales.
+
+**Verificación E2E por HTTP:**
+- `/qa5-contacto` y `/fr/qa5-contact` emiten los mismos tres `<link rel="alternate">` (es, fr, x-default) — recíprocos byte a byte.
+- canonical: `/` → raíz; `/fr` → `/fr` (antes → raíz).
+- sitemap: XML válido parseado con ElementTree, raíz una sola vez, `/fr` presente, alternates correctos por URL.
+- Sitio monolingüe: **0** etiquetas hreflang. No se ensucia el `<head>` de quien no usa esto.
+
+Tests: `tests/site_language_seo.php` NUEVO (14/14). Actualizada UNA aserción de `tests/seo_services.php` (`sitemap_has_urlset` fijaba la etiqueta `<urlset>` literal; ahora comprueba la intención, porque el namespace `xhtml` es un añadido deliberado). Ampliado `site_languages_model.php` con `setPrimary`. Regresión en verde (18 suites). Sin migración.
+
+### Lessons (Fase 4)
+
+- Un `canonical` mal calculado no "se ve mal": desindexa. Merece test propio y explícito por cada caso (home principal, home secundaria, página interior), no confiar en que "la URL sale bien en el navegador".
+- Cuando una función decide por `page_type`, comprobar qué pasa si hay VARIAS filas con ese tipo. `page_type='home'` no está limitado a una fila por sitio y la BD de desarrollo tenía 22.
+- Si dos fuentes guardan el mismo dato (`sites.language` y `site_languages.is_primary`), hay que sincronizarlas EN EL MISMO sitio donde se escribe, o divergen en silencio. Mejor aún: que solo una sea la verdad — aquí se mantienen ambas por compatibilidad, pero `setPrimary()` es el único camino de escritura.
+
+---
+
+# [I18N-FULL · FASE 5] Traducción de contenido — PLAN (27/07/2026)
+
+## Decisiones cerradas (usuario)
+
+1. **Motor híbrido por tipo de página.** Traducción LITERAL donde no cabe creatividad (legales, formularios, fichas con datos) y REESCRITURA nativa donde el texto vende (home, servicios, landings). Motivo: el riesgo de que la IA "mejore" un aviso legal es el que no queremos correr; el de que una home suene plana es el que menos compensa aceptar.
+2. **Alcance: páginas + SEO + chrome.** El catálogo va aparte (ver 4).
+3. **Chrome por idioma**: tagline, nombre de marca del footer, etiquetas de menú personalizadas y textos de newsletter pasan a guardarse por idioma. Son pocas cadenas y salen en TODAS las páginas.
+4. **El catálogo se mueve a una FASE 7 propia.** Motivo verificado en código, no supuesto: `ProductStore::all()` y `findActiveBySlug()` no filtran por idioma, así que un producto con gemelo francés duplicaría las fichas en `/tienda` y la búsqueda por slug devolvería una variante arbitraria (el UNIQUE ya permite el mismo slug en dos idiomas). Además la tienda vive en `/tienda`, una sola URL sin prefijo. Traducir catálogo arrastra las rutas de módulo por idioma, que el plan tenía fuera de v1.
+5. **Todo aterriza en BORRADOR.** Nunca autopublicar una traducción automática.
+6. **Orden**: primero página a página, luego el lote.
+
+## Key Challenges and Analysis (Fase 5)
+
+**1. Dos formatos de página, dos tratamientos.** Canvas (HTML+CSS libre en `page_canvas`) y secciones (JSON tipado en `page_sections`). El canvas exige preservar estructura, clases, `data-pp-*`, `data-pp-behavior` y placeholders `{{form:REF}}`; las secciones exigen respetar el esquema de cada tipo. Son dos rutas de código distintas dentro de la misma acción.
+
+**2. Enlaces internos.** Una página traducida que enlaza a `/contacto` manda al visitante francés al castellano. Los enlaces internos deben reescribirse al idioma destino usando `translation_group`, y si la página destino no está traducida, dejar el original (mejor un enlace que funciona en otro idioma que uno roto).
+
+**3. Validación automática por tipo.** En modo LITERAL se puede exigir isomorfismo: mismo número de secciones y de `data-pp-field`. En modo REESCRITURA no —el copy cambia—, así que la validación es más laxa: estructura de secciones y presencia de placeholders. Esto refuerza la elección híbrida: donde más riesgo hay, más se puede validar.
+
+**4. El grupo de traducción ya existe** (fase 1) y `BrandService::languageSwitchTarget()` ya lo usa. Traducir = crear la página hermana con el MISMO `translation_group`.
+
+**5. El lote debe montarse sobre `SiteAssistantJobs`**, que ya va por pasos (un item por request), aguanta fallos sin detener el resto y reintenta transitorios. No inventar cola nueva.
+
+**6. Coste.** Traducir una web de 8 páginas canvas son 8 llamadas largas. Conviene estimar y mostrar el coste antes de lanzar el lote, como ya hace el asistente.
+
+## High-level Task Breakdown (Fase 5)
+
+- **T5.1 · Chrome por idioma.** Migración pequeña: las cadenas de `ChromeService` con un valor por sitio pasan a tener uno por idioma (o tabla auxiliar), y `BrandService` las lee por `self::$lang`. Incluye el tagline de `site_memory`.
+  *Criterio*: con dos idiomas activos, el footer francés muestra tagline y etiquetas en francés y el castellano sigue exactamente igual que hoy.
+- **T5.2 · Acción IA `TRANSLATE_PAGE`.** Modo literal / reescritura según `page_type`, con `Actions::languageRule()` ya existente. Preserva estructura, `data-pp-*` y `{{form:REF}}`, y reescribe enlaces internos.
+  *Criterio*: traducir una página canvas real produce el mismo número de secciones y de `data-pp-field`, con los enlaces internos apuntando al idioma destino.
+- **T5.3 · Traducir una página (bajo demanda).** Botón en el panel: clona (canvas o secciones), traduce, guarda como BORRADOR con el mismo `translation_group` y el slug prefijado (`uniqueSlug(..., $lang)`, ya listo de la fase 2).
+  *Criterio*: la traducción aparece en el listado, el selector de idioma la enlaza, y publicarla es un acto humano explícito.
+- **T5.4 · Listado con idioma y traducciones.** Columna de idioma y qué falta por traducir, agrupado por `translation_group`.
+  *Criterio*: de un vistazo se ve qué páginas no tienen versión en cada idioma activo.
+- **T5.5 · Job "traducir el sitio a X"** sobre `SiteAssistantJobs`, con estimación de coste antes de lanzar.
+  *Criterio*: traducir un sitio de 3 páginas deja 3 borradores correctamente agrupados; un fallo en una no impide las otras.
+- **T5.6 · SEO de la traducción**: `meta_title` y `meta_description` se traducen con la página.
+  *Criterio*: la página traducida no hereda el meta en el idioma original.
+
+## Project Status Board (Fase 5)
+
+- [ ] T5.1 Chrome por idioma
+- [ ] T5.2 Acción IA TRANSLATE_PAGE (híbrida)
+- [ ] T5.3 Traducir una página bajo demanda
+- [ ] T5.4 Listado con estado de traducción
+- [ ] T5.5 Job de traducción del sitio
+- [ ] T5.6 SEO traducido
+
+## FASE 7 (nueva, movida desde el alcance de la 5)
+
+Catálogo multi-idioma: filtrado por idioma en `ProductStore` y en el escaparate, resolución de variante por ficha, prefijos de ruta para tienda y reservas (`/fr/boutique`), y repaso de carrito, pedidos y Stripe. Diseño propio antes de ejecutar.
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 5)
+
+**T5.1 completada y verificada (27/07/2026).** Chrome por idioma. Cierra el hueco visible que dejó la fase 3.
+
+**Sin migración.** La config de chrome ya es JSON en `settings`, así que la capa de idioma vive dentro: una clave `i18n` con forma `['fr' => ['header' => [...], 'footer' => [...]]]`. Resultó más barato de lo que estimé en el plan (allí dije «migración pequeña»; al final, ninguna).
+
+**Decisión de diseño: la capa contiene SOLO texto.** El layout, los colores y los bordes siguen compartidos entre idiomas, a propósito: si se duplicaran, cambiar un color solo afectaría a un idioma y el sitio se desincronizaría visualmente. Hay test que lo fija (`layout_and_style_are_shared`).
+
+Cubre: tagline, nombre de marca del footer, las cinco etiquetas de columna, textos de newsletter, copyright, etiqueta del CTA del header, menú del header y navegación del pie.
+
+**Dos detalles que importan:**
+- **El menú se sustituye ENTERO**, no etiqueta a etiqueta: en otro idioma apunta a otras páginas, así que traducir solo las etiquetas dejaría enlaces al idioma equivocado. Si un idioma no tiene menú configurado, cae a la navegación automática, que desde la fase 3 ya filtra por idioma — buen valor por defecto.
+- **Un campo no traducido cae a la base**, no se queda vacío: vale más una etiqueta en el idioma original que un hueco en el footer.
+
+Implementación: `ChromeService::localized($config, $lang)` resuelve, `sanitizeI18n()` sanea (solo idiomas admitidos, solo campos de texto, mismas reglas de longitud que la base) y `BrandService::publicHeader/publicFooter` la aplican al arrancar. De paso se extrajo `sanitizeMenu()` del cuerpo de `sanitize()` para que la capa reutilice exactamente las mismas reglas en vez de duplicarlas.
+
+Tests: `tests/site_language_chrome_i18n.php` NUEVO (12/12). Regresión en verde (20 suites, incluido `chrome_config`). Estado final: capa `i18n` vacía en el sitio real (nadie la ha tocado), config intacta, 31 páginas, solo `es` activo.
+
+### Lessons (T5.1)
+
+- `ChromeService::sanitize()` descarta todo lo que no esté en su lista blanca. Cualquier clave nueva en la config hay que contemplarla ahí o se pierde silenciosamente **al guardar** — no al leer, que es lo que hace el fallo difícil de ver.
+- Los ítems de menú con `type` implícito caen a `'page'`, que exige `page_id > 0`; un ítem `['label','url']` sin `type` se descarta entero. Al construir menús en tests hay que poner `type => 'link'`.
+
+### Pendiente de T5.1 (siguiente sesión)
+
+La capa se lee y se renderiza, pero **el editor de chrome del panel todavía no la escribe**: hoy solo se puede poblar por código o por importación. Falta añadir al editor un conmutador de idioma que edite `i18n[lang]` cuando el sitio es multi-idioma. Es UI, no lógica — la lógica está y probada. Conviene hacerlo junto a T5.4 (listado con estado de traducción), que también es panel.
+
+**T5.2 completada y verificada (27/07/2026).** Motor de traducción híbrido.
+
+Nuevo `App\Services\PageTranslator` + dos acciones IA (`TRANSLATE_PAGE_CANVAS`, `TRANSLATE_PAGE_SECTIONS`). El servicio **no persiste nada**: devuelve la traducción para que T5.3 decida. Así el guardado (y su política de borrador) queda en un solo sitio.
+
+**Modo por tipo de página, con la lista al revés de como la escribí primero.** El test me corrigió: definí `LITERAL_TYPES` y todo lo demás caía a reescritura, así que un tipo desconocido se habría reescrito. Ahora la lista explícita es `REWRITE_TYPES` (home, service, landing, product) y **cualquier otro tipo, conocido o no, se traduce con fidelidad**: el modo con más libertad —y más riesgo— se opta tipo por tipo.
+
+**Validación proporcional al riesgo**, que era el argumento para elegir híbrido:
+- LITERAL: mismo número de secciones Y de campos editables. Si se pierde algo, se detecta solo.
+- REESCRITURA: el copy cambia a propósito, así que solo se exige que no desaparezcan secciones ni quede la página en nada.
+
+**Enlaces internos** (`rewriteInternalLinks`): `/contacto` en una página francesa mandaría al visitante de vuelta al castellano. Se resuelve por `translation_group`; si la página destino no está traducida se deja el original —mejor un enlace que funciona en otro idioma que uno roto— y los externos y las anclas no se tocan.
+
+**UX no técnica** (petición explícita del usuario): todos los mensajes de fallo están escritos para alguien que no sabe qué es un `<section>`, dicen **siempre** que no se ha guardado nada, e invitan a reintentar. Hay un test que lo vigila (`validation_error_is_human_readable`): rechaza mensajes que contengan `data-pp-`, `<section`, «isomorf», «regex» o «null».
+
+**Verificación con IA REAL** sobre dos páginas canvas creadas al efecto:
+- **Legal (fiel)**: «Mentions légales», con NIF `B12345678`, dirección y «article 30 du RGPD» intactos. Estructura 1→1 secciones, 3→3 campos.
+- **Home (adaptación)**: «Votre réussite au concours d'enseignement commence ici» — no es la traducción literal de «Tu plaza docente comienza aquí», es cómo lo diría un nativo. `{{form:contacto}}` intacto, 2→2 secciones, 3→3 campos.
+- SEO traducido en ambas (T5.6 queda cubierta de paso para el flujo canvas).
+
+Tests: `tests/page_translation.php` NUEVO (17/17), sin llamadas a IA (modo, enlaces, validación y contrato de prompts). Regresión en verde (17 suites). Sin migración. BD limpia: 31 páginas, 0 restos.
+
+### Observación menor (no bloqueante)
+
+En la página legal, el texto del enlace `<a href="/qa8-contacto">contacto</a>` se quedó como «contacto»: el modelo lo interpretó como parte de la URL. Con textos de enlace reales («escríbenos aquí») no debería pasar. Si se repite en pruebas con contenido real, se resuelve con una línea en el prompt.
+
+### Lessons (T5.2)
+
+- `CanvasService` expone `get()`, no `load()`. Confirmar el nombre real antes de llamarlo: el error solo aparece en ejecución, y aquí apareció ya con la llamada a IA hecha (coste tirado).
+- Al elegir entre dos comportamientos donde uno es más arriesgado, la lista explícita debe ser la del comportamiento ARRIESGADO, no la del seguro. Así lo desconocido cae siempre del lado bueno.
+
+**T5.3 completada y verificada (27/07/2026).** Traducir una página desde el panel.
+
+**Arquitectura: traducir y guardar, separados.** `PageTranslator` (IA) devuelve; `TranslationWriter` (BD) persiste. Así el riesgo real del guardado —duplicar páginas, pisar contenido, publicar sin querer— se prueba **entero sin gastar una sola llamada a la IA** (`tests/page_translation_write.php`, 14/14).
+
+**Tres invariantes fijadas por test:**
+1. La traducción nace en **borrador**. La publica una persona, mirándola.
+2. La página **original no se toca jamás** (se comprueba título, estado y slug tras traducir).
+3. Pedirlo dos veces **no crea una segunda página**: devuelve la que ya existe.
+
+**UX para usuario no técnico** (petición explícita), con todo verificado en el panel real:
+- La columna «Idiomas» y el script **solo aparecen si el sitio es multi-idioma**. Verificado: en un sitio de un idioma, 0 columnas, 0 chips, 0 scripts. Quien no usa esto no ve nada nuevo.
+- Cada página muestra su idioma y un chip por idioma pendiente (`+ Français`) o un enlace a la traducción existente, marcada «· borrador» si no está publicada.
+- **Antes** de traducir, un diálogo dice literalmente qué va a pasar: «Se guardará como **borrador** para que la revises antes de publicarla, y **tu página actual no cambia**».
+- **Durante**, spinner + mensajes que van rotando cada 7 s («Adaptando los textos al idioma…», «Revisando enlaces y estructura…»). Una espera larga en silencio parece un cuelgue.
+- **Después**, botón directo «Abrir la traducción»; si falla, «Volver a intentarlo» con el mensaje del servidor ya escrito en cristiano.
+
+**Verificación E2E con IA real por HTTP**: «Nuestros servicios» (/qa10-servicios, publicada, es) → «Nos services» (/fr/qa10-servicios, **draft**, fr), mismo `translation_group`, SEO traducido y contenido adaptado («Préparation aux concours de l'enseignement»). El original quedó intacto.
+
+**Dos fallos encontrados ejecutando, no leyendo:**
+1. **El diálogo se veía sin pulsar nada.** `display:grid` en `.pp-tr-overlay` pisa el atributo `hidden`. Es EXACTAMENTE la lección que ya estaba escrita en este scratchpad (FEAT-5) y aun así la repetí. Añadidas las reglas `[hidden]{display:none}` a las tres clases con display.
+2. **Las comprobaciones corrían DESPUÉS de llamar a la IA**: traducir a un idioma inactivo, o una página ya traducida, gastaba una llamada para nada. Movidas antes con `TranslationWriter::precheck()`. Medido: la respuesta pasa de 2,4 s a **0,015 s**. Y de paso, el enlace a la traducción existente respeta que la página sea canvas (Studio) o de secciones (editor).
+
+Ficheros: `app/Services/TranslationWriter.php` (nuevo), `admin/assets/js/page-translate.js` (nuevo), endpoint `POST /admin/pages/{id}/translate`, columna en el listado y CSS. Añadido `<pp-title>` al envelope de traducción: **el título de la página es lo que se ve en el menú del sitio**, y se me había quedado fuera en T5.2.
+
+Tests: `page_translation_write.php` NUEVO (14/14). Regresión en verde (18 suites). Sin migración. BD limpia: 31 páginas, solo `es` activo.
+
+### Lessons (T5.3)
+
+- Repetida la lección de `[hidden]` vs `display:flex/grid`. Escribirla no basta: **al añadir CSS con `display` a un elemento que se oculta con `hidden`, la regla `[hidden]{display:none}` va en el mismo commit**, no después.
+- Las guardas baratas (¿existe ya? ¿idioma activo?) van SIEMPRE antes de la operación cara. Es correctitud y es dinero.
+- Separar "calcular con IA" de "escribir en BD" no es purismo: es lo que permite probar el 90% del riesgo sin gastar en llamadas.
+
+**T5.4 completada y verificada (27/07/2026).** Estado de traducción de un vistazo.
+
+- **Tarjeta «Traducciones»** al principio del mapa del sitio: por cada idioma adicional, «X de Y páginas traducidas», barra de progreso y enlace «Ver las N que faltan». Con todo traducido, «Todo traducido 🎉».
+- **Filtro** `?sin_traducir=fr`: deja solo las páginas del idioma principal que aún no tienen versión en ese idioma, con banner explicativo y enlace para quitarlo. Verificado: de 33 páginas, la tabla muestra 32 y la ya traducida desaparece.
+- **Solo cuentan las páginas del idioma PRINCIPAL.** Las que ya son traducciones no se traducen a su vez; incluirlas daría un porcentaje sin significado.
+- Todo esto **solo existe si el sitio es multi-idioma**, igual que en T5.3.
+
+**Detalle de coherencia detectado al verificar:** con el filtro puesto, la vista «Mapa» seguía mostrando el sitio entero, contradiciendo el banner de «solo lo que falta». Como el mapa es una vista jerárquica del sitio completo (filtrarla rompería el árbol), **se oculta la pestaña Mapa mientras hay filtro** y se arranca en Lista. Verificado por HTTP: 0 pestañas con filtro, 1 sin filtro.
+
+Regresión en verde (14 suites). Sin migración. BD limpia.
+
+### Pendiente explícito: editor de chrome por idioma (nuevo T5.7)
+
+En T5.1 dije que el conmutador de idioma del editor de «Header y pie» encajaba en T5.4. **Al abrirlo he decidido no meterlo aquí**: el editor es un único `buildConfig()` que serializa TODA la config desde 409 líneas de JS, y añadir edición por capas exige estado de UI, habilitar/deshabilitar campos estructurales y semántica de guardado cuidadosa (no pisar la base al editar una capa). Hacerlo de refilón dentro de otra tarea es como se rompen los editores.
+
+Queda como **T5.7**, con la lógica ya lista y probada desde T5.1 (`ChromeService::localized()` + `sanitizeI18n()`): es solo UI. Mientras tanto, la capa `i18n` se puede poblar por código o desde la traducción automática.
+
+**T5.5 completada y verificada (28/07/2026).** Traducción del sitio completo, por pasos.
+
+**Decisión: se reutiliza el PATRÓN del asistente, no sus tablas.** `assistant_jobs`/`assistant_job_items` están modeladas para «aplicar una instrucción a una sección»; meter aquí la traducción obligaría a reaprovechar columnas para otra cosa (`instruction` como idioma, `reply` como id de la página creada). Tablas propias (`translation_jobs`, `translation_job_items`), columnas explícitas y **cero riesgo para el asistente central, que ya está en producción**. Migración `2026_07_28_translation_jobs.sql`.
+
+Del asistente se copia lo que está probado: **un item por petición HTTP** (el navegador llama a `step` en bucle), **un fallo no detiene los demás**, y **un reintento automático solo para fallos transitorios** (status 0, 429, 5xx).
+
+Reglas propias de traducir: solo páginas del idioma principal; las que ya tienen versión se marcan `skipped` (no se duplican); todo a **borrador**.
+
+**Verificación E2E real por HTTP**: trabajo de 2 páginas → paso 1 traduce «QA13 Servicios» (→ `/fr/qa13-servicios`, draft), paso 2 «QA13 Contacto» (→ `/fr/qa13-contacto`, draft), paso 3 sobre el trabajo ya terminado no rompe nada. Contenido correcto en francés y en el modo que toca (el contacto, literal; el de servicios, adaptado).
+
+**Tres fallos encontrados ejecutando:**
+1. **Orden de rutas**: `/pages/{id}` estaba declarada ANTES y capturaba `/pages/translate-all` como si `translate-all` fuera un id → 404. Movidas las rutas específicas por delante, con comentario para que no vuelva a pasar.
+2. **El test traducía el sitio real**: `candidates()` devolvía las 31 páginas del sitio de desarrollo, no solo las del test, y un paso llegó a traducir «Inicio» de verdad (borrada después). Se añadió el parámetro `?array $onlyPageIds` — que además hace falta para la UI cuando el usuario quiera traducir un subconjunto.
+3. **Título del diálogo en singular** («Traducir página») también en modo lote. Ahora dice «Traducir 32 páginas».
+
+**UX del lote**, verificada en el panel: botón «Traducir las N de golpe» junto al resumen; diálogo que dice cuántas páginas, que **cada una queda en borrador**, que **las actuales no cambian**, que tardará unos minutos y —lo importante— que **si cierra la ventana el trabajo se queda donde iba y lo ya traducido no se pierde**. Durante el proceso, lista de páginas con ✅/⚠️/↷ y contador «3 de 12». Al terminar, resumen «N traducidas · M ya estaban · K no se han podido» y aviso de que las fallidas pueden traducirse de una en una.
+
+Tests: `tests/translation_jobs.php` NUEVO (15/15), sin llamadas a IA: cubre selección de candidatas, creación, saltar lo ya traducido, que un fallo no detenga el trabajo y que un `step` sobre un trabajo terminado sea inocuo. Regresión en verde (19 suites). BD limpia: 31 páginas, 0 jobs, solo `es`.
+
+### Lessons (T5.5)
+
+- **Orden de rutas**: una ruta con comodín (`/pages/{id}`) declarada antes se come cualquier ruta literal más específica que llegue después. Las literales van SIEMPRE primero.
+- Un test que opera sobre el sitio de desarrollo real debe **acotar su ámbito explícitamente**. Si la operación cuesta dinero (llamadas a IA), no acotar no es solo lentitud: es gasto y contenido basura en la BD.
+- Reutilizar el *patrón* de un sistema probado no obliga a reutilizar sus *tablas*. Cuando los payloads difieren, columnas propias salen más baratas que reinterpretar las ajenas.
+
+**T5.7 completada y verificada (28/07/2026). FASE 5 CERRADA.** Editor de «Header y pie» por idioma.
+
+**Regla que gobierna la pantalla: al editar un idioma secundario solo se toca su capa de texto.** El diseño (colores, bordes, disposición), los bloques del pie, las redes sociales y los datos de contacto son COMUNES y se **bloquean visiblemente**, para que nadie crea que está cambiando «solo la versión francesa» de un color. `buildConfig()` devuelve la base intacta con `i18n[lang]` actualizado; **editar una traducción no puede modificar el original**.
+
+**UX para usuario no técnico**, verificada en el editor real:
+- Barra superior: «Estás editando los textos en» + pestañas «Español · principal» / «Français», con el aviso de que el diseño y los datos de contacto son comunes.
+- Al cambiar de idioma, aviso explícito: «Lo que dejes en blanco usará el texto en Español. El diseño y los datos de contacto están bloqueados porque son iguales en todos los idiomas.»
+- **Un campo vacío significa «usa el texto del idioma principal», y se ve**: el placeholder pasa a mostrar el texto castellano real. Verificado: el CTA sin traducir muestra «Pide información» como pista.
+- Cambiar de idioma con cambios sin guardar pide confirmación.
+- El menú se edita por idioma (apunta a otras páginas); vacío = navegación automática, que ya filtra por idioma desde la fase 3.
+- La vista previa se pinta en el idioma que se está editando (`lang` viaja al endpoint de preview).
+
+**Verificación E2E**: con base castellana + capa francesa, al pulsar «Français» el lema pasa a francés, el CTA queda vacío con el castellano de placeholder y el selector de fondo se deshabilita. Guardado en francés por HTTP → **base intacta** (`Tu plaza docente, más cerca` / `Pide información`) y capa actualizada. Renderizado: footer ES en castellano, footer FR y CTA del header en francés.
+
+Regresión en verde (18 suites, incluido `chrome_config`). Sin migración. Estado final: config de chrome del sitio restaurada a la de fábrica, solo `es` activo, 31 páginas.
+
+### Estado de la FASE 5
+
+- [x] T5.1 Chrome por idioma (lógica)
+- [x] T5.2 Motor de traducción híbrido
+- [x] T5.3 Traducir una página bajo demanda
+- [x] T5.4 Estado de traducción y filtro
+- [x] T5.5 Traducción del sitio por pasos
+- [x] T5.6 SEO traducido (cubierto por el motor)
+- [x] T5.7 Editor de chrome por idioma (UI)
+
+**Pendientes del proyecto**: FASE 6 (generar páginas nuevas en sitios multi-idioma) y FASE 7 (catálogo multi-idioma + rutas de módulo por idioma).
+
+### Lessons (T5.7)
+
+- En un editor con capas, el estado vacío necesita explicarse en la propia interfaz. «Vacío = hereda» es obvio para quien lo programó y opaco para todos los demás: ponerlo de placeholder con el valor heredado real lo resuelve sin una línea de ayuda.
+- Al añadir un modo a un editor existente, la lista de controles que NO pertenecen al modo hay que enumerarla explícitamente y deshabilitarlos. Dejar editable algo que en ese modo no se guarda es peor que no ofrecer el modo.
+
+## Current Status / Progress Tracking (I18N-FULL · FASE 6)
+
+**FASE 6 completada y verificada (28/07/2026).** Crear y editar contenido en un sitio multi-idioma.
+
+**El fallo que justificaba la fase, encontrado al empezar**: `CanvasChatService` pasaba a la IA `LanguageService::promptLabelFor($siteId)` — el idioma del SITIO. En una web bilingüe, pedirle un cambio a una página francesa desde el Studio habría devuelto **castellano**. Ahora manda `LanguageService::forPage($page, $siteId)`.
+
+**Verificado con IA real** sobre una página francesa de un sitio con principal castellano:
+- contenido devuelto en francés («…avec un suivi personnalisé et adapté à chaque profil…»),
+- y el mensaje al administrador **en castellano**, como se decidió en T0.1 (el panel es castellano). Las dos cosas a la vez, que era el objetivo.
+
+**Creación de páginas con idioma:**
+- `PageController::createPageRow()` — punto ÚNICO que resuelve idioma, prefijo de slug y grupo de traducción. `store()` pasa por él, así que el formulario del panel y cualquier llamante futuro comparten la misma lógica.
+- Un idioma que no esté activo cae al principal: vale más una página en el idioma de la casa que una en un idioma que la web no sirve.
+- Verificado por HTTP: crear con `language=fr` produce `/fr/qa15-nouvelle`, idioma `fr`, grupo propio.
+
+**UX**: el selector de idioma solo aparece si el sitio es multi-idioma. Al crear explica que un idioma no principal vivirá bajo su prefijo; **al editar sale deshabilitado**, con el motivo escrito: cambiar el idioma movería la URL de la página, y para eso está traducir desde el listado.
+
+`CustomBlockGenerator` respeta ahora el `language` que le imponga el llamante (bloque para una página en otro idioma) en vez de forzar siempre el del sitio.
+
+Tests: `tests/page_creation_language.php` NUEVO (9/9). Regresión en verde (23 suites). Sin migración. BD limpia: 31 páginas, solo `es`.
+
+### Nota sobre la FASE 7 tras el dato del usuario (la web de prod llevará RESERVAS, no tienda)
+
+El bloqueo que documenté para la fase 7 era de **Commerce**: `ProductStore` no filtra por idioma, así que un producto con gemelo francés duplicaría fichas en `/tienda` y la búsqueda por slug sería ambigua.
+
+**Reservas no tiene ese problema**: `booking_services` no usa slug (el widget apunta a un servicio por ID con `data-service="N"`), no hay listado público de servicios que pueda salir duplicado, y la API solo se consulta por id. Una web bilingüe **solo con reservas** puede lanzarse sin la fase 7: basta con crear un servicio por idioma y embeber en cada página el suyo. Queda pendiente de confirmar en una prueba real antes de darlo por bueno del todo.
+
+## Verificación: RESERVAS bilingües (28/07/2026)
+
+Prometido tras el dato del usuario (la web de producción llevará reservas, no tienda). **Se ejecutó el caso real y NO estaba listo**: la lectura de código decía que sí, la prueba dijo que no. Dos huecos, los dos de cara al cliente final:
+
+1. **El widget del servicio francés salía en castellano.** `GET /api/booking/v1/services` devolvía siempre `lang` = idioma del SITIO. Corregido: el widget indica de qué servicio es (`?service=N`) y la API responde con los textos en el idioma de ESE servicio. Sin el parámetro sigue devolviendo el idioma del sitio, así que los embebidos antiguos no cambian.
+2. **La reserva se guardaba con el idioma del sitio.** Una reserva hecha en el servicio francés quedaba como `es`, así que el cliente habría recibido **email y página de cancelación en castellano**. Corregido: el idioma sale del SERVICIO (`BookingService::serviceLanguage()`), y de ahí viaja a la reserva, al mensaje de confirmación, al email y a la página de cancelación.
+
+**Verificación E2E completa, con dos servicios hermanos (mismo `translation_group`, uno `es` y otro `fr`):**
+- Widget del servicio 41 (fr): `lang: fr`, `Votre nom *`, `Réserver à {time}`. Del 40 (es): `Tu nombre *`. Sin parámetro: idioma del sitio.
+- Reserva en el francés → guardada como `fr`; respuesta al cliente «Réservation confirmée. Nous vous avons envoyé les détails par e-mail.»
+- Página de cancelación de esa reserva: `<html lang="fr">`, «Annuler la réservation», «Voulez-vous vraiment…», «Oui, annuler…».
+- **Email real capturado**: asunto «Réservation confirmée : … — mercredi 29 juillet 2026, 11:00» y cuerpo en francés; el aviso al admin, en castellano.
+- Regresión: reserva en el servicio castellano → mensaje en castellano.
+
+**Conclusión: una web bilingüe SOLO con reservas es lanzable.** Receta: un servicio por idioma (con el mismo grupo de traducción si se quiere emparejarlos) y, en cada página, el widget de su servicio. La FASE 7 sigue pendiente solo para tiendas bilingües.
+
+### Lessons
+
+- «Lo he verificado leyendo el código» no es verificar. Aquí la lectura daba luz verde y la ejecución encontró DOS fallos que habrían llegado al cliente final: un widget en el idioma equivocado y un email de confirmación en el idioma equivocado.
+- Cuando un dato (el idioma) tiene que viajar desde el contenido hasta un email, hay que seguirlo **de punta a punta en una ejecución real**. Cada salto —widget → API → reserva → email → página de cancelación— es un sitio donde puede caerse al valor por defecto.
+
+---
+
+# [FONTS] Fuentes personalizadas (brandbook) — PLAN (28/07/2026)
+
+## Background and Motivation
+
+Clientes con brandbook necesitan usar SUS tipografías en la web, no las 14 Google Fonts curadas. Requisitos del usuario:
+
+1. Subir archivos de fuente desde la interfaz (admin) **y** desde el onboarding.
+2. Indicar el rol de cada familia: **títulos**, **textos** o **ambas**.
+3. Subir **varios pesos** por familia y que PromptPress los gestione bien (que el navegador use el peso real, no uno sintetizado).
+
+## Key Challenges and Analysis
+
+### Dónde vive hoy la tipografía (mapa real del código)
+
+- `app/Services/DesignSystem.php:34` — `FONT_OPTIONS`: **const** con 14 familias. `validateValue()` (`:242`) rechaza cualquier valor fuera de esa const → hoy es imposible guardar una fuente propia.
+- `DesignSystem::fontCssValue()` (`:280`) — compone `"Familia", fallback`; el fallback serif se decide con un `in_array` hardcodeado de 3 familias.
+- `DesignSystem::googleFontsUsed()` (`:468`) + `renderFontsLink()` (`:337`) — meten toda familia ≠ `system` en el `<link>` de Google Fonts. Una fuente propia acabaría pedida a Google (404 silencioso y texto en fallback).
+- `DesignSystem::renderHead()` (`:359`) — punto único donde el front público inyecta fuentes + vars. **Aquí es donde tiene que salir el `@font-face`.**
+- `DesignSystem::applySkinToTokens()` (`:417`) y `Personality\SkinComposer::applyUserAnchors()` (`:66`) — el skin inferido por IA **pisa** `font_heading`/`font_body`.
+- `VisualStyleService::renderCss()` (`:266-280`) — cada dirección visual impone sus propias `--pp-font-heading/body`.
+- Onboarding step 2: `OnboardingController::TYPOGRAPHY` (`:39`) → `typography_pair` (`:896`), select en `views/admin/onboarding/index.php:204`.
+- Admin diseño: `DesignController::render()` pasa `fontOptions` (`:279`); la vista pinta el select y expone `window.PP_DESIGN_FONTS` (`views/admin/design/index.php:32`) para el preview en vivo.
+- Subida de archivos: patrón ya resuelto con el logo → `DesignController::updateLogo()` (`:81`) + `OnboardingController::saveLogo()` (`:1095`), guardando en `storage/uploads/{siteId}/brand/`.
+- **`storage/` no es servible por web**: el logo se sirve por ruta PHP (`/brand-assets/{site}/logo` → `BrandAssetController`). Las fuentes necesitan lo mismo.
+
+### Los 4 riesgos reales (aquí es donde se rompe si no se planifica)
+
+1. **Precedencia.** Hay TRES capas que escriben `--pp-font-*`: tokens del design system, skin de personalidad y dirección visual. Si el cliente sube su fuente de marca y luego la IA regenera el diseño o cambia la dirección visual, la fuente desaparece. **Regla propuesta: una familia propia asignada a un rol gana SIEMPRE**, y se aplica al final de `renderHead()` (en el `<style>` inline, que ya tiene la máxima prioridad).
+2. **Pesos.** Si se sube solo Regular y el design system pide `weight_bold: 700`, el navegador sintetiza una negrita falsa (fea, y el cliente de brandbook lo nota). Hay que declarar un `@font-face` por archivo con su `font-weight` y `font-style` reales, y avisar en la UI de qué pesos usa el sitio y cuáles faltan.
+3. **Validación de archivos.** Aceptar binarios subidos por el usuario y servirlos: hay que validar extensión **y magic bytes** (`wOF2`, `wOFF`, `OTTO`, `\x00\x01\x00\x00`, `true`), tamaño máximo, nombre aleatorizado, `X-Content-Type-Options: nosniff` y MIME correcto al servir. Mismo endurecimiento que ya tiene el logo.
+4. **Caché.** `/design.css` cachea 60s y `CacheService` cachea páginas. Cualquier alta/baja de fuente tiene que hacer `CacheService::flush($siteId)` y el `@font-face` debe llevar un parámetro de versión para invalidar el navegador.
+
+### Decisiones que propongo (el Planner las asume salvo que digas lo contrario)
+
+- **D1 — Formatos aceptados: `woff2`, `woff`, `ttf`, `otf`.** Los brandbooks casi siempre entregan TTF/OTF; PHP no puede convertir a WOFF2 sin binarios externos, así que se sirve tal cual. La UI recomienda WOFF2 por peso.
+- **D2 — Modelo de datos: dos tablas** (`site_font_families` + `site_font_files`). Una sola tabla obligaría a repetir nombre/rol/fallback en cada peso y hace frágil el borrado. Con dos tablas, la UI es una tarjeta por familia con sus pesos dentro.
+- **D3 — Clave del token: `custom:{slug}`.** `font_heading` pasa a poder valer `Inter`, `system` o `custom:helvetica-now`. Así no se rompe nada de lo existente y `googleFontsUsed()` solo tiene que excluir el prefijo.
+- **D4 — Rol como propiedad de la familia** (`heading` | `body` | `both`), tal y como lo pediste. Asignar un rol desasigna a la familia que lo tuviera antes (un rol, una familia).
+- **D5 — En el onboarding, campo opcional que no estorbe**: el select de parejas sigue mandando; debajo, un "¿Tienes tu propia tipografía?" que sube archivos y, si se sube algo, gana sobre la pareja elegida.
+- **D6 — Licencias**: aviso visible en la UI de que el cliente debe tener derechos de uso web (webfont license). No se valida técnicamente; queda registrado.
+
+## High-level Task Breakdown (FONTS)
+
+**F1 — Esquema de datos + migración**
+`database/migrations/2026_07_29_custom_fonts.sql` con `site_font_families` (id, site_id, name, slug, role, fallback_stack, created_at; unique site_id+slug) y `site_font_files` (id, family_id, weight, style, format, path, file_size, original_name; unique family_id+weight+style). Añadir lo mismo a `install/schema.sql` (lección ya aprendida: los installs nuevos divergen si no se toca este archivo).
+*Criterio:* migración aplicada en local, `DESCRIBE` de ambas tablas correcto, y una instalación limpia desde `install/schema.sql` las crea igual.
+
+**F2 — Servicio `CustomFontService`**
+CRUD (listar familias con sus archivos, crear familia, añadir archivo, borrar archivo, borrar familia con sus ficheros de disco), validación de subida (magic bytes + tamaño + formato), guardado en `storage/uploads/{siteId}/fonts/`, y `renderFontFaceCss(int $siteId): string` que emite un `@font-face` por archivo con `font-display: swap`.
+*Criterio:* test CLI en `tests/` que crea familia + 3 pesos con ficheros de prueba, genera el CSS y verifica que salen 3 bloques `@font-face` con weight/style correctos; y que un archivo con extensión `.woff2` pero contenido PNG es rechazado.
+
+**F3 — Ruta pública de servido**
+`/brand-assets/{site}/font/{id}` (`BrandAssetController::font()`), calcado del logo: valida que el archivo pertenece al site, MIME por formato, `nosniff`, `Cache-Control: public, max-age=31536000, immutable` (el id es inmutable).
+*Criterio:* `curl -I` de un id válido devuelve 200 + `font/woff2`; id de otro site devuelve 404.
+
+**F4 — Integración en el pipeline de tokens (el núcleo)**
+- `FONT_OPTIONS` deja de ser la única fuente: nuevo `DesignSystem::fontOptions(int $siteId)` = curadas + `custom:*`.
+- `validateValue()` acepta `custom:{slug}` existente para ese site.
+- `fontCssValue()` resuelve `custom:{slug}` → `"Nombre", {fallback_stack}`.
+- `googleFontsUsed()` excluye `custom:*`.
+- `renderHead()` inyecta el `@font-face` **antes** de las vars y, al final, un `<style>` con la asignación por rol que pisa skin y dirección visual.
+- `applySkinToTokens()` y `SkinComposer::applyUserAnchors()` no sobrescriben un rol que tenga familia propia asignada.
+*Criterio:* con una familia `both` asignada, `renderHead()` contiene el `@font-face`, `--pp-font-heading` y `--pp-font-body` apuntan a ella, y NO aparece en el `<link>` de Google. Repetir con `sites.skin_json` presente y con una dirección visual activa: la fuente propia sigue ganando.
+
+**F5 — UI en `/admin/design`**
+Bloque "Tus tipografías" dentro de la tarjeta de Tipografía: subida (familia nueva o peso adicional a una existente), selector de rol, lista de pesos con botón de borrado, aviso de licencia, y aviso "tu sitio usa peso 700 para títulos y no lo has subido". Los selects de fuente pasan a incluir las propias; `window.PP_DESIGN_FONTS` y el preview en vivo cargan el `@font-face` para que se vean de verdad.
+*Criterio:* subir 3 pesos, asignar rol "ambas", guardar, recargar → la web pública se ve con la fuente (verificación con servidor real + `curl` del HTML y del CSS, no solo lectura de código).
+
+**F6 — Onboarding (step 2)**
+Campo de subida múltiple + selector de rol bajo el select de parejas. `saveDesign()` procesa los archivos y, si hay familia propia, escribe `custom:{slug}` en los tokens en vez de la pareja. Preview del step 2 usa la fuente subida.
+*Criterio:* onboarding completo desde cero con una fuente propia → el sitio recién creado ya renderiza con ella.
+
+**F7 — Invalidación de caché + repaso final**
+`CacheService::flush()` en toda alta/baja, versión en la URL del CSS, y borrado en cascada al eliminar familia (ficheros de disco incluidos).
+*Criterio:* subir/borrar una fuente se refleja en la web pública sin borrar caché a mano.
+
+## Project Status Board (FONTS)
+
+- [x] F1 — Esquema + migración
+- [x] F2 — `CustomFontService` (validación, almacenamiento, `@font-face`)
+- [x] F3 — Ruta pública `/brand-assets/{site}/font/{id}`
+- [x] F4 — Integración en `DesignSystem` + precedencia sobre skin y dirección visual
+- [x] F5 — UI en `/admin/design`
+- [x] F6 — Onboarding step 2
+- [x] F7 — Caché e invalidación
+
+## Executor's Feedback or Assistance Requests (FONTS)
+
+Pendiente de que el Planner (usuario) valide el plan y las decisiones D1–D6 antes de ejecutar F1.
+
+## Current Status / Progress Tracking (FONTS · 28/07/2026)
+
+Las 7 tareas están implementadas y verificadas en local (servidor `:8788`, subidas reales por `curl` y comprobación en navegador).
+
+**Archivos nuevos**
+- `database/migrations/2026_07_29_custom_fonts.sql` — `site_font_families` + `site_font_files`.
+- `app/Services/CustomFontService.php` — CRUD, validación, `@font-face`, deducción de peso/estilo.
+- `tests/custom_fonts.php` — 34 comprobaciones, todas en verde.
+
+**Archivos tocados**
+- `app/Services/DesignSystem.php` — `fontOptions()`, `fontCssValue()` resuelve `custom:{slug}`, `googleFontsUsed()` excluye las propias, `renderHead()` inyecta `@font-face` + override final, `applyCustomFontsToTokens()`, `syncCustomFontTokens()`.
+- `app/Controllers/Public/BrandAssetController.php` + `app/routes.php` — ruta de servido y `@font-face` en `/design.css`.
+- `app/Controllers/Admin/DesignController.php` + `views/admin/design/index.php` + `admin/assets/css/admin.css` + `admin/assets/js/design-system.js` — bloque "Tus tipografías de marca".
+- `app/Controllers/Admin/OnboardingController.php` + `views/admin/onboarding/index.php` + `admin/assets/js/onboarding.js` — campo plegable en el paso 2.
+
+**Verificado de punta a punta**
+- Subida de 2 archivos (TTF) desde `/admin/design` → peso deducido del nombre (Regular→400, Bold→700), `@font-face` en la home, `--pp-font-heading/body` con la familia real, cero peticiones a Google Fonts.
+- `/brand-assets/1/font/6` devuelve 200 + `font/ttf` + bytes idénticos al archivo subido; el mismo id bajo otro `site` devuelve 404.
+- Onboarding paso 2 con 2 archivos y rol "solo títulos" → familia creada con el nombre deducido del archivo, cursiva detectada, rol aplicado y la pareja tipográfica elegida arriba cede ante la fuente de marca.
+- Aviso de peso ausente: con 400 y 700 subidos y `buttons.font_weight = 600`, el panel avisa de que falta Semibold (600).
+- Estado de desarrollo devuelto a limpio: familias borradas, archivos fuera del disco, tokens de vuelta a Inter.
+
+### Lessons (FONTS)
+
+- El preview de `/admin/design` llevaba tiempo sin aplicar la tipografía: `style="<?= $previewInline ?>"` metía valores con comillas dobles (`"Inter", system-ui…`) sin escapar, así que el atributo `style` se cerraba en la primera comilla y el navegador descartaba el resto. Se ve solo si comparas la fuente calculada con la esperada — a ojo parecía "una sans cualquiera". Corregido con `e()`.
+- La dirección visual (`VisualStyleService`) declara sus fuentes con un selector de CLASE (`.pp-visual-style--x`), no con `:root`. Cualquier override posterior tiene que igualar esa especificidad: se usa `:root,[class*="pp-visual-style--"]` y se emite el último del `<head>`.
+- Asignar el rol de una fuente tiene que escribir TAMBIÉN los tokens (`syncCustomFontTokens`). Con solo aplicarlo al renderizar, el desplegable de Tipografía seguía enseñando "Inter" mientras la web se veía con la fuente de marca: el usuario deja de saber quién manda.
+- Un test que lee el estado real del sitio (las fuentes que haya subido el usuario) pasa o falla según el día. `tests/custom_fonts.php` aparta los roles reales al empezar y los restaura en `register_shutdown_function`.
+
+---
+
+# [UX4] Logo claro/oscuro · multi-subida · parar generación · parpadeo de fuente — PLAN (28/07/2026)
+
+## Background and Motivation
+
+Cuatro peticiones del usuario tras subir a producción la funcionalidad de tipografías:
+
+1. Logo en dos versiones (claro/oscuro) con una marcada como principal, para que la IA use la que contraste con el fondo.
+2. Subida múltiple de imágenes en Medios.
+3. Poder parar una generación del Studio ya enviada.
+4. El parpadeo de fuente genérica → fuente propia dura demasiado, incluso con buena conexión.
+
+## Key Challenges and Analysis
+
+### U1 — Logo claro / oscuro
+
+- Hoy solo hay UN logo: setting `site_logo_path` + fila en `media` ([DesignController::updateLogo](app/Controllers/Admin/DesignController.php:82), [BrandService::publicLogoUrl](app/Services/BrandService.php:77)), servido por `/brand-assets/{site}/logo`.
+- **Hallazgo:** `ChromeService` YA declara el hueco `header.logo.dark_variant_path` ([ChromeService.php:49](app/Services/ChromeService.php:49) y [:189](app/Services/ChromeService.php:189)) — con default y saneado — pero **nadie lo lee**: no hay UI ni render. Es un slot muerto de un intento anterior; la funcionalidad puede aterrizar ahí en vez de inventar otro sitio.
+- El riesgo real no es técnico sino de etiquetado: "logo oscuro" es ambiguo (¿el logo de tinta oscura, o el que va sobre fondo oscuro?). La UI debe nombrarlos **por el fondo donde van**: "Para fondos claros" / "Para fondos oscuros". Marcar cuál es el principal = cuál se usa cuando no se sabe el fondo.
+- Consumidores a actualizar: cabecera pública, pie (que hoy pinta el NOMBRE, no el logo, y va sobre `--pp-on-surface`, es decir fondo oscuro), panel, y el contexto que recibe la IA de Canvas.
+
+### U2 — Subida múltiple en Medios
+
+- [MediaController::upload](app/Controllers/Admin/MediaController.php:98) procesa un único `$_FILES['file']`; la vista tiene un input sin `multiple` ([views/admin/media/index.php:47](views/admin/media/index.php:47)). El endpoint ya responde JSON cuando la petición es AJAX, así que el camino barato es: `multiple` en el input + subir de una en una desde JS reutilizando ese endpoint, con progreso por archivo. Sin tocar `MediaService::store`.
+- Ventaja de subir de una en una: un archivo corrupto no tumba la tanda, y no chocamos con `upload_max_filesize`/`post_max_size` del hosting, que es lo que rompe las subidas múltiples de golpe.
+
+### U3 — Parar la generación
+
+- El chat del Studio hace `fetch` sin `AbortController` ([canvas-studio.js:405](admin/assets/js/canvas-studio.js:405)); solo desactiva el botón con la bandera `busy`.
+- **Cuidado con el falso "cancelar":** abortar el fetch en el navegador NO detiene a PHP. La petición sigue, el modelo responde y el cambio se guarda igual; el usuario creería haberlo parado y se encontraría la página modificada. Un cancelar honesto necesita que el servidor mire una marca antes de persistir.
+- Diseño propuesto: el chat manda un `request_id`; "Parar" aborta el fetch Y llama a `POST /admin/canvas/cancel` con ese id; `CanvasChatService` comprueba la marca justo antes de escribir y descarta el resultado. Como red de seguridad ya existe el historial undo/redo.
+
+### U4 — Parpadeo de la fuente propia
+
+Tres causas, de mayor a menor sospecha:
+
+1. **El lock de sesión de PHP serializa las descargas.** `App::boot()` llama a `Session::start()` en TODAS las rutas ([core/App.php:55](core/App.php:55)), incluida `/brand-assets/{site}/font/{id}`, y no se cierra la sesión antes de servir. El handler de ficheros de PHP mantiene un lock exclusivo por sesión durante toda la petición: las fuentes hacen cola detrás de la petición de la página y entre ellas. Con buena conexión el síntoma es exactamente ese — la página pinta ya con la genérica y las fuentes entran con retraso. Arreglo: `session_write_close()` (o no arrancar sesión) antes de `readfile()` en las rutas de asset.
+2. **No hay `<link rel="preload">`** de las fuentes de los roles asignados: el navegador no empieza a descargarlas hasta que aplica el CSS.
+3. **TTF/OTF pesan 5-10× más que WOFF2** (en pruebas locales, 486 KB por corte). Hay que avisar en la UI y recomendar convertir.
+
+`font-display: swap` es lo que produce el cambio visible; es la opción correcta (mejor eso que texto invisible), pero con 1 y 2 resueltos la ventana se reduce a casi nada.
+
+## High-level Task Breakdown (UX4)
+
+**U4.1** — `session_write_close()` antes de servir en `BrandAssetController` (logo + fuente). *Criterio:* dos peticiones concurrentes a fuentes distintas dejan de serializarse (medido con `curl` en paralelo contra un servidor multiproceso).
+**U4.2** — `<link rel="preload" as="font" type=… crossorigin>` en `renderHead()` para los cortes de los roles asignados (máx. 2-3, no todos). *Criterio:* el HTML público trae el preload y la fuente aparece ya descargada en la primera pintura.
+**U4.3** — Aviso en `/admin/design#fonts` cuando un archivo no es WOFF2, con su peso real. *Criterio:* subir un TTF de 400 KB muestra el aviso; un WOFF2 de 30 KB no.
+**U2.1** — `multiple` en el input de Medios + cola de subida en JS con progreso y errores por archivo. *Criterio:* seleccionar 5 imágenes las sube todas; si una falla, las otras 4 entran y el error nombra el archivo.
+**U1.1** — Dos slots de logo (fondo claro / fondo oscuro) + principal, sobre el hueco existente de `ChromeService`. *Criterio:* subir ambos, marcar principal, y ver el correcto en cabecera (claro) y pie (oscuro).
+**U1.2** — Exponer ambas variantes al contexto de la IA de Canvas. *Criterio:* pedir en el chat "pon el logo sobre la sección oscura" y que use la variante para fondo oscuro.
+**U3.1** — Botón "Parar" con `AbortController` + `request_id` + endpoint de cancelación comprobado antes de persistir. *Criterio:* cancelar a mitad deja la página EXACTAMENTE como estaba (verificado recargando, no solo por lo que diga la UI).
+
+## Project Status Board (UX4)
+
+- [x] U4.1 — Cerrar sesión antes de servir assets
+- [x] U4.2 — Preload de las fuentes en uso
+- [x] U4.3 — Aviso de formato/peso no óptimo
+- [x] U2.1 — Subida múltiple en Medios
+- [x] U1.1 — Logo claro/oscuro + principal
+- [x] U1.2 — Variantes de logo disponibles para la IA
+- [x] U3.1 — Parar generación (cancelación real)
+
+---
+
+# [SLIDER] Carrusel de Canvas: siempre horizontal y sin poder elegir las fotos — 28/07/2026 (Executor)
+
+## Diagnóstico (reproducido, no deducido)
+
+Las dos quejas del usuario tenían **la misma causa**, y no estaba en el carrusel sino en el guardado del Studio.
+
+`serializeAndSave()` ([CanvasController.php:489](app/Controllers/Admin/CanvasController.php:489)) guarda el `outerHTML` del **DOM vivo** de la sección. Para entonces `pp-ux.js` ya ha montado el carrusel: envuelve los slides en `.pp-ux-slider__track`, añade dos `<button>` de flechas y marca el contenedor con `data-pp-ux-ready="1"`. El normalizador del servidor limpiaba lo del Studio (`pp-studio-*`, `contenteditable`) pero **no sabía nada de pp-ux**, así que todo ese andamiaje se persistía.
+
+Al recargar, `initSlider` empieza con `if (el.dataset.ppUxReady) return;` → **no engancha listeners**. Resultado: tira horizontal congelada, flechas muertas y, como no se puede pasar de slide, las fotos que quedan fuera de pantalla son inalcanzables → "no me permite elegir las fotos".
+
+Prueba A/B sobre el MISMO HTML dañado, instrumentando `Element.prototype.scrollBy`:
+- pp-ux.js anterior → `scrollBy` llamado **0 veces** al pulsar la flecha (sin listeners).
+- pp-ux.js nuevo → `scrollBy({left:444})` llamado **1 vez** (carrusel recuperado).
+
+Se hizo así porque medir `scrollLeft` no valía: en el navegador headless `behavior:'smooth'` no anima y todo parecía roto. Con `'auto'` sí movía. **Lección: en este entorno, verificar scroll por el efecto es un falso negativo; hay que verificar la llamada.**
+
+Daño ya presente en la BD local: página 135 con 14 clases `pp-ux-*` incrustadas (animaciones `reveal` quemadas) y la 146 con el juego completo.
+
+## Cambios
+
+1. **`CanvasService::stripRuntimeBehaviorMarkup()`** (nuevo) — desenvuelve el track, borra flechas y puntos, quita `data-pp-ux-ready` y toda clase `pp-ux-*`, y restaura la cifra del contador. Se llama desde `normalizeEditedSectionHtml()`, por donde pasa TODA edición directa. La fuente de verdad es siempre `data-pp-behavior`.
+2. **`pp-ux.js` · defensa en `initSlider`** — si encuentra andamiaje de una sesión anterior lo deshace antes de montar. Esto recupera en caliente las páginas ya dañadas, sin esperar a la reparación.
+3. **`scripts/repair_canvas_runtime_markup.php`** — repara el HTML ya guardado. Con `--dry-run`. Idempotente.
+4. **Disposiciones del carrusel** (petición del usuario: "siempre horizontal") — `data-pp-slider="strip|single|vertical"`: en fila (defecto), una a una a todo el ancho con puntos de posición, o pila vertical con flechas arriba/abajo. CSS en `DesignSystem::renderSectionBaseCss()`.
+5. **Control en el Studio** — panel de sección: "Galería · cómo se ven las fotos" (En fila / Una a una / En vertical) + "Elegir fotos (N)".
+6. **Selección múltiple de fotos** — la biblioteca entra en modo galería: se tocan las fotos en orden (numeradas), y "Usar N fotos" reconstruye los slides clonando el primero como plantilla, así heredan maquetado y pies.
+7. **La IA conoce las disposiciones** — `data-pp-slider` documentado en el prompt de generación y en los dos de edición; para galerías de fotos se le indica `single`.
+
+## Verificación
+
+- `tests/canvas_runtime_markup.php` — 16 comprobaciones en verde (limpieza, conservación de fotos/pies/clases del autor, slides al nivel correcto, contador, idempotencia, HTML limpio intacto).
+- Ciclo real en el Studio: editar un titular de una sección con carrusel → lo guardado ya NO trae andamiaje y conserva las 4 fotos.
+- "Una a una": slide de 932 px sobre pista de 940 (ancho completo) y 4 puntos de posición.
+- "En vertical": `flex-direction: column`, `scroll-snap-type: y mandatory`, flechas arriba/abajo, sin puntos.
+- Elegir fotos: 3 seleccionadas en orden (1,2,3) → el carrusel pasa de 4 a 3 fotos, con sus pies, y se guarda `data-pp-slider="vertical"` sin una sola clase de runtime.
+- Preview pública: disposición vertical, 3 fotos, flecha viva.
+- Reparación: 2 páginas arregladas; segunda pasada, 0 cambios.
+
+### Lessons
+
+- El Studio serializa el DOM vivo: **cualquier JS que modifique el DOM en tiempo de ejecución acaba en la base de datos** salvo que el normalizador lo deshaga explícitamente. Al añadir un comportamiento nuevo a `pp-ux.js` hay que añadir su limpieza en `stripRuntimeBehaviorMarkup()` a la vez, no después.
+- Un `data-*-ready` como guarda de idempotencia es una bomba si el HTML se persiste: la marca sobrevive a la recarga y desactiva para siempre el propio comportamiento que protegía. Si se usa, el montador debe saber deshacer su estado (es lo que ahora hace `initSlider`).
+- En el navegador headless de verificación, `scrollBy({behavior:'smooth'})` no produce desplazamiento. Verificar el EFECTO da falsos negativos; hay que instrumentar la LLAMADA.
+
+## Current Status / Progress Tracking (UX4 · 29/07/2026)
+
+Las 7 tareas implementadas y verificadas. Orden ejecutado: parpadeo → multi-subida → logo → parar generación.
+
+**U4 · Parpadeo de la fuente**
+- `Session::close()` (nuevo en `core/Session.php`) y llamada en las rutas de asset de `BrandAssetController`.
+- `CustomFontService::renderPreloadLinks()` + `bestFileFor()`: `<link rel="preload">` SOLO de los dos cortes que se ven primero (peso de títulos y peso de textos). Va lo primero del `<head>`.
+- Aviso en `/admin/design#fonts` con el peso total y los archivos TTF/OTF o >120 KB.
+- **Honestidad sobre la verificación:** el preload y el aviso están comprobados en el HTML real. La serialización por lock de sesión NO se pudo medir en local: el servidor de desarrollo sirve en 1-3 ms y el ruido se come la diferencia. El mecanismo está documentado en PHP y el cambio es inocuo, pero no tengo prueba propia de que fuera la causa del parpadeo del usuario. Lo que sí es medible: 1,1 MB de TTF en la prueba, que en WOFF2 serían ~100 KB.
+
+**U2 · Subida múltiple en Medios**
+- Input `multiple` + cola en JS que sube de una en una reutilizando el endpoint AJAX existente; fila por archivo con su estado y motivo del fallo.
+- `MediaController::uploadBatch()` para el camino SIN JavaScript (el navegador manda `file[]`).
+- Verificado: 3 imágenes por la cola con recarga al terminar; tanda mixta (ok/roto/ok) → 2 subidas + el error exacto del archivo malo, sin cortar la tanda.
+- **Hallazgo colateral (NO arreglado, fuera de alcance):** `MediaService::detectMime()` cae a deducir el tipo por la EXTENSIÓN cuando finfo no reconoce el mime, así que un `.txt` renombrado a `.jpg` entra en la biblioteca como imagen. Reproducido. Queda propuesto como tarea aparte.
+
+**U1 · Logo claro / oscuro**
+- Nombrados por el FONDO donde van, no por su color. Ajustes: `site_logo_path`, `site_logo_dark_path`, `site_logo_primary`.
+- Ruta `/brand-assets/{site}/logo/dark`; `BrandService::logoPathFor()/logoVariantFor()/logoUrl($siteId,$fondo)` con recambio a la otra variante.
+- El pie (fondo oscuro) pasa a usar el logo para fondo oscuro si existe; si no, sigue con el nombre en texto (un logo de tinta oscura sobre el pie no se vería).
+- `BrandService::logoHintForAi()` entra en el contexto de generación y en `available_images` del chat, con la regla de contraste.
+- Verificado: subida de ambas, marcar principal (la cabecera cambia), borrar la principal (recambio automático y el ajuste `site_logo_primary` se corrige).
+
+**U3 · Parar la generación**
+- `CanvasCancelToken` (marca en disco, no en sesión) + endpoint `POST /admin/canvas/{id}/cancel` + `request_id` desde el navegador.
+- La comprobación va justo antes de `CanvasService::save()`, que es la única línea que toca la página.
+- El chat llama a `Session::close()` antes de la petición a la IA: sin eso, la petición de cancelar se quedaría bloqueada esperando a la generación que quiere parar.
+- **Verificado con una generación real:** cancelada a los 2 s → el endpoint respondió en 5 ms (prueba de que el lock ya no serializa), la IA terminó su trabajo (`ai_logs`: `edit_canvas_page`, success, 2117 ms) y el chat devolvió 409 "Cambio cancelado. Tu página no se ha tocado" con el sha1 de la página INTACTO. Control positivo: la misma instrucción sin cancelar → 200 y la página sí cambia.
+
+### Lessons (UX4)
+
+- "Cancelar" en el navegador no cancela nada: abortar el `fetch` deja al servidor trabajando y guardando. Si el usuario ve "cancelado", el servidor tiene que haber mirado una marca antes de escribir.
+- Guardar esa marca en la sesión habría sido inútil: la petición larga retiene el lock del fichero de sesión, así que la petición de cancelar se habría quedado esperando justo a lo que quiere parar. Marca en disco.
+- Al medir concurrencia en local con `php -S`, ojo: por defecto es de un solo proceso (`PHP_CLI_SERVER_WORKERS=4` para varios) y con respuestas de 1-3 ms el coste de arrancar `curl` domina la medición. Si no se puede medir, decirlo en vez de adornar.
+
+---
+
+# [UPD] Actualizar subiendo el ZIP desde Ajustes — 29/07/2026 (Executor)
+
+## Punto de partida
+
+La maquinaria ya existía: `UpdateInstallerService::apply()` hacía backup → descarga → verificación → extracción → despliegue → migraciones. Solo sabía DESCARGAR de una URL remota. Lo añadido es la puerta de entrada manual, el mantenimiento y la vuelta atrás.
+
+## Cambios
+
+1. **`MaintenanceMode`** (nuevo) — marca en fichero (no en BD: tiene que funcionar con el código a medias). Gate en `Core\App::run()`: el público recibe 503 con página propia; **el panel sigue abierto** para que quien actualiza no se quede fuera y pueda restaurar. La marca caduca a los 15 min: una actualización cortada no puede dejar el sitio caído para siempre.
+2. **`UpdateInstallerService::applyFromUpload()`** — valida la subida (ZIP real por cabecera `PK\x03\x04`, tamaño), checksum SHA-256 opcional ANTES de tocar nada, backup, y la misma tubería de siempre.
+3. **Huella de paquete** (`assertLooksLikePromptPress`) — el zip debe traer `index.php`, `app/`, `core/`, `config/constants.php` y `database/migrations`. Sin esto, cualquier zip se volcaría sobre la raíz.
+4. **`restore()` + `backups()`** — listado de copias y vuelta atrás, guardando antes el estado actual (`*_prerestore.zip`). Nombre de copia validado contra path traversal.
+5. **UI en Ajustes → Actualizaciones** — subida del ZIP, campo de checksum opcional, listado de copias con botón Restaurar, y textos que dicen exactamente qué se toca y qué no.
+
+## Bug preexistente encontrado y arreglado
+
+`UpdateInstallerService::runMigrations()` instanciaba `PromptPress\Database\Migrator` **sin cargar la clase**: ese namespace no está en el autoloader (los demás callers hacen `require_once` a mano). Es decir, la actualización remota que ya estaba en producción **desplegaba los archivos y moría justo después, al migrar**: código nuevo con base de datos vieja y un fatal en pantalla. Añadido el `require_once`.
+
+## Verificación
+
+`tests/update_from_zip.php` — 18 comprobaciones en verde: rechazo de zip que no es PromptPress (con el motivo), de archivo que no es zip y de checksum que no cuadra (sin desplegar nada); despliegue correcto con lectura de versión, copia de seguridad creada y listada, `config/config.php` intacto; segunda versión y restauración al estado anterior con copia de seguridad previa; nombre de copia manipulado rechazado; y, al final, que `index.php` y `config/constants.php` siguen siendo byte a byte los mismos.
+
+Extremo a extremo por HTTP: subida real del ZIP con su checksum → "Actualización aplicada (v0.1.0-dev)" + copia guardada; el sitio siguió respondiendo 200 y los cambios recientes del código seguían en su sitio. Restauración por HTTP → copia restaurada + `*_prerestore.zip` creada.
+
+Mantenimiento: con la marca activa, la web pública devuelve **503 + Retry-After: 120** con la página "Volvemos enseguida" y el panel sigue en 200. Con la marca envejecida a 1000 s, se limpia sola y la web vuelve a 200.
+
+## Incidente durante el desarrollo (mío)
+
+La primera versión del test metía en el paquete de prueba un `index.php` y un `config/constants.php` **inventados**, y el despliegue —que es real— se los llevó por delante en la instalación de desarrollo: la app dejó de arrancar. Restaurado desde git en el momento. El test se reescribió para que el paquete lleve **copias byte a byte de los archivos reales** (sobrescribirlos es un no-op) y solo un centinela nuevo en `storage/`, y ahora se niega a ejecutarse si `PP_ENV` no es `development`.
+
+### Lessons (UPD)
+
+- Un test que ejerce un despliegue real no puede llevar contenido inventado para rutas reales. O el paquete replica los archivos existentes, o el test no se ejecuta contra la instalación de trabajo. Aquí costó dejar la app sin front controller.
+- `deploy()` COPIA, nunca borra. Bueno: no se pierden `config.php`, `storage/` ni marcas como `install/.installed`. Malo: el código eliminado en la versión nueva sobrevive, y **restaurar tampoco borra lo que la versión rota añadió**. Está dicho en la interfaz para que nadie espere otra cosa.
+- Cargar una clase fuera del autoload solo por `use` no falla hasta que se instancia. En un flujo largo (backup, descarga, despliegue…) ese fallo aparece en el peor momento: con los archivos ya sustituidos.
+
+---
+
+# [STUDIO-2] Barra lateral de edición + chat flotante · imágenes propias primero · bug del fondo — PLAN (29/07/2026, Planner)
+
+## Background and Motivation (STUDIO-2)
+
+Cuatro peticiones del usuario en una sola conversación, todas sobre el Studio de páginas canvas:
+
+1. **Separar los dos modos de edición**: la barra lateral se queda SOLO para edición manual (y así puede ir creciendo con más controles), y el chat pasa a ser una conversación flotante sobre la página.
+2. **Mejorar la edición por chat** (pregunta abierta: qué se puede hacer).
+3. **Prioridad a las imágenes del negocio**: hoy la plataforma tira de Unsplash por defecto; las fotos que sube el cliente deben ser la primera opción y Unsplash el relleno.
+4. **Bug**: con una foto de fondo, si le pides a la IA que ponga "una capa blanca encima", después ya no se puede cambiar esa foto desde la barra lateral.
+
+## Key Challenges and Analysis (STUDIO-2)
+
+### A. Estructura actual del Studio (lo que hay que mover)
+
+`views/admin/canvas/studio.php` → `.cvstudio-main` = `.cvstudio-stage` (iframe) + `aside.cvstudio-chat` (380 px fijos) que hoy mete TRES cosas en la misma columna: `#edit-panel` (panel manual contextual, oculto hasta que seleccionas), `#chat-messages` y el composer (insertar formulario + chip de contexto + textarea + modelo + Aplicar/Parar). El panel manual y el chat se pelean por el mismo alto: cuando el panel de sección está abierto, el chat queda reducido a una rendija. Esa es la razón de fondo por la que "no caben más elementos" en la barra.
+
+Todo el cambio de layout es front-end (studio.php + `cvstudio-*` en admin.css + canvas-studio.js). No toca backend ni el contrato de mensajes con el iframe (`postMessage` source `pp-studio` / `pp-studio-parent`).
+
+### B. Qué le falta hoy a la edición por chat (revisado en código)
+
+- **No hay memoria de conversación**: `CanvasChatService::applyInstruction()` manda solo la instrucción actual (+ sección + `element_context`). "Ahora un poco más grande" no tiene a qué referirse. Es el fallo más visible y el más barato de arreglar.
+- **La selección de elemento viaja como PROSA**: `element_context` = `"texto con texto \"...\""` (canvas-studio.js:80). El modelo tiene que adivinar qué nodo es. Marcar el nodo elegido en el HTML que se le manda (`data-pp-target="1"`) es determinista y elimina la ambigüedad.
+- **Después de aplicar no se ve qué cambió**: `reloadPreview()` recarga el iframe entero; se recupera el scroll pero no hay ninguna señal de qué parte se ha tocado.
+- **Espera opaca**: una edición de sección puede tardar 30-60 s con tres puntitos. Existe "Parar" (bien), pero no hay ni tiempo transcurrido ni expectativa.
+- **Errores genéricos** (ya en Lessons): cualquier `AIException` cae en "La IA no devolvió un cambio válido". Además, si el sobre `<pp-html>/<pp-css>` viene mal, no hay reintento (el generador SÍ reintenta; el chat no).
+- **Todo se interpreta como edición**: una pregunta ("¿queda bien este azul?") acaba modificando la página.
+
+### C. Imágenes: por qué siempre salen fotos de Unsplash (causas concretas)
+
+1. `CanvasChatService::prepareRequestedImages()` — en cuanto la instrucción menciona una foto, **va a Unsplash primero** y descarga 3 imágenes a la biblioteca, haya o no fotos propias del negocio. La biblioteca propia solo se mira como red de seguridad si Unsplash falla (`hasLibraryImages`).
+2. `CanvasChatService::availableImages()` — lista las 12 imágenes más recientes `ORDER BY id DESC`, **sin distinguir origen**. Como el paso 1 acaba de meter 3 de Unsplash, esas encabezan la lista. Se retroalimenta.
+3. **La generación de páginas ni siquiera consulta la biblioteca**: `OnboardingController::resolvePlanImages()` y `genericBusinessImages()` resuelven los briefs **exclusivamente** contra `ImageBankService` (Unsplash). Un negocio con 20 fotos propias recibe una página de stock.
+4. **Las fotos propias llegan sin descripción**: `media.alt_text` es opcional al subir (en la BD de dev: 30/30 de Unsplash con alt, 1 de 3 subidas sin alt). En el prompt aparecen como `- /storage/uploads/1/IMG_2043.jpg — ` (ruta pelada), mientras las de Unsplash llevan descripción. Aunque se prioricen, el modelo no sabe qué son. **Sin descripciones, la prioridad no se puede ejercer bien**: esta es la pieza habilitadora.
+
+La columna `media.source` ('upload' | 'unsplash') ya existe y es la palanca para todo lo anterior.
+
+### D. Bug del fondo tras "ponle una capa blanca" — diagnóstico verificado
+
+Reproducido sobre páginas canvas reales de la BD de dev (637 y 774). Hay tres mecanismos distintos, todos de la misma familia: **el panel manual pierde el "asa" de la imagen cuando la IA reestructura la sección**.
+
+- **Mecanismo 1 (el del usuario, principal)** — la capa blanca es un elemento que CONTIENE el contenido. Página 637: `<section data-pp-section="hero" class="lx-hero">` con `background-image:url(foto)` en la hoja, y dentro `<div class="lx-hero__overlay">` con `background:rgba(255,255,255,.85)`. Al hacer clic dentro del hero, `visualBoxFrom()` (overlay del preview, CanvasController) devuelve ese div → el panel se abre como **"Bloque"**, cuyos controles NO tienen nada de imagen de fondo. El panel de **Sección** —único sitio con "Imagen de fondo · Cambiar/Quitar"— se vuelve inalcanzable salvo que aciertes a pinchar una franja de la sección por fuera de la caja blanca. Si la capa cubre la sección entera (`inset:0`), inalcanzable del todo.
+- **Mecanismo 2** — velo incrustado en la propia regla del fondo. Página 774: `background-image: linear-gradient(rgba(255,255,255,.7),rgba(255,255,255,.7)), url("...jpg")` en la hoja de estilos. Al reemplazar, el overlay lee `bgEl.style.backgroundImage` (**solo el inline**, aquí vacío) → escribe inline `url(nueva)` → la capa inline gana a la hoja y **el velo desaparece** al cambiar la foto. Y si la IA llega a dejar el `background-image` con solo el gradiente (sin `url`), `cssBgUrlOf()` devuelve null → `hasBgImage=false` → el panel ofrece "Poner imagen de fondo" y el cambio parece no hacer nada.
+- **Mecanismo 3** — la foto acaba en un div intermedio (`.hero__bg{background-image:url()}`). `bgImageOf()` solo busca `<img>` que cubran y `cssBgUrlOf()` solo mira el elemento en sí → ninguno la encuentra → "esta sección no tiene imagen de fondo".
+
+Conclusión: no es un bug puntual, es una fragilidad estructural. Los dos arreglos que lo cierran de forma duradera son **poder subir de ámbito siempre** (elemento → bloque → sección) y **resolver quién lleva de verdad el fondo** en lugar de asumir que es la `<section>`.
+
+## High-level Task Breakdown (STUDIO-2)
+
+Orden pensado para que el alivio llegue pronto y los cambios de UI se toquen una sola vez.
+
+### Fase 1 — Bug del fondo (pequeña, sin rediseño)
+
+- **D1 · Resolver el dueño del fondo.** `resolveBgTarget(section)` en el overlay del preview: devuelve el elemento que realmente lleva el fondo (la sección, un descendiente con `background-image` que cubra, o un `<img>` de cobertura). `hasBgImage`, `bgdim`, `bgimg mark/remove` y `replace-image` pasan a operar sobre él.
+  *Éxito*: en una sección con la foto en un wrapper interior, el panel dice "Imagen de fondo" y Cambiar/Quitar funcionan.
+- **D2 · Conservar el velo al reemplazar.** Leer `getComputedStyle(el).backgroundImage` (no solo el inline), conservar todas las capas que no sean `url(...)` (gradientes/velos) y sustituir únicamente la capa de imagen.
+  *Éxito*: en la página 774 (velo blanco 0.7 + foto), cambiar la foto mantiene el velo.
+- **D3 · Regla de prompt para las capas.** En `EDIT_CANVAS_SECTION`/`EDIT_CANVAS_PAGE`: una "capa/velo" sobre una foto de fondo se aplica como capa extra del `background-image` del mismo elemento (o `::before`), nunca envolviendo el contenido en una caja opaca, y nunca eliminando la capa `url(...)`.
+  *Éxito*: pedir "capa blanca encima de la foto" deja la sección con foto + velo y el panel sigue ofreciendo Cambiar.
+
+### Fase 2 — Barra lateral manual + chat flotante (+ el arreglo estructural del bug)
+
+- **A1 · La barra lateral pasa a ser el Editor.** El `aside` deja de contener el chat: queda `#edit-panel` a pantalla completa de la columna, con tres estados — sin selección (ayuda + lista de secciones), elemento seleccionado (controles de hoy), sección seleccionada (controles de sección). Ancho actual (380 px), sin scroll compartido con nada.
+  *Éxito*: seleccionar texto/botón/imagen/sección llena la barra sin recortar nada; sin selección la barra no está vacía.
+- **A2 · Migas de ámbito (arregla el mecanismo 1 del bug).** Cabecera del panel con la cadena real del elemento: `Texto ▸ Bloque ▸ Sección ▸ Página`, clicable para subir de ámbito, y `Esc` sube un nivel. El iframe manda la cadena de ancestros editables junto con `element-selected`.
+  *Éxito*: en el hero de la página 637 (caja blanca sobre foto), un clic dentro de la caja y luego "Sección" en las migas da acceso a "Imagen de fondo · Cambiar" — el caso exacto del usuario.
+- **A3 · Chat flotante.** Pastilla anclada abajo a la derecha sobre el lienzo ("Pídeme un cambio…") que se despliega en panel de conversación (chat + chip de contexto + modelo + Aplicar/Parar + insertar formulario). Recuerda plegado/desplegado en `localStorage`, se despliega solo mientras hay una petición en curso y muestra estado en la pastilla si está plegado. Por debajo de ~1100 px la barra lateral pasa a cajón superpuesto.
+  *Éxito*: se puede conversar con el chat viendo el panel manual completo a la vez; plegado, el lienzo gana ~380 px de ancho.
+
+### Fase 3 — Imágenes propias primero
+
+- **C1 · Fuente única de imágenes para la IA.** `MediaLibraryService::forAi($siteId, ...)`: fotos de la biblioteca ordenadas **propias primero** (`source='upload'`), etiquetadas (`foto propia del negocio` / `banco de imágenes`) y con descripción y orientación. Lo consumen chat y generación.
+  *Éxito*: test que, con biblioteca mixta, devuelve todas las propias antes que cualquiera de banco.
+- **C2 · Chat: Unsplash deja de ser el primer recurso.** En `applyInstruction()`, si el sitio tiene fotos propias utilizables NO se llama a Unsplash; solo se recurre a él si no hay ninguna propia o si el usuario lo pide explícitamente ("busca una foto de…"). Regla de prompt: prioriza siempre las fotos propias; el banco solo si ninguna encaja.
+  *Éxito*: con biblioteca propia, "pon una foto de fondo aquí" no genera ninguna descarga de Unsplash (verificable en `media`).
+- **C3 · Generación: la biblioteca propia entra en el reparto.** `resolvePlanImages()` y el pool sin referencias buscan primero en las fotos propias del sitio (casando el brief con descripción/nombre) y solo piden a Unsplash lo que falte.
+  *Éxito*: sitio con 6 fotos propias descritas → página generada usando propias; sin fotos propias → comportamiento actual intacto.
+- **C4 · Que las fotos propias se puedan describir** (habilitador de C1-C3; decisión pendiente del usuario sobre automático vs. manual). Descripción con IA de las imágenes sin `alt_text`, editable siempre desde la biblioteca.
+  *Éxito*: una foto recién subida llega al prompt con una descripción útil, no con la ruta pelada.
+- **C5 · Que se note en la interfaz.** En el modal de imágenes del Studio: filtro "Tus fotos / De banco" y la pestaña Unsplash presentada como alternativa cuando no hay foto propia.
+  *Éxito*: el modal abre en "Tus fotos" y se ve de un vistazo cuáles son propias.
+
+### Fase 4 — Calidad de la edición por chat
+
+- **B1 · Memoria de conversación.** Enviar los últimos 3-4 turnos (instrucción + respuesta + ámbito) al prompt de edición. *Éxito*: "ponlo un poco más grande" tras un cambio anterior se aplica a lo mismo.
+- **B2 · Marcar el elemento seleccionado en el HTML.** Sustituir la prosa de `element_context` por un `data-pp-target="1"` en el nodo elegido dentro del HTML que se manda; regla de prompt "aplica el cambio al elemento marcado". *Éxito*: con dos titulares iguales en la sección, se cambia el que estaba seleccionado.
+- **B3 · Ver qué ha cambiado.** Tras aplicar: volver a la sección tocada, resaltarla un instante y mantener la selección. *Éxito*: tras un cambio en una sección del final, la vista queda en ella y se distingue.
+- **B4 · Espera y errores honestos.** Contador de tiempo y expectativa realista mientras trabaja; mensajes de error por causa (agotó el tiempo / respuesta cortada / proveedor caído) con la salida sugerida; reintento automático UNA vez si el sobre `<pp-html>/<pp-css>` viene mal. *Éxito*: un fallo de sobre se recupera solo; un timeout lo dice con esas palabras.
+- **B5 (opcional) · Preguntas sin tocar la página.** Detectar que el mensaje es una pregunta y responder sin editar. *Éxito*: "¿este azul se lee bien?" responde y la página no cambia de versión.
+- **B6 (opcional) · Atajos deterministas.** Peticiones simples que el panel ya sabe hacer (color, tamaño, espaciado, quitar fondo) se resuelven sin llamar a la IA. *Éxito*: "pon el fondo blanco" se aplica al instante y sin coste. **Riesgo**: falsos positivos; solo con un conjunto pequeño y con "deshacer" a la vista.
+
+## Project Status Board (STUDIO-2)
+
+- [x] D1 resolver dueño del fondo
+- [x] D2 conservar velo al reemplazar
+- [x] D3 regla de prompt para capas
+- [x] A1 barra lateral = editor manual
+- [x] A2 migas de ámbito (cierra el bug de raíz)
+- [x] A3 chat flotante
+- [x] C1 fuente única de imágenes para la IA
+- [x] C2 chat: propias antes que Unsplash
+- [x] C3 generación: propias en el reparto
+- [x] C4 descripción de fotos propias (automática al subir)
+- [x] C5 modal de imágenes: propias primero
+- [x] B1 memoria de conversación
+- [x] B2 marcar elemento seleccionado
+- [x] B3 ver qué ha cambiado
+- [x] B4 espera y errores honestos
+- [ ] B5 (opcional) preguntas sin editar
+- [ ] B6 (opcional) atajos deterministas
+
+## Current Status / Progress Tracking (STUDIO-2)
+
+**Entrega 1 (29/07/2026) — D1+D2+D3+A2: el bug del fondo, cerrado por los dos lados.**
+
+- **D1** `resolveBgTarget(sec)` en el overlay del preview (`CanvasController::overlayScript`): el fondo puede vivir en la sección, en un envoltorio interior o en un `<img>` de cobertura. `hasBgImage`, `bgdim`, `bgimg mark/remove` y `replace-image` operan sobre el elemento que lo lleva de verdad. Verificado en la página 774, cuyo fondo está en `.fgl-hero__frame` (un div interior): antes el panel decía "Poner imagen de fondo" y cualquier cambio iba a la sección, DETRÁS del frame — invisible.
+- **D2** `bgLayers()` lee el `background-image` del estilo COMPUTADO y separa capas respetando paréntesis (`splitLayers`). Al reemplazar la foto se conservan todas las capas que no son `url(...)`. Verificado: velo blanco 0.6 intacto tras cambiar la foto.
+- **D2b (hallazgo colateral, bug real preexistente)** — `bgdim` sobre un fondo CSS reescribía la URL leída del computado, que es ABSOLUTA. `CanvasSanitizer::scrubCssDeclarations` solo acepta rutas `/` o `https://`, así que convertía esa URL en `none`: **atenuar el fondo borraba la foto**. Añadido `siteUrl()`, que devuelve las URLs del propio sitio a ruta relativa antes de escribirlas. Verificado: ahora guarda `/storage/uploads/...`.
+- **A2** Migas de ámbito `Página › Sección › Bloque › Elemento` en la cabecera del panel, clicables, con `Esc` para subir un nivel. El iframe manda la cadena de ancestros con `element-selected` y atiende `select-scope`. Verificado en la página 637 (el caso exacto del usuario, capa blanca envolviendo el contenido): clic dentro de la caja → panel "Bloque" (sin controles de fondo) → clic en "Hero" → "Imagen de fondo · Cambiar/Quitar" accesible. `Esc` recorre Texto → Bloque → Hero → cerrado. Ida y vuelta por las migas conserva el marcado del elemento (imagen/caja).
+- **D3** Regla en `EDIT_CANVAS_SECTION` y `EDIT_CANVAS_PAGE`: las capas/velos se aplican como capa extra del `background-image` del mismo elemento (o `::before`), nunca quitando la capa `url(...)` ni envolviendo el contenido en una caja opaca.
+
+Verificación: navegador real sobre las páginas 637, 774 y 135 (secciones con `<img>`); sin errores de consola; las páginas de prueba quedaron restauradas con `undo` (774 de vuelta en la versión 420, sin estilos inline). Suites en verde: `canvas_runtime` (49), `canvas_runtime_markup`, `canvas_box_editor`, `canvas_edit_envelope`, `canvas_settings`.
+
+**Entrega 2 (29/07/2026) — A1+A3: barra lateral de edición manual + chat flotante.**
+
+- **A1** `views/admin/canvas/studio.php`: el `aside` pasa de `cvstudio-chat` a `cvstudio-side` y contiene solo edición manual. Dos estados excluyentes: `#edit-panel` (controles del elemento seleccionado, ahora a toda la altura de la barra) y `#side-empty` (sin selección). El estado vacío no está vacío: explica en una frase cómo se edita, lista **"Partes de esta página"** numeradas —clic para ir a esa parte y abrir su panel, ratón por encima para resaltarla en la página— y agrupa **"Añadir a la página"**, donde se ha movido "+ Formulario" (era una acción manual metida en el composer del chat).
+- **A3** El chat vive en `#chat-dock`, flotando sobre el lienzo abajo a la derecha. Plegado es una pastilla; desplegado, panel de conversación con su composer. Estado recordado en `localStorage` (`pp-studio-chat-open`), abierto la primera vez. La pastilla es informativa: dice "Cambiar «Hero»" cuando hay una parte seleccionada y "Aplicando el cambio…" mientras trabaja, y marca un punto si llega respuesta con el chat plegado. Insertar un formulario despliega el chat, que es donde se cuenta el progreso.
+- Responsive: por debajo de 1100 px la barra se superpone al lienzo (no lo estruja) y el dock se aparta para no quedar debajo.
+- Nuevos mensajes al iframe: `select` con `panel:true` (abre el panel de esa sección) y `highlight` (resalte al pasar el ratón por la lista).
+
+Verificación en navegador: plegar/desplegar con persistencia tras recarga; lista de partes navegable con resalte y marca de la parte actual; panel y ayuda nunca visibles a la vez; a 1024 px ni la pastilla ni el panel quedan bajo la barra; modal de imágenes por encima de todo (z-index 50); y **una petición real de chat de principio a fin** desde el dock ("pon el fondo de esta parte en negro" sobre "Frase inspiracional", 2 s, con su Deshacer) — deshecha después, la página 637 vuelve a su versión "Generación inicial". Sin errores de consola. Suites en verde: canvas_runtime (49), canvas_runtime_markup (16), canvas_box_editor (4), canvas_edit_envelope (10), canvas_image_requests (9), canvas_settings (4), canvas_cross_page_reference (10).
+
+**Entrega 3 (29/07/2026) — C1..C5: las fotos del negocio son la primera opción.**
+
+- **C1** `app/Services/MediaLibraryService.php` (nuevo): fuente única para chat y generación. `images()` ordena `(source='upload') DESC, id DESC`; `forAi()` devuelve el bloque de prompt separado en dos — "FOTOS PROPIAS DEL NEGOCIO (PRIORITARIAS…)" y "BANCO DE IMÁGENES (solo si NINGUNA foto propia encaja)" — con descripción y orientación calculada (horizontal/vertical/cuadrada). Los logos de marca (`/brand/`) quedan fuera: se ofrecen aparte por `BrandService` y no son fotos de contenido.
+- **C2** `CanvasChatService::applyInstruction()` ya NO llama a Unsplash por defecto: solo si el sitio no tiene fotos propias o si el usuario lo pide con palabras explícitas (`requestsImageBank()`: unsplash / banco de imágenes / de internet / stock). Además inyecta una directiva de prioridad en la instrucción cuando hay fotos propias. `availableImages()` pasa a delegar en C1.
+- **C3** `resolvePlanImages()` reparte primero las fotos propias casando el brief con la descripción y el nombre de archivo (`MediaLibraryService::bestMatch()`, con desempate por orientación y sin repetir); Unsplash solo cubre lo que falte. `genericBusinessImages()` arranca con hasta 6 fotos propias y solo completa con banco si no llega a 4.
+- **C4** Acción de visión `DESCRIBE_IMAGE` (tier LIGHT, JSON `{alt}`) + `describeAfterResponse()`: al subir una imagen sin texto alternativo se describe con IA DESPUÉS de responder al navegador (`register_shutdown_function` + `fastcgi_finish_request` cuando existe), mismo patrón que el procesado de documentos del onboarding. Nunca pisa un alt escrito por el usuario.
+- **C5** Selector de imágenes del Studio: chips "Tus fotos / De banco / Todas" (abre siempre en "Tus fotos"), distintivo "Tu foto" sobre las propias en la vista mezclada, y el filtro se oculta en la pestaña de Unsplash. El endpoint `/admin/media/library` devuelve `source` y ordena propias primero.
+
+Verificación:
+- `tests/media_library_priority.php` (nuevo, 11 comprobaciones): orden propias-primero, `ownOnly`, formato del bloque de prompt, caída al nombre de archivo cuando no hay alt, orientación, y `bestMatch` (acierto, respeto de usadas, null sin coincidencia). Inserta y borra sus propias filas.
+- `tests/canvas_image_requests.php` ampliado con 4 casos de `requestsImageBank` (13 PASS).
+- **C4 real por HTTP**: subida de un PNG desde el navegador → respuesta en **1,32 s** con `alt_text` vacío y, segundos después, en BD "Fondo azul con la palabra \"AULA\" escrita en letras blancas centradas". La descripción NO hace esperar a la subida.
+- **C2 real**: "pon una foto de fondo en esta sección" sobre la página 637 → **0 descargas nuevas de Unsplash** (33 filas en `media` antes y después) y el log de `ai_logs` confirma el prompt con el bloque de propias delante y la directiva de prioridad. El modelo eligió una foto ya existente de la biblioteca en vez de la única foto "propia" del entorno dev, que es una imagen de prueba con la palabra TEST — comportamiento correcto: la prioridad no obliga a usar una foto que no pega.
+- Todo restaurado: página 637 en su versión 361 y `media` con las mismas 33 filas del principio.
+- Suites en verde: canvas_runtime (49), canvas_runtime_markup (16), canvas_box_editor (4), canvas_edit_envelope (10), canvas_image_requests (13), canvas_settings (4), canvas_cross_page_reference (10), canvas_cancel (11), media_library_priority (11).
+
+**Entrega 4 (29/07/2026) — B1..B4: el chat entiende el contexto y dice la verdad.**
+
+- **B1 memoria de conversación.** El Studio guarda los últimos turnos (`chatHistory`) y manda los 4 más recientes; `CanvasController::parseChatHistory()` los valida y acota (4 turnos, 300 caracteres por campo) y `CanvasChatService::historyBlock()` los pone DELANTE de la petición, etiquetando la actual ("PETICIÓN ACTUAL (la única que debes aplicar)") y avisando de que los turnos anteriores son contexto, no pendientes.
+- **B2 el elemento seleccionado se marca en el HTML.** El overlay calcula el camino del nodo dentro de su sección como índices de hijos (`pathWithinSection` → "0.1") y `CanvasChatService::markTarget()` le pone `data-pp-target="1"` con DOMDocument antes de mandar la sección al modelo. La descripción en prosa se conserva como apoyo. `stripTargetMarks()` limpia la marca del resultado por si el modelo no la quita.
+- **B3 ver qué ha cambiado.** La respuesta del chat trae `changed_section`; al recargar el preview, el Studio manda `flash` al iframe, que lleva la vista a esa parte y le da un destello (`@keyframes pp-studio-flash`, respetando `prefers-reduced-motion`).
+- **B4 espera y errores honestos.** El mensaje "Aplicando el cambio…" cuenta segundos y, al pasar de 15 s y de 45 s, explica por qué tarda y recuerda "Parar". Los errores salen por CAUSA vía `CanvasController::chatErrorMessage()` (timeout / respuesta cortada / 401 / 429 / 5xx), con la salida sugerida distinta según si el cambio era de una sección o de la página entera. Y `CanvasChatService::runEdit()` reintenta UNA vez cuando el sobre `<pp-html>/<pp-css>` llega incompleto, avisando al modelo de lo que faltó.
+
+Verificación:
+- `tests/canvas_chat_context.php` (nuevo, 30 comprobaciones): marcado por camino (nodo correcto entre hermanos iguales, enlaces, caminos fuera de rango/vacíos/basura que NO marcan), limpieza de marcas, parseo y acotado de la memoria, orden y etiquetado del bloque, y los seis caminos del mensaje de error.
+- **Conversación real de dos turnos en navegador** (lo que prueba B1 y B2 juntos): "pon este titular en color rojo" → rojo; después **"ahora hazlo un poco más grande"**, sin decir qué, y el titular pasó de 32 px a 40 px **conservando el rojo**. El log confirma el bloque de memoria con el turno anterior y el `<h1 ... data-pp-target="1">` marcado; el HTML guardado quedó sin la marca.
+- B3 verificado: cambio sobre "Proceso por pasos" → el destello apareció en esa sección y no en otra.
+- B4 verificado: en una petición de 2 s el mensaje pasó de "Aplicando el cambio…" a "Aplicando el cambio… 1 s".
+- Página 637 restaurada a su versión 361 (sin estilos inline ni CSS de chat). Sin errores de consola.
+- **168 comprobaciones en verde** en 11 suites de canvas/medios.
+
+## Executor's Feedback or Assistance Requests (STUDIO-2)
+
+- **B5 y B6 quedan sin hacer, a propósito** (estaban marcadas como opcionales): B5 (responder preguntas sin editar) y B6 (atajos deterministas sin IA). B6 es la que más cuidado pide: un falso positivo aplicaría un cambio que el usuario no pidió, así que solo merece la pena con un conjunto muy pequeño de frases y el "Deshacer" a la vista.
+- **Pendiente de decisión del usuario**: en el entorno dev no hay fotos propias reales (solo una imagen de prueba y los logos), así que la prioridad no se puede ver "en bonito" hasta que un sitio real suba material. Para probarlo de verdad conviene subir 3-4 fotos del negocio y regenerar una página.
+- Las imágenes ya subidas ANTES de este cambio siguen sin descripción: la automática solo actúa en subidas nuevas. Si interesa, un comando/botón "describir las que faltan" es media hora de trabajo (reutiliza `describeNow()`).
+- `tests/canvas_image_requests.php` **llevaba roto desde FEAT-5** (reflexionaba sobre `CanvasController::requestsImages`, método que se movió a `CanvasChatService`): moría con exit 255 y SIN imprimir nada, así que pasaba por "sin fallos". Corregido el import y las dos reflexiones; 9/9 PASS. Cubre justo la detección de peticiones de imagen que toca la Fase 3.
+- Pendiente de la Fase 2: la captura de la entrega deja claro que con el panel de sección abierto el chat queda reducido a una franja — es exactamente el problema que A1+A3 resuelven.
+
+## Decisiones cerradas (29/07/2026, usuario)
+
+1. **Chat flotante** = pastilla abajo a la derecha que se despliega en panel; recuerda plegado/desplegado y se despliega sola mientras hay una petición en curso. (A3)
+2. **Descripción de imágenes** = automática al subir con el modelo ligero cuando la imagen llega sin `alt_text`, siempre editable a mano. (C4)
+3. **Unsplash en generación** = relleno: primero todas las fotos propias que encajen, banco sólo para completar lo que falte. (C3)
+
+### Lessons (STUDIO-2)
+
+- `getComputedStyle(el).backgroundImage` devuelve URLs ABSOLUTAS. Escribirlas de vuelta en un estilo inline hace que `CanvasSanitizer` las convierta en `none` (solo admite rutas `/` o `https://`) y la imagen desaparece al guardar. Pasar siempre por `siteUrl()` antes de reescribir un fondo leído del computado.
+- Al depurar el Studio, el iframe de preview se carga sin `?t=` en la primera pintada: para ver código nuevo del overlay hay que forzar `iframe.src = '...preview?t=' + Date.now()`, si no se depura contra la versión cacheada.
+- Un `click` sintético sobre un texto NO reproduce el flujo real del usuario: la edición inline entra por `mousedown`. Para verificar el panel de "Texto" hay que despachar `mousedown`.
+- Un test que muere por `ReflectionException` sale con 255 y **sin imprimir nada**: parece que "no falla". Al mover métodos entre clases, revisar quién los reflexiona (`grep ReflectionMethod`).
+- Se repitió la lección del `[hidden]`: `#side-empty` es `display:flex`, así que `hidden` no lo ocultaba y panel + ayuda se pintaban a la vez. Al crear cualquier contenedor flex/grid que se vaya a ocultar por atributo, añadir la regla `[hidden]{display:none}` EN EL MISMO commit.
+- Al superponer paneles en el Studio hay que revisar el z-index de los tres actores: modal (50) > barra lateral superpuesta (45) > chat flotante (40). El dock quedaba debajo de la barra en pantallas estrechas.
+- `intval('')` es `0`: convertir antes de validar el formato hacía que un camino de elemento vacío o con basura marcase el PRIMER hijo de la sección, es decir, la IA cambiando el elemento equivocado con toda confianza. Validar el formato (regex) y luego convertir.
+- Muestrear la UI cada 250 ms desde `javascript_tool` no garantiza 4 muestras por segundo (los timers se estrangulan): una comprobación de "esto no se actualiza" puede ser un artefacto del muestreo. Confirmar leyendo el nodo concreto (`textContent`) antes de dar por roto el código.
+- Filtrar filas DESPUÉS del `LIMIT` es una trampa: `images($siteId, 1, true)` con el filtro de logos en PHP devolvía vacío cuando la única fila del LIMIT era un logo, y `hasOwnImages()` mentía. El filtro tiene que ir en el WHERE.
+- `Response::json()` hace `exit`, así que un `register_shutdown_function` registrado antes SÍ se ejecuta después de enviar el cuerpo: sirve para trabajo post-respuesta (descripción con IA) sin hacer esperar al navegador. Medido: subida en 1,32 s con la descripción llegando después.
+- Detectar el fondo de una sección por geometría (`getBoundingClientRect`) es frágil si se mide antes del layout; en la práctica funciona porque se calcula al seleccionar, ya con la página pintada, pero conviene no moverlo a la carga.

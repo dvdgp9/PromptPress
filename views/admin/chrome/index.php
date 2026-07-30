@@ -83,6 +83,27 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
     <p class="pp-page-intro">Diseña el encabezado y el pie de tu sitio: menú, botón, contacto, redes y estilo. Los cambios se aplican a todas las páginas.</p>
 </div>
 
+<?php if (!empty($isMultilingual)): ?>
+    <div class="pp-chrome-langbar" id="pp-chrome-langbar"
+         data-primary="<?= e($primaryLang) ?>">
+        <div class="pp-chrome-langbar__label">
+            <strong>Estás editando los textos en</strong>
+            <span>El diseño (colores, bordes, disposición) y los datos de contacto son comunes a todos los idiomas.</span>
+        </div>
+        <div class="pp-chrome-langbar__tabs" role="tablist">
+            <?php foreach ($languages as $code): ?>
+                <button type="button" role="tab"
+                        class="pp-chrome-langtab<?= $code === $primaryLang ? ' is-active' : '' ?>"
+                        data-lang="<?= e($code) ?>"
+                        aria-selected="<?= $code === $primaryLang ? 'true' : 'false' ?>">
+                    <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' · principal' : '' ?>
+                </button>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <p class="pp-chrome-langhint" id="pp-chrome-langhint" hidden></p>
+<?php endif; ?>
+
 <div class="pp-chrome-editor">
     <form method="POST" action="<?= e(base_url('admin/chrome')) ?>" class="pp-chrome-editor__form" id="chrome-form" autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">

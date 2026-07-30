@@ -6,6 +6,7 @@ namespace App\Controllers\Admin;
 
 use App\Services\BrandService;
 use App\Services\ChromeService;
+use App\Services\LanguageService;
 use App\Services\DesignSystem;
 use App\Services\VisualStyleService;
 use Core\Auth;
@@ -29,6 +30,11 @@ class ChromeController
         $data['csrf'] = CSRF::token();
         $data['config'] = ChromeService::load($siteId);
         $data['pages'] = $this->sitePages($siteId);
+        // I18N-FULL T5.7 — idiomas en los que se puede editar el texto del chrome.
+        $data['isMultilingual'] = LanguageService::isMultilingual($siteId);
+        $data['languages']      = LanguageService::activeFor($siteId);
+        $data['primaryLang']    = LanguageService::primaryFor($siteId);
+        $data['languageLabels'] = LanguageService::LANGUAGES;
         View::send('admin/chrome/index', $data);
     }
 
@@ -54,19 +60,21 @@ class ChromeController
         CSRF::check();
         $siteId = $this->requireSiteId();
         $config = ChromeService::sanitize($this->decodePayload());
+        // La vista previa se pinta en el idioma que se está editando.
+        $lang = LanguageService::normalize((string) Request::post('lang', LanguageService::primaryFor($siteId)));
 
         $styleSlug = VisualStyleService::selectedForSite($siteId);
-        $html = '<!doctype html><html lang="es"><head>'
+        $html = '<!doctype html><html lang="' . e($lang) . '"><head>'
               . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
               . '<meta name="robots" content="noindex,nofollow">'
               . DesignSystem::renderHead($siteId, $styleSlug)
               . '</head><body class="' . e(VisualStyleService::bodyClass($styleSlug)) . '">'
-              . BrandService::publicHeader($siteId, $config)
+              . BrandService::publicHeader($siteId, $config, $lang)
               . '<main class="pp-section"><div class="container" style="padding:64px 24px;text-align:center">'
               . '<h1 style="font-family:var(--pp-font-heading)">Vista previa</h1>'
               . '<p style="color:var(--pp-text-muted)">Así se ven el header y el pie con los cambios actuales. El contenido de las páginas no se modifica.</p>'
               . '</div></main>'
-              . BrandService::publicFooter($siteId, $config)
+              . BrandService::publicFooter($siteId, $config, $lang)
               . '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>'
               . '</body></html>';
 

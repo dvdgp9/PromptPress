@@ -138,12 +138,66 @@ $pageMapPayload = array_map(fn($p) => [
         </div>
     </div>
 
+<?php if (!empty($isMultilingual) && !empty($translationCoverage)): ?>
+    <div class="pp-tr-summary">
+        <div class="pp-tr-summary__head">
+            <strong>Traducciones</strong>
+            <span>Cuánto de tu web está disponible en cada idioma</span>
+        </div>
+        <?php foreach ($translationCoverage as $code => $cov): ?>
+            <div class="pp-tr-lang<?= $untranslatedFilter === $code ? ' is-filtered' : '' ?>">
+                <div class="pp-tr-lang__top">
+                    <span class="pp-tr-lang__name"><?= e($languageLabels[$code] ?? $code) ?></span>
+                    <span class="pp-tr-lang__count">
+                        <?= (int) $cov['done'] ?> de <?= (int) $cov['total'] ?> páginas traducidas
+                    </span>
+                </div>
+                <div class="pp-tr-bar" role="img"
+                     aria-label="<?= (int) $cov['percent'] ?>% traducido al <?= e($languageLabels[$code] ?? $code) ?>">
+                    <span style="width:<?= (int) $cov['percent'] ?>%"></span>
+                </div>
+                <div class="pp-tr-lang__foot">
+                    <?php if ((int) $cov['missing'] === 0): ?>
+                        <span class="pp-tr-done-msg">Todo traducido 🎉</span>
+                    <?php else: ?>
+                        <?php if ($untranslatedFilter === $code): ?>
+                            <a href="<?= e(base_url('admin/pages')) ?>">Ver todas las páginas</a>
+                        <?php else: ?>
+                            <a href="<?= e(base_url('admin/pages?sin_traducir=' . urlencode((string) $code))) ?>">
+                                Ver las <?= (int) $cov['missing'] ?> que faltan
+                            </a>
+                        <?php endif; ?>
+                        <button type="button" class="pp-tr-bulk-btn"
+                                data-pp-translate-all="<?= e($code) ?>"
+                                data-pp-lang-label="<?= e($languageLabels[$code] ?? $code) ?>"
+                                data-pp-missing="<?= (int) $cov['missing'] ?>">
+                            Traducir las <?= (int) $cov['missing'] ?> de golpe
+                        </button>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($untranslatedFilter)): ?>
+    <div class="pp-tr-filter-banner">
+        Mostrando solo las páginas que <strong>todavía no tienen versión en
+        <?= e($languageLabels[$untranslatedFilter] ?? $untranslatedFilter) ?></strong>.
+        <a href="<?= e(base_url('admin/pages')) ?>">Quitar el filtro</a>
+    </div>
+<?php endif; ?>
+
     <div class="pp-map-tabs" role="tablist" aria-label="Vistas de páginas">
-        <button type="button" class="is-active" data-map-tab="map">Mapa</button>
-        <button type="button" data-map-tab="list">Lista</button>
+        <?php if (empty($untranslatedFilter)): ?>
+            <?php // Con filtro activo se oculta el mapa: es una vista jerárquica
+                  // del sitio ENTERO y contradiría el aviso de «solo lo que falta». ?>
+            <button type="button" class="is-active" data-map-tab="map">Mapa</button>
+        <?php endif; ?>
+        <button type="button" class="<?= !empty($untranslatedFilter) ? 'is-active' : '' ?>" data-map-tab="list">Lista</button>
     </div>
 
-    <div class="pp-map-view is-active" data-map-view="map">
+    <div class="pp-map-view<?= empty($untranslatedFilter) ? ' is-active' : '' ?>" data-map-view="map">
         <aside class="pp-architect-panel is-collapsed" id="pp-architect-panel" aria-live="polite">
             <div class="pp-architect-panel__head">
                 <div>
@@ -230,7 +284,7 @@ $pageMapPayload = array_map(fn($p) => [
         </div>
     </div>
 
-    <div class="pp-map-view" data-map-view="list" hidden>
+    <div class="pp-map-view<?= !empty($untranslatedFilter) ? ' is-active' : '' ?>" data-map-view="list"<?= empty($untranslatedFilter) ? ' hidden' : '' ?>>
         <?php if (empty($pages)): ?>
             <div class="pp-empty">
                 <div class="pp-empty__title">Todavía no hay páginas</div>
@@ -246,6 +300,9 @@ $pageMapPayload = array_map(fn($p) => [
                             <th>Slug</th>
                             <th>Tipo</th>
                             <th>Estado</th>
+                            <?php if (!empty($isMultilingual)): ?>
+                                <th>Idiomas</th>
+                            <?php endif; ?>
                             <th>Actualizada</th>
                             <th style="width:180px">Acciones</th>
                         </tr>
@@ -257,6 +314,30 @@ $pageMapPayload = array_map(fn($p) => [
                             <td><code>/<?= e($p['slug']) ?></code></td>
                             <td><?= e($pageTypes[$p['page_type']] ?? $p['page_type']) ?></td>
                             <td><?= $statusBadge($p) . $canvasBadge($p) ?></td>
+                            <?php if (!empty($isMultilingual)): ?>
+                                <td class="pp-tr-cell">
+                                    <span class="pp-tr-own"><?= e($languageLabels[$p['language'] ?? ''] ?? ($p['language'] ?? '')) ?></span>
+                                    <?php foreach (($translationStatus[(int) $p['id']] ?? []) as $code => $info): ?>
+                                        <?php if ($info['exists']): ?>
+                                            <a class="pp-tr-chip is-done"
+                                               href="<?= e(base_url(($p['render_mode'] ?? '') === 'canvas'
+                                                    ? 'admin/canvas/' . (int) $info['page_id']
+                                                    : 'admin/pages/' . (int) $info['page_id'] . '/edit')) ?>"
+                                               title="Ver la versión en <?= e($languageLabels[$code] ?? $code) ?><?= $info['status'] === 'draft' ? ' (borrador sin publicar)' : '' ?>">
+                                                <?= e($languageLabels[$code] ?? $code) ?><?= $info['status'] === 'draft' ? ' ·&nbsp;borrador' : '' ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <button type="button" class="pp-tr-chip is-missing"
+                                                    data-pp-translate="<?= (int) $p['id'] ?>"
+                                                    data-pp-lang="<?= e($code) ?>"
+                                                    data-pp-lang-label="<?= e($languageLabels[$code] ?? $code) ?>"
+                                                    data-pp-page-title="<?= e($p['title']) ?>">
+                                                + <?= e($languageLabels[$code] ?? $code) ?>
+                                            </button>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </td>
+                            <?php endif; ?>
                             <td><small><?= e($fmtDate($p['updated_at'])) ?></small></td>
                             <td>
                                 <div class="pp-actions">
@@ -276,4 +357,30 @@ $pageMapPayload = array_map(fn($p) => [
     </div>
 
     <div class="pp-map-inspector" id="pp-map-inspector" tabindex="-1" hidden></div>
+
+<?php if (!empty($isMultilingual)): ?>
+    <p class="pp-tr-help">
+        Tu web tiene varios idiomas. Pulsa <strong>+ idioma</strong> en cualquier página para crear su
+        versión traducida: se guarda como <strong>borrador</strong> para que la revises, y
+        <strong>tu página original no se toca</strong>.
+    </p>
+
+    <div class="pp-tr-overlay" id="pp-tr-overlay" hidden
+         data-pp-pages-url="<?= e(rtrim(base_url('admin/pages'), '/')) ?>">
+        <div class="pp-tr-dialog" role="dialog" aria-modal="true" aria-labelledby="pp-tr-title">
+            <h3 id="pp-tr-title">Traducir página</h3>
+            <p class="pp-tr-body" id="pp-tr-body"></p>
+            <div class="pp-tr-progress" id="pp-tr-progress" hidden>
+                <span class="pp-tr-spinner" aria-hidden="true"></span>
+                <span id="pp-tr-progress-text">Traduciendo…</span>
+            </div>
+            <ul class="pp-tr-joblist" id="pp-tr-joblist" hidden></ul>
+            <div class="pp-tr-actions" id="pp-tr-actions">
+                <button type="button" class="pp-btn pp-btn--secondary" data-pp-tr-cancel>Cancelar</button>
+                <button type="button" class="pp-btn pp-btn--primary" data-pp-tr-confirm>Traducir</button>
+            </div>
+        </div>
+    </div>
+    <script src="<?= e(base_url('admin/assets/js/page-translate.js?v=' . @filemtime(PP_ROOT . '/admin/assets/js/page-translate.js'))) ?>" defer></script>
+<?php endif; ?>
 </section>

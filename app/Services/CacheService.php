@@ -21,6 +21,19 @@ final class CacheService
     /** Slug interno para la home. Slug real puede ser cualquier cosa. */
     public const HOME_KEY = '__home';
 
+    /**
+     * Clave de caché de la home de un idioma.
+     *
+     * El principal conserva `__home` (misma clave de siempre: los sitios
+     * monolingües no notan nada); cada idioma adicional tiene la suya, para que
+     * publicar la home francesa no sirva la castellana cacheada ni al revés.
+     */
+    public static function homeKey(int $siteId, string $lang): string
+    {
+        $prefix = LanguageService::prefixFor($siteId, $lang);
+        return $prefix === '' ? self::HOME_KEY : self::HOME_KEY . '__' . $prefix;
+    }
+
     /** Devuelve HTML cacheado o null si no existe / está expirado. */
     public static function get(int $siteId, string $slug, int $ttl = self::DEFAULT_TTL): ?string
     {
@@ -91,9 +104,13 @@ final class CacheService
         if ($oldSlug !== null && $oldSlug !== '' && $oldSlug !== $slug) {
             self::forget($siteId, $oldSlug);
         }
-        // Si esta página actúa como home, también invalidar la entrada __home.
+        // Si esta página actúa como home, invalidar la entrada de home de SU
+        // idioma (no la del sitio: en una web bilingüe son claves distintas).
         if (($page['page_type'] ?? '') === 'home' || $slug === 'home') {
-            self::forget($siteId, self::HOME_KEY);
+            $lang = trim((string) ($page['language'] ?? ''));
+            self::forget($siteId, $lang !== ''
+                ? self::homeKey($siteId, $lang)
+                : self::HOME_KEY);
         }
     }
 

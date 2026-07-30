@@ -9,6 +9,16 @@ use RuntimeException;
 
 final class UpdateInstallerService
 {
+    /** Tamaño máximo del paquete subido a mano. */
+    public const MAX_PACKAGE_BYTES = 200 * 1024 * 1024;
+
+    /**
+     * Archivos/carpetas que TIENEN que estar en el zip para considerarlo un
+     * paquete de PromptPress. Es la diferencia entre actualizar y volcar
+     * cualquier cosa sobre la raíz del proyecto.
+     */
+    private const PACKAGE_FINGERPRINT = ['index.php', 'app', 'core', 'config/constants.php', 'database/migrations'];
+
     /**
      * @return array{backup:string, package:string, version:?string}
      */
@@ -38,11 +48,213 @@ final class UpdateInstallerService
         self::createBackup($backupPath);
         self::download($downloadUrl, $packagePath);
         self::verifyPackage($packagePath, $expectedChecksum, $signature, $signatureAlg);
-        self::extractZip($packagePath, $extractDir);
-        self::deploy($extractDir);
-        self::runMigrations();
+        self::installPackage($packagePath, $extractDir);
 
         return ['backup' => $backupPath, 'package' => $packagePath, 'version' => $version !== '' ? $version : null];
+    }
+
+    /**
+     * UPD — Actualiza desde un ZIP subido a mano desde el panel.
+     *
+     * Misma tubería que `apply()` a partir de la verificación: lo único que
+     * cambia es de dónde sale el paquete. El checksum es OPCIONAL y lo pega el
+     * usuario; sirve para detectar un zip corrupto o cambiado por el camino, no
+     * para autenticar el origen (quien sube el archivo ya tiene acceso al panel).
+     *
+     * @param array<string,mixed> $file entrada de $_FILES
+     * @return array{backup:string, package:string, version:?string}
+     */
+    public static function applyFromUpload(array $file, string $expectedChecksum = ''): array
+    {
+        self::ensureRequirements();
+        self::ensureDirs();
+
+        $error = self::validateUploadedPackage($file);
+        if ($error !== null) {
+            throw new RuntimeException($error);
+        }
+
+        $stamp = date('Ymd_His');
+        $base = "update_{$stamp}_manual";
+        $backupPath = PP_STORAGE . '/updates/backups/' . $base . '.zip';
+        $packagePath = PP_STORAGE . '/updates/packages/' . $base . '.zip';
+        $extractDir = PP_STORAGE . '/updates/extracted/' . $base;
+
+        $tmp = (string) $file['tmp_name'];
+        $moved = is_uploaded_file($tmp) ? move_uploaded_file($tmp, $packagePath) : rename($tmp, $packagePath);
+        if (!$moved || !is_file($packagePath)) {
+            throw new RuntimeException('No se pudo guardar el paquete subido.');
+        }
+
+        // Checksum antes de tocar nada: si el archivo llegó mal, no hay ni backup
+        // ni despliegue a medias que deshacer.
+        self::verifyPackage($packagePath, $expectedChecksum, '', '');
+
+        self::createBackup($backupPath);
+        $version = self::installPackage($packagePath, $extractDir);
+
+        return ['backup' => $backupPath, 'package' => $packagePath, 'version' => $version];
+    }
+
+    /**
+     * Extrae, comprueba que es PromptPress, despliega y migra — con el sitio en
+     * mantenimiento mientras dura el copiado.
+     *
+     * @return string|null versión declarada por el paquete, si la trae
+     */
+    private static function installPackage(string $packagePath, string $extractDir): ?string
+    {
+        self::extractZip($packagePath, $extractDir);
+
+        $root = self::resolveExtractRoot($extractDir);
+        self::assertLooksLikePromptPress($root);
+        $version = self::packageVersion($root);
+
+        MaintenanceMode::enable('Actualizando PromptPress');
+        try {
+            self::deploy($extractDir);
+            self::runMigrations();
+        } finally {
+            // Pase lo que pase, el sitio vuelve a estar en línea: dejarlo caído
+            // por un error de despliegue sería el peor final posible.
+            MaintenanceMode::disable();
+        }
+
+        return $version;
+    }
+
+    /**
+     * UPD — Copias de seguridad disponibles, de la más reciente a la más vieja.
+     *
+     * @return array<int,array{name:string,size:int,size_human:string,created_at:string}>
+     */
+    public static function backups(): array
+    {
+        $dir = PP_STORAGE . '/updates/backups';
+        if (!is_dir($dir)) return [];
+
+        $out = [];
+        foreach (glob($dir . '/*.zip') ?: [] as $path) {
+            $out[] = [
+                'name'       => basename($path),
+                'size'       => (int) filesize($path),
+                'size_human' => self::humanBytes((int) filesize($path)),
+                'created_at' => date('Y-m-d H:i', (int) filemtime($path)),
+            ];
+        }
+        usort($out, static fn ($a, $b) => strcmp($b['name'], $a['name']));
+        return $out;
+    }
+
+    /**
+     * UPD — Vuelve a una copia de seguridad.
+     *
+     * Restaura ARCHIVOS, no base de datos: las migraciones ya aplicadas siguen
+     * aplicadas. Es la vuelta atrás de una actualización que rompió el código,
+     * no un viaje en el tiempo completo.
+     */
+    public static function restore(string $backupName): array
+    {
+        self::ensureRequirements();
+        self::ensureDirs();
+
+        if (preg_match('/^update_[0-9]{8}_[0-9]{6}_[A-Za-z0-9._-]+\.zip$/', $backupName) !== 1) {
+            throw new RuntimeException('Nombre de copia no válido.');
+        }
+        $path = PP_STORAGE . '/updates/backups/' . $backupName;
+        if (!is_file($path)) {
+            throw new RuntimeException('Esa copia de seguridad ya no está en el servidor.');
+        }
+
+        // Antes de restaurar, una copia del estado ACTUAL: si la copia elegida
+        // resulta ser peor, todavía se puede volver.
+        $safety = PP_STORAGE . '/updates/backups/update_' . date('Ymd_His') . '_prerestore.zip';
+        self::createBackup($safety);
+
+        $extractDir = PP_STORAGE . '/updates/extracted/restore_' . date('Ymd_His');
+        self::extractZip($path, $extractDir);
+
+        $root = self::resolveExtractRoot($extractDir);
+        self::assertLooksLikePromptPress($root);
+
+        MaintenanceMode::enable('Restaurando una copia de seguridad');
+        try {
+            self::deploy($extractDir);
+        } finally {
+            MaintenanceMode::disable();
+        }
+
+        self::deleteDir($extractDir);
+
+        return ['restored' => $backupName, 'safety_backup' => basename($safety)];
+    }
+
+    /**
+     * @return string|null mensaje de error, o null si el archivo subido sirve
+     */
+    private static function validateUploadedPackage(mixed $file): ?string
+    {
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return 'Selecciona el archivo ZIP de la actualización.';
+        }
+        if ((int) ($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_INI_SIZE) {
+            return 'El ZIP supera el tamaño máximo que admite este servidor (revisa upload_max_filesize).';
+        }
+        if ((int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            return 'La subida no se completó. Vuelve a intentarlo.';
+        }
+        $size = (int) ($file['size'] ?? 0);
+        if ($size <= 0) return 'El archivo está vacío.';
+        if ($size > self::MAX_PACKAGE_BYTES) {
+            return 'El paquete supera los ' . (int) (self::MAX_PACKAGE_BYTES / 1024 / 1024) . ' MB.';
+        }
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_file($tmp)) return 'El archivo recibido no es válido.';
+
+        // Cabecera real de ZIP: "PK\x03\x04".
+        $fh = @fopen($tmp, 'rb');
+        $head = $fh !== false ? (string) fread($fh, 4) : '';
+        if ($fh !== false) fclose($fh);
+        if (strncmp($head, "PK\x03\x04", 4) !== 0) {
+            return 'Ese archivo no es un ZIP.';
+        }
+        return null;
+    }
+
+    /**
+     * El paquete tiene que parecer PromptPress. Sin esto, un zip cualquiera se
+     * volcaría sobre la raíz del proyecto y dejaría la instalación inservible.
+     */
+    private static function assertLooksLikePromptPress(string $root): void
+    {
+        $missing = [];
+        foreach (self::PACKAGE_FINGERPRINT as $needle) {
+            if (!file_exists($root . '/' . $needle)) $missing[] = $needle;
+        }
+        if ($missing !== []) {
+            throw new RuntimeException(
+                'El ZIP no parece un paquete de PromptPress: falta ' . implode(', ', $missing)
+                . '. No se ha tocado nada.'
+            );
+        }
+    }
+
+    /** Versión declarada en `config/constants.php` del paquete, si se puede leer. */
+    private static function packageVersion(string $root): ?string
+    {
+        $file = $root . '/config/constants.php';
+        if (!is_file($file)) return null;
+        $src = (string) @file_get_contents($file);
+        if (preg_match("/PP_VERSION'\s*,\s*'([^']+)'/", $src, $m) === 1) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    private static function humanBytes(int $bytes): string
+    {
+        if ($bytes >= 1024 * 1024) return number_format($bytes / (1024 * 1024), 1, ',', '.') . ' MB';
+        return max(1, (int) round($bytes / 1024)) . ' KB';
     }
 
     private static function ensureRequirements(): void
@@ -81,6 +293,7 @@ final class UpdateInstallerService
             '/storage/cache',
             '/storage/logs',
             '/storage/updates',
+            '/storage/maintenance.flag',
             '/.git',
         ];
 
@@ -237,6 +450,13 @@ final class UpdateInstallerService
 
     private static function runMigrations(): void
     {
+        // El Migrator vive fuera del autoload (namespace `PromptPress\Database`,
+        // carpeta `database/`), así que hay que cargarlo a mano igual que hacen
+        // `database/migrate.php` y `Core\App`. Sin esto, la actualización
+        // desplegaba los archivos y moría justo después, al migrar: código nuevo
+        // con base de datos vieja y un error fatal en pantalla.
+        require_once PP_ROOT . '/database/Migrator.php';
+
         $migrator = new Migrator(\Core\Database::connection(), PP_ROOT . '/database/migrations');
         $result = $migrator->run();
         if (!empty($result['errors'])) {
