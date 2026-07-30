@@ -377,6 +377,31 @@ final class DesignSystem
      * @param int $siteId
      * @return string HTML listo para inyectar
      */
+    /**
+     * ONB2 O2.6 — Vuelca la paleta a medida del sitio sobre los tokens de color.
+     * Es la traducción entre las 8 claves de la paleta y los tokens del design
+     * system, y vive aquí para que solo exista en un sitio.
+     *
+     * @param array<string,mixed> $tokens
+     * @return array<string,mixed>
+     */
+    public static function applyCustomPaletteToTokens(int $siteId, array $tokens): array
+    {
+        $palette = BrandPaletteService::forSite($siteId);
+        if ($palette === null) return $tokens;
+
+        $tokens['colors']['primary']      = $palette['accent'];
+        $tokens['colors']['primary_dark'] = $palette['accent_dark'];
+        $tokens['colors']['accent']       = $palette['accent_2'];
+        $tokens['colors']['bg']           = $palette['bg'];
+        $tokens['colors']['surface']      = $palette['surface'];
+        $tokens['colors']['text']         = $palette['text'];
+        $tokens['colors']['text_muted']   = $palette['muted'];
+        $tokens['colors']['border']       = $palette['line'];
+        $tokens['colors']['secondary']    = $palette['text'];
+        return $tokens;
+    }
+
     public static function renderHead(int $siteId, ?string $visualStyleSlug = null, ?string $paletteOverride = null): string
     {
         $tokens = self::load($siteId);
@@ -389,6 +414,11 @@ final class DesignSystem
         if ($skin !== null) {
             $tokens = self::applySkinToTokens($tokens, $skin);
         }
+
+        // ONB2 O2.6 — Y si el usuario ha ELEGIDO una paleta en el paso 2, manda
+        // ella sobre el skin inferido, por el mismo motivo que las tipografías
+        // propias: lo que el usuario decide gana a lo que nosotros deducimos.
+        $tokens = self::applyCustomPaletteToTokens($siteId, $tokens);
 
         // FONTS — Si el cliente ha subido tipografías de marca y les ha dado un
         // rol, mandan ellas: por encima de los tokens, del skin inferido y de la

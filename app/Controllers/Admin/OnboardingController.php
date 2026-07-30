@@ -5,6 +5,8 @@ namespace App\Controllers\Admin;
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
 use App\Services\AI\AIException;
+use App\Services\BrandColorExtractor;
+use App\Services\BrandPaletteService;
 use App\Services\CacheService;
 use App\Services\CustomFontService;
 use App\Services\DesignSystem;
@@ -36,6 +38,10 @@ final class OnboardingController
     ];
 
     private const SWATCHES = ['#ea580c', '#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#db2777', '#d97706', '#0f172a'];
+
+    /** ONB2 O2.4 — Colores de marca que acepta el paso 2. */
+    public const BRAND_PALETTE_KEY = 'site_brand_palette';
+    public const BRAND_PALETTE_MAX = 5;
 
     private const TYPOGRAPHY = [
         'Inter / Inter' => ['heading' => 'Inter', 'body' => 'Inter', 'label' => 'Sobrio y digital'],
@@ -83,8 +89,9 @@ final class OnboardingController
             'memoryFields' => MemoryController::FIELDS,
             'memoryValues' => MemoryController::loadValues($siteId),
             'designValues' => $designValues,
-            'paletteCards' => PalettePresets::cards((string) ($designValues['primary_color'] ?? '#ea580c')),
-            'selectedPalettePreset' => PalettePresets::selectedForSite($siteId) ?? PalettePresets::defaultSlug(),
+            // ONB2 O2.5 — El paso ya no ofrece el catálogo de presets: enseña la
+            // paleta a medida del sitio (si la hay) y genera propuestas nuevas.
+            'currentPalette' => BrandPaletteService::forSite($siteId),
             'brandValues' => self::loadBrandValues($siteId),
             'referenceValues' => self::loadReferenceValues($siteId),
             'aiValues' => self::loadAiValues($siteId),
@@ -217,6 +224,174 @@ final class OnboardingController
         ]);
     }
 
+
+    /**
+     * ONB2 O2.4 — Colores dominantes del logo ya subido, para sembrar la paleta
+     * de marca sin que el usuario tenga que buscar sus HEX.
+     *
+     * Endpoint: POST /admin/onboarding/extract-logo-colors
+     */
+    public function extractLogoColors(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $paths = [];
+        foreach (['site_logo_path', 'site_logo_dark_path'] as $key) {
+            $rel = trim(self::loadSetting($siteId, $key));
+            if ($rel !== '') $paths[] = PP_ROOT . '/' . ltrim($rel, '/');
+        }
+        if ($paths === []) {
+            Response::json(['ok' => false, 'error' => 'Sube antes el logo y volvemos a intentarlo.'], 422);
+        }
+
+        $colors = [];
+        foreach ($paths as $path) {
+            foreach (BrandColorExtractor::fromFile($path) as $hex) {
+                if (!in_array($hex, $colors, true)) $colors[] = $hex;
+            }
+        }
+        if ($colors === []) {
+            Response::json([
+                'ok' => false,
+                'error' => 'No hemos sacado ningún color del logo. Añádelos a mano si tienes tu manual de marca.',
+            ], 422);
+        }
+
+        Response::json(['ok' => true, 'colors' => array_slice($colors, 0, self::BRAND_PALETTE_MAX)]);
+    }
+
+    /**
+     * ONB2 O2.5 — Propuestas de paleta para la web a partir de los colores de
+     * la marca. Lo que devuelve el modelo pasa SIEMPRE por el validador de
+     * contraste; si una propuesta no se puede arreglar, no se enseña. Si la IA
+     * falla entera, se cae a las recetas curadas para que el paso nunca se
+     * quede sin paletas que ofrecer.
+     *
+     * Endpoint: POST /admin/onboarding/generate-palette
+     */
+    public function generatePalette(): void
+    {
+        @set_time_limit(120);
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $brand = [];
+        $posted = Request::post('brand_palette', []);
+        if (is_array($posted)) {
+            foreach ($posted as $value) {
+                $hex = self::color((string) $value, '');
+                if ($hex !== '' && !in_array($hex, $brand, true)) $brand[] = $hex;
+            }
+        }
+        $brand = array_slice($brand, 0, self::BRAND_PALETTE_MAX);
+        if ($brand === []) {
+            // Sin colores de marca declarados seguimos teniendo el principal.
+            $primary = self::color((string) Request::post('primary_color_hex', ''), '');
+            if ($primary !== '') $brand[] = $primary;
+        }
+        if ($brand === []) {
+            Response::json(['ok' => false, 'error' => 'Añade al menos un color de marca (o extráelo del logo).'], 422);
+        }
+
+        $proposals = [];
+        $model = '';
+        $error = '';
+        try {
+            $result = AIActionRunner::run(Actions::GENERATE_SITE_PALETTE, [
+                'brand_colors' => implode(', ', $brand),
+                'business_context' => self::businessContext($siteId),
+                'language' => LanguageService::promptLabelFor($siteId),
+                'design_language' => self::paletteStyleHint($siteId),
+            ], $siteId);
+            $model = (string) ($result['model'] ?? '');
+            $proposals = self::normalizePaletteProposals((array) ($result['data'] ?? []));
+        } catch (AIException $e) {
+            $error = $e->getMessage();
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        $fallback = false;
+        if ($proposals === []) {
+            $proposals = BrandPaletteService::fallbackProposals($brand);
+            $fallback = true;
+        }
+        if ($proposals === []) {
+            Response::json(['ok' => false, 'error' => $error ?: 'No hemos podido preparar paletas ahora mismo.'], 502);
+        }
+
+        Response::json([
+            'ok' => true,
+            'palettes' => $proposals,
+            'model' => $model,
+            'fallback' => $fallback,
+            'notice' => $fallback
+                ? 'La IA no ha respondido; te proponemos paletas de nuestro catálogo adaptadas a tu color.'
+                : '',
+        ]);
+    }
+
+    /**
+     * @param array<string,mixed> $data respuesta cruda del modelo
+     * @return array<int,array<string,mixed>>
+     */
+    private static function normalizePaletteProposals(array $data): array
+    {
+        $list = $data['palettes'] ?? [];
+        if (!is_array($list)) return [];
+
+        $out = [];
+        foreach ($list as $item) {
+            if (!is_array($item)) continue;
+            $tokens = BrandPaletteService::enforceContrast((array) ($item['tokens'] ?? []));
+            if ($tokens === null) continue;   // irreparable: fuera
+            $out[] = [
+                'name' => mb_substr(trim((string) ($item['name'] ?? 'Paleta')), 0, 60) ?: 'Paleta',
+                'rationale' => mb_substr(trim((string) ($item['rationale'] ?? '')), 0, 240),
+                'tokens' => $tokens,
+                'source' => 'ai',
+            ];
+            if (count($out) >= 3) break;
+        }
+        return $out;
+    }
+
+    /**
+     * Pista de estilo para la paleta. Deliberadamente barata: describir de
+     * verdad las capturas de referencia cuesta una llamada de visión, y eso ya
+     * se hace (una sola vez) al generar las páginas. Aquí basta con saber si
+     * hay referencias y qué estilo visual tiene declarado el sitio.
+     */
+    private static function paletteStyleHint(int $siteId): string
+    {
+        $parts = [];
+        $refs = self::loadReferenceValues($siteId);
+        if ((int) ($refs['count'] ?? 0) > 0) {
+            $parts[] = 'el usuario ha subido ' . (int) $refs['count'] . ' referencia(s) visual(es) de webs que le gustan';
+        }
+        $slug = trim(self::loadSetting($siteId, VisualStyleService::SETTING_KEY, ''));
+        $style = $slug !== '' ? VisualStyleService::get($slug) : null;
+        if (is_array($style)) {
+            $parts[] = 'estilo visual del sitio: ' . (string) ($style['label'] ?? $slug);
+        }
+        return $parts === [] ? '(sin referencia)' : implode('; ', $parts);
+    }
+
+    /** Resumen corto del negocio para que la paleta no sea un ejercicio abstracto. */
+    private static function businessContext(int $siteId): string
+    {
+        $rows = Database::select(
+            'SELECT field_key, field_value FROM site_memory WHERE site_id = ? AND field_key IN (?, ?, ?)',
+            [$siteId, 'business_description', 'target_audience', 'tone_of_voice']
+        );
+        $parts = [];
+        foreach ($rows as $row) {
+            $value = trim((string) ($row['field_value'] ?? ''));
+            if ($value !== '') $parts[] = $row['field_key'] . ': ' . mb_substr($value, 0, 400);
+        }
+        return $parts === [] ? '(sin datos; usa un registro sobrio y profesional)' : implode("\n", $parts);
+    }
 
     /**
      * D-Slice 1 (S1.13/S1.14) — Compone el skin del sitio en el momento en que
@@ -887,19 +1062,23 @@ final class OnboardingController
             );
         }
 
-        self::saveLogo($siteId);
+        self::saveLogos($siteId);
         self::saveReferenceImages($siteId);
 
+        $tokens = DesignSystem::load($siteId);
+
         $primaryRaw = (string) Request::post('primary_color_hex', Request::post('primary_color_custom', Request::post('primary_color', '#ea580c')));
-        $secondaryRaw = (string) Request::post('secondary_color_hex', Request::post('secondary_color_custom', Request::post('secondary_color', '#1c1917')));
         $primary = self::color($primaryRaw, '#ea580c');
-        $secondary = self::color($secondaryRaw, '#1c1917');
+        // ONB2 O2.5 — El "color de texto" ya no es un campo del paso: lo decide
+        // la paleta. Si el formulario no lo manda, se conserva el que hubiera;
+        // con el default fijo de antes, cada guardado pisaba el de la paleta.
+        $secondaryRaw = (string) Request::post('secondary_color_hex', Request::post('secondary_color_custom', Request::post('secondary_color', '')));
+        $secondary = self::color($secondaryRaw, self::color((string) ($tokens['colors']['secondary'] ?? ''), '#1c1917'));
         $pair = (string) Request::post('typography_pair', 'Inter / Inter');
         $radius = (string) Request::post('border_radius', '8');
         $radiusPx = max(0, min(60, (int) $radius));
         $fonts = self::TYPOGRAPHY[$pair] ?? self::TYPOGRAPHY['Inter / Inter'];
 
-        $tokens = DesignSystem::load($siteId);
         $tokens['colors']['primary'] = $primary;
         $tokens['colors']['primary_dark'] = $primary;
         $tokens['colors']['secondary'] = $secondary;
@@ -916,8 +1095,16 @@ final class OnboardingController
         // pareja elegida arriba: para eso ha traído su manual de marca.
         self::saveCustomFonts($siteId);
 
-        $preset = (string) Request::post('palette_preset', PalettePresets::defaultSlug());
-        PalettePresets::saveSelectedForSite($siteId, $preset);
+        self::saveBrandPalette($siteId);
+        self::saveCustomPalette($siteId, $tokens);
+
+        // ONB2 O2.5 — El paso ya no enseña el catálogo de presets, así que solo
+        // se toca el ajuste si el formulario lo manda de verdad; si no, se
+        // machacaría la elección que venga de una plantilla.
+        $preset = trim((string) Request::post('palette_preset', ''));
+        if ($preset !== '') {
+            PalettePresets::saveSelectedForSite($siteId, $preset);
+        }
 
         // D-Slice 1 — Decisión 3 (2026-05-18): el step 2 NO marca `manual`.
         // Sus inputs (color, fuente, radius, paleta) entran como anclas del
@@ -1095,9 +1282,30 @@ final class OnboardingController
         return implode("\n\n", $chunks);
     }
 
-    private static function saveLogo(int $siteId): void
+    /**
+     * ONB2 O2.2 — Las dos versiones del logo, nombradas por el FONDO donde van
+     * (claro / oscuro), que es como las guarda ya el resto del panel. El paso 2
+     * solo escribía la clara; el modelo de datos soportaba las dos desde [UX4].
+     */
+    private static function saveLogos(int $siteId): void
     {
-        $file = Request::file('logo');
+        foreach (\App\Services\BrandService::LOGO_VARIANTS as $variant => $cfg) {
+            self::saveLogo($siteId, $variant === 'dark' ? 'logo_dark' : 'logo', (string) $cfg['setting']);
+        }
+
+        // Cuál se usa cuando no se sabe el fondo. Solo se acepta la variante que
+        // exista de verdad: marcar como principal un logo que no está subido
+        // dejaría la cabecera sin nada.
+        $primary = (string) Request::post('logo_primary', '');
+        if (isset(\App\Services\BrandService::LOGO_VARIANTS[$primary])) {
+            $path = trim(self::loadSetting($siteId, (string) \App\Services\BrandService::LOGO_VARIANTS[$primary]['setting']));
+            if ($path !== '') self::storeSetting($siteId, 'site_logo_primary', $primary);
+        }
+    }
+
+    private static function saveLogo(int $siteId, string $field = 'logo', string $settingKey = 'site_logo_path'): void
+    {
+        $file = Request::file($field);
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return;
         if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) return;
         if (($file['size'] ?? 0) <= 0 || ($file['size'] ?? 0) > 2 * 1024 * 1024) return;
@@ -1120,7 +1328,8 @@ final class OnboardingController
 
         $dir = PP_ROOT . '/storage/uploads/' . $siteId . '/brand';
         if (!is_dir($dir)) mkdir($dir, 0775, true);
-        $filename = 'logo-' . bin2hex(random_bytes(8)) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+        $prefix = $settingKey === 'site_logo_dark_path' ? 'logo-dark-' : 'logo-';
+        $filename = $prefix . bin2hex(random_bytes(8)) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
         $dest = $dir . '/' . $filename;
         if (!move_uploaded_file((string) $file['tmp_name'], $dest)) return;
 
@@ -1140,8 +1349,8 @@ final class OnboardingController
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [$siteId, $filename, mb_substr($original, 0, 255), $allowed[$ext], (int) $file['size'], $rel, 'Logo', $width, $height, Auth::id()]
         );
-        self::storeSetting($siteId, 'site_logo_path', $rel);
-        self::storeSetting($siteId, 'site_logo_media_id', Database::lastInsertId());
+        self::storeSetting($siteId, $settingKey, $rel);
+        self::storeSetting($siteId, $settingKey . '_media_id', (string) Database::lastInsertId());
     }
 
     private static function saveReferenceImages(int $siteId, ?string &$reason = null): int
@@ -2433,8 +2642,47 @@ final class OnboardingController
      */
     private static function saveCustomFonts(int $siteId): void
     {
-        $raw = $_FILES['custom_fonts'] ?? null;
-        if (!is_array($raw) || !isset($raw['name'])) return;
+        // ONB2 O2.7 — Dos huecos: títulos y textos. Con la casilla "la misma
+        // para ambos" se sube UNA familia con rol `both`, que es exactamente lo
+        // que hacía el paso antes de esto.
+        $same = (string) Request::post('custom_font_same', '') === '1';
+        $names = Request::post('custom_font_name', []);
+        if (!is_array($names)) $names = ['heading' => (string) $names];
+
+        $slots = $same ? ['heading' => 'both'] : ['heading' => 'heading', 'body' => 'body'];
+        $touched = false;
+
+        foreach ($slots as $slot => $role) {
+            $files = self::uploadedFontFiles('custom_fonts_' . $slot);
+            if ($files === []) continue;
+
+            $name = trim((string) ($names[$slot] ?? ''));
+            if ($name === '') $name = self::fontNameFromFile((string) $files[0]['name']);
+
+            $familyId = CustomFontService::ensureFamily($siteId, $name, $role);
+            $saved = 0;
+            foreach ($files as $file) {
+                $result = CustomFontService::addFile($siteId, $familyId, $file);
+                if ($result['ok']) $saved++;
+            }
+            if ($saved === 0) continue;
+
+            CustomFontService::assignRole($siteId, $familyId, $role);
+            $touched = true;
+        }
+
+        if ($touched) DesignSystem::syncCustomFontTokens($siteId);
+    }
+
+    /**
+     * Normaliza un `$_FILES[...]` múltiple y se queda con las subidas correctas.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function uploadedFontFiles(string $field): array
+    {
+        $raw = $_FILES[$field] ?? null;
+        if (!is_array($raw) || !isset($raw['name'])) return [];
 
         $names = is_array($raw['name']) ? $raw['name'] : [$raw['name']];
         $files = [];
@@ -2448,28 +2696,83 @@ final class OnboardingController
                 'error'    => UPLOAD_ERR_OK,
             ];
         }
-        if ($files === []) return;
+        return $files;
+    }
 
-        $name = trim((string) Request::post('custom_font_name', ''));
-        if ($name === '') {
-            // Sin nombre, usamos el del primer archivo: "AcmeSans-Bold.woff2" → "AcmeSans".
-            $base = pathinfo($files[0]['name'], PATHINFO_FILENAME);
-            $name = trim((string) preg_replace('/[-_](thin|extralight|ultralight|light|regular|book|medium|semibold|demibold|bold|extrabold|ultrabold|black|heavy|italic|oblique)+$/i', '', $base));
-            if ($name === '') $name = 'Tipografía de marca';
+    /** "AcmeSans-Bold.woff2" → "AcmeSans". */
+    private static function fontNameFromFile(string $original): string
+    {
+        $base = pathinfo($original, PATHINFO_FILENAME);
+        $name = trim((string) preg_replace('/[-_](thin|extralight|ultralight|light|regular|book|medium|semibold|demibold|bold|extrabold|ultrabold|black|heavy|italic|oblique)+$/i', '', $base));
+        return $name !== '' ? $name : 'Tipografía de marca';
+    }
+
+    /**
+     * ONB2 O2.4 — Colores de marca del usuario (los de su manual, o los que
+     * hemos sacado del logo). No son la paleta de la web: son la MATERIA PRIMA
+     * con la que la IA la deriva en O2.5.
+     */
+    private static function saveBrandPalette(int $siteId): void
+    {
+        $raw = Request::post('brand_palette', []);
+        if (!is_array($raw)) $raw = [];
+
+        $colors = [];
+        foreach ($raw as $value) {
+            $hex = self::color((string) $value, '');
+            if ($hex !== '' && !in_array($hex, $colors, true)) $colors[] = $hex;
+            if (count($colors) >= self::BRAND_PALETTE_MAX) break;
         }
 
-        $role = (string) Request::post('custom_font_role', 'both');
-        $familyId = CustomFontService::ensureFamily($siteId, $name, $role);
+        self::storeSetting($siteId, self::BRAND_PALETTE_KEY, json_encode($colors, JSON_UNESCAPED_SLASHES));
+    }
 
-        $saved = 0;
-        foreach ($files as $file) {
-            $result = CustomFontService::addFile($siteId, $familyId, $file);
-            if ($result['ok']) $saved++;
+    /**
+     * ONB2 O2.6 — Paleta elegida en el paso. Se guarda en `site_palette_custom`
+     * (lo que lee el motor) y se vuelca a los tokens del design system, para
+     * que bloques clásicos, panel y Canvas cuenten lo mismo. Un único camino de
+     * escritura: si no viene paleta en el formulario, no se toca nada.
+     *
+     * @param array<string,mixed> $tokens tokens del design system ya cargados
+     */
+    private static function saveCustomPalette(int $siteId, array $tokens): void
+    {
+        $raw = trim((string) Request::post('palette_custom', ''));
+        if ($raw === '') return;
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) return;
+
+        $palette = BrandPaletteService::enforceContrast($decoded);
+        if ($palette === null) return;
+        if (!BrandPaletteService::save($siteId, $palette)) return;
+
+        $colors = $tokens['colors'] ?? [];
+        $colors['primary'] = $palette['accent'];
+        $colors['primary_dark'] = $palette['accent_dark'];
+        $colors['accent'] = $palette['accent_2'];
+        $colors['bg'] = $palette['bg'];
+        $colors['surface'] = $palette['surface'];
+        $colors['text'] = $palette['text'];
+        $colors['text_muted'] = $palette['muted'];
+        $colors['border'] = $palette['line'];
+        $colors['secondary'] = $palette['text'];
+        DesignSystem::saveCategory($siteId, 'colors', $colors);
+    }
+
+    /** @return array<int,string> */
+    public static function loadBrandPalette(int $siteId): array
+    {
+        $raw = self::loadSetting($siteId, self::BRAND_PALETTE_KEY, '[]');
+        $list = json_decode($raw, true);
+        if (!is_array($list)) return [];
+
+        $colors = [];
+        foreach ($list as $value) {
+            $hex = self::color((string) $value, '');
+            if ($hex !== '' && !in_array($hex, $colors, true)) $colors[] = $hex;
         }
-        if ($saved === 0) return;
-
-        CustomFontService::assignRole($siteId, $familyId, $role);
-        DesignSystem::syncCustomFontTokens($siteId);
+        return array_slice($colors, 0, self::BRAND_PALETTE_MAX);
     }
 
     private static function loadDesignValues(int $siteId): array
@@ -2486,16 +2789,19 @@ final class OnboardingController
     private static function loadBrandValues(int $siteId): array
     {
         $site = self::site($siteId);
-        $logo = Database::selectOne(
-            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
-            [$siteId, 'site_logo_path']
-        );
+        // ONB2 O2.2 — Las dos variantes salen ya resueltas de BrandService.
+        $brand = \App\Services\BrandService::data($siteId);
         return [
             'name' => (string) ($site['name'] ?? ''),
-            'logo_path' => (string) ($logo['setting_value'] ?? ''),
-            'logo_url' => \App\Services\BrandService::publicLogoUrl($siteId, (string) ($logo['setting_value'] ?? '')),
+            'logo_path' => (string) $brand['logo_path'],
+            'logo_url' => \App\Services\BrandService::publicLogoUrl($siteId, (string) $brand['logo_path'], 'light'),
+            'logo_dark_path' => (string) $brand['logo_dark_path'],
+            'logo_dark_url' => \App\Services\BrandService::publicLogoUrl($siteId, (string) $brand['logo_dark_path'], 'dark'),
+            'logo_primary' => (string) $brand['logo_primary'],
             // FONTS — tipografías propias ya subidas (para no pedirlas dos veces).
             'custom_fonts' => CustomFontService::families($siteId),
+            // ONB2 O2.4 — colores de marca ya declarados.
+            'brand_palette' => self::loadBrandPalette($siteId),
         ];
     }
 

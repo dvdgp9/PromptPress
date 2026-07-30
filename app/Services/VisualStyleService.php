@@ -300,6 +300,15 @@ final class VisualStyleService
         if ($paletteOverride !== null && PalettePresets::get($paletteOverride)) {
             return PalettePresets::tokens($paletteOverride, $primary);
         }
+        // 1.b) ONB2 O2.6 — Paleta a medida del sitio (la que salió del paso 2,
+        //      derivada de los colores de la marca y con el contraste ya
+        //      comprobado). Manda sobre el catálogo: es la decisión explícita
+        //      del usuario para ESTE sitio, no una receta general.
+        $custom = BrandPaletteService::forSite($siteId);
+        if ($custom !== null) {
+            return $custom;
+        }
+
         // 2) Si el sitio declara un palette_preset persistido, usar esa paleta
         //    curada y saltar la generación automática derivada del primary.
         $presetSlug = PalettePresets::selectedForSite($siteId);

@@ -33,6 +33,7 @@ final class Actions
     public const ANALYZE_SITE_ARCHITECTURE = 'analyze_site_architecture';
     public const EXTRACT_BUSINESS_PROFILE = 'extract_business_profile';
     public const PROPOSE_LAYOUT_VARIATIONS = 'propose_layout_variations';
+    public const GENERATE_SITE_PALETTE     = 'generate_site_palette';        // ONB2 O2.5
     public const GENERATE_ARTICLE          = 'generate_article';
     public const GENERATE_ARTICLE_FROM_DOCUMENT = 'generate_article_from_document';
     public const SUGGEST_RELATED_ARTICLES   = 'suggest_related_articles';
@@ -980,6 +981,37 @@ final class Actions
                 ],
             ],
 
+            // ONB2 O2.5 — Paleta de la web a partir de los colores de la marca.
+            // El contraste se COMPRUEBA después en `BrandPaletteService`: aquí
+            // se pide, pero no se da por hecho.
+            self::GENERATE_SITE_PALETTE => [
+                'label'        => 'Generar paleta del sitio',
+                'output'       => 'json',
+                'required'     => ['brand_colors'],
+                'instruction'  =>
+                    "Eres director de arte. A partir de los colores de marca de un negocio, propón TRES paletas completas para su web.\n"
+                  . "Devuelve SOLO JSON con esta forma exacta: {\"palettes\":[{\"name\":\"...\",\"rationale\":\"...\",\"tokens\":{\"bg\":\"#rrggbb\",\"surface\":\"#rrggbb\",\"text\":\"#rrggbb\",\"muted\":\"#rrggbb\",\"line\":\"#rrggbb\",\"accent\":\"#rrggbb\",\"accent_dark\":\"#rrggbb\",\"accent_2\":\"#rrggbb\"}}]}.\n"
+                  . "Significado de cada token: bg = fondo de la página; surface = fondo de tarjetas y secciones destacadas; text = texto principal; muted = texto secundario; line = bordes y separadores; accent = color de los botones y enlaces; accent_dark = el mismo acento en hover (más oscuro); accent_2 = acento secundario para detalles, badges o subrayados.\n"
+                  . "REGLAS INNEGOCIABLES:\n"
+                  . "- Respeta la identidad: al menos un color de marca tiene que reconocerse en `accent` o `accent_2`. No inventes una marca nueva.\n"
+                  . "- Contraste: texto sobre fondo y texto secundario sobre fondo ≥ 4.5:1; el `accent` debe admitir encima una etiqueta en blanco o en negro con ≥ 4.5:1.\n"
+                  . "- `surface` tiene que distinguirse de `bg`, pero poco: es un matiz, no un bloque de color.\n"
+                  . "- `muted` más apagado que `text`, nunca al revés.\n"
+                  . "- Nada de HEX de 3 dígitos, nombres de color ni rgb(): siempre #rrggbb.\n"
+                  . "VARIEDAD: las tres propuestas deben ser distintas de verdad (por ejemplo una clara y sobria, una cálida o editorial, y una oscura), no tres versiones del mismo gris.\n"
+                  . "El nombre va en el idioma del sitio, corto (2-3 palabras), y la justificación en UNA frase que hable del negocio, no de teoría del color.",
+                'user_template' =>
+                    "Colores de marca: {brand_colors}\n"
+                  . "Negocio: {business_context}\n"
+                  . "Idioma: {language}\n"
+                  . "Dirección visual de las referencias (si la hay): {design_language}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.55,
+                    'max_tokens'      => 1200,
+                ],
+            ],
+
             self::PROPOSE_LAYOUT_VARIATIONS => [
                 'label'        => 'Proponer variaciones de layout',
                 'output'       => 'json',
@@ -1163,6 +1195,7 @@ final class Actions
             self::ANALYZE_SITE_ARCHITECTURE,
             self::EXTRACT_BUSINESS_PROFILE,
             self::PROPOSE_LAYOUT_VARIATIONS => self::TIER_LIGHT,
+            self::GENERATE_SITE_PALETTE    => self::TIER_LIGHT,
             self::SUGGEST_RELATED_ARTICLES => self::TIER_LIGHT,
             self::DESCRIBE_IMAGE           => self::TIER_LIGHT,
             self::INFER_BRAND_PERSONALITY  => self::TIER_LIGHT,

@@ -1637,3 +1637,412 @@ página salió con **2 fotos descargadas de Unsplash**.
 - Un `if (!$hasRefs)` alrededor de un bloque de contexto es una bomba de
   relojería: el flujo "con referencia" es el principal del producto y se queda
   sin ese contexto sin que nada lo señale.
+
+---
+
+# [ONB2] Paso 2 del onboarding: identidad visual (paleta IA, logos, tipografías, ancho) — PLAN (30/07/2026, Planner)
+
+## Background and Motivation (ONB2)
+
+El paso 2 («Dale dirección visual a la IA») es donde el usuario entrega su marca,
+y hoy se queda corto en cuatro puntos que el usuario ha señalado:
+
+1. **Logo:** solo un archivo, cuando el motor YA soporta dos versiones
+   (fondo claro / fondo oscuro + cuál es la principal) desde [UX4] U1.1.
+2. **Color:** se elige UN color principal con un picker pobre, y a partir de él
+   se «adapta» uno de los 8 presets curados. El usuario quiere lo contrario:
+   entregar **su paleta de marca** y que la IA derive la paleta de la web
+   (fondos, superficies, texto, texto secundario, líneas, acentos) cuidando
+   tonos y contrastes.
+3. **Color de texto:** no debería ser un campo suelto; es una decisión de la paleta.
+4. **Tipografías:** el paso admite UNA familia propia, aunque el modelo de datos
+   ya distingue títulos y textos.
+
+Y de fondo: la tarjeta del onboarding mide 720 px fijos, así que el paso 2 —el
+único con dos columnas— reparte ~390 px de campos + 290 px de preview. Todo va
+apretado.
+
+## Key Challenges and Analysis (ONB2)
+
+### Lo que ya existe (no hay que inventarlo)
+
+- **Logos:** `site_logo_path`, `site_logo_dark_path`, `site_logo_primary` y
+  `BrandService::LOGO_VARIANTS` / `logoPathFor()` / `logoUrl()`. La pantalla de
+  Diseño ya tiene los dos slots. El onboarding solo escribe el claro
+  ([OnboardingController::saveLogo](app/Controllers/Admin/OnboardingController.php:1098)).
+- **Tipografías propias:** `CustomFontService` maneja familias con rol
+  (`heading` / `body` / `both`), varios archivos por peso y `@font-face`. El
+  onboarding solo crea UNA familia
+  ([saveCustomFonts](app/Controllers/Admin/OnboardingController.php:2434)).
+- **Tokens de color:** `DesignSystem` ya declara los 9 tokens que necesita una
+  paleta completa (primary, primary_dark, secondary, accent, bg, surface, text,
+  text_muted, border). No hace falta almacenamiento nuevo para el sitio clásico.
+- **Acciones de IA:** `Actions` + `AIActionRunner` con `output: json` y tier
+  ligero es el patrón (ver `EXTRACT_BUSINESS_PROFILE`).
+
+### El nudo real: dónde vive la paleta
+
+Hoy el motor resuelve el color así
+([VisualStyleService::paletteForSite](app/Services/VisualStyleService.php:293)):
+override explícito → **preset persistido** (`site_palette_preset`) → generación
+automática desde el `primary`. `PalettePresets` es un catálogo **estático de 8
+slugs**: no admite una paleta a medida, porque `tokens()` y `get()` no reciben
+`siteId`.
+
+Decisión (usuario, 30/07/2026): **en el paso 2 la IA sustituye a los presets** —
+el usuario ya no elige entre «Studio mono» y «Crema y tinta». Pero el catálogo
+NO se borra: sigue siendo el fallback del motor y lo declaran las plantillas
+(`PageTemplateService`, `palette_preset`). Por tanto:
+
+- Paleta a medida → setting nuevo `site_palette_custom` (JSON con los 8 tokens),
+  leído **antes** del preset en `paletteForSite()`.
+- Además se vuelca a los tokens de `DesignSystem`, para que bloques clásicos,
+  panel y Canvas cuenten lo mismo. Es la misma lección de `sites.language` vs
+  `site_languages`: si dos fuentes guardan el dato, se escriben en el mismo sitio.
+- Un sitio sin `site_palette_custom` se comporta **exactamente** como hoy.
+
+### El contraste no se le puede dejar al modelo
+
+Pedirle «cuida los contrastes» a un LLM produce paletas bonitas que fallan AA en
+el texto secundario y en el texto sobre el botón. La generación tiene que pasar
+por un **validador WCAG en PHP** que sea el que manda: ratio texto/fondo ≥ 4,5;
+muted/fondo ≥ 4,5; línea/fondo ≥ 1,5; y el color del texto del botón (blanco o
+negro) lo elige el validador contra el acento, no el modelo. Si una propuesta no
+cumple, se corrige por HSL (subir/bajar luminosidad en pasos) antes de enseñarla;
+si no converge en N pasos, se descarta esa propuesta. Esto además hace el
+resultado testeable sin llamar a la IA.
+
+### Extraer colores del logo: sin IA
+
+Cuantizar los píxeles dominantes de un PNG/JPG/WebP con GD es determinista,
+instantáneo y gratis; mandar la imagen a un modelo de visión no aporta nada aquí.
+Para SVG, leer `fill` / `stop-color` del XML. Es un atajo para el usuario que no
+tiene su manual de marca a mano, no la vía principal.
+
+### Ancho y composición
+
+`.pp-onboarding-card` es `min(720px, …)` para los 5 pasos. Ensanchar todos
+estropearía los pasos de una sola columna (líneas de texto demasiado largas). Va
+un modificador aplicado **solo al paso 2**: ~1120 px, campos a `minmax(0,1fr)` y
+preview sticky de ~340 px, con los campos cortos (esquinas, tipografía) en
+subrejilla de dos columnas. El paso pasa a leerse en cuatro bloques: **Marca**
+(nombre + logos) · **Inspiración** (referencias) · **Color** (paleta de marca →
+paleta generada) · **Tipografía y forma**.
+
+### Riesgo de alcance
+
+El paso 2 alimenta al `SkinComposer` del paso 5 y a toda la generación. Cambiar
+qué se guarda ahí toca la creación de la web entera; por eso O2.6 (persistencia)
+lleva una prueba de regresión explícita del camino «sitio sin paleta a medida».
+
+## High-level Task Breakdown (ONB2)
+
+**O2.1 — Contenedor ancho y recomposición del paso 2.**
+Modificador de tarjeta ancha aplicado solo a `step === 2`; rejilla campos +
+preview sticky; agrupación en los cuatro bloques. Solo CSS de `admin.css` + el
+marcado de la vista.
+*Criterio:* a 1440 px, columna de campos ≥ 620 px y preview ≥ 320 px; a 900 px
+cae a una columna con el preview debajo; a 375 px no hay scroll horizontal; los
+pasos 1, 3, 4 y 5 mantienen su ancho actual (comprobado a ojo y por CSS).
+
+**O2.2 — Logo en dos versiones + cuál es la principal.**
+`saveLogo()` parametrizado por variante (`logo_light`, `logo_dark`), dos zonas de
+subida con las etiquetas de `BrandService::LOGO_VARIANTS` y un selector de
+principal. El preview del paso usa la variante que toca.
+*Criterio:* subir las dos y marcar la oscura como principal deja `site_logo_path`,
+`site_logo_dark_path` y `site_logo_primary` correctos, `/admin/design` las muestra
+igual, y la cabecera pública pinta la principal. Con una sola versión, el
+comportamiento es el de hoy.
+
+**O2.3 — Picker de color propio (sin librerías).**
+Componente `pp-color-picker` en `admin/assets/js/` + estilos en `admin.css`:
+área saturación/luminosidad, slider de tono, campo HEX validado en vivo,
+cuentagotas si el navegador trae `EyeDropper`, y colores recientes del sitio.
+Manejable con teclado.
+*Criterio:* arrastrar en el área actualiza HEX y preview en vivo; escribir un HEX
+inválido no rompe el formulario ni pierde el valor anterior; en un navegador sin
+`EyeDropper` el botón no aparece (no falla); Tab + flechas permiten elegir color.
+
+**O2.4 — Paleta de marca del usuario (entrada) + extracción del logo.**
+Lista de hasta 5 colores (añadir / quitar / reordenar por rol simple: principal,
+secundario, acentos), cada uno con el picker de O2.3, persistida en
+`site_brand_palette` (JSON). Botón «Extraer del logo» →
+`POST /admin/onboarding/extract-logo-colors`, cuantización con GD (XML para SVG).
+*Criterio:* con un logo de 3 colores planos, el botón devuelve esos 3 en menos de
+2 s y sin llamar a la IA (verificado en `ai_logs`: sin fila nueva); sin logo
+subido, mensaje claro en vez de error; los colores sobreviven a recargar el paso.
+
+**O2.5 — Generación IA de la paleta del sitio + validador de contraste.**
+Acción nueva `GENERATE_SITE_PALETTE` (JSON, tier ligero) que recibe la paleta de
+marca, la descripción/sector del negocio (memoria del paso 1) y, si hay,
+la dirección visual de las referencias; devuelve **3 propuestas** con los 8
+tokens, un nombre y una frase de justificación. Endpoint
+`POST /admin/onboarding/generate-palette`. El validador WCAG descrito arriba
+corrige o descarta antes de mostrar. Las tarjetas de propuesta sustituyen a la
+rejilla de presets y el campo «Color de texto» desaparece.
+*Criterio:* test con una respuesta de modelo **deliberadamente mala** (texto gris
+claro sobre fondo blanco) → la paleta que llega a la vista cumple AA en los
+cuatro pares comprobados; una generación real produce 3 propuestas distintas
+entre sí y coherentes con los colores de marca.
+
+**O2.6 — Persistir y consumir la paleta elegida.**
+`site_palette_custom` (JSON) leído en `paletteForSite()` antes del preset +
+volcado a los tokens de `DesignSystem`. Un único camino de escritura.
+*Criterio:* elegida una paleta, la home generada, el preview del paso 5 y
+`/admin/design` muestran los mismos colores; y un sitio SIN `site_palette_custom`
+renderiza byte a byte lo mismo que antes del cambio (comparación de la CSS
+generada, no impresión visual).
+
+**O2.7 — Dos tipografías propias: títulos y textos.**
+Dos zonas de subida con rol fijo (`heading`, `body`) + casilla «usar la misma
+para ambas» (rol `both`, que es el comportamiento de hoy). Reutiliza
+`ensureFamily` / `addFile` / `assignRole`.
+*Criterio:* subir una serif para títulos y una sans para textos crea DOS familias
+con sus roles en `/admin/design#fonts`, y el HTML público aplica cada una donde
+toca (`--pp-font-heading` / `--pp-font-body`).
+
+**O2.8 — Regresión y pruebas.**
+`tests/onboarding_step2.php` nuevo (paleta: validador de contraste, extracción de
+color del logo, guardado y lectura de `site_palette_custom`, dos familias de
+fuente, dos logos) + suite completa en verde.
+*Criterio:* todas las suites pasan y la nueva cubre los cinco puntos, sin dejar
+filas ni archivos de prueba.
+
+Orden propuesto: **O2.1 → O2.3 → O2.4 → O2.5 → O2.6 → O2.2 → O2.7 → O2.8**
+(el layout primero para no maquetar dos veces; el picker antes que la paleta
+porque esta lo usa; los logos y las fuentes al final porque son independientes).
+
+## Project Status Board (ONB2)
+
+- [x] O2.1 — Contenedor ancho y recomposición del paso 2
+- [x] O2.3 — Picker de color propio
+- [x] O2.4 — Paleta de marca + extracción del logo
+- [x] O2.5 — Generación IA de la paleta + validador de contraste
+- [x] O2.6 — Persistencia y consumo de la paleta
+- [x] O2.2 — Logo claro/oscuro + principal en el onboarding
+- [x] O2.7 — Dos tipografías propias (títulos / textos)
+- [x] O2.8 — Tests y regresión
+
+## Decisiones cerradas (30/07/2026, usuario)
+
+1. La paleta de marca se entrega como **lista de HEX** + botón para **extraerla
+   del logo**. No se sube el manual de marca como imagen.
+2. En el paso 2, **la paleta generada por IA sustituye a los 8 presets curados**.
+   El catálogo sigue existiendo por debajo (fallback del motor y plantillas).
+3. El picker de color se construye **a medida, sin librerías externas**.
+
+## Current Status / Progress Tracking (ONB2)
+
+**O2.1 — Contenedor ancho y recomposición del paso 2 · HECHO (30/07/2026)**
+
+- `.pp-onboarding-card--wide` (1120px) aplicado SOLO cuando `$step === 2`; el
+  resto de pasos sigue en 720px.
+- Rejilla del paso: campos `minmax(0,1fr)` + preview de 340px pegajoso, y el
+  contenido agrupado en cuatro bloques (`.pp-onboarding-block`): Tu marca ·
+  Inspiración · Color · Tipografía y forma. El control de esquinas se mueve al
+  lado del selector de tipografía para que el bloque final vaya a dos columnas.
+- **Dos bugs preexistentes destapados por el ancho** (el campo HEX del color):
+  `.pp-onboarding-swatches input{position:absolute;opacity:0}` —hecho para los
+  radios de los swatches— también cogía al campo HEX, dejándolo INVISIBLE y
+  anclado al bloque inicial, así que su `width:100%` era el ancho del viewport;
+  y `.pp-onboarding-swatches>div{display:flex}` le ganaba a su propia rejilla.
+  Con la tarjeta de 720px el desastre cabía dentro de la ventana y no se veía;
+  con 1120px la página empezó a desbordar. Arreglado acotando la primera regla a
+  `label input` y subiendo la especificidad de la fila HEX.
+- Verificado en navegador (servidor de dev, sesión admin real): a 1280px →
+  tarjeta 1120, campos 686, preview 340, campo HEX 170px, visible y sin
+  desbordamiento; a 900px → una columna con el preview debajo; a 375px → sin
+  scroll horizontal; paso 1 sigue en 720px. `POST /admin/onboarding/step/2`
+  responde 302 al paso 3, o sea el formulario sigue guardando tras el troceado.
+
+**O2.3 — Picker de color propio · HECHO (30/07/2026)**
+
+- `admin/assets/js/color-picker.js` (nuevo, sin dependencias) + estilos `.pp-cp*`
+  en `admin.css`. Se monta sobre cualquier `input[data-pp-color]`: muestra de
+  color que abre un panel con área saturación/luminosidad, tono, cuentagotas
+  (solo si el navegador trae `EyeDropper`) y colores recientes (localStorage).
+  Teclado: flechas sobre el área, Escape cierra, foco visible.
+- El `input type="color"` nativo ("Libre") desaparece del paso 2; el campo HEX
+  sigue existiendo y ahora es el que lleva el picker.
+- Cada cambio escribe en el input y dispara `input`/`change`, así que el preview
+  del paso sigue funcionando sin tocarlo.
+
+Tres trampas que costaron una vuelta cada una (y que el componente ya evita):
+
+1. **Bucle de eventos.** `commit()` dispara `input` y el propio campo escucha
+   `input` → recursión infinita. Hay una bandera `emitting` que corta el ciclo,
+   y así el mismo listener sirve para lo que teclea el usuario y para los
+   cambios externos.
+2. **`focus()` desplaza la página.** Al enfocar el área antes de leer su
+   rectángulo, el scroll movía el elemento y el color salía desplazado (o negro
+   del todo). `focus({preventScroll:true})` y la lectura después.
+3. **El CSS de la página anfitriona se cuela.** El control de tono iba dentro de
+   un `<label>` y `.pp-onboarding-swatches label input{position:absolute;opacity:0}`
+   lo dejaba invisible. Ahora el panel no usa `label` y sus reglas van con
+   especificidad propia (`.pp-cp .pp-cp__hue input`).
+
+- `syncHex()` de `onboarding.js` avisa al picker (`ppColorPicker.sync()`) en vez
+  de escribir `.value` a pelo: si no, al pulsar un swatch la muestra del picker
+  se quedaba con el color anterior. `sync()` NO dispara eventos a propósito —
+  hacerlo desmarcaba el swatch que el usuario acababa de pulsar.
+- Verificado en navegador con la secuencia completa: abrir panel → elegir en el
+  área (#ea580c → #bf5b26 con s/v correctos) → arrastrar → tono 210 (#2673bf,
+  conserva s/v) → flecha derecha (sube saturación) → escribir "zzz" (no rompe;
+  al salir del campo restaura) → escribir "#123456" (se aplica y el preview lo
+  sigue) → swatch verde (picker y preview se actualizan y el radio SIGUE
+  marcado) → Escape cierra. Reciente guardado tras soltar el ratón.
+- **Sobre las capturas:** el panel del navegador de esta sesión devolvía
+  fotogramas desfasados tras hacer scroll por JS; las medidas de esta
+  verificación salen del DOM (posiciones y estilos calculados), y la captura
+  final se hizo con la ventana alta para no tener que desplazarse.
+
+**O2.4 — Paleta de marca del usuario + extracción del logo · HECHO (30/07/2026)**
+
+- `App\Services\BrandColorExtractor` (nuevo): colores dominantes de un logo.
+  Rasterizados con GD (se reduce a 72px, se agrupan los píxeles en cubos de 24 y
+  el color de cada grupo es la MEDIA real de sus píxeles, no el centro del cubo,
+  para que un azul corporativo salga exacto). SVG: se leen `fill`/`stroke`/
+  `stop-color` del XML, incluidos los que van dentro de un `style`. Sin IA.
+- Regla que costó una iteración: filtrar solo blancos y negros casi puros no
+  bastaba. **El logo real del sitio de dev es monocromo** y devolvía cinco grises
+  casi idénticos disfrazados de paleta. Ahora manda el color: si hay tonos
+  cromáticos se devuelven solo esos; si el logo es monocromo de verdad, se
+  devuelve UN neutro (el más oscuro, la tinta de la marca) y punto.
+- UI en el bloque Color: lista de hasta 5 colores, cada uno con el picker de
+  O2.3, botón «+ Añadir color» (se desactiva al llegar al tope) y «Extraer del
+  logo». Guardado en el ajuste `site_brand_palette` (JSON), con deduplicado y
+  tope en el servidor — no me fío de que la lista llegue limpia del navegador.
+- Endpoint `POST /admin/onboarding/extract-logo-colors`. Mira las dos variantes
+  de logo (claro y oscuro) aunque el paso todavía solo suba una: cuando O2.2
+  añada la segunda, esto ya la aprovecha.
+- Verificado: logo sintético de 3 colores → `#1f4eff, #ff8a3d` en 1-2 ms (el
+  negro se descarta, como debe); el mismo logo en SVG → los mismos dos colores;
+  fichero inexistente → lista vacía sin error; logo REAL del sitio (monocromo)
+  → `#222429`. En el navegador: el botón añade el color y le monta el picker;
+  el tope de 5 y el borrado funcionan; tras enviar el paso, el ajuste guarda
+  `["#222429","#ff8a3d","#16a34a","#1f4eff"]` (el duplicado que colé a propósito
+  se cayó en el servidor) y al recargar el paso vuelven los 4 con su picker.
+  **0 llamadas a la IA** en `ai_logs` durante toda la prueba.
+
+**O2.5 + O2.6 — Paleta generada por IA, validada y consumida · HECHO (30/07/2026)**
+
+- `App\Services\BrandPaletteService` (nuevo): sanea, corrige y persiste.
+  - **El contraste no se le pide al modelo, se comprueba.** Mínimos: texto y
+    texto apagado sobre fondo 4,5:1; texto sobre superficie 4,5:1; línea 1,4:1;
+    acento sobre fondo 2,5:1; y el acento tiene que admitir encima una etiqueta
+    blanca o negra con 4,5:1 (quién gana lo decide `labelOn()`, no el modelo).
+    La corrección mueve SOLO la luminosidad (HSL): el tono es la decisión de
+    diseño. Si una propuesta no llega, se descarta entera.
+  - Detalle que salió probando: corrigiendo el texto justo hasta 4,5 el texto
+    apagado (que exige lo mismo) acababa en el mismo gris — salieron #757575 y
+    #747474. Al corregir, el texto apunta a AAA (7:1) y así queda jerarquía.
+- Acción de IA `generate_site_palette` (tier ligero, JSON, 3 propuestas con
+  nombre y una frase de por qué) + `POST /admin/onboarding/generate-palette`.
+- **Red de seguridad:** si la IA falla, el endpoint cae a las recetas curadas de
+  `PalettePresets` adaptadas al color de marca, y lo dice en la respuesta. El
+  paso nunca se queda sin paletas que ofrecer.
+- UI: fuera la rejilla de 8 presets y fuera el campo «Color de texto» (lo decide
+  la paleta). Quedan la paleta guardada del sitio + las propuestas, en tarjetas
+  elegibles; lo que viaja en el formulario es el JSON de la marcada.
+- Persistencia (O2.6): `site_palette_custom` + volcado a los tokens del design
+  system (primary, primary_dark, accent, bg, surface, text, text_muted, border,
+  secondary). `VisualStyleService::paletteForSite()` la mira ANTES del preset.
+  El catálogo de presets sigue vivo como fallback y para las plantillas.
+- Efecto colateral arreglado de camino: `saveDesign()` metía `#1c1917` como
+  «color de texto» por defecto en cada guardado. Sin el campo en el formulario,
+  eso habría pisado el texto de la paleta en cada paso por el step 2; ahora, si
+  el formulario no manda color de texto, se conserva el que hubiera.
+
+Verificación (todo end-to-end, servidor de dev):
+
+- **Generación real** con los 4 colores de marca del sitio: 3 paletas distintas
+  de verdad (clara sobria, cálida, oscura), con los colores de marca
+  reconocibles en los acentos y textos en español sobre el negocio real
+  (`google/gemini-3.1-flash-lite-preview`).
+- **Paleta mala forzada** (gris claro sobre blanco, botón amarillo pálido): 5
+  incumplimientos antes; después de corregir, **ninguno**, y la etiqueta del
+  botón resuelta a `#111111`. Una paleta oscura ya correcta sale intacta.
+  Una paleta incompleta se rechaza.
+- **Elegida la oscura y enviado el paso:** `site_palette_custom` guardado,
+  `paletteForSite()` devuelve exactamente esos 8 tokens y los tokens del design
+  system quedan sincronizados.
+- **Regresión (criterio de O2.6):** borrando la paleta a medida, la salida de
+  `paletteForSite()` para los 7 estilos visuales y el hash de la CSS generada
+  son **idénticos** al código anterior al cambio (comparado contra la versión
+  en git, no a ojo).
+- **Fallback sin IA:** con el modelo ligero apuntando a propósito a un modelo
+  inexistente, el endpoint responde `ok:true, fallback:true` con 3 paletas de
+  catálogo adaptadas al azul de marca y el aviso correspondiente. Modelo
+  restaurado después.
+
+**O2.2 + O2.7 — Dos logos y dos tipografías · HECHO (30/07/2026)**
+
+- **Logos:** el paso 2 sube ya las dos variantes (`logo` y `logo_dark`), con el
+  radio de cuál manda por defecto, reutilizando `BrandService::LOGO_VARIANTS` y
+  las claves que ya usa Diseño. `saveLogo()` pasa a estar parametrizada por
+  variante. Dos detalles: el ajuste del media pasa a `{clave}_media_id` (el
+  patrón nuevo; `DesignController::deleteLogo` ya limpiaba las dos formas), y
+  solo se acepta como principal una variante que exista de verdad — marcar la
+  que no está subida dejaría la cabecera sin logo. En el JS, subir una versión
+  cuando no hay ninguna marcada la marca sola.
+- **Tipografías:** dos huecos con rol fijo (títulos / textos) y casilla «uso la
+  misma para ambos», que es el comportamiento antiguo (una familia con rol
+  `both`). Reutiliza `ensureFamily`/`addFile`/`assignRole`.
+- Verificado con subidas reales (`Montserrat-Bold.otf` para títulos y
+  `Kanit-ExtraLight.ttf` para textos, más un logo para fondo oscuro): dos
+  familias con sus roles, `logo_primary=dark`, `logoPathFor()` devolviendo la
+  correcta para cada fondo, y el HTML público con **dos `@font-face`**,
+  `--pp-font-heading`/`--pp-font-body` apuntando a cada familia y el logo para
+  fondo oscuro en el marcado.
+
+**Hallazgo importante durante la verificación (y arreglo):** la paleta elegida
+NO llegaba a la web pública. `DesignSystem::renderHead()` aplica el `skin_json`
+inferido POR ENCIMA de los tokens, así que el skin compuesto en el paso 5 pisaba
+el color que el usuario acababa de elegir a mano. Ahora la paleta a medida se
+aplica después del skin (`applyCustomPaletteToTokens`), por el mismo criterio
+que ya se usaba con las tipografías propias: lo que el usuario decide gana a lo
+que nosotros deducimos. La hoja `/design.css` también la aplica.
+
+**O2.8 — Tests y regresión · HECHO (30/07/2026)**
+
+- `tests/onboarding_step2.php` NUEVO: **26 comprobaciones**, sin llamar a la IA
+  (extracción de color, validador de contraste, propuestas de reserva,
+  persistencia y consumo de la paleta, la paleta ganando al skin, el sitio sin
+  paleta comportándose como antes, y dos comprobaciones de contrato: las claves
+  de logo que espera el panel y las 8 claves de paleta del catálogo).
+- **Regresión completa: 65 suites en verde.** `update_from_zip` no cuenta: se
+  niega a ejecutarse fuera de `PP_ENV=development`, como está diseñado.
+- `site_languages_model` falló en la primera pasada por **dos páginas de prueba
+  que otras suites de la misma tanda dejaron sin `translation_group`** («Inicio
+  Canvas» e «Inicio DMB2», creadas minutos antes por `canvas_generate` y
+  `dmb2_reference_regen`). No es del cambio: borradas esas dos filas, la suite
+  pasa. La base vuelve a **31 páginas**.
+- **Estado de dev restaurado**: borradas las dos familias de fuente de prueba,
+  el logo oscuro de prueba (archivo + fila en `media` + ajustes), y las paletas
+  de prueba; los colores del sitio vuelven a `#ea580c`/`#1c1917`. Verificado
+  después: `families()` vacío, `logo_primary=light`, `palette custom: null`.
+
+### Lessons (ONB2)
+
+- **Ensanchar un contenedor es un test de estrés del CSS de dentro.** Los 720px
+  tapaban dos bugs del campo HEX (invisible y con el ancho del viewport) que
+  llevaban ahí desde siempre; a 1120px la página empezó a desbordar. Si al
+  ensanchar algo aparece un desbordamiento, mira primero qué llevaba roto.
+- **Un componente propio tiene que defenderse del CSS de la página.** El control
+  de tono del picker desaparecía porque el onboarding esconde los `label input`
+  (así dibuja sus swatches). Dentro de un componente reutilizable: nada de
+  `label` como envoltorio genérico, y sus reglas con especificidad propia.
+- **Cuidado con los eventos que uno mismo dispara.** `commit()` emitía `input` y
+  el propio campo lo escuchaba: recursión infinita. Y al revés: sincronizar el
+  picker disparando eventos desmarcaba el swatch recién pulsado. Dos caminos
+  distintos — uno que avisa (`set`) y otro que no (`sync`).
+- **Al LLM se le pide el criterio, no la garantía.** El contraste lo comprueba y
+  lo corrige el servidor; así además se puede probar sin gastar una llamada.
+- **Filtrar "blancos y negros" no es filtrar neutros.** El logo monocromo del
+  sitio de dev devolvía cinco grises casi idénticos que parecían una paleta.
+- **Un default en un guardado es una escritura silenciosa.** Al quitar el campo
+  «color de texto», el `'#1c1917'` por defecto de `saveDesign()` habría pisado
+  el texto de la paleta en cada guardado del paso.
+- **`renderHead()` tiene un orden de precedencia y hay que respetarlo.** Skin
+  inferido → paleta elegida → tipografías propias. Guardar bien un dato no
+  significa que llegue a la página: hay que mirar quién lo pisa después.

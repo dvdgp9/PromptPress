@@ -43,7 +43,9 @@ use App\Controllers\Public\BrandAssetController;
 $router->get('/design.css', function () {
     $site = \Core\Database::selectOne('SELECT id FROM sites ORDER BY id ASC LIMIT 1');
     $siteId = $site ? (int) $site['id'] : 0;
-    $tokens = DesignSystem::applyCustomFontsToTokens($siteId, DesignSystem::load($siteId));
+    // ONB2 O2.6 — La hoja pública también tiene que llevar la paleta elegida.
+    $tokens = DesignSystem::applyCustomPaletteToTokens($siteId, DesignSystem::load($siteId));
+    $tokens = DesignSystem::applyCustomFontsToTokens($siteId, $tokens);
     $css = "/* PromptPress — design system tokens (site={$siteId}) */\n"
          . \App\Services\CustomFontService::renderFontFaceCss($siteId)
          . DesignSystem::renderCssVars($tokens, $siteId)
@@ -131,6 +133,8 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/onboarding/exit',               [OnboardingController::class, 'exitToPanel']);
     $r->post('/onboarding/autofill-memory',    [OnboardingController::class, 'autofillMemory']);
     $r->post('/onboarding/upload-references',  [OnboardingController::class, 'uploadReferences']);
+    $r->post('/onboarding/extract-logo-colors', [OnboardingController::class, 'extractLogoColors']); // ONB2 O2.4
+    $r->post('/onboarding/generate-palette',   [OnboardingController::class, 'generatePalette']);    // ONB2 O2.5
     $r->post('/onboarding/analyze',            [OnboardingController::class, 'analyze']);
     $r->post('/onboarding/create-pages',       [OnboardingController::class, 'createPages']);
     $r->post('/onboarding/create-post',        [OnboardingController::class, 'createPost']);

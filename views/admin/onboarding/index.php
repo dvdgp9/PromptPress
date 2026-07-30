@@ -38,6 +38,7 @@ $groups = [
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=DM+Sans:wght@300..900&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=IBM+Plex+Sans:wght@300..700&family=Lora:wght@400..700&family=Manrope:wght@300..800&family=Montserrat:wght@300..800&family=Open+Sans:wght@300..800&family=Outfit:wght@300..900&family=Playfair+Display:wght@400..900&family=Plus+Jakarta+Sans:wght@300..800&family=Source+Sans+3:wght@300..900&family=Space+Grotesk:wght@300..700&display=swap">
 <?php \Core\View::end(); ?>
 <?php \Core\View::start('scripts'); ?>
+<script src="<?= e(base_url('admin/assets/js/color-picker.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/color-picker.js') ?: '1' ?>"></script>
 <script src="<?= e(base_url('admin/assets/js/onboarding.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/onboarding.js') ?: '1' ?>"></script>
 <?php \Core\View::end(); ?>
 
@@ -60,7 +61,9 @@ $groups = [
             <?php endforeach; ?>
         </nav>
 
-        <section class="pp-onboarding-card">
+        <?php // ONB2 O2.1 — El paso 2 es el único a dos columnas: necesita más ancho
+              // que los pasos de una sola, donde ensanchar alargaría las líneas de texto. ?>
+        <section class="pp-onboarding-card<?= $step === 2 ? ' pp-onboarding-card--wide' : '' ?>">
             <div class="pp-onboarding-step">
                 <p class="pp-onboarding-eyebrow"><?= e($stepMeta[$step]['eyebrow']) ?></p>
                 <h1><?= e($stepMeta[$step]['title']) ?></h1>
@@ -149,109 +152,189 @@ $groups = [
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <div class="pp-onboarding-design-grid">
                         <div class="pp-onboarding-design-fields">
-                            <label class="pp-onboarding-field">
-                                <span>Nombre de la empresa <em>recomendado</em></span>
-                                <input type="text" name="site_name" value="<?= e((string) ($brandValues['name'] ?? '')) ?>" maxlength="255" data-brand-name>
-                                <small>Lo usaremos en encabezados, SEO y llamadas a la acción.</small>
-                            </label>
-                            <label class="pp-onboarding-reference-field pp-onboarding-reference-field--hero" data-reference-dropzone>
-                                <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
-                                <span aria-hidden="true"></span>
-                                <strong>Inspiración visual para Canvas</strong>
-                                <small>Sube capturas de webs que te gusten. La IA tomará como referencia su estructura, ritmo y composición, siempre adaptadas a tu marca.</small>
-                                <em data-reference-state>
-                                    <?php if (($referenceValues['count'] ?? 0) > 0): ?>
-                                        <?= (int) $referenceValues['count'] ?> referencia<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?> guardada<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?>. Puedes sustituirlas.
-                                    <?php else: ?>
-                                        PNG, JPG o WebP. Hasta 4 imágenes · 8 MB cada una.
-                                    <?php endif; ?>
-                                </em>
-                            </label>
-                            <label class="pp-onboarding-logo-field" data-logo-dropzone>
-                                <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg">
-                                <span>
-                                    <?php if (!empty($brandValues['logo_path'])): ?>
-                                        <img src="<?= e((string) $brandValues['logo_url']) ?>" alt="">
-                                    <?php else: ?>
-                                        <b></b>
-                                    <?php endif; ?>
-                                </span>
-                                <strong>Logo opcional</strong>
-                                <small>PNG, JPG, WEBP o SVG. Hasta 2 MB.</small>
-                                <em data-logo-state><?= !empty($brandValues['logo_path']) ? 'Logo actual cargado. Puedes sustituirlo.' : 'No hay logo subido todavía.' ?></em>
-                            </label>
-                            <?= design_swatches('primary_color', 'Color principal', (string) $designValues['primary_color'], $swatches) ?>
-                            <div class="pp-onboarding-field pp-onboarding-palette-field" data-palette-field>
-                                <span>Paleta generada <em>basada en tu color</em></span>
-                                <div class="pp-onboarding-palette-grid">
-                                    <?php foreach (($paletteCards ?? []) as $card): ?>
-                                        <label class="pp-onboarding-palette-card">
-                                            <input type="radio" name="palette_preset" value="<?= e((string) $card['slug']) ?>" <?= (($selectedPalettePreset ?? '') === $card['slug']) ? 'checked' : '' ?>>
-                                            <span>
-                                                <strong><?= e((string) $card['label']) ?></strong>
-                                                <i data-palette-swatches="<?= e((string) $card['slug']) ?>">
-                                                    <?php foreach (($card['swatches'] ?? []) as $swatch): ?><b style="background:<?= e((string) $swatch) ?>"></b><?php endforeach; ?>
-                                                </i>
-                                            </span>
+                            <?php // ONB2 O2.1 — Cuatro bloques: Marca · Inspiración · Color · Tipografía y forma. ?>
+                            <section class="pp-onboarding-block">
+                                <h2>Tu marca</h2>
+                                <label class="pp-onboarding-field">
+                                    <span>Nombre de la empresa <em>recomendado</em></span>
+                                    <input type="text" name="site_name" value="<?= e((string) ($brandValues['name'] ?? '')) ?>" maxlength="255" data-brand-name>
+                                    <small>Lo usaremos en encabezados, SEO y llamadas a la acción.</small>
+                                </label>
+                                <?php // ONB2 O2.2 — Dos versiones del logo, nombradas por el FONDO donde
+                                      // van (no por su color: "logo oscuro" es ambiguo). Y cuál manda
+                                      // cuando no se sabe el fondo. ?>
+                                <div class="pp-onboarding-logos">
+                                    <?php foreach (\App\Services\BrandService::LOGO_VARIANTS as $variant => $cfg):
+                                        $isDark = $variant === 'dark';
+                                        $url = $isDark ? ($brandValues['logo_dark_url'] ?? '') : ($brandValues['logo_url'] ?? '');
+                                        $has = $isDark ? !empty($brandValues['logo_dark_path']) : !empty($brandValues['logo_path']);
+                                    ?>
+                                        <div class="pp-onboarding-logo-slot<?= $isDark ? ' is-dark' : '' ?>">
+                                            <label class="pp-onboarding-logo-field" data-logo-dropzone="<?= e($variant) ?>">
+                                                <input type="file" name="<?= $isDark ? 'logo_dark' : 'logo' ?>" accept=".png,.jpg,.jpeg,.webp,.svg">
+                                                <span>
+                                                    <?php if ($has): ?>
+                                                        <img src="<?= e((string) $url) ?>" alt="">
+                                                    <?php else: ?>
+                                                        <b></b>
+                                                    <?php endif; ?>
+                                                </span>
+                                                <strong><?= e((string) $cfg['label']) ?></strong>
+                                                <small>PNG, JPG, WEBP o SVG. Hasta 2 MB.</small>
+                                                <em data-logo-state><?= $has ? 'Cargado. Puedes sustituirlo.' : 'Sin subir.' ?></em>
+                                            </label>
+                                            <label class="pp-onboarding-logo-primary">
+                                                <input type="radio" name="logo_primary" value="<?= e($variant) ?>"
+                                                       <?= (($brandValues['logo_primary'] ?? 'light') === $variant) ? 'checked' : '' ?>>
+                                                <span>Usar esta por defecto</span>
+                                            </label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <p class="pp-onboarding-logos__hint">Si solo tienes una, sube esa: la usaremos en los dos sitios. La versión para fondos oscuros es la que va en el pie y en las secciones en negativo.</p>
+                            </section>
+
+                            <section class="pp-onboarding-block">
+                                <h2>Inspiración</h2>
+                                <label class="pp-onboarding-reference-field pp-onboarding-reference-field--hero" data-reference-dropzone>
+                                    <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
+                                    <span aria-hidden="true"></span>
+                                    <strong>Inspiración visual para Canvas</strong>
+                                    <small>Sube capturas de webs que te gusten. La IA tomará como referencia su estructura, ritmo y composición, siempre adaptadas a tu marca.</small>
+                                    <em data-reference-state>
+                                        <?php if (($referenceValues['count'] ?? 0) > 0): ?>
+                                            <?= (int) $referenceValues['count'] ?> referencia<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?> guardada<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?>. Puedes sustituirlas.
+                                        <?php else: ?>
+                                            PNG, JPG o WebP. Hasta 4 imágenes · 8 MB cada una.
+                                        <?php endif; ?>
+                                    </em>
+                                </label>
+                            </section>
+
+                            <section class="pp-onboarding-block">
+                                <h2>Color</h2>
+                                <?php // ONB2 O2.4 — Los colores de la marca del usuario: la materia prima
+                                      // con la que se deriva después la paleta de la web. ?>
+                                <div class="pp-onboarding-brandpalette" data-brand-palette
+                                     data-max="<?= (int) \App\Controllers\Admin\OnboardingController::BRAND_PALETTE_MAX ?>">
+                                    <span>Los colores de tu marca <em>opcional</em></span>
+                                    <p>Si tienes manual de marca, ponlos aquí. Nos sirven para derivar la paleta de la web sin inventarnos tu identidad.</p>
+                                    <div class="pp-onboarding-brandpalette__list" data-brand-palette-list>
+                                        <?php foreach ((array) ($brandValues['brand_palette'] ?? []) as $hex): ?>
+                                            <div class="pp-onboarding-brandpalette__item">
+                                                <input type="text" name="brand_palette[]" value="<?= e((string) $hex) ?>" maxlength="7" data-pp-color aria-label="Color de marca">
+                                                <button type="button" data-brand-palette-remove aria-label="Quitar este color">×</button>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <div class="pp-onboarding-brandpalette__actions">
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-add>+ Añadir color</button>
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-extract>Extraer del logo</button>
+                                        <small data-brand-palette-status></small>
+                                    </div>
+                                </div>
+                                <?= design_swatches('primary_color', 'Color principal', (string) $designValues['primary_color'], $swatches) ?>
+                                <?php // ONB2 O2.5 — Las paletas las propone la IA a partir de los colores
+                                      // de marca, y el contraste lo garantiza el servidor. Aquí ya no se
+                                      // elige un preset del catálogo ni un "color de texto" suelto: el
+                                      // texto, los fondos y las líneas los decide la paleta. ?>
+                                <div class="pp-onboarding-field pp-onboarding-palette-field" data-palette-field>
+                                    <span>Paleta de la web <em>la deriva la IA de tus colores</em></span>
+                                    <div class="pp-onboarding-palette-grid" data-palette-grid>
+                                        <?php if (!empty($currentPalette)): ?>
+                                            <?= palette_card('Tu paleta actual', 'La que ya tiene guardada este sitio.', (array) $currentPalette, true) ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <p class="pp-onboarding-palette-empty" data-palette-empty <?= !empty($currentPalette) ? 'hidden' : '' ?>>
+                                        Todavía no hay paleta. Pulsa el botón y te proponemos tres, con los contrastes ya comprobados.
+                                    </p>
+                                    <div class="pp-onboarding-palette-actions">
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-palette-generate>Generar paletas con IA</button>
+                                        <small data-palette-status></small>
+                                    </div>
+                                    <input type="hidden" name="palette_custom" value="<?= e(!empty($currentPalette) ? json_encode($currentPalette) : '') ?>" data-palette-value>
+                                    <small>Fondos, texto, texto secundario, líneas y acentos salen de aquí. El color principal solo es el punto de partida.</small>
+                                </div>
+                            </section>
+
+                            <section class="pp-onboarding-block pp-onboarding-block--duo">
+                                <h2>Tipografía y forma</h2>
+                                <label class="pp-onboarding-field">
+                                    <span>Tipografía <em>opcional</em></span>
+                                    <select name="typography_pair" data-preview-font>
+                                        <?php foreach ($typographyOptions as $value => $opt): ?>
+                                            <option value="<?= e($value) ?>" data-heading="<?= e((string) $opt['heading']) ?>" data-body="<?= e((string) $opt['body']) ?>" <?= $designValues['typography_pair'] === $value ? 'selected' : '' ?>><?= e($value . ' — ' . $opt['label']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </label>
+                                <div class="pp-onboarding-field">
+                                    <span>Esquinas <em>opcional</em></span>
+                                    <div class="pp-onboarding-radius-control">
+                                        <input type="range" name="border_radius" min="0" max="60" step="1" value="<?= e((string) $designValues['border_radius']) ?>" data-radius-range>
+                                        <div><span>Rectas</span><strong data-radius-label><?= e((string) $designValues['border_radius']) ?> px</strong><span>Redondas</span></div>
+                                    </div>
+                                </div>
+                                <?php /* FONTS · ONB2 O2.7 — Tipografía propia del cliente, ahora con
+                                         DOS huecos: títulos y textos. El modelo de datos ya distinguía
+                                         los roles; el paso solo dejaba subir una familia. Plegado para
+                                         no recargar el paso: quien no tiene manual de marca ni lo abre. */ ?>
+                                <?php
+                                $ownFonts = (array) ($brandValues['custom_fonts'] ?? []);
+                                $fontByRole = ['heading' => null, 'body' => null];
+                                foreach ($ownFonts as $family) {
+                                    $role = (string) ($family['role'] ?? '');
+                                    if ($role === 'both') { $fontByRole['heading'] = $fontByRole['heading'] ?: $family; $fontByRole['body'] = $fontByRole['body'] ?: $family; }
+                                    elseif (isset($fontByRole[$role])) { $fontByRole[$role] = $family; }
+                                }
+                                $sameForBoth = $ownFonts !== [] && ($ownFonts[0]['role'] ?? '') === 'both';
+                                $fontSlots = [
+                                    'heading' => ['label' => 'Para los títulos', 'placeholder' => 'Ej. Helvetica Now Display'],
+                                    'body'    => ['label' => 'Para los textos',  'placeholder' => 'Ej. Inter'],
+                                ];
+                                ?>
+                                <details class="pp-onboarding-fonts" <?= $ownFonts !== [] ? 'open' : '' ?>>
+                                    <summary>
+                                        <strong>¿Tu marca tiene sus propias tipografías?</strong>
+                                        <small><?= $ownFonts !== [] ? e(implode(' · ', array_map(fn(array $f): string => (string) $f['name'], $ownFonts))) : 'Súbelas y las usaremos en toda la web' ?></small>
+                                    </summary>
+                                    <div class="pp-onboarding-fonts__body">
+                                        <label class="pp-onboarding-fonts__same">
+                                            <input type="checkbox" name="custom_font_same" value="1" <?= $sameForBoth ? 'checked' : '' ?> data-fonts-same>
+                                            <span>Uso la misma tipografía para títulos y textos</span>
                                         </label>
-                                    <?php endforeach; ?>
-                                </div>
-                                <small>El color principal manda; la paleta solo decide fondos, contraste y acentos compatibles.</small>
-                            </div>
-                            <?= design_swatches('secondary_color', 'Color de texto', (string) $designValues['secondary_color'], $swatches, 'Puedes ajustarlo si quieres un texto más claro u oscuro.') ?>
-                            <label class="pp-onboarding-field">
-                                <span>Tipografía <em>opcional</em></span>
-                                <select name="typography_pair" data-preview-font>
-                                    <?php foreach ($typographyOptions as $value => $opt): ?>
-                                        <option value="<?= e($value) ?>" data-heading="<?= e((string) $opt['heading']) ?>" data-body="<?= e((string) $opt['body']) ?>" <?= $designValues['typography_pair'] === $value ? 'selected' : '' ?>><?= e($value . ' — ' . $opt['label']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                            <?php /* FONTS — Tipografía propia del cliente. Plegado para no
-                                     recargar el paso: quien no tiene manual de marca ni lo abre. */ ?>
-                            <?php $ownFonts = (array) ($brandValues['custom_fonts'] ?? []); ?>
-                            <details class="pp-onboarding-fonts" <?= $ownFonts !== [] ? 'open' : '' ?>>
-                                <summary>
-                                    <strong>¿Tu marca tiene su propia tipografía?</strong>
-                                    <small><?= $ownFonts !== [] ? e((string) $ownFonts[0]['name']) . ' · ' . count($ownFonts[0]['files']) . ' peso' . (count($ownFonts[0]['files']) === 1 ? '' : 's') : 'Súbela y la usaremos en toda la web' ?></small>
-                                </summary>
-                                <div class="pp-onboarding-fonts__body">
-                                    <label class="pp-onboarding-field">
-                                        <span>Nombre <em>opcional</em></span>
-                                        <input type="text" name="custom_font_name" maxlength="120" placeholder="Ej. Helvetica Now Display"
-                                               value="<?= e((string) ($ownFonts[0]['name'] ?? '')) ?>">
-                                    </label>
-                                    <label class="pp-onboarding-field">
-                                        <span>¿Dónde se usará?</span>
-                                        <select name="custom_font_role">
-                                            <option value="both" <?= (($ownFonts[0]['role'] ?? 'both') === 'both') ? 'selected' : '' ?>>Títulos y textos</option>
-                                            <option value="heading" <?= (($ownFonts[0]['role'] ?? '') === 'heading') ? 'selected' : '' ?>>Solo títulos</option>
-                                            <option value="body" <?= (($ownFonts[0]['role'] ?? '') === 'body') ? 'selected' : '' ?>>Solo textos</option>
-                                        </select>
-                                    </label>
-                                    <label class="pp-onboarding-fonts__file">
-                                        <input type="file" name="custom_fonts[]" accept=".woff2,.woff,.ttf,.otf" multiple data-onboarding-fonts>
-                                        <span aria-hidden="true"></span>
-                                        <strong>Subir archivos de fuente</strong>
-                                        <small>WOFF2, WOFF, TTF u OTF · hasta 3 MB cada uno. Sube un archivo por peso (Regular, Bold…): detectamos el peso por el nombre.</small>
-                                        <em data-onboarding-fonts-state>
-                                            <?php if ($ownFonts !== []): ?>
-                                                <?= count($ownFonts[0]['files']) ?> archivo<?= count($ownFonts[0]['files']) === 1 ? '' : 's' ?> guardado<?= count($ownFonts[0]['files']) === 1 ? '' : 's' ?>. Puedes añadir más.
-                                            <?php else: ?>
-                                                Ningún archivo seleccionado.
-                                            <?php endif; ?>
-                                        </em>
-                                    </label>
-                                    <p class="pp-onboarding-fonts__legal">Necesitas licencia de uso web (webfont) para los archivos que subas. Si prefieres, puedes hacerlo luego desde Diseño.</p>
-                                </div>
-                            </details>
-                            <div class="pp-onboarding-field">
-                                <span>Esquinas <em>opcional</em></span>
-                                <div class="pp-onboarding-radius-control">
-                                    <input type="range" name="border_radius" min="0" max="60" step="1" value="<?= e((string) $designValues['border_radius']) ?>" data-radius-range>
-                                    <div><span>Rectas</span><strong data-radius-label><?= e((string) $designValues['border_radius']) ?> px</strong><span>Redondas</span></div>
-                                </div>
-                            </div>
+                                        <div class="pp-onboarding-fonts__slots">
+                                            <?php foreach ($fontSlots as $role => $slot):
+                                                $current = $fontByRole[$role] ?? null;
+                                                $files = (array) ($current['files'] ?? []);
+                                            ?>
+                                                <div class="pp-onboarding-fonts__slot" data-font-slot="<?= e($role) ?>">
+                                                    <strong><?= e($slot['label']) ?></strong>
+                                                    <label class="pp-onboarding-field">
+                                                        <span>Nombre <em>opcional</em></span>
+                                                        <input type="text" name="custom_font_name[<?= e($role) ?>]" maxlength="120"
+                                                               placeholder="<?= e($slot['placeholder']) ?>"
+                                                               value="<?= e((string) ($current['name'] ?? '')) ?>">
+                                                    </label>
+                                                    <label class="pp-onboarding-fonts__file">
+                                                        <input type="file" name="custom_fonts_<?= e($role) ?>[]" accept=".woff2,.woff,.ttf,.otf" multiple data-onboarding-fonts>
+                                                        <span aria-hidden="true"></span>
+                                                        <strong>Subir archivos</strong>
+                                                        <small>WOFF2, WOFF, TTF u OTF · hasta 3 MB. Un archivo por peso (Regular, Bold…): detectamos el peso por el nombre.</small>
+                                                        <em data-onboarding-fonts-state>
+                                                            <?php if ($files !== []): ?>
+                                                                <?= count($files) ?> archivo<?= count($files) === 1 ? '' : 's' ?> guardado<?= count($files) === 1 ? '' : 's' ?>. Puedes añadir más.
+                                                            <?php else: ?>
+                                                                Ningún archivo seleccionado.
+                                                            <?php endif; ?>
+                                                        </em>
+                                                    </label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <p class="pp-onboarding-fonts__legal">Necesitas licencia de uso web (webfont) para los archivos que subas. Si prefieres, puedes hacerlo luego desde Diseño.</p>
+                                    </div>
+                                </details>
+                            </section>
                         </div>
                         <aside class="pp-onboarding-preview" data-design-preview>
                             <span class="pp-onboarding-preview-brand">
@@ -416,6 +499,30 @@ function onboarding_footer(int $step, string $csrf, string $action, string $skip
     <?php return ob_get_clean();
 }
 
+/**
+ * ONB2 O2.5 — Tarjeta de paleta. Se pinta igual desde PHP (la guardada) que
+ * desde JS (las que propone la IA); si cambia el marcado, cambian los dos.
+ *
+ * @param array<string,string> $tokens
+ */
+function palette_card(string $name, string $rationale, array $tokens, bool $checked = false): string
+{
+    $order = ['bg', 'surface', 'text', 'accent', 'accent_2'];
+    ob_start(); ?>
+    <label class="pp-onboarding-palette-card">
+        <input type="radio" name="palette_choice" <?= $checked ? 'checked' : '' ?>
+               data-palette-tokens="<?= e(json_encode($tokens, JSON_UNESCAPED_SLASHES)) ?>">
+        <span>
+            <strong><?= e($name) ?></strong>
+            <i>
+                <?php foreach ($order as $key): ?><b style="background:<?= e((string) ($tokens[$key] ?? '#ffffff')) ?>"></b><?php endforeach; ?>
+            </i>
+            <?php if ($rationale !== ''): ?><em><?= e($rationale) ?></em><?php endif; ?>
+        </span>
+    </label>
+    <?php return ob_get_clean();
+}
+
 function design_swatches(string $name, string $label, string $value, array $swatches, string $help = ''): string
 {
     $value = preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? $value : '#ea580c';
@@ -426,11 +533,11 @@ function design_swatches(string $name, string $label, string $value, array $swat
             <?php foreach ($swatches as $color): ?>
                 <label style="--swatch: <?= e($color) ?>"><input type="radio" name="<?= e($name) ?>" value="<?= e($color) ?>" <?= strtolower($value) === strtolower($color) ? 'checked' : '' ?>><i></i></label>
             <?php endforeach; ?>
-            <label class="is-custom"><input type="color" name="<?= e($name) ?>_custom" value="<?= e($value) ?>" data-color-custom="<?= e($name) ?>"><i></i><strong>Libre</strong></label>
         </div>
+        <?php // ONB2 O2.3 — El diálogo nativo de color se sustituye por el picker propio,
+              // que se monta sobre este campo HEX (ver admin/assets/js/color-picker.js). ?>
         <div class="pp-onboarding-hex">
-            <span>HEX</span>
-            <input type="text" name="<?= e($name) ?>_hex" value="<?= e($value) ?>" maxlength="7" data-color-hex="<?= e($name) ?>" inputmode="text" autocomplete="off">
+            <input type="text" name="<?= e($name) ?>_hex" value="<?= e($value) ?>" maxlength="7" data-color-hex="<?= e($name) ?>" data-pp-color inputmode="text" autocomplete="off" aria-label="<?= e($label) ?> en HEX">
         </div>
         <?php if ($help !== ''): ?><small><?= e($help) ?></small><?php endif; ?>
     </div>

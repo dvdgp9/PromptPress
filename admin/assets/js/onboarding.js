@@ -15,6 +15,8 @@
     bindMemoryWarning();
     bindMemoryAutofill();
     bindDesignPreview();
+    bindBrandPalette();
+    bindSitePalette();
     bindDropzone();
     bindLeaveGuard();
     if (step === 5) bindIntentPicker();
@@ -158,6 +160,15 @@
         function updatePreview() {
             var primary = selectedColor(form, 'primary_color') || '#ea580c';
             var secondary = selectedColor(form, 'secondary_color') || '#1c1917';
+            // ONB2 O2.5 — Si hay paleta elegida, manda ella: es lo que va a
+            // tener la web. El color principal solo es la semilla.
+            var palette = selectedPalette(form);
+            if (palette) {
+                primary = palette.accent || primary;
+                secondary = palette.text || secondary;
+                preview.style.background = palette.bg || '';
+                preview.style.borderColor = palette.line || '';
+            }
             var radius = form.querySelector('[name="border_radius"]');
             var radiusValue = radius ? radius.value : '8';
             var radiusLabel = form.querySelector('[data-radius-label]');
@@ -190,9 +201,19 @@
             });
         }
 
+        function selectedPalette(scope) {
+            var hidden = scope.querySelector('[data-palette-value]');
+            if (!hidden || !hidden.value) return null;
+            try { return JSON.parse(hidden.value); } catch (err) { return null; }
+        }
+
         function syncHex(name, value) {
             var hex = form.querySelector('[data-color-hex="' + cssEscape(name) + '"]');
-            if (hex && normalizeHex(value)) hex.value = normalizeHex(value);
+            if (!hex || !normalizeHex(value)) return;
+            // ONB2 O2.3 — Si el picker propio está montado sobre el campo, hay que
+            // avisarle: escribir `.value` a pelo deja su muestra con el color viejo.
+            if (hex.ppColorPicker) hex.ppColorPicker.sync(normalizeHex(value));
+            else hex.value = normalizeHex(value);
         }
 
         function syncColorPicker(name, value) {
@@ -281,6 +302,194 @@
         }
     }
 
+    /**
+     * ONB2 O2.4 — Colores de marca: lista de HEX (con el picker propio en cada
+     * uno) más un botón que los saca del logo ya subido.
+     */
+    function bindBrandPalette() {
+        var panel = root.querySelector('[data-brand-palette]');
+        if (!panel) return;
+        var list = panel.querySelector('[data-brand-palette-list]');
+        var addBtn = panel.querySelector('[data-brand-palette-add]');
+        var extractBtn = panel.querySelector('[data-brand-palette-extract]');
+        var status = panel.querySelector('[data-brand-palette-status]');
+        var max = Number(panel.dataset.max || 5);
+
+        function colors() {
+            return Array.prototype.map.call(
+                list.querySelectorAll('input[name="brand_palette[]"]'),
+                function (input) { return (input.value || '').toLowerCase(); }
+            );
+        }
+
+        function addColor(hex) {
+            if (colors().length >= max) return false;
+            if (colors().indexOf(String(hex).toLowerCase()) !== -1) return false;
+            var item = document.createElement('div');
+            item.className = 'pp-onboarding-brandpalette__item';
+            item.innerHTML = '<input type="text" name="brand_palette[]" maxlength="7" data-pp-color aria-label="Color de marca">'
+                + '<button type="button" data-brand-palette-remove aria-label="Quitar este color">×</button>';
+            var input = item.querySelector('input');
+            input.value = hex;
+            list.appendChild(item);
+            if (window.PPColorPicker) window.PPColorPicker.attach(input);
+            updateAddState();
+            return true;
+        }
+
+        function updateAddState() {
+            if (addBtn) addBtn.disabled = colors().length >= max;
+        }
+
+        list.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-brand-palette-remove]');
+            if (!button) return;
+            button.closest('.pp-onboarding-brandpalette__item').remove();
+            updateAddState();
+        });
+
+        if (addBtn) addBtn.addEventListener('click', function () {
+            // Un color nuevo arranca del principal: es el que el usuario ya ha
+            // mirado, y así el picker abre en un sitio con sentido.
+            var primary = root.querySelector('[data-color-hex="primary_color"]');
+            addColor((primary && normalizeHex(primary.value)) || '#2563eb');
+        });
+
+        if (extractBtn) extractBtn.addEventListener('click', function () {
+            var data = new FormData();
+            data.set('_csrf', csrf);
+            setBusy(extractBtn, true, 'Mirando el logo…');
+            if (status) { status.textContent = ''; status.className = ''; }
+            fetch(baseUrl + '/admin/onboarding/extract-logo-colors', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: data
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var body = {};
+                    try { body = text ? JSON.parse(text) : {}; }
+                    catch (err) { throw new Error('Respuesta no válida del servidor.'); }
+                    if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                    return body;
+                });
+            }).then(function (body) {
+                var added = 0;
+                (body.colors || []).forEach(function (hex) { if (addColor(hex)) added++; });
+                if (status) {
+                    status.textContent = added === 0
+                        ? 'Esos colores ya estaban en la lista.'
+                        : (added === 1 ? 'Añadido 1 color del logo.' : 'Añadidos ' + added + ' colores del logo.');
+                    status.className = added === 0 ? '' : 'is-success';
+                }
+            }).catch(function (err) {
+                if (status) {
+                    status.textContent = err.message || 'No hemos podido leer el logo.';
+                    status.className = 'is-error';
+                }
+            }).finally(function () {
+                setBusy(extractBtn, false, 'Extraer del logo');
+            });
+        });
+
+        updateAddState();
+    }
+
+    /**
+     * ONB2 O2.5 — Paletas de la web: se piden al servidor (que llama a la IA y
+     * corrige los contrastes) y se pintan como tarjetas elegibles. Lo que viaja
+     * en el formulario es el JSON de la paleta marcada.
+     */
+    function bindSitePalette() {
+        var field = root.querySelector('[data-palette-field]');
+        if (!field) return;
+        var grid = field.querySelector('[data-palette-grid]');
+        var empty = field.querySelector('[data-palette-empty]');
+        var button = field.querySelector('[data-palette-generate]');
+        var status = field.querySelector('[data-palette-status]');
+        var hidden = field.querySelector('[data-palette-value]');
+
+        function applySelection() {
+            var checked = grid.querySelector('input[name="palette_choice"]:checked');
+            if (!checked) { hidden.value = ''; return; }
+            var raw = checked.getAttribute('data-palette-tokens') || '';
+            hidden.value = raw;
+            // El preview lo repinta `bindDesignPreview`, que ya sabe que la
+            // paleta manda sobre el color principal: basta con avisarle.
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        grid.addEventListener('change', function (event) {
+            if (event.target.name === 'palette_choice') applySelection();
+        });
+
+        function card(palette) {
+            var order = ['bg', 'surface', 'text', 'accent', 'accent_2'];
+            var label = document.createElement('label');
+            label.className = 'pp-onboarding-palette-card';
+            var dots = order.map(function (key) {
+                return '<b style="background:' + (palette.tokens[key] || '#ffffff') + '"></b>';
+            }).join('');
+            label.innerHTML = '<input type="radio" name="palette_choice">'
+                + '<span><strong></strong><i>' + dots + '</i><em></em></span>';
+            label.querySelector('strong').textContent = palette.name || 'Paleta';
+            label.querySelector('em').textContent = palette.rationale || '';
+            label.querySelector('input').setAttribute('data-palette-tokens', JSON.stringify(palette.tokens));
+            return label;
+        }
+
+        if (button) button.addEventListener('click', function () {
+            var data = new FormData();
+            data.set('_csrf', csrf);
+            root.querySelectorAll('input[name="brand_palette[]"]').forEach(function (input) {
+                data.append('brand_palette[]', input.value);
+            });
+            var primary = root.querySelector('[data-color-hex="primary_color"]');
+            if (primary) data.set('primary_color_hex', primary.value);
+
+            setBusy(button, true, 'Pensando en color…');
+            status.textContent = 'Derivando paletas de tus colores y comprobando contrastes.';
+            status.className = 'is-loading';
+            fetch(baseUrl + '/admin/onboarding/generate-palette', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: data
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var body = {};
+                    try { body = text ? JSON.parse(text) : {}; }
+                    catch (err) { throw new Error('Respuesta no válida del servidor.'); }
+                    if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                    return body;
+                });
+            }).then(function (body) {
+                var palettes = body.palettes || [];
+                // Las propuestas nuevas sustituyen a las anteriores, pero la
+                // paleta ya guardada se queda: es a lo que puede volver.
+                grid.querySelectorAll('[data-palette-generated]').forEach(function (el) { el.remove(); });
+                palettes.forEach(function (palette) {
+                    var el = card(palette);
+                    el.setAttribute('data-palette-generated', '1');
+                    grid.appendChild(el);
+                });
+                if (palettes.length) {
+                    var first = grid.querySelector('[data-palette-generated] input');
+                    if (first) { first.checked = true; applySelection(); }
+                }
+                if (empty) empty.hidden = true;
+                status.textContent = body.notice
+                    || (palettes.length + ' paletas listas' + (body.model ? ' · ' + body.model : '') + '. Elige la que más te suene a tu marca.');
+                status.className = body.fallback ? '' : 'is-success';
+            }).catch(function (err) {
+                status.textContent = err.message || 'No hemos podido preparar las paletas.';
+                status.className = 'is-error';
+            }).finally(function () {
+                setBusy(button, false, 'Generar paletas con IA');
+            });
+        });
+
+        applySelection();
+    }
+
     function bindDropzone() {
         var input = root.querySelector('.pp-onboarding-dropzone input[type="file"]');
         var state = root.querySelector('[data-file-state]');
@@ -298,49 +507,81 @@
             state.textContent = files.length + ' documentos seleccionados · ' + formatBytes(total);
         });
 
-        var logoInput = root.querySelector('[data-logo-dropzone] input[type="file"]');
-        var logoWrap = root.querySelector('[data-logo-dropzone]');
-        var logoPreview = root.querySelector('[data-logo-dropzone] img');
-        var logoSlot = root.querySelector('[data-logo-dropzone] > span');
+        // ONB2 O2.2 — Dos zonas de logo (fondo claro / fondo oscuro): el mismo
+        // comportamiento para cada una, y solo la principal alimenta el preview.
         var designPreview = root.querySelector('[data-design-preview]');
-        var logoState = root.querySelector('[data-logo-state]');
-        if (logoInput && logoState) logoInput.addEventListener('change', function () {
-            var file = logoInput.files && logoInput.files[0] ? logoInput.files[0] : null;
-            if (!file) return;
-            logoState.textContent = file.name + ' · ' + formatBytes(file.size) + ' · Se guardará al continuar';
-            logoState.className = 'is-success';
-            if (logoWrap) logoWrap.classList.add('has-file');
-            if (!logoPreview && logoSlot) {
-                logoSlot.innerHTML = '<img src="" alt="">';
-                logoPreview = logoSlot.querySelector('img');
-            }
-            if (typeof FileReader !== 'undefined') {
-                var reader = new FileReader();
-                reader.onload = function (event) {
-                    if (event && event.target && typeof event.target.result === 'string') {
-                        if (logoPreview) logoPreview.src = event.target.result;
-                        updateDesignPreviewLogo(event.target.result);
-                    }
-                };
-                reader.readAsDataURL(file);
-            }
+        root.querySelectorAll('[data-logo-dropzone]').forEach(function (wrap) {
+            var input = wrap.querySelector('input[type="file"]');
+            var state = wrap.querySelector('[data-logo-state]');
+            var slot = wrap.querySelector(':scope > span');
+            var img = wrap.querySelector('img');
+            var variant = wrap.getAttribute('data-logo-dropzone') || 'light';
+            if (!input || !state) return;
+
+            input.addEventListener('change', function () {
+                var file = input.files && input.files[0] ? input.files[0] : null;
+                if (!file) return;
+                state.textContent = file.name + ' · ' + formatBytes(file.size) + ' · Se guardará al continuar';
+                state.className = 'is-success';
+                wrap.classList.add('has-file');
+                if (!img && slot) {
+                    slot.innerHTML = '<img src="" alt="">';
+                    img = slot.querySelector('img');
+                }
+                // Subir una versión y no tener ninguna marcada por defecto deja
+                // el sitio sin logo: marcamos esta si nadie ha elegido aún.
+                var primary = root.querySelector('input[name="logo_primary"]:checked');
+                if (!primary) {
+                    var own = root.querySelector('input[name="logo_primary"][value="' + cssEscape(variant) + '"]');
+                    if (own) own.checked = true;
+                }
+                if (typeof FileReader !== 'undefined') {
+                    var reader = new FileReader();
+                    reader.onload = function (event) {
+                        if (event && event.target && typeof event.target.result === 'string') {
+                            if (img) img.src = event.target.result;
+                            var chosen = root.querySelector('input[name="logo_primary"]:checked');
+                            if (!chosen || chosen.value === variant) updateDesignPreviewLogo(event.target.result);
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
         });
 
-        // FONTS — Feedback al elegir archivos de tipografía propia.
-        var fontsInput = root.querySelector('[data-onboarding-fonts]');
-        var fontsState = root.querySelector('[data-onboarding-fonts-state]');
-        if (fontsInput && fontsState) fontsInput.addEventListener('change', function () {
-            var files = fontsInput.files ? Array.prototype.slice.call(fontsInput.files) : [];
-            if (!files.length) {
-                fontsState.textContent = 'Ningún archivo seleccionado.';
-                fontsState.className = '';
-                return;
-            }
-            var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
-            fontsState.textContent = files.length + (files.length === 1 ? ' archivo' : ' archivos')
-                + ' · ' + formatBytes(total) + ' · Se guardarán al continuar';
-            fontsState.className = 'is-success';
+        // FONTS · ONB2 O2.7 — Un hueco por rol (títulos / textos), cada uno con
+        // su propio estado; y la casilla "la misma para ambos" oculta el de textos.
+        root.querySelectorAll('[data-onboarding-fonts]').forEach(function (input) {
+            var state = input.closest('label').querySelector('[data-onboarding-fonts-state]');
+            if (!state) return;
+            input.addEventListener('change', function () {
+                var files = input.files ? Array.prototype.slice.call(input.files) : [];
+                if (!files.length) {
+                    state.textContent = 'Ningún archivo seleccionado.';
+                    state.className = '';
+                    return;
+                }
+                var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+                state.textContent = files.length + (files.length === 1 ? ' archivo' : ' archivos')
+                    + ' · ' + formatBytes(total) + ' · Se guardarán al continuar';
+                state.className = 'is-success';
+            });
         });
+
+        var fontsSame = root.querySelector('[data-fonts-same]');
+        if (fontsSame) {
+            var bodySlot = root.querySelector('[data-font-slot="body"]');
+            var headingSlot = root.querySelector('[data-font-slot="heading"]');
+            var syncSlots = function () {
+                if (bodySlot) bodySlot.hidden = fontsSame.checked;
+                if (headingSlot) {
+                    var title = headingSlot.querySelector('strong');
+                    if (title) title.textContent = fontsSame.checked ? 'Para títulos y textos' : 'Para los títulos';
+                }
+            };
+            fontsSame.addEventListener('change', syncSlots);
+            syncSlots();
+        }
 
         var referenceInput = root.querySelector('[data-reference-dropzone] input[type="file"]');
         var referenceWrap = root.querySelector('[data-reference-dropzone]');
