@@ -18,6 +18,7 @@
     bindBrandPalette();
     bindSitePalette();
     bindDropzone();
+    bindBusinessPhotos();
     bindLeaveGuard();
     if (step === 5) bindIntentPicker();
 
@@ -631,6 +632,233 @@
             logo.src = src;
             if (fallback) fallback.remove();
         }
+    }
+
+    // ONB-FOTOS — Fotos propias del paso 4. Tres cosas que tienen que pasar en
+    // este orden: subir (una petición por foto, para no chocar con
+    // `post_max_size`), describir con IA (por lotes, con progreso) y solo
+    // entonces dejar avanzar. Sin descripción la foto llega al modelo como un
+    // nombre de archivo y la generación acaba tirando del banco de imágenes.
+    function bindBusinessPhotos() {
+        var panel = root.querySelector('[data-photos]');
+        if (!panel) return;
+
+        var input = panel.querySelector('[data-photos-input]');
+        var dropzone = panel.querySelector('[data-photos-dropzone]');
+        var grid = panel.querySelector('[data-photos-grid]');
+        var status = panel.querySelector('[data-photos-status]');
+        var nextButton = root.querySelector('[data-next-button]');
+        var max = Number(panel.dataset.max || 12);
+        var busy = false;
+
+        if (!input || !grid || !status) return;
+
+        input.addEventListener('change', function () {
+            var files = Array.prototype.slice.call(input.files || []);
+            // Vaciar el input es lo que evita que el POST del paso vuelva a
+            // subir las mismas fotos (el camino sin JS sigue vivo en el server).
+            input.value = '';
+            if (files.length) uploadAll(files);
+        });
+
+        if (dropzone) {
+            ['dragenter', 'dragover'].forEach(function (name) {
+                dropzone.addEventListener(name, function (event) {
+                    event.preventDefault();
+                    dropzone.classList.add('is-dragover');
+                });
+            });
+            ['dragleave', 'drop'].forEach(function (name) {
+                dropzone.addEventListener(name, function () { dropzone.classList.remove('is-dragover'); });
+            });
+            dropzone.addEventListener('drop', function (event) {
+                event.preventDefault();
+                var files = Array.prototype.slice.call((event.dataTransfer && event.dataTransfer.files) || []);
+                if (files.length) uploadAll(files);
+            });
+        }
+
+        grid.addEventListener('click', function (event) {
+            var remove = event.target.closest('[data-photo-remove]');
+            if (remove) removePhoto(remove.closest('[data-photo-id]'));
+        });
+
+        grid.addEventListener('change', function (event) {
+            var field = event.target.closest('[data-photo-alt]');
+            if (field) saveAlt(field.closest('[data-photo-id]'), field.value);
+        });
+
+        function uploadAll(files) {
+            var slots = max - grid.querySelectorAll('[data-photo-id]').length;
+            if (slots <= 0) {
+                setStatus('Ya tienes el máximo de ' + max + ' fotos. Podrás añadir más desde Medios.', 'is-error');
+                return;
+            }
+            var queue = files.slice(0, slots);
+            var skipped = files.length - queue.length;
+            setBusyState(true);
+
+            var index = 0;
+            var uploaded = 0;
+            var lastError = '';
+
+            var next = function () {
+                if (index >= queue.length) {
+                    if (uploaded === 0) {
+                        setStatus(lastError || 'No se pudo subir ninguna foto.', 'is-error');
+                        setBusyState(false);
+                        return;
+                    }
+                    var tail = skipped > 0 ? ' (' + skipped + ' no cabían: máximo ' + max + ')' : '';
+                    setStatus(uploaded + (uploaded === 1 ? ' foto subida' : ' fotos subidas') + tail + '. Analizando con IA…', 'is-loading');
+                    describeMissing();
+                    return;
+                }
+                var file = queue[index++];
+                setStatus('Subiendo ' + file.name + ' (' + index + '/' + queue.length + ')…', 'is-loading');
+                var data = new FormData();
+                data.set('_csrf', csrf);
+                data.set('photo', file);
+                fetch(panel.dataset.uploadUrl, { method: 'POST', credentials: 'same-origin', body: data })
+                    .then(function (res) {
+                        return res.json().then(function (body) {
+                            if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                            return body;
+                        });
+                    })
+                    .then(function (body) {
+                        uploaded++;
+                        addCard(body.item);
+                    })
+                    .catch(function (err) { lastError = err.message || 'No se pudo subir la foto.'; })
+                    .then(next);
+            };
+            next();
+        }
+
+        // Los lotes los decide el servidor (3 por petición); aquí solo se repite
+        // mientras queden y se pinta el avance.
+        function describeMissing() {
+            fetch(panel.dataset.describeUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new URLSearchParams({ _csrf: csrf })
+            }).then(function (res) {
+                return res.json().then(function (body) {
+                    if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                    return body;
+                });
+            }).then(function (body) {
+                (body.items || []).forEach(function (item) { applyAlt(item.id, item.alt_text); });
+                var remaining = Number(body.remaining || 0);
+                if (body.blocked || remaining <= 0) {
+                    setStatus(pendingCount() > 0
+                        ? 'Algunas fotos se han quedado sin descripción. Puedes escribirla tú en cada foto.'
+                        : 'Fotos analizadas. La IA ya sabe qué muestra cada una y las usará al crear tu web.',
+                        pendingCount() > 0 ? 'is-error' : 'is-success');
+                    setBusyState(false);
+                    return;
+                }
+                setStatus('Analizando con IA… quedan ' + remaining + '.', 'is-loading');
+                describeMissing();
+            }).catch(function (err) {
+                setStatus((err.message || 'No hemos podido analizar las fotos.')
+                    + ' Puedes describirlas a mano o continuar igualmente.', 'is-error');
+                setBusyState(false);
+            });
+        }
+
+        function addCard(item) {
+            if (!item || !item.id) return;
+            var li = document.createElement('li');
+            li.className = 'pp-onboarding-photo';
+            li.setAttribute('data-photo-id', String(item.id));
+            li.innerHTML = '<div class="pp-onboarding-photo__thumb">'
+                + '<img src="' + escapeHtml(item.url) + '" alt="">'
+                + '<button type="button" class="pp-onboarding-photo__remove" data-photo-remove aria-label="Quitar esta foto">×</button>'
+                + '</div>'
+                + '<textarea class="pp-onboarding-photo__alt" rows="3" data-photo-alt placeholder="Sin descripción">'
+                + escapeHtml(item.alt_text || '') + '</textarea>'
+                + '<small data-photo-state>' + (item.alt_text ? 'Descrita' : 'Analizando…') + '</small>';
+            grid.appendChild(li);
+            grid.hidden = false;
+        }
+
+        function applyAlt(id, alt) {
+            var card = grid.querySelector('[data-photo-id="' + cssEscape(String(id)) + '"]');
+            if (!card) return;
+            var field = card.querySelector('[data-photo-alt]');
+            var state = card.querySelector('[data-photo-state]');
+            if (field) field.value = alt || '';
+            if (state) state.textContent = alt ? 'Descrita' : 'Sin describir';
+        }
+
+        function pendingCount() {
+            var pending = 0;
+            grid.querySelectorAll('[data-photo-alt]').forEach(function (field) {
+                if (!field.value.trim()) pending++;
+            });
+            return pending;
+        }
+
+        function saveAlt(card, value) {
+            if (!card) return;
+            var state = card.querySelector('[data-photo-state]');
+            if (state) state.textContent = 'Guardando…';
+            fetch(panel.dataset.altUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: new URLSearchParams({ _csrf: csrf, id: card.dataset.photoId, alt_text: value })
+            }).then(function (res) { return res.json(); })
+              .then(function (body) {
+                  if (state) state.textContent = body && body.ok
+                      ? (body.alt_text ? 'Descrita' : 'Sin describir')
+                      : 'No se pudo guardar';
+              })
+              .catch(function () { if (state) state.textContent = 'No se pudo guardar'; });
+        }
+
+        function removePhoto(card) {
+            if (!card) return;
+            fetch(panel.dataset.deleteUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: new URLSearchParams({ _csrf: csrf, id: card.dataset.photoId })
+            }).then(function (res) { return res.json(); })
+              .then(function (body) {
+                  if (!body || !body.ok) throw new Error(body && body.error);
+                  card.remove();
+                  if (!grid.querySelector('[data-photo-id]')) {
+                      grid.hidden = true;
+                      setStatus('Si no subes ninguna, usaremos un banco de imágenes genérico.', '');
+                  }
+              })
+              .catch(function () { setStatus('No se pudo quitar la foto.', 'is-error'); });
+        }
+
+        function setStatus(text, className) {
+            status.hidden = false;
+            status.textContent = text;
+            status.className = 'pp-onboarding-photos__status ' + (className || '');
+        }
+
+        // Mientras se sube o se describe, avanzar generaría la web sin las fotos
+        // (o con fotos que el modelo aún no entiende).
+        function setBusyState(value) {
+            busy = value;
+            if (nextButton) {
+                nextButton.disabled = value;
+                nextButton.classList.toggle('is-busy', value);
+            }
+            if (input) input.disabled = value;
+        }
+
+        window.addEventListener('beforeunload', function (event) {
+            if (!busy) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
     }
 
     function bindLeaveGuard() {

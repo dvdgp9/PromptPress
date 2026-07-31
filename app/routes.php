@@ -133,6 +133,10 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/onboarding/exit',               [OnboardingController::class, 'exitToPanel']);
     $r->post('/onboarding/autofill-memory',    [OnboardingController::class, 'autofillMemory']);
     $r->post('/onboarding/upload-references',  [OnboardingController::class, 'uploadReferences']);
+    // ONB-FOTOS — fotos propias del negocio en el paso 4 (una petición por foto).
+    $r->post('/onboarding/upload-photo',        [OnboardingController::class, 'uploadPhoto']);
+    $r->post('/onboarding/photo-alt',           [OnboardingController::class, 'updatePhotoAlt']);
+    $r->post('/onboarding/photo-delete',        [OnboardingController::class, 'deletePhoto']);
     $r->post('/onboarding/extract-logo-colors', [OnboardingController::class, 'extractLogoColors']); // ONB2 O2.4
     $r->post('/onboarding/generate-palette',   [OnboardingController::class, 'generatePalette']);    // ONB2 O2.5
     $r->post('/onboarding/analyze',            [OnboardingController::class, 'analyze']);

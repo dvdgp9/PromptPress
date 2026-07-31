@@ -13,6 +13,7 @@ use App\Services\DesignSystem;
 use App\Services\DocumentSummarizer;
 use App\Services\ImageBankService;
 use App\Services\LanguageService;
+use App\Services\MediaService;
 use App\Services\Microcopy;
 use App\Services\PalettePresets;
 use App\Services\Renderer\CustomBlockGenerator;
@@ -33,7 +34,7 @@ final class OnboardingController
         1 => 'Negocio',
         2 => 'Identidad',
         3 => 'IA',
-        4 => 'Documento',
+        4 => 'Materiales',
         5 => 'Arquitectura',
     ];
 
@@ -100,6 +101,9 @@ final class OnboardingController
             'typographyOptions' => self::TYPOGRAPHY,
             'document' => self::latestDocument($siteId),
             'documents' => self::latestDocuments($siteId),
+            // ONB-FOTOS — fotos propias ya subidas + tope, para el paso 4.
+            'businessPhotos' => self::businessPhotos($siteId),
+            'photosMax' => self::BUSINESS_PHOTOS_MAX,
             // F22.T22.1 — intent guardado (si el usuario ya pasó por el paso 5).
             'savedIntent' => self::loadSetting($siteId, 'onboarding_intent', ''),
         ]);
@@ -128,6 +132,9 @@ final class OnboardingController
             Response::redirect(base_url('admin/onboarding?step=4'));
         }
         if ($step === 4) {
+            // ONB-FOTOS — camino sin JavaScript: con JS las fotos ya se subieron
+            // por AJAX y el input queda vacío, así que esto no duplica nada.
+            self::saveBusinessPhotos($siteId);
             self::saveDocument($siteId);
             self::storeSetting($siteId, 'onboarding_current_step', '5');
             Response::redirect(base_url('admin/onboarding?step=5'));
@@ -224,6 +231,175 @@ final class OnboardingController
         ]);
     }
 
+    // ----------------------------------------------------------------------
+    // ONB-FOTOS — Fotos propias del negocio (paso 4).
+    //
+    // OJO con la distinción, porque el parecido en la UI es engañoso: las
+    // REFERENCIAS del paso 2 son inspiración de diseño y viven en un ajuste;
+    // estas son CONTENIDO y tienen que acabar en `media` con `source='upload'`,
+    // que es justo lo que filtra `MediaLibraryService::images($id, N, true)` y
+    // lo que hace que la generación las prefiera al banco.
+    //
+    // Un archivo por petición: así ningún lote choca con `post_max_size` (un
+    // POST demasiado grande vacía $_FILES y el paso "no guarda" sin explicar
+    // por qué, que es lo que ya nos pasó con las referencias).
+    // ----------------------------------------------------------------------
+
+    /** Tope de fotos que pide el onboarding; más allá solo alarga el paso. */
+    public const BUSINESS_PHOTOS_MAX = 12;
+
+    /** POST /admin/onboarding/upload-photo */
+    public function uploadPhoto(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $existing = count(\App\Services\MediaLibraryService::images($siteId, self::BUSINESS_PHOTOS_MAX + 1, true));
+        if ($existing >= self::BUSINESS_PHOTOS_MAX) {
+            Response::json([
+                'ok' => false,
+                'error' => 'Ya tienes ' . self::BUSINESS_PHOTOS_MAX . ' fotos, suficientes para toda la web. '
+                    . 'Podrás añadir más desde Medios cuando termines.',
+            ], 422);
+        }
+
+        $file = Request::file('photo');
+        $error = MediaService::validate(is_array($file) ? $file : null);
+        if ($error !== null) {
+            Response::json(['ok' => false, 'error' => $error], 422);
+        }
+
+        try {
+            $row = MediaService::store((array) $file, $siteId, Auth::id(), null);
+        } catch (\Throwable $e) {
+            error_log('[Onboarding] foto fallida site=' . $siteId . ': ' . $e->getMessage());
+            Response::json(['ok' => false, 'error' => 'No se pudo procesar la imagen: ' . $e->getMessage()], 500);
+            return;
+        }
+
+        // El material cambió: la preview de home que hubiera guardada enseñaría
+        // una web hecha sin estas fotos.
+        self::invalidateHomeDraft($siteId);
+
+        Response::json([
+            'ok' => true,
+            'item' => self::photoPayload($row),
+            'count' => $existing + 1,
+        ]);
+    }
+
+    /** POST /admin/onboarding/photo-alt — descripción editada a mano. */
+    public function updatePhotoAlt(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $row = self::ownPhotoOrFail($siteId, (int) Request::post('id', 0));
+
+        $alt = mb_substr(trim((string) Request::post('alt_text', '')), 0, 300);
+        Database::execute(
+            'UPDATE media SET alt_text = ? WHERE id = ? AND site_id = ?',
+            [$alt !== '' ? $alt : null, (int) $row['id'], $siteId]
+        );
+        self::invalidateHomeDraft($siteId);
+
+        Response::json(['ok' => true, 'id' => (int) $row['id'], 'alt_text' => $alt]);
+    }
+
+    /** POST /admin/onboarding/photo-delete */
+    public function deletePhoto(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $row = self::ownPhotoOrFail($siteId, (int) Request::post('id', 0));
+
+        MediaService::delete($row);
+        self::invalidateHomeDraft($siteId);
+
+        Response::json([
+            'ok' => true,
+            'id' => (int) $row['id'],
+            'count' => count(\App\Services\MediaLibraryService::images($siteId, self::BUSINESS_PHOTOS_MAX, true)),
+        ]);
+    }
+
+    /**
+     * Una foto del propio sitio, o corta con 404. Nunca por id a secas: el id
+     * viene del navegador y `media` es global.
+     *
+     * @return array<string,mixed>
+     */
+    private static function ownPhotoOrFail(int $siteId, int $mediaId): array
+    {
+        $row = $mediaId > 0
+            ? Database::selectOne(
+                "SELECT id, path, alt_text, original_name, width, height
+                 FROM media WHERE id = ? AND site_id = ? AND mime_type LIKE 'image/%'",
+                [$mediaId, $siteId]
+            )
+            : null;
+        if ($row === null) {
+            Response::json(['ok' => false, 'error' => 'Esa imagen ya no existe.'], 404);
+        }
+        return (array) $row;
+    }
+
+    /**
+     * @param array<string,mixed> $row fila de `media`
+     * @return array<string,mixed>
+     */
+    private static function photoPayload(array $row): array
+    {
+        return [
+            'id' => (int) ($row['id'] ?? 0),
+            'url' => base_url(ltrim((string) ($row['path'] ?? ''), '/')),
+            'name' => (string) ($row['original_name'] ?? ''),
+            'alt_text' => (string) ($row['alt_text'] ?? ''),
+        ];
+    }
+
+    /**
+     * Subida sin JavaScript: llega todo el lote en el POST del paso. Un archivo
+     * inválido no invalida los buenos, y sin JS no hay progreso de descripción,
+     * así que aquí sí se describe en segundo plano tras responder.
+     */
+    private static function saveBusinessPhotos(int $siteId): void
+    {
+        $files = self::uploadedFiles('business_photos');
+        if ($files === []) return;
+
+        $slots = self::BUSINESS_PHOTOS_MAX
+            - count(\App\Services\MediaLibraryService::images($siteId, self::BUSINESS_PHOTOS_MAX, true));
+        $saved = 0;
+
+        foreach ($files as $file) {
+            if ($slots <= 0) break;
+            if (MediaService::validate($file) !== null) continue;
+            try {
+                $row = MediaService::store($file, $siteId, Auth::id(), null);
+            } catch (\Throwable $e) {
+                error_log('[Onboarding] foto (sin JS) fallida site=' . $siteId . ': ' . $e->getMessage());
+                continue;
+            }
+            \App\Services\MediaLibraryService::describeAfterResponse((int) ($row['id'] ?? 0), $siteId);
+            $slots--;
+            $saved++;
+        }
+
+        if ($saved > 0) self::invalidateHomeDraft($siteId);
+    }
+
+    /**
+     * Fotos propias ya subidas, para pintar la rejilla del paso 4.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function businessPhotos(int $siteId): array
+    {
+        return array_map(
+            [self::class, 'photoPayload'],
+            \App\Services\MediaLibraryService::images($siteId, self::BUSINESS_PHOTOS_MAX, true)
+        );
+    }
 
     /**
      * ONB2 O2.4 — Colores dominantes del logo ya subido, para sembrar la paleta

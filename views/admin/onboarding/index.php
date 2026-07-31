@@ -15,6 +15,8 @@
  * @var array $typographyOptions
  * @var ?array $document
  * @var array $documents
+ * @var array $businessPhotos
+ * @var int $photosMax
  */
 \Core\View::extend('admin/layout');
 
@@ -22,7 +24,10 @@ $stepMeta = [
     1 => ['eyebrow' => 'Paso 1 de 5 · Conoce tu negocio', 'title' => 'Cuéntale a la IA quién eres', 'subtitle' => 'Esta información se usa cada vez que la IA escriba algo: páginas, secciones, SEO. Cuanto más concreto, mejor.', 'action' => 'Siguiente'],
     2 => ['eyebrow' => 'Paso 2 de 5 · Marca y referencias', 'title' => 'Dale dirección visual a la IA', 'subtitle' => 'Sube el logo y capturas de webs que te gusten. Canvas usará esas referencias como inspiración de estructura, ritmo y composición.', 'action' => 'Siguiente'],
     3 => ['eyebrow' => 'Paso 3 de 5 · Modelo IA', 'title' => 'Elige el motor que va a crear tu web', 'subtitle' => 'Te proponemos una selección limitada para empezar bien. Después podrás cambiarlo desde Ajustes · IA.', 'action' => 'Siguiente'],
-    4 => ['eyebrow' => 'Paso 4 de 5 · Documentos base · opcional', 'title' => '¿Tienes documentos que te describan?', 'subtitle' => 'Brochures, plan de negocio, catálogo, tarifas o dosieres. La IA los usa como contexto extra para diseñar y escribir con más criterio.', 'action' => 'Continuar'],
+    // ONB-FOTOS — el paso deja de ser solo documentos: fotos y documentos son la
+    // misma pregunta ("¿qué material tienes ya?") y las fotos son lo que evita
+    // que la web se genere entera con banco de imágenes.
+    4 => ['eyebrow' => 'Paso 4 de 5 · Materiales · opcional', 'title' => '¿Qué material tienes ya?', 'subtitle' => 'Fotos reales de tu negocio y documentos que te describan. Las fotos se usan en las páginas; los documentos, como contexto para escribir con criterio.', 'action' => 'Continuar'],
     5 => ['eyebrow' => 'Paso 5 de 5 · Web inicial', 'title' => 'Tu web, paso a paso', 'subtitle' => 'Primero elige qué páginas crear. Después verás un preview de tu estilo, hecho a medida desde tus datos.', 'action' => 'Continuar al estilo'],
 ];
 $groups = [
@@ -399,6 +404,52 @@ $groups = [
             <?php elseif ($step === 4): ?>
                 <form method="POST" enctype="multipart/form-data" action="<?= e(base_url('admin/onboarding/step/4')) ?>" class="pp-onboarding-form" data-onboarding-form>
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+
+                    <?php // ONB-FOTOS — Fotos reales del negocio. Sin ellas la web se
+                          // genera con banco de imágenes; con ellas, la generación las
+                          // prefiere. Se suben de una en una por AJAX y se describen con
+                          // IA antes de dejar avanzar: sin descripción, la foto llega al
+                          // modelo como un nombre de archivo y acaba descartada. ?>
+                    <section class="pp-onboarding-photos" data-photos
+                             data-max="<?= (int) $photosMax ?>"
+                             data-upload-url="<?= e(base_url('admin/onboarding/upload-photo')) ?>"
+                             data-alt-url="<?= e(base_url('admin/onboarding/photo-alt')) ?>"
+                             data-delete-url="<?= e(base_url('admin/onboarding/photo-delete')) ?>"
+                             data-describe-url="<?= e(base_url('admin/media/describe-missing')) ?>">
+                        <header class="pp-onboarding-photos__head">
+                            <h2>Fotos de tu negocio</h2>
+                            <p>Tu local, tu equipo, tu producto, tu trabajo terminado. La IA las mira, las describe y las coloca en las páginas. <strong>No son las capturas de webs del paso 2</strong>: aquello era inspiración de diseño, esto es tu material real.</p>
+                        </header>
+
+                        <label class="pp-onboarding-dropzone pp-onboarding-dropzone--photos" data-photos-dropzone>
+                            <input type="file" name="business_photos[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple data-photos-input>
+                            <span></span>
+                            <strong>Arrastra tus fotos aquí o haz click para elegir</strong>
+                            <small>JPG, PNG, WebP o GIF · hasta 10 MB cada una · máximo <?= (int) $photosMax ?> fotos. Con 4-6 buenas fotos ya cubrimos una web entera.</small>
+                        </label>
+
+                        <p class="pp-onboarding-photos__status" data-photos-status <?= empty($businessPhotos) ? '' : 'hidden' ?>>
+                            Si no subes ninguna, usaremos un banco de imágenes genérico.
+                        </p>
+
+                        <ul class="pp-onboarding-photos__grid" data-photos-grid<?= empty($businessPhotos) ? ' hidden' : '' ?>>
+                            <?php foreach ($businessPhotos as $photo): ?>
+                                <li class="pp-onboarding-photo" data-photo-id="<?= (int) $photo['id'] ?>">
+                                    <div class="pp-onboarding-photo__thumb">
+                                        <img src="<?= e((string) $photo['url']) ?>" alt="">
+                                        <button type="button" class="pp-onboarding-photo__remove" data-photo-remove aria-label="Quitar esta foto">×</button>
+                                    </div>
+                                    <textarea class="pp-onboarding-photo__alt" rows="3" data-photo-alt
+                                              placeholder="Sin descripción"><?= e((string) $photo['alt_text']) ?></textarea>
+                                    <small data-photo-state><?= $photo['alt_text'] === '' ? 'Sin describir' : 'Descrita' ?></small>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </section>
+
+                    <h2 class="pp-onboarding-photos__divider">Documentos que te describan</h2>
+                    <p class="pp-onboarding-photos__divider-hint">Brochures, plan de negocio, catálogo, tarifas o dosieres. La IA los usa como contexto extra al escribir.</p>
+
                     <?php if (!empty($documents)): ?>
                         <section class="pp-onboarding-doc-current">
                             <strong>Documentos ya cargados</strong>
