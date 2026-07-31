@@ -2624,3 +2624,71 @@ Las suites `canvas_generate` y `dmb2_reference_regen` dejan sus páginas creadas
 PUBLICADAS con `page_type='home'`, así que tras una regresión completa la portada
 del sitio de dev pasa a ser una página de prueba. Ya no rompe
 `site_languages_model`, pero ensucia el estado y hay que borrarlas a mano.
+
+---
+
+# [PALETA-2] El segundo color de la paleta no llegaba a la web — 31/07/2026 (Executor)
+
+## Lo que reportó el usuario
+
+Web creada con una paleta verde + rosa. El rosa quedó guardado como
+«secundario» y **no aparece por ninguna parte** en la web generada.
+
+## Diagnóstico (medido, no deducido)
+
+En la base de dev, sobre 20 páginas canvas: **142 usos de `--pp-primary` y 0 de
+`--pp-accent`**. El color no se pierde por el camino —`BrandPaletteService` →
+`applyCustomPaletteToTokens()` → `--pp-accent` está en el CSS de todas las
+páginas— sino que **nadie lo usa**. Dos causas:
+
+1. **El prompt de composición no lo permitía.** En `Actions.php`, la sección
+   "MARCA (ley, no sugerencia)" enumera los tokens permitidos ("Colores y
+   tipografías SOLO vía tokens del sitio: …") y `--pp-accent` NO estaba en la
+   lista, con un "PROHIBIDO inventar colores" a continuación. El modelo hacía
+   exactamente lo que se le pedía: la paleta que veía no tenía segundo color.
+2. **El token «Secundario» era el color del texto.** Tanto
+   `DesignSystem::applyCustomPaletteToTokens()` como `saveCustomPalette()` del
+   onboarding asignaban `secondary = palette['text']`, así que el panel enseñaba
+   como secundario un casi-negro que no era el que el usuario había elegido.
+
+## Arreglo
+
+- `var(--pp-accent)` entra en la lista de tokens permitidos del prompt de
+  composición, con una regla de **dosis**: el principal manda (CTA, enlaces,
+  énfasis) y el acento acompaña en 1-3 sitios (detalles, badges, subrayados,
+  iconos, hovers), nunca en el CTA principal ni como fondo de una banda entera.
+  Los prompts de edición dicen lo mismo, para que "usa más el rosa" funcione.
+- `secondary` pasa a ser el segundo color de marca (`accent_2`) en los dos
+  sitios que lo escribían. **Sin riesgo medido**: `--pp-secondary` no lo pinta
+  nada del sitio público (0 usos en las 20 páginas canvas y en las 59 secciones
+  clásicas); solo arregla lo que se ve en el panel.
+- Etiquetas del design system con el papel de cada color.
+
+## Verificación
+
+- Con paleta verde+rosa: `primary=#0f7a4a`, `accent=secondary=#e0559b`, y el CSS
+  público emite `--pp-accent: #e0559b`.
+- **Generación real por el camino del panel**: la página nueva usa
+  `--pp-accent` **2 veces** (`border-left: 4px solid var(--pp-accent)` y un
+  `background`) frente a 11 de `--pp-primary`. Es exactamente la dosis pedida.
+- `tests/onboarding_step2.php` +9 comprobaciones, incluidas dos de contrato del
+  prompt (si alguien quita `var(--pp-accent)` de la lista, la suite falla).
+  Suites relacionadas en verde (bloques, canvas, referencia, idiomas).
+- Estado de dev restaurado: 30 páginas, sin paleta a medida (como estaba).
+
+## Lo que NO arregla
+
+Las páginas **ya generadas** no cambian: nacieron sin el segundo color. Se
+pueden retocar por el chat del Studio ("usa el rosa en los detalles") o
+regenerar.
+
+### Lessons (PALETA-2)
+
+- **Un dato puede estar guardado, convertido y publicado en el CSS y aun así no
+  existir para quien pinta la página.** El recorrido del color estaba bien hasta
+  el último paso; el fallo era una lista blanca en un prompt.
+- **Cuidado con los nombres que se pisan.** «Secundario» significaba una cosa en
+  el paso 2 (segundo color de marca) y otra en el design system (color del
+  texto). El usuario lee la etiqueta, no el mapeo.
+- **Antes de temer una regresión, medirla.** Remapear `--pp-secondary` daba
+  miedo hasta contar sus usos reales: cero.

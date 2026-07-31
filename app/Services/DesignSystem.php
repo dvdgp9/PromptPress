@@ -74,8 +74,8 @@ final class DesignSystem
                 'fields' => [
                     ['key' => 'primary',      'label' => 'Color principal',    'type' => 'color', 'default' => '#6366f1', 'css_var' => '--pp-primary',      'hint' => 'CTA, enlaces, énfasis'],
                     ['key' => 'primary_dark', 'label' => 'Principal oscuro',   'type' => 'color', 'default' => '#4f46e5', 'css_var' => '--pp-primary-dark', 'hint' => 'Hover de CTA'],
-                    ['key' => 'secondary',    'label' => 'Secundario',         'type' => 'color', 'default' => '#64748b', 'css_var' => '--pp-secondary'],
-                    ['key' => 'accent',       'label' => 'Acento',             'type' => 'color', 'default' => '#f59e0b', 'css_var' => '--pp-accent', 'hint' => 'Highlights, badges especiales'],
+                    ['key' => 'secondary',    'label' => 'Secundario',         'type' => 'color', 'default' => '#64748b', 'css_var' => '--pp-secondary', 'hint' => 'Segundo color de marca'],
+                    ['key' => 'accent',       'label' => 'Acento',             'type' => 'color', 'default' => '#f59e0b', 'css_var' => '--pp-accent', 'hint' => 'El segundo color en la web: detalles, badges, subrayados — siempre menos que el principal'],
                     ['key' => 'bg',           'label' => 'Fondo de página',    'type' => 'color', 'default' => '#ffffff', 'css_var' => '--pp-bg'],
                     ['key' => 'surface',      'label' => 'Fondo de secciones', 'type' => 'color', 'default' => '#f9fafb', 'css_var' => '--pp-surface'],
                     ['key' => 'text',         'label' => 'Texto principal',    'type' => 'color', 'default' => '#1f2937', 'css_var' => '--pp-text'],
@@ -398,7 +398,12 @@ final class DesignSystem
         $tokens['colors']['text']         = $palette['text'];
         $tokens['colors']['text_muted']   = $palette['muted'];
         $tokens['colors']['border']       = $palette['line'];
-        $tokens['colors']['secondary']    = $palette['text'];
+        // PALETA-2 — «Secundario» es el SEGUNDO COLOR DE MARCA, no el color del
+        // texto. Antes recibía `text`, así que el panel enseñaba como secundario
+        // un gris/negro que no era el que el usuario había elegido. `--pp-secondary`
+        // no lo pinta nada del sitio público (comprobado: 0 usos), así que esto
+        // no mueve ninguna web ya publicada; arregla lo que se ve en el panel.
+        $tokens['colors']['secondary']    = $palette['accent_2'];
         return $tokens;
     }
 

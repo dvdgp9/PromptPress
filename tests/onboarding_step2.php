@@ -223,6 +223,51 @@ check_onb(
 );
 
 // =====================================================================
+// PALETA-2 — El segundo color de marca tiene que LLEGAR a la web.
+//
+// Se guardaba bien y no lo pintaba nadie: el token «secundario» recibía el
+// color del TEXTO, y el prompt de composición no incluía `var(--pp-accent)`
+// en su lista cerrada de tokens permitidos ("SOLO vía tokens del sitio"), así
+// que el modelo no podía usarlo aunque quisiera. Medido en la base de dev:
+// 142 usos de --pp-primary y 0 de --pp-accent en 20 páginas canvas.
+// =====================================================================
+
+$dosPalette = BrandPaletteService::enforceContrast([
+    'bg' => '#ffffff', 'surface' => '#f2f7f3', 'text' => '#12211a', 'muted' => '#5b6b62',
+    'line' => '#d8e6dc', 'accent' => '#0f7a4a', 'accent_dark' => '#0a5c37', 'accent_2' => '#e0559b',
+]);
+check_onb('la_paleta_de_dos_colores_de_marca_es_valida', $dosPalette !== null);
+
+if ($dosPalette !== null) {
+    BrandPaletteService::save($siteId, $dosPalette);
+    $paletteTokens = DesignSystem::applyCustomPaletteToTokens($siteId, DesignSystem::load($siteId));
+    $colors = $paletteTokens['colors'] ?? [];
+
+    check_onb('el_principal_es_el_acento_de_la_paleta',
+        ($colors['primary'] ?? '') === $dosPalette['accent']);
+    check_onb('el_acento_es_el_segundo_color_de_marca',
+        ($colors['accent'] ?? '') === $dosPalette['accent_2']);
+    // La regresión concreta que reportó el usuario: «el rosa se quedó como
+    // secundario pero no se ve». Secundario era el color del texto.
+    check_onb('secundario_es_el_segundo_color_de_marca_y_no_el_texto',
+        ($colors['secondary'] ?? '') === $dosPalette['accent_2']
+        && ($colors['secondary'] ?? '') !== $dosPalette['text']);
+
+    $publicCss = DesignSystem::renderCssVars($paletteTokens, $siteId);
+    check_onb('el_segundo_color_sale_en_el_css_publico',
+        str_contains($publicCss, '--pp-accent: ' . $dosPalette['accent_2']));
+}
+
+// Contrato del prompt: si `var(--pp-accent)` desaparece de la lista de tokens
+// permitidos, la generación vuelve a ignorar el segundo color en silencio.
+$compose = \App\Services\AI\Actions::get(\App\Services\AI\Actions::COMPOSE_CANVAS_PAGE);
+$instruction = (string) ($compose['instruction'] ?? '');
+check_onb('el_prompt_de_composicion_permite_el_acento',
+    str_contains($instruction, 'var(--pp-accent)'));
+check_onb('el_prompt_pide_usarlo_menos_que_el_principal',
+    str_contains($instruction, 'ACENTO SECUNDARIO') && str_contains($instruction, 'menos presencia'));
+
+// =====================================================================
 // Limpieza: ni ficheros ni filas de prueba.
 // =====================================================================
 

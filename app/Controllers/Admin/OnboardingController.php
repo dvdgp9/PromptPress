@@ -2936,7 +2936,9 @@ final class OnboardingController
         $colors['text'] = $palette['text'];
         $colors['text_muted'] = $palette['muted'];
         $colors['border'] = $palette['line'];
-        $colors['secondary'] = $palette['text'];
+        // PALETA-2 — «Secundario» es el segundo color de marca (mismo criterio
+        // que `DesignSystem::applyCustomPaletteToTokens()`), no el del texto.
+        $colors['secondary'] = $palette['accent_2'];
         DesignSystem::saveCategory($siteId, 'colors', $colors);
     }
 
