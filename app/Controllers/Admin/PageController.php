@@ -58,6 +58,7 @@ class PageController
         self::ensureHierarchySchema();
         self::inferInitialHierarchy($siteId);
         self::repairFlatOnboardingHierarchy($siteId);
+        self::repairMissingLanguageGroups($siteId);
 
         $pages = Database::select(
             'SELECT id, title, slug, page_type, parent_id, nav_label, tree_sort_order,
@@ -176,11 +177,12 @@ class PageController
         $now = date('Y-m-d H:i:s');
         Database::execute(
             'INSERT INTO pages
-                (site_id, title, slug, page_type, meta_title, meta_description,
+                (site_id, title, slug, page_type, language, translation_group,
+                 meta_title, meta_description,
                  seo_noindex, seo_exclude_sitemap, canonical_url,
                  status, sort_order, created_by, created_at, updated_at, published_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$siteId, $title, $slug, $type, null, null, 0, 0, null, 'draft', 0, Auth::id(), $now, $now, null]
+             VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$siteId, $title, $slug, $type, LanguageService::primaryFor($siteId), null, null, 0, 0, null, 'draft', 0, Auth::id(), $now, $now, null]
         );
         $id = (int) Database::connection()->lastInsertId();
 
@@ -699,14 +701,16 @@ class PageController
 
             Database::execute(
                 'INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
+                    (site_id, title, slug, page_type, language, translation_group,
+                     parent_id, nav_label, meta_title, meta_description,
                      status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $siteId,
                     $title,
                     $slug,
                     $pageType,
+                    LanguageService::primaryFor($siteId),
                     $parentId > 0 ? $parentId : null,
                     null,
                     trim((string) ($seo['seo_title'] ?? '')) ?: null,
@@ -2127,6 +2131,32 @@ class PageController
             Response::notFound('Página no encontrada');
         }
         return $page;
+    }
+
+    /**
+     * PAGES-LANG L3 — Rellena idioma y grupo de traducción de las páginas que
+     * se crearon antes de arreglar los caminos de alta (L1).
+     *
+     * El backfill de la migración de multi-idioma fue de una sola pasada, pero
+     * once caminos de creación siguieron insertando filas sin estas columnas
+     * después. Una página sin `translation_group` no se puede traducir, así
+     * que no basta con arreglar el alta: hay que reparar lo ya creado.
+     *
+     * Es idempotente y barato: sin filas afectadas, dos UPDATE que no tocan nada.
+     */
+    private static function repairMissingLanguageGroups(int $siteId): void
+    {
+        Database::execute(
+            "UPDATE pages SET language = ? WHERE site_id = ? AND (language IS NULL OR language = '')",
+            [LanguageService::primaryFor($siteId), $siteId]
+        );
+        // UUID() se evalúa POR FILA: cada página arranca en su propio grupo. Un
+        // grupo compartido las convertiría en traducciones unas de otras.
+        Database::execute(
+            "UPDATE pages SET translation_group = UUID()
+             WHERE site_id = ? AND (translation_group IS NULL OR translation_group = '')",
+            [$siteId]
+        );
     }
 
     private static function ensureHierarchySchema(): void

@@ -470,13 +470,14 @@ final class LegalPageGenerator
                 $treeOrder = PageController::nextTreeOrder($siteId, null);
                 Database::execute(
                     "INSERT INTO pages
-                        (site_id, title, slug, page_type, parent_id, nav_label,
+                        (site_id, title, slug, page_type, language, translation_group,
+                         parent_id, nav_label,
                          meta_title, meta_description, status, sort_order, tree_sort_order,
                          created_by, created_at, updated_at, published_at)
-                     VALUES (?, ?, ?, 'legal', NULL, NULL, NULL, NULL,
+                     VALUES (?, ?, ?, 'legal', ?, UUID(), NULL, NULL, NULL, NULL,
                              'published', 999, ?, ?, ?, ?, ?)",
                     [
-                        $siteId, $title, $slug,
+                        $siteId, $title, $slug, LanguageService::primaryFor($siteId),
                         $treeOrder, Auth::id() ?? 1, $now, $now, $now,
                     ]
                 );

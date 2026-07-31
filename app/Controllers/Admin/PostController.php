@@ -118,13 +118,16 @@ class PostController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — una entrada también es una fila de `pages`:
+                // sin idioma ni grupo se queda fuera del circuito de traducción.
                 "INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
+                    (site_id, title, slug, page_type, language, translation_group,
+                     parent_id, nav_label, meta_title, meta_description,
                      status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, 'article', NULL, NULL, NULL, ?,
+                 VALUES (?, ?, ?, 'article', ?, UUID(), NULL, NULL, NULL, ?,
                     'draft', 0, ?, ?, ?, ?, NULL)",
                 [
-                    $siteId, $title, $slug,
+                    $siteId, $title, $slug, \App\Services\LanguageService::primaryFor($siteId),
                     $excerpt !== '' ? mb_substr($excerpt, 0, 155) : null,
                     PageController::nextTreeOrder($siteId, null),
                     Auth::id(), $now, $now,
@@ -226,13 +229,16 @@ class PostController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — una entrada también es una fila de `pages`:
+                // sin idioma ni grupo se queda fuera del circuito de traducción.
                 "INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
+                    (site_id, title, slug, page_type, language, translation_group,
+                     parent_id, nav_label, meta_title, meta_description,
                      status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, 'article', NULL, NULL, NULL, ?,
+                 VALUES (?, ?, ?, 'article', ?, UUID(), NULL, NULL, NULL, ?,
                     'draft', 0, ?, ?, ?, ?, NULL)",
                 [
-                    $siteId, $title, $slug,
+                    $siteId, $title, $slug, \App\Services\LanguageService::primaryFor($siteId),
                     $excerpt !== '' ? mb_substr($excerpt, 0, 155) : null,
                     PageController::nextTreeOrder($siteId, null),
                     Auth::id(), $now, $now,
@@ -336,13 +342,16 @@ class PostController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — una entrada también es una fila de `pages`:
+                // sin idioma ni grupo se queda fuera del circuito de traducción.
                 "INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
+                    (site_id, title, slug, page_type, language, translation_group,
+                     parent_id, nav_label, meta_title, meta_description,
                      status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, 'article', NULL, NULL, NULL, ?,
+                 VALUES (?, ?, ?, 'article', ?, UUID(), NULL, NULL, NULL, ?,
                     'draft', 0, ?, ?, ?, ?, NULL)",
                 [
-                    $siteId, $title, $slug,
+                    $siteId, $title, $slug, \App\Services\LanguageService::primaryFor($siteId),
                     $excerpt !== '' ? mb_substr($excerpt, 0, 155) : null,
                     PageController::nextTreeOrder($siteId, null),
                     $userId, $now, $now,
@@ -588,13 +597,16 @@ class PostController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — una entrada también es una fila de `pages`:
+                // sin idioma ni grupo se queda fuera del circuito de traducción.
                 "INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, nav_label, meta_title, meta_description,
+                    (site_id, title, slug, page_type, language, translation_group,
+                     parent_id, nav_label, meta_title, meta_description,
                      status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, 'article', NULL, NULL, NULL, ?,
+                 VALUES (?, ?, ?, 'article', ?, UUID(), NULL, NULL, NULL, ?,
                     'draft', 0, ?, ?, ?, ?, NULL)",
                 [
-                    $siteId, $title, $slug,
+                    $siteId, $title, $slug, \App\Services\LanguageService::primaryFor($siteId),
                     $excerpt !== '' ? mb_substr($excerpt, 0, 155) : null,
                     PageController::nextTreeOrder($siteId, null),
                     Auth::id(), $now, $now,

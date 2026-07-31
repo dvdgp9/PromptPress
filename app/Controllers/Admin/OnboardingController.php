@@ -1730,10 +1730,12 @@ final class OnboardingController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — idioma y grupo propio: una página sin
+                // `translation_group` no entra en el circuito de traducción.
                 'INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
-                [$siteId, $title, $slug, $type, $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
+                    (site_id, title, slug, page_type, language, translation_group, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
+                 VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
+                [$siteId, $title, $slug, $type, LanguageService::primaryFor($siteId), $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
             );
             $pageId = (int) Database::lastInsertId();
             foreach ($sections as $pos => $section) {
@@ -1845,10 +1847,12 @@ final class OnboardingController
         $pdo->beginTransaction();
         try {
             Database::execute(
+                // PAGES-LANG L1 — idioma y grupo propio: una página sin
+                // `translation_group` no entra en el circuito de traducción.
                 'INSERT INTO pages
-                    (site_id, title, slug, page_type, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
-                [$siteId, $title, $slug, $type, $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
+                    (site_id, title, slug, page_type, language, translation_group, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
+                 VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
+                [$siteId, $title, $slug, $type, LanguageService::primaryFor($siteId), $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
             );
             $pageId = (int) Database::lastInsertId();
             foreach ($sections as $pos => $section) {
@@ -2283,9 +2287,9 @@ final class OnboardingController
         $now = date('Y-m-d H:i:s');
         Database::execute(
             'INSERT INTO pages
-                (site_id, title, slug, page_type, render_mode, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
-             VALUES (?, ?, ?, ?, "canvas", ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
-            [$siteId, $title, $slug, $type, $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
+                (site_id, title, slug, page_type, language, translation_group, render_mode, parent_id, meta_title, meta_description, status, sort_order, tree_sort_order, created_by, created_at, updated_at, published_at)
+             VALUES (?, ?, ?, ?, ?, UUID(), "canvas", ?, ?, ?, "draft", 0, ?, ?, ?, ?, NULL)',
+            [$siteId, $title, $slug, $type, LanguageService::primaryFor($siteId), $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
         );
         $pageId = (int) Database::lastInsertId();
         \App\Services\Canvas\CanvasService::save($pageId, $generated['html'], $generated['css'], 'generate');

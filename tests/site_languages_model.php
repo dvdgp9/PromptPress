@@ -90,6 +90,38 @@ checkModel(
 );
 
 // ---------------------------------------------------------------------------
+// PAGES-LANG L2 — El invariante de arriba se rompía una y otra vez porque casi
+// ningún camino de alta rellenaba estas columnas (11 de 13 INSERT). Comprobarlo
+// creando una página por cada camino exigiría ejecutar medio producto y gastar
+// IA; se comprueba sobre el código, que además cubre el INSERT que se escriba
+// mañana.
+// ---------------------------------------------------------------------------
+$offenders = [];
+$phpFiles = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(PP_ROOT . '/app'));
+foreach ($phpFiles as $file) {
+    if ($file->getExtension() !== 'php') {
+        continue;
+    }
+    $code = (string) file_get_contents($file->getPathname());
+    if (!preg_match_all('/INSERT INTO pages\s*\(([^)]*)\)/s', $code, $matches, PREG_OFFSET_CAPTURE)) {
+        continue;
+    }
+    foreach ($matches[1] as $match) {
+        $columns = (string) $match[0];
+        if (str_contains($columns, 'language') && str_contains($columns, 'translation_group')) {
+            continue;
+        }
+        $line = substr_count(substr($code, 0, (int) $match[1]), "\n") + 1;
+        $offenders[] = str_replace(PP_ROOT . '/', '', $file->getPathname()) . ':' . $line;
+    }
+}
+checkModel(
+    'every_insert_into_pages_sets_language_and_group',
+    $offenders === [],
+    'altas que dejarían la página sin idioma o sin grupo: ' . implode(', ', $offenders)
+);
+
+// ---------------------------------------------------------------------------
 // T1.2 — el idioma viaja con el pedido y con la reserva
 // ---------------------------------------------------------------------------
 

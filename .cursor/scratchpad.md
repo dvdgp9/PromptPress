@@ -2502,3 +2502,125 @@ páginas huérfanas de idioma/grupo. Las 21 homes duplicadas quedaron degradadas
   serían N peticiones y un árbol a medio ordenar en cuanto una fallara.
 - **La ambigüedad de la home no era teórica**: 22 páginas marcadas como inicio en la
   base de dev, sirviendo la última editada.
+
+## Cierre (PAGES-OPS · 31/07/2026, Planner)
+
+**Tarea aprobada y CERRADA por el usuario.** G1–G8 entregadas y verificadas;
+entregable `deliverables/promptpress-update-20260731.zip` desde los commits
+`1bf4d7a` (onboarding: fotos) y `2b046b0` (páginas: operaciones).
+
+---
+
+# [PAGES-LANG] Páginas que nacen sin idioma ni grupo de traducción — PLAN (31/07/2026, Planner)
+
+## Background and Motivation (PAGES-LANG)
+
+`tests/site_languages_model.php` comprueba un invariante global: **ninguna página
+sin `language` ni `translation_group`**. Falla en cada regresión completa desde
+hace al menos tres sesiones (30/07, 31/07 ×2), y siempre se ha "arreglado"
+borrando a mano las páginas que las suites acababan de crear. El fallo es real:
+la suite dice la verdad y el código de creación es el que está mal.
+
+## Key Challenges and Analysis (PAGES-LANG)
+
+Hay **13 sitios que hacen `INSERT INTO pages` en producción** y solo **2**
+rellenan idioma y grupo:
+
+- OK: `PageController::createPageRow()` (el alta "oficial", con `UUID()`) y
+  `TranslationWriter` (que necesita el grupo por definición).
+- Sin idioma ni grupo: `OnboardingController` ×3 (páginas del onboarding y el
+  borrador de la home), `PostController` ×4 (entradas del blog),
+  `PageController` ×2 (creación rápida y creación con IA),
+  `Compliance\LegalPageGenerator` (páginas legales) y `FormStore` (la página
+  interna `__forms`).
+
+Consecuencias, por orden de daño:
+
+1. Una página sin `translation_group` **no se puede traducir**: el flujo de
+   traducción agrupa por ese campo. En un sitio multi-idioma, todo lo creado por
+   esos caminos queda fuera del circuito.
+2. Sin `language`, el resolutor público la trata por compatibilidad como del
+   idioma principal — funciona hoy, pero es una excepción que hay que arrastrar.
+3. La regresión completa miente: un fallo permanente que se aprende a ignorar es
+   peor que no tener test.
+
+El error fácil al arreglarlo: dar a todas el MISMO grupo (o el de otra página).
+El grupo es «esta página y sus traducciones»; cada alta nueva necesita el suyo,
+igual que hace `createPageRow()` con `UUID()`.
+
+## High-level Task Breakdown (PAGES-LANG)
+
+**L1 — Rellenar idioma y grupo en los 11 caminos que faltan**
+- Idioma: el principal del sitio (`LanguageService::primaryFor`), salvo que el
+  camino ya sepa cuál toca. Grupo: `UUID()` propio.
+- *Criterio:* crear una página por cada camino y ver `language` y
+  `translation_group` rellenos.
+
+**L2 — Test de contrato que no dependa de ejecutar los 13 caminos**
+- Recorrer los `INSERT INTO pages` de `app/` y exigir que todos declaren las dos
+  columnas. Así queda cubierto también el camino que se escriba mañana.
+- *Criterio:* la suite falla si alguien añade un INSERT sin las columnas.
+
+**L3 — Backfill de lo que ya está en la base**
+- Las filas existentes sin idioma/grupo se rellenan (idioma del sitio, grupo
+  propio), sin tocar las que ya lo tienen.
+- *Criterio:* `site_languages_model` pasa sin borrar páginas a mano, y pasa
+  también después de una regresión completa.
+
+## Project Status Board (PAGES-LANG)
+
+- [ ] L1 — Idioma y grupo en los 11 caminos de creación
+- [ ] L2 — Test de contrato sobre los INSERT
+- [ ] L3 — Backfill de las filas existentes + regresión
+
+## Current Status / Progress Tracking (PAGES-LANG · 31/07/2026, Executor)
+
+**L1, L2 y L3 hechas.**
+
+- **L1** — Los 11 caminos que faltaban ya escriben `language` (el principal del
+  sitio) y `translation_group` (`UUID()`, uno por fila):
+  `OnboardingController` ×3, `PostController` ×4, `PageController` ×2 (creación
+  rápida y con IA), `Compliance\LegalPageGenerator` y `FormStore`.
+- **L2** — `tests/site_languages_model.php` gana
+  `every_insert_into_pages_sets_language_and_group`: recorre los
+  `INSERT INTO pages` de `app/` y exige las dos columnas. Comprobado que FALLA de
+  verdad quitándoselas a `FormStore` (señaló el archivo y la línea) y vuelve a
+  pasar al restaurarlo. Cubre también el INSERT que se escriba mañana, sin tener
+  que ejecutar los 13 flujos ni gastar IA.
+- **L3** — `PageController::repairMissingLanguageGroups()` (llamada desde
+  `index()`, junto a las otras reparaciones) rellena lo ya creado por el camino
+  viejo; idempotente y sin coste cuando no hay filas que tocar. Copia canónica en
+  `database/migrations/2026_07_31_pages_language_backfill.sql`.
+
+**Verificación**
+
+- Página huérfana creada a mano (`language=''`, `translation_group=NULL`): al abrir
+  `/admin/pages` queda con `es` y grupo propio, y sin grupos compartidos.
+- La página que crea `canvas_generate` —el reincidente de las últimas tres
+  sesiones— nace ya con idioma y grupo.
+- Suites de los caminos tocados en verde: legal, formularios (×2), blog canvas,
+  idioma en creación, páginas internas.
+- **Regresión completa en verde, incluida `site_languages_model`, y por primera
+  vez SIN borrar páginas a mano.**
+
+**Estado de dev**: 30 páginas, 0 huérfanas, una sola home (135 «Inicio»).
+
+### Lessons (PAGES-LANG)
+
+- **Un test que falla siempre acaba siendo un test que se ignora.** Tres sesiones
+  "arreglándolo" borrando páginas a mano; el test tenía razón y el código de alta
+  era el que estaba mal, en 11 de 13 caminos.
+- **Que exista un alta "oficial" no significa que se use.** `createPageRow()` hacía
+  lo correcto desde el principio y casi nadie pasaba por ahí. Cuando la corrección
+  hay que repetirla en N sitios, el test que vale es el que mira el CÓDIGO, no el
+  que ejercita un flujo.
+- **Un backfill de migración es de una sola pasada.** Si el código que ensucia
+  sigue vivo, la base vuelve a ensuciarse: primero el alta (L1), después la
+  reparación (L3).
+
+### Pendiente relacionado (no entra aquí)
+
+Las suites `canvas_generate` y `dmb2_reference_regen` dejan sus páginas creadas y
+PUBLICADAS con `page_type='home'`, así que tras una regresión completa la portada
+del sitio de dev pasa a ser una página de prueba. Ya no rompe
+`site_languages_model`, pero ensucia el estado y hay que borrarlas a mano.

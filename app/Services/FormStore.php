@@ -39,10 +39,13 @@ final class FormStore
 
         $now = date('Y-m-d H:i:s');
         Database::execute(
+            // PAGES-LANG L1 — es una página interna, pero vive en `pages` y
+            // cuenta para el invariante "ninguna fila sin idioma ni grupo".
             'INSERT INTO pages
-                (site_id, title, slug, page_type, status, seo_noindex, seo_exclude_sitemap, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$siteId, 'Formularios (sistema)', self::CONTAINER_SLUG, 'landing', 'draft', 1, 1, $now, $now]
+                (site_id, title, slug, page_type, language, translation_group, status, seo_noindex, seo_exclude_sitemap, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, UUID(), ?, ?, ?, ?, ?)',
+            [$siteId, 'Formularios (sistema)', self::CONTAINER_SLUG, 'landing',
+             \App\Services\LanguageService::primaryFor($siteId), 'draft', 1, 1, $now, $now]
         );
         return (int) Database::lastInsertId();
     }
