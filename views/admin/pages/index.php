@@ -33,6 +33,42 @@ $typeInitial = function (array $p) use ($pageTypes): string {
     return mb_strtoupper(mb_substr($label, 0, 1));
 };
 
+// PAGES-OPS G2/G4 — La portada se ve de un vistazo: hasta ahora el único
+// indicio era una clase en la barra de "navegación probable".
+$homeBadge = function (array $p): string {
+    return ($p['page_type'] ?? '') === 'home'
+        ? ' <span class="pp-badge pp-badge--home" title="Es la página que se sirve en «/»">Inicio</span>'
+        : '';
+};
+
+// Adónde lleva "Ver": a la URL pública si está publicada, y al preview del
+// panel si es un borrador (que en la web pública daría 404).
+$viewUrl = function (array $p): string {
+    if (($p['status'] ?? '') !== 'published') {
+        return base_url('admin/pages/' . (int) $p['id'] . '/preview');
+    }
+    return ($p['page_type'] ?? '') === 'home'
+        ? base_url('')
+        : base_url(ltrim((string) $p['slug'], '/'));
+};
+
+/**
+ * PAGES-OPS G2 — Los datos que necesita cualquier acción sobre la página. Van
+ * en el contenedor (fila o tarjeta) y los lee el mismo JS para las dos vistas:
+ * si cada vista tuviera su propio marcado, acabarían divergiendo.
+ */
+$actionData = function (array $p) use ($viewUrl): string {
+    $id = (int) $p['id'];
+    return ' data-page-id="' . $id . '"'
+        . ' data-page-title="' . e((string) $p['title']) . '"'
+        . ' data-page-status="' . e((string) ($p['status'] ?? 'draft')) . '"'
+        . ' data-page-type="' . e((string) ($p['page_type'] ?? '')) . '"'
+        . ' data-page-slug="' . e((string) $p['slug']) . '"'
+        . ' data-page-lang="' . e((string) ($p['language'] ?? '')) . '"'
+        . ' data-page-view="' . e($viewUrl($p)) . '"'
+        . ' data-page-edit="' . e(base_url('admin/pages/' . $id . '/edit')) . '"';
+};
+
 $parentOptions = function (?int $currentId, ?int $selectedId) use ($pageOptions) {
     $html = '<option value="">Raíz</option>';
     foreach ($pageOptions as $opt) {
@@ -44,7 +80,7 @@ $parentOptions = function (?int $currentId, ?int $selectedId) use ($pageOptions)
     return $html;
 };
 
-$renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge, $canvasBadge, $parentOptions, $typeInitial) {
+$renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge, $canvasBadge, $homeBadge, $parentOptions, $typeInitial, $actionData, $viewUrl) {
     $id = (int) $node['id'];
     $label = (string) (($node['nav_label'] ?? '') ?: $node['title']);
     $children = (array) ($node['children'] ?? []);
@@ -52,17 +88,14 @@ $renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge
     $status = (string) ($node['status'] ?? 'draft');
     ob_start();
     ?>
-    <li class="pp-map-node pp-map-node--depth-<?= min($depth, 3) ?>" data-page-id="<?= $id ?>">
+    <li class="pp-map-node pp-map-node--depth-<?= min($depth, 3) ?>" data-page-id="<?= $id ?>" data-page-lang="<?= e((string) ($node['language'] ?? '')) ?>">
         <article class="pp-map-card pp-map-card--<?= e($status) ?>"
-                 data-page-type="<?= e((string) $node['page_type']) ?>"
-                 data-page-title="<?= e((string) $node['title']) ?>"
+                 draggable="true"
+                 <?= $actionData($node) ?>
                  data-page-label="<?= e($label) ?>"
-                 data-page-slug="<?= e((string) $node['slug']) ?>"
-                 data-page-status="<?= e($status) ?>"
                  data-page-parent="<?= e((string) ($node['parent_id'] ?? '')) ?>"
                  data-page-nav="<?= e((string) ($node['nav_label'] ?? '')) ?>"
                  data-page-order="<?= (int) ($node['tree_sort_order'] ?? 0) ?>"
-                 data-page-edit="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>"
                  data-page-preview="<?= e(base_url('admin/pages/' . $id . '/preview')) ?>"
                  data-page-structure="<?= e('/admin/pages/' . $id . '/structure') ?>">
             <div class="pp-map-card__main">
@@ -72,16 +105,21 @@ $renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge
                         <span class="pp-map-card__type"><?= e($pageTypes[$node['page_type']] ?? $node['page_type']) ?></span>
                         <h3><?= e($label) ?></h3>
                     </div>
-                    <?= $statusBadge($node) . $canvasBadge($node) ?>
+                    <?= $statusBadge($node) . $homeBadge($node) . $canvasBadge($node) ?>
                 </div>
                 <div class="pp-map-card__meta">
                     <code>/<?= e($node['slug']) ?></code>
                     <span><?= count($children) ?> hijas</span>
                 </div>
                 <div class="pp-map-card__actions">
+                    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e($viewUrl($node)) ?>" target="_blank" rel="noopener">Ver</a>
                     <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>">Editar</a>
-                    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/pages/' . $id . '/preview')) ?>">Preview</a>
                     <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-inspect-page="<?= $id ?>">Estructura</button>
+                    <?php // Las acciones que cambian o destruyen van en un menú:
+                          // en una tarjeta pequeña, "Eliminar" a un click del resto
+                          // se pulsa sin querer. ?>
+                    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-page-menu-btn"
+                            data-page-menu aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">⋯</button>
                 </div>
             </div>
         </article>
@@ -113,7 +151,9 @@ $pageMapPayload = array_map(fn($p) => [
 <?php \Core\View::start('title'); ?>Mapa del sitio<?php \Core\View::end(); ?>
 <?php \Core\View::start('bodyClass'); ?>pp-pages-map-mode<?php \Core\View::end(); ?>
 <?php \Core\View::start('scripts'); ?>
-<script src="<?= e(base_url('admin/assets/js/pages-map.js')) ?>"></script>
+<?php // Versionado con filemtime: sin él, el navegador sirve el JS viejo y los
+      // cambios "no funcionan" aunque el código esté bien. ?>
+<script src="<?= e(base_url('admin/assets/js/pages-map.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/pages-map.js') ?: '1' ?>"></script>
 <?php \Core\View::end(); ?>
 
 <section class="pp-site-map"
@@ -229,6 +269,18 @@ $pageMapPayload = array_map(fn($p) => [
                                 <span><i class="pp-map-legend__dot pp-map-legend__dot--draft"></i>Borrador</span>
                                 <span><i class="pp-map-legend__dot pp-map-legend__dot--ai"></i>Sugerencia IA</span>
                             </div>
+                            <?php // PAGES-OPS G7 — Sin este filtro, en un sitio con
+                                  // dos idiomas el árbol mezcla las traducciones como
+                                  // raíces extra y deja de leerse como arquitectura. ?>
+                            <?php if (!empty($isMultilingual)): ?>
+                                <select class="pp-map-lang-filter" data-map-lang aria-label="Idioma del mapa">
+                                    <?php foreach (($mapLanguages ?? []) as $code): ?>
+                                        <option value="<?= e((string) $code) ?>"<?= $code === ($primaryLang ?? '') ? ' selected' : '' ?>>
+                                            <?= e($languageLabels[$code] ?? $code) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php endif; ?>
                             <div class="pp-map-density" aria-label="Densidad del mapa">
                                 <button type="button" data-map-density="cozy" class="is-active">Cómodo</button>
                                 <button type="button" data-map-density="compact">Compacto</button>
@@ -292,10 +344,39 @@ $pageMapPayload = array_map(fn($p) => [
                 <a href="<?= e(base_url('admin/pages/studio')) ?>" class="pp-btn pp-btn--primary">Crear primera página con IA</a>
             </div>
         <?php else: ?>
+            <?php // PAGES-OPS G6 — Buscador y filtros en cliente: el listado ya
+                  // viene entero del servidor y son decenas de páginas, no miles.
+                  // Recargar la página para filtrar sería peor experiencia. ?>
+            <div class="pp-pages-toolbar" data-pages-toolbar>
+                <input type="search" class="pp-pages-search" placeholder="Buscar por título o slug…"
+                       aria-label="Buscar páginas" data-pages-search>
+                <select data-pages-filter="status" aria-label="Filtrar por estado">
+                    <option value="">Todos los estados</option>
+                    <option value="published">Publicadas</option>
+                    <option value="draft">Borradores</option>
+                </select>
+                <select data-pages-filter="type" aria-label="Filtrar por tipo">
+                    <option value="">Todos los tipos</option>
+                    <?php foreach ($pageTypes as $typeKey => $typeLabel): ?>
+                        <option value="<?= e((string) $typeKey) ?>"><?= e((string) $typeLabel) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="pp-pages-toolbar__count" data-pages-count><?= count($pages) ?> páginas</span>
+            </div>
+
+            <div class="pp-pages-bulk" data-pages-bulk hidden>
+                <strong><span data-bulk-count>0</span> seleccionadas</strong>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-bulk-action="publish">Publicar</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-bulk-action="draft">Volver a borrador</button>
+                <button type="button" class="pp-btn pp-btn--danger pp-btn--sm" data-bulk-action="delete">Eliminar</button>
+                <button type="button" class="pp-link" data-bulk-clear>Quitar selección</button>
+            </div>
+
             <div class="pp-table-wrap">
                 <table class="pp-table">
                     <thead>
                         <tr>
+                            <th class="pp-pages-check"><input type="checkbox" data-bulk-all aria-label="Seleccionar todas"></th>
                             <th>Título</th>
                             <th>Slug</th>
                             <th>Tipo</th>
@@ -304,16 +385,18 @@ $pageMapPayload = array_map(fn($p) => [
                                 <th>Idiomas</th>
                             <?php endif; ?>
                             <th>Actualizada</th>
-                            <th style="width:180px">Acciones</th>
+                            <th style="width:220px">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($pages as $p): ?>
-                        <tr>
+                        <tr<?= $actionData($p) ?> data-pages-row
+                            data-search="<?= e(mb_strtolower((string) $p['title'] . ' ' . (string) $p['slug'])) ?>">
+                            <td class="pp-pages-check"><input type="checkbox" data-bulk-item value="<?= (int) $p['id'] ?>" aria-label="Seleccionar <?= e((string) $p['title']) ?>"></td>
                             <td><a href="<?= e(base_url('admin/pages/' . $p['id'] . '/edit')) ?>"><strong><?= e($p['title']) ?></strong></a></td>
                             <td><code>/<?= e($p['slug']) ?></code></td>
                             <td><?= e($pageTypes[$p['page_type']] ?? $p['page_type']) ?></td>
-                            <td><?= $statusBadge($p) . $canvasBadge($p) ?></td>
+                            <td><?= $statusBadge($p) . $homeBadge($p) . $canvasBadge($p) ?></td>
                             <?php if (!empty($isMultilingual)): ?>
                                 <td class="pp-tr-cell">
                                     <span class="pp-tr-own"><?= e($languageLabels[$p['language'] ?? ''] ?? ($p['language'] ?? '')) ?></span>
@@ -341,11 +424,10 @@ $pageMapPayload = array_map(fn($p) => [
                             <td><small><?= e($fmtDate($p['updated_at'])) ?></small></td>
                             <td>
                                 <div class="pp-actions">
+                                    <a href="<?= e($viewUrl($p)) ?>" class="pp-btn pp-btn--secondary pp-btn--sm" target="_blank" rel="noopener">Ver</a>
                                     <a href="<?= e(base_url('admin/pages/' . $p['id'] . '/edit')) ?>" class="pp-btn pp-btn--secondary pp-btn--sm">Editar</a>
-                                    <form method="POST" action="<?= e(base_url('admin/pages/' . $p['id'] . '/delete')) ?>" class="pp-inline-form" onsubmit="return confirm('¿Seguro que quieres eliminar «<?= e($p['title']) ?>»? Esta acción no se puede deshacer.');">
-                                        <input type="hidden" name="_csrf" value="<?= e(\Core\CSRF::token()) ?>">
-                                        <button type="submit" class="pp-btn pp-btn--danger pp-btn--sm">Eliminar</button>
-                                    </form>
+                                    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-page-menu-btn"
+                                            data-page-menu aria-haspopup="true" aria-expanded="false" aria-label="Más acciones para <?= e((string) $p['title']) ?>">⋯</button>
                                 </div>
                             </td>
                         </tr>

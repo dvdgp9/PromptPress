@@ -2046,3 +2046,459 @@ que nosotros deducimos. La hoja `/design.css` también la aplica.
 - **`renderHead()` tiene un orden de precedencia y hay que respetarlo.** Skin
   inferido → paleta elegida → tipografías propias. Guardar bien un dato no
   significa que llegue a la página: hay que mirar quién lo pisa después.
+
+---
+
+# [ONB-FOTOS] Subir fotos del negocio en el onboarding (y usarlas en la generación) — PLAN (31/07/2026, Planner)
+
+## Background and Motivation (ONB-FOTOS)
+
+Petición del usuario: poder subir fotos del negocio durante el onboarding, que se
+analicen, y que luego se usen al crear la web.
+
+Punto de partida real (importante, porque cambia el tamaño del trabajo): **el
+consumo ya está resuelto**. En [C3-FIX] (commit 29d7150) se arregló que las fotos
+propias van siempre al outline como pool prioritario, que el presupuesto de banco
+se calcula restando las propias, y que sin pareja léxica decide el modelo. Es
+decir: si hay filas en `media` con `source = 'upload'` y su `alt_text` descrito,
+la generación ya las prefiere sobre Unsplash.
+
+Lo que falta es **el momento**: hoy la única puerta de entrada de fotos propias es
+Medios (`/admin/media`), que el usuario descubre DESPUÉS del onboarding — cuando
+la home ya se ha generado con fotos de banco. El onboarding pide documentos
+(paso 4) y referencias visuales (paso 2, que son inspiración de diseño, no
+contenido), pero nunca pide el material fotográfico del negocio.
+
+## Key Challenges and Analysis (ONB-FOTOS)
+
+1. **Fotos propias ≠ referencias visuales.** Son dos cosas que se parecen mucho en
+   la UI y significan lo contrario: la referencia (paso 2) es "quiero que se
+   parezca a esto" y se guarda en `storage/uploads/{site}/references` como ajuste
+   `onboarding_visual_references`; la foto propia es contenido y tiene que acabar
+   en la tabla `media` con `source = 'upload'`, que es exactamente lo que filtra
+   `MediaLibraryService::images($siteId, N, true)`. Si se guardan mal, la
+   generación no las ve. El copy tiene que separarlas sin ambigüedad.
+
+2. **Reutilizar el endpoint que ya existe en vez de escribir otro.**
+   `POST /admin/media/upload` (MediaController::upload) ya acepta un archivo por
+   petición, valida con `MediaService::validate`, guarda con `MediaService::store`
+   (`source = 'upload'`, dimensiones incluidas), **dispara solo la descripción por
+   IA** (`describeAfterResponse`) y responde JSON con id/url/alt. Subir desde el
+   onboarding con una petición por archivo evita además el problema de
+   `post_max_size` que ya nos mordió en `saveReferenceImages` (un POST grande vacía
+   `$_POST` y `$_FILES` y el paso "no guarda nada" sin decir por qué).
+
+3. **La descripción tiene que estar lista ANTES de generar.** `describeAfterResponse`
+   es fire-and-forget: no hay garantía de que el `alt_text` esté escrito cuando el
+   paso 5 componga la home. Sin `alt_text`, `describeRow()` cae al nombre del
+   archivo ("IMG_2841 (sin descripción)"), que es justo el material con el que el
+   emparejado falla y la sección se va al banco. Hay que hacer la descripción
+   **visible y esperable**: el paso ya tiene un endpoint hecho para eso,
+   `POST /admin/media/describe-missing` (lotes de 3, devuelve `remaining`,
+   distingue fallo de IA de archivo ausente y corta el bucle honestamente).
+   El onboarding puede llamarlo en bucle con barra de progreso y dejar el alt
+   editable en la miniatura.
+
+4. **Invalidar el borrador de la home.** `saveReferenceImages()` llama a
+   `invalidateHomeDraft()` por una razón: si el usuario ya vio una preview y luego
+   cambia el material, la preview está mentida. Subir fotos tiene que invalidar
+   igual, o el usuario subirá 8 fotos y verá la misma home con Unsplash.
+
+5. **"Que se analicen" tiene dos lecturas.** La que da valor hoy es la descripción
+   por IA de cada foto (es lo que consume la generación). La otra —deducir sector,
+   paleta o estilo a partir de las fotos— es una función distinta que pisa el paso
+   2 (paleta desde logo) y el paso 1 (memoria). Propongo dejarla fuera de esta
+   tanda y decidirla aparte con datos.
+
+6. **Cuántas fotos.** `genericBusinessImages()` coge hasta 6 propias y
+   `MediaLibraryService::forAi()` hasta 14. Pedir 4–8 en el onboarding es lo
+   razonable: cubre una home entera sin banco y no convierte el paso en una tarea.
+   Tope duro sugerido: 12 (más solo estorba y alarga la descripción).
+
+7. **El paso tiene que ser saltable y honesto.** Si no hay fotos, la web se genera
+   con banco: hay que decirlo en el propio paso, no dejarlo como sorpresa.
+
+## Decisión de encaje (a validar por el usuario)
+
+Recomendación: **ampliar el paso 4** de "Documento" a "Materiales" con dos zonas
+(documentos · fotos), en vez de añadir un paso 6. El wizard ya tiene 5 pasos y la
+guía UX pide fricción mínima; documentos y fotos son la misma pregunta ("¿qué
+material tienes ya?") y el paso 4 es hoy el más ligero de todos.
+Alternativa si se quiere darle peso propio: paso nuevo entre 4 y 5.
+
+## High-level Task Breakdown (ONB-FOTOS)
+
+**F1 — Backend: recibir fotos del onboarding**
+- Endpoint `POST /admin/onboarding/upload-photos` (o reutilizar directamente
+  `/admin/media/upload` desde el JS del onboarding; decidir en F1 tras comprobar
+  que el CSRF y el `site_id` de sesión del onboarding sirven tal cual).
+- Guardar SIEMPRE vía `MediaService::store()` → `source = 'upload'`.
+- Tope 12 fotos, 8 MB, JPG/PNG/WebP; errores por archivo, no por lote.
+- Al guardar al menos una: `invalidateHomeDraft($siteId)`.
+- *Criterio de éxito:* subida real desde el paso; `MediaLibraryService::images($id, 6, true)`
+  devuelve las fotos; `onboarding_home_draft` queda vacío.
+
+**F2 — Backend: descripción con progreso**
+- Reutilizar `POST /admin/media/describe-missing` (lotes de 3 + `remaining`).
+- *Criterio de éxito:* tras el bucle, `countMissingAlt($siteId) === 0` y cada
+  `alt_text` describe la foto en el idioma del sitio.
+
+**F3 — UI del paso**
+- Dropzone propia para fotos, separada del dropzone de documentos, con copy que la
+  distinga de las referencias visuales del paso 2.
+- Rejilla de miniaturas: estado *subiendo → describiendo → descrita*, alt visible y
+  editable (`POST /admin/media/{id}/alt`), botón de borrar.
+- Estado vacío honesto: "sin fotos usaremos un banco de imágenes".
+- CSS en `admin/assets/css/*` (nunca inline).
+- *Criterio de éxito:* subir 4 fotos, ver las 4 descripciones aparecer, editar una,
+  borrar otra, recargar y que el estado persista.
+
+**F4 — Que la generación las use de verdad (verificación E2E, no supuesto)**
+- Completar el onboarding con fotos y comprobar en la generación real de la home:
+  las fotos llegan al prompt, las secciones eligen del POOL y las descargas de
+  Unsplash bajan (idealmente 0 si cubren).
+- Revisar si el tope de 6 en `genericBusinessImages()` se queda corto ahora que
+  pedimos hasta 12.
+- *Criterio de éxito:* misma evidencia que en [C3-FIX] (conteo de fotos propias
+  usadas vs descargas de banco), con el camino que recorre el usuario.
+
+**F5 — Tests**
+- Suite nueva `tests/onboarding_photos.php`, sin gastar IA salvo lo imprescindible:
+  la foto subida queda como `source = 'upload'` y la ve `images(ownOnly)`; el logo
+  sigue excluido; el borrador de la home se invalida; los límites (tipo, tamaño,
+  tope) rechazan bien; `countMissingAlt` baja al describir.
+- *Criterio de éxito:* suite en verde + regresión completa de suites.
+
+## Project Status Board (ONB-FOTOS)
+
+- [ ] F1 — Backend: subida de fotos desde el onboarding
+- [ ] F2 — Descripción por IA con progreso
+- [ ] F3 — UI del paso (dropzone + rejilla + alt editable)
+- [ ] F4 — Verificación E2E de la generación con fotos propias
+- [ ] F5 — Tests + regresión
+
+## Executor's Feedback or Assistance Requests (ONB-FOTOS)
+
+Pendiente de confirmar por el usuario antes de ejecutar:
+1. ¿Ampliar el paso 4 a "Materiales" (recomendado) o paso nuevo?
+2. ¿Esperar a que terminen las descripciones antes de dejar avanzar (recomendado,
+   es lo que hace que la generación las use) o describir en segundo plano?
+3. ¿Análisis extra de las fotos (sector/estilo/paleta) dentro o fuera de esta tanda?
+   Recomendación: fuera.
+
+## Decisiones cerradas (31/07/2026, usuario)
+
+1. **Encaje: ampliar el paso 4.** Pasa de "Documento" a "Materiales", con dos zonas
+   (documentos · fotos del negocio). El wizard sigue con 5 pasos.
+2. **Descripción bloqueante con progreso.** Se describe con IA antes de dejar
+   avanzar, con barra de progreso sobre `POST /admin/media/describe-missing`. Es lo
+   que garantiza que la generación entienda las fotos y no se vaya al banco.
+3. **Sin análisis extra en esta tanda.** Nada de deducir sector, estilo ni paleta a
+   partir de las fotos: se decide aparte cuando veamos el resultado en generación.
+
+## Project Status Board (ONB-FOTOS) — actualizado 31/07/2026
+
+- [x] F1 — Backend: subida de fotos desde el onboarding
+- [x] F2 — Descripción por IA con progreso
+- [x] F3 — UI del paso (dropzone + rejilla + alt editable)
+- [x] F4 — Verificación E2E de la generación con fotos propias
+- [x] F5 — Tests + regresión
+
+## Current Status / Progress Tracking (ONB-FOTOS · 31/07/2026, Executor)
+
+**Qué se ha hecho**
+
+- `OnboardingController`: tres endpoints JSON nuevos —`uploadPhoto`, `updatePhotoAlt`,
+  `deletePhoto`— más `saveBusinessPhotos()` (camino sin JS) y `businessPhotos()`
+  para pintar la rejilla. Constante `BUSINESS_PHOTOS_MAX = 12`. Todo pasa por
+  `MediaService::store()`, así que la foto nace con `source = 'upload'`, que es
+  lo que filtra el pool de la generación. Cualquier alta, cambio de descripción
+  o borrado llama a `invalidateHomeDraft()`.
+- Rutas: `/admin/onboarding/upload-photo`, `/photo-alt`, `/photo-delete`.
+- Paso 4 renombrado a **Materiales**: fotos arriba, documentos debajo, con copy
+  que lo separa explícitamente de las referencias visuales del paso 2.
+- `onboarding.js` · `bindBusinessPhotos()`: drag&drop y selector, **una petición
+  por archivo**, rejilla con miniatura + descripción editable + borrar, bucle
+  sobre `/admin/media/describe-missing` con progreso, y el botón "Continuar"
+  deshabilitado mientras se sube o se describe.
+- CSS en `admin/assets/css/admin.css` (nada inline).
+
+**Verificación (hecha, no supuesta)**
+
+- Subida real por HTTP: dos fotos → `source = 'upload'`, `images(ownOnly)` pasa de
+  1 a 3, `onboarding_home_draft` vaciado. Descripción por lotes: 2 descritas en
+  español y correctas, `remaining = 0`.
+- Límites: la foto 13 se rechaza con mensaje ("ya tienes 12"); un `.txt` se
+  rechaza por tipo; un id de otro sitio da 404; sin CSRF, 403. Borrado: quita la
+  fila y el archivo del disco.
+- Flujo completo por el navegador (drop simulado con un `File` real): subida →
+  análisis → "Fotos analizadas…", 4 tarjetas descritas, "Continuar" reactivado,
+  cero errores en consola.
+- **F4, la que importa**: `prepare-home` real con 4 fotos propias → las 4 llegan
+  al prompt de `COMPOSE_CANVAS_PAGE` dentro del "POOL DE FOTOS PROPIAS" con su
+  descripción, **0 descargas de Unsplash** (ninguna fila nueva en `media`, 0 URLs
+  remotas) y la home usa **2 fotos propias** como fondo de sección. Ojo al leerlo:
+  las fotos de fondo viven en la columna `css` de `page_canvas`, no en `html`.
+- `tests/onboarding_photos.php` NUEVO: **28 comprobaciones** sin gastar IA.
+- **Regresión: todas las suites en verde.** `update_from_zip` no cuenta (se niega
+  fuera de `PP_ENV=development`, por diseño).
+- `site_languages_model` falló en la primera pasada por lo de siempre: páginas
+  creadas durante la propia tanda sin `translation_group` (el borrador de home de
+  mi verificación y las páginas de `canvas_generate` / `dmb2_reference_regen`).
+  Borradas esas tres, la suite pasa. La base vuelve a **30 páginas**.
+- **Estado de dev restaurado**: borradas las fotos de prueba (filas + archivos);
+  el sitio vuelve a 1 imagen propia (el PNG de "TEST" que ya estaba) y 31 de
+  banco. El borrador de home quedó vacío y se regenerará solo al entrar al paso 5.
+
+### Lessons (ONB-FOTOS)
+
+- **La mitad del trabajo ya estaba hecha y verlo primero evitó rehacerla.** El
+  consumo se arregló en [C3-FIX]; aquí solo faltaba la puerta de entrada. Antes
+  de diseñar, mirar qué parte del camino ya existe.
+- **Buscar una ruta en un JSON de `ai_logs` sin escapar las barras da un falso
+  negativo.** `storage/uploads` aparece como `storage\/uploads`: parecía que las
+  fotos no llegaban al prompt cuando sí llegaban.
+- **Una página Canvas no guarda sus imágenes solo en el HTML.** Los fondos de
+  sección van en la columna `css`; contar `<img>` en `html` daba "0 fotos usadas"
+  con dos fotos propias perfectamente colocadas.
+- **Describir después de responder no sirve cuando lo siguiente es generar.**
+  `describeAfterResponse` vale en Medios; en el onboarding el paso 5 llega antes
+  y la foto entraría al prompt como nombre de archivo. Por eso el paso espera con
+  barra de progreso.
+- **Una petición por archivo no es un capricho.** Es lo que evita el `post_max_size`
+  que ya vació `$_FILES` con las referencias, y de paso da error por foto.
+
+---
+
+# [PAGES-OPS] /admin/pages: operaciones que faltan sobre las páginas — PLAN (31/07/2026, Planner)
+
+## Background and Motivation (PAGES-OPS)
+
+El usuario reporta que en `/admin/pages` faltan opciones: no se puede devolver una
+página a borrador, no se puede eliminar desde el mapa (solo desde la lista) y no se
+puede elegir otra página como inicio. Pide además revisar qué más falta.
+
+Revisado el código: `views/admin/pages/index.php` (mapa + lista),
+`app/Controllers/Admin/PageController.php`, `admin/assets/js/pages-map.js`,
+`CanvasController` y el resolutor de home en `app/Controllers/Public/PageController.php`.
+
+## Key Challenges and Analysis (PAGES-OPS)
+
+### Lo que confirma el reporte
+
+1. **Volver a borrador.** El backend YA existe por dos caminos distintos:
+   `PageController::update()` guarda `status` desde el formulario clásico, y
+   `POST /admin/canvas/{id}/publish` con `publish=0` despublica. Lo que falta es la
+   acción en la lista y en el mapa. Ojo al detalle que lo hace más grave de lo que
+   parece: **para una página canvas el formulario clásico es inalcanzable** —
+   `PageController::edit()` redirige al Studio si `render_mode = 'canvas'`—, así que
+   hoy despublicar solo se puede entrando al Studio de cada página.
+
+2. **Eliminar desde el mapa.** La tarjeta del mapa ofrece Editar / Preview /
+   Estructura / Crear hija; borrar solo está en la tabla de la lista.
+
+3. **Elegir otra home.** No hay ninguna acción "marcar como inicio". La home pública
+   se resuelve en `Public\PageController::homePageFor()` por
+   `page_type = 'home' AND status = 'published'`, por idioma, con
+   `ORDER BY updated_at DESC LIMIT 1`. De ahí salen dos problemas:
+   - `page_type` solo se edita en el formulario clásico → en una página canvas **no
+     se puede cambiar en absoluto**, y hoy casi todas las páginas de marketing son canvas.
+   - Si dos páginas tienen `page_type='home'`, gana **la actualizada más
+     recientemente**: la home del sitio puede cambiar sola al editar la otra. Eso no
+     es una funcionalidad que falte, es un comportamiento silencioso que hay que cerrar.
+
+### Lo que he encontrado además (ordenado por daño, no por esfuerzo)
+
+4. **Borrar es definitivo y silencioso.** Sin papelera ni confirmación informada:
+   - las hijas no se borran ni se avisan — la FK es `ON DELETE SET NULL`, así que
+     **suben a raíz** y el mapa cambia de forma sin que nadie lo haya pedido;
+   - las traducciones del mismo `translation_group` se quedan huérfanas;
+   - si la página estaba publicada e indexada, no se ofrece **redirección 301**
+     aunque `SeoRedirectService` ya la crea sola al cambiar un slug y hay monitor de
+     404s. La pieza existe; este camino no la usa.
+5. **Borrar o despublicar la home deja el sitio sin `/`** (cae a `renderFallback`)
+   sin ningún aviso previo.
+6. **No se puede duplicar una página.** Es la operación más natural cuando ya tienes
+   una landing que funciona y quieres la siguiente.
+7. **La lista no tiene búsqueda, ni filtro por estado/tipo, ni orden por columna, ni
+   acciones en lote.** Con 30 páginas ya es una tabla plana que se recorre a ojo.
+8. **Falta el enlace "Ver"** a la URL pública (o al preview del borrador) en la lista.
+9. **El mapa no permite reordenar arrastrando**: el orden es un campo numérico dentro
+   del inspector.
+10. **La home no se distingue en el mapa ni en la lista.** El único indicio es la
+    clase `is-home` en la barra de "navegación probable".
+11. **En sitios multi-idioma el mapa mezcla idiomas**: `buildPageTree()` no filtra por
+    idioma, así que las traducciones aparecen como raíces extra y la arquitectura se
+    vuelve ilegible. La lista sí tiene columna de idiomas; el mapa no.
+12. **Antes de borrar no se puede ver quién enlaza a esa página**, aunque
+    `LinkAuditService` ya lo calcula para `/admin/links`.
+
+### El hilo común
+
+Casi todo lo que falta es la misma pieza: **una barra de acciones por página,
+coherente en lista y mapa**, apoyada en endpoints que en su mayoría ya existen. Lo
+único que necesita decisión de producto de verdad es la home (cómo se marca y qué
+pasa con la anterior) y si el borrado gana papelera o se queda en confirmación
+informada.
+
+## Propuesta (pendiente de que el usuario elija alcance)
+
+- **P1 · Acciones por página, iguales en lista y mapa**: publicar / volver a borrador,
+  eliminar (también desde el mapa), ver, duplicar. Un único endpoint de estado que
+  valga para clásicas y canvas.
+- **P2 · Home explícita**: acción "marcar como inicio" que ponga `page_type='home'` en
+  la elegida y **degrade la anterior** en la misma operación (fin de la ambigüedad del
+  `updated_at DESC`), con la home señalada en mapa y lista y protegida al borrar.
+- **P3 · Borrado informado**: el diálogo dice qué arrastra (hijas, traducciones,
+  enlaces entrantes) y ofrece crear la redirección 301 si estaba publicada.
+- **P4 · Lista usable**: buscador, filtros por estado/tipo, y acciones en lote.
+- **P5 · Mapa**: reordenar arrastrando y filtro por idioma en sitios multi-idioma.
+
+## Decisiones cerradas (31/07/2026, usuario)
+
+- Entra **todo**: P1 (acciones por página), P2 (home explícita), P3 (borrado
+  informado), P4 (lista usable) y P5 (mapa).
+- **Borrado: confirmación informada**, no papelera. Sigue siendo definitivo, pero
+  antes dice qué se lleva por delante y ofrece la redirección 301. Sin tablas nuevas.
+
+## High-level Task Breakdown (PAGES-OPS)
+
+**G1 — Un único endpoint de estado que valga para los dos mundos**
+- `POST /admin/pages/{id}/status` con `status=published|draft`. Sirve para páginas
+  clásicas y canvas (hoy son dos caminos distintos: el formulario y
+  `/admin/canvas/{id}/publish`). Invalida caché igual que `update()`, y mantiene
+  `published_at` con el mismo criterio.
+- El Studio sigue usando su endpoint: no se toca lo que ya funciona.
+- Aviso al despublicar la home: el sitio se queda sin `/`.
+- *Criterio:* despublicar y republicar una página canvas y una clásica desde la
+  lista; la web pública lo refleja (200 → 404 → 200) y el badge cambia sin recargar.
+
+**G2 — Barra de acciones por página, la misma en lista y mapa**
+- Acciones: Ver (URL pública o preview si es borrador), Editar, Publicar / Volver a
+  borrador, Duplicar, Marcar como inicio, Eliminar.
+- Un solo sitio que genere esa barra para no acabar con dos verdades: la tabla y la
+  tarjeta del mapa consumen el mismo marcado/JS.
+- *Criterio:* todas las acciones funcionan desde las dos vistas y el inspector, y
+  la página no se recarga entera para un cambio de estado.
+
+**G3 — Duplicar página**
+- `POST /admin/pages/{id}/duplicate`: copia la fila (título «… (copia)», slug único,
+  **siempre borrador**), su contenido (`page_canvas` o `page_sections`), y los metadatos.
+- **Grupo de traducción propio** (vía `createPageRow`, que ya hace `UUID()`): una copia
+  no es una traducción. Ojo con esto, es el error fácil.
+- *Criterio:* duplicar una canvas y una clásica; la copia abre en su editor con el
+  mismo contenido, en borrador, sin tocar la original ni su grupo.
+
+**G4 — Home explícita (y fin de la ambigüedad actual)**
+- `POST /admin/pages/{id}/set-home`: pone `page_type='home'` en la elegida y **degrada
+  la anterior del mismo idioma** a `landing` en la misma operación (no hay tipo
+  "página" genérico en `PAGE_TYPES`; `landing` es el neutro que ya usa el alta).
+- Alcance por idioma: cada idioma tiene su home, como ya asume `homePageFor()`.
+- Si la elegida es borrador, se avisa de que no se servirá hasta publicarla.
+- Home señalada en mapa y lista, y protegida en el diálogo de borrado.
+- *Criterio:* marcar otra página como inicio cambia `/` en la web pública; deja de
+  haber dos `page_type='home'` a la vez; editar la antigua ya no puede recuperar la
+  home por `updated_at`.
+
+**G5 — Borrado informado + redirección**
+- `GET /admin/pages/{id}/delete-info` (JSON): hijas que subirían a raíz, traducciones
+  del grupo, enlaces entrantes (`LinkAuditService`), si estaba publicada y si es la home.
+- Diálogo con ese resumen y casilla **"crear redirección 301 hacia…"** (selector de
+  página) cuando la página estaba publicada. Usa `SeoRedirectService`.
+- *Criterio:* borrar una página publicada con hijas y enlaces entrantes muestra los
+  tres avisos, y con la casilla marcada la URL vieja responde 301 a la nueva.
+
+**G6 — Lista usable**
+- Buscador por título/slug, filtros por estado y tipo, y selección múltiple con
+  acciones en lote (publicar / volver a borrador / eliminar). Filtrado en cliente:
+  el listado ya viene entero y son decenas de páginas, no miles.
+- Columna "Ver" y marca de home.
+- *Criterio:* buscar "contacto" deja solo esa; seleccionar 3 borradores y publicarlos
+  en un gesto; el filtro de idiomas existente sigue funcionando.
+
+**G7 — Mapa: arrastrar para reordenar y filtro de idioma**
+- Drag & drop de tarjetas para cambiar padre y orden, escribiendo por el endpoint de
+  estructura que ya existe (con su validación de ciclos).
+- Selector de idioma cuando el sitio es multi-idioma: hoy `buildPageTree()` mezcla
+  idiomas y las traducciones aparecen como raíces extra.
+- *Criterio:* mover una rama entera y recargar sin que cambie nada de sitio; en un
+  sitio con dos idiomas, el mapa enseña un idioma cada vez.
+
+**G8 — Tests + regresión**
+- Suite `tests/pages_operations.php`: estado (los dos render modes), duplicado (grupo
+  propio, borrador, contenido copiado), set-home (degradación de la anterior, por
+  idioma), delete-info (recuento de hijas/traducciones/enlaces) y la redirección 301
+  al borrar. Sin gastar IA.
+- *Criterio:* suite en verde + regresión completa.
+
+## Project Status Board (PAGES-OPS)
+
+- [ ] G1 — Endpoint único de estado (publicar / volver a borrador)
+- [ ] G2 — Barra de acciones compartida entre lista y mapa
+- [ ] G3 — Duplicar página
+- [ ] G4 — Home explícita con degradación de la anterior
+- [ ] G5 — Borrado informado + redirección 301
+- [ ] G6 — Lista: buscador, filtros y acciones en lote
+- [ ] G7 — Mapa: drag & drop y filtro de idioma
+- [ ] G8 — Tests + regresión
+
+## Current Status / Progress Tracking (PAGES-OPS · 31/07/2026, Executor)
+
+**Todo hecho (G1–G8).**
+
+Backend (`PageController`, todo JSON): `updateStatus` (un solo camino para clásicas
+y canvas), `duplicate`, `setHome`, `deleteInfo`, `move`, `bulk`, y `destroy`
+ampliado con `redirect_to` + respuesta JSON. Internos nuevos: `applyStatus`,
+`demoteOtherHomes`, `copyPageContent`, `inboundLinks`, `redirectTargets`,
+`createDeletionRedirect`. Rutas en `app/routes.php` (con `/pages/bulk` ANTES de
+`/pages/{id}`, o lo captura como id).
+
+Front: `views/admin/pages/index.php` (marca de inicio, "Ver", buscador, filtros,
+selección múltiple, menú ⋯ en lista y tarjetas, selector de idioma del mapa) y
+`admin/assets/js/pages-map.js` (menú, diálogo de borrado informado, lote, filtros,
+filtro de idioma, drag & drop). CSS al final de `admin/assets/css/admin.css`.
+
+**Verificación (por HTTP y por navegador, no supuesta)**
+
+- Estado: publicar/despublicar una canvas y una clásica; el aviso de "te quedas sin
+  portada" salta al despublicar la home; estado inválido → 422; el badge cambia en
+  la propia fila/tarjeta sin recargar.
+- Duplicar: copia de una canvas con su HTML+CSS (4440/4819 bytes idénticos), en
+  borrador, `home` → `landing`, slug único y **grupo de traducción distinto**.
+- Home: en el sitio de dev había **22 páginas con `page_type='home'`** (basura de
+  suites), que es justo la ambigüedad del `updated_at DESC`. Marcar una degradó las
+  otras 21 y quedó **una sola home**; con la elegida en borrador la web cae al
+  fallback y el aviso lo dice; al marcar la buena, `GET /` → 200.
+- Borrado informado: `delete-info` detecta hijas, traducciones y **20 páginas que
+  enlazaban** a la de prueba; borrando una publicada con destino,
+  `/inicio-canvas-13-2` pasó de 200 a **301 → /contacto**.
+- Lote: publicar dos de golpe; borrar con la home dentro la salta con motivo.
+- Mapa: arrastrar una tarjeta sobre otra la hace hija; soltar en el borde superior
+  la coloca como hermana y el servidor renumera (0,1,2); el ciclo se rechaza.
+- Idioma del mapa: activando `fr` temporalmente, con "Español" la página francesa
+  queda oculta y con "Français" solo se ve ella. Revertido después.
+- `tests/pages_operations.php` NUEVO: **39 comprobaciones**, sin IA.
+- **Regresión completa en verde** (`update_from_zip` se niega por diseño).
+  `site_languages_model` volvió a fallar por las páginas sin `translation_group`
+  que dejan `canvas_generate` y `dmb2_reference_regen`; borradas, pasa. Es el
+  problema de fondo que ya está anotado como tarea aparte.
+
+**Estado de dev**: 30 páginas, una sola home (135 «Inicio»), 0 redirecciones, 0
+páginas huérfanas de idioma/grupo. Las 21 homes duplicadas quedaron degradadas a
+`landing`: es lo que hace la propia función y deja la base coherente.
+
+### Lessons (PAGES-OPS)
+
+- **`display:flex` en la clase pisa el atributo `[hidden]`.** La barra de lote se
+  quedaba visible con 0 seleccionadas. Ya estaba avisado en el CSS de `pp-ps` y he
+  vuelto a caer; ahora hay regla `[hidden]{display:none}` para la barra y para la
+  rejilla de fotos del onboarding, y un test que lo comprueba.
+- **En el mapa hay dos elementos con el mismo `data-page-id`**: el `<li>` del árbol
+  y la tarjeta. Coger "el primero" daba diálogos que decían «esta página».
+- **Una badge más puede romper un layout que parecía estable**: con estado + inicio
+  + canvas, el título de la tarjeta se partía letra a letra (`flex:1` + 
+  `overflow-wrap:anywhere`). Las badges ahora bajan de línea antes de estrujarlo.
+- **La renumeración de hermanas la hace el servidor.** Si la hiciera el navegador
+  serían N peticiones y un árbol a medio ordenar en cuanto una fallara.
+- **La ambigüedad de la home no era teórica**: 22 páginas marcadas como inicio en la
+  base de dev, sirviendo la última editada.

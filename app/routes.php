@@ -170,6 +170,14 @@ $router->group('/admin', function (\Core\Router $r) {
     // I18N-FULL T5.5 — OJO: van ANTES de `/pages/{id}`, que si no captura
     // «translate-all» como si fuera un id de página y devuelve 404.
     $r->post('/pages/translate-all',  [PageController::class, 'translateAll']);
+    // PAGES-OPS — acciones sobre páginas desde el mapa y la lista. `bulk` va
+    // antes de `/pages/{id}` por lo mismo que `translate-all`.
+    $r->post('/pages/bulk',           [PageController::class, 'bulk']);
+    $r->post('/pages/{id}/status',    [PageController::class, 'updateStatus']);
+    $r->post('/pages/{id}/duplicate', [PageController::class, 'duplicate']);
+    $r->post('/pages/{id}/set-home',  [PageController::class, 'setHome']);
+    $r->get('/pages/{id}/delete-info', [PageController::class, 'deleteInfo']);
+    $r->post('/pages/{id}/move',      [PageController::class, 'move']);
     $r->post('/pages/translate-job/{id}/step', [PageController::class, 'translateJobStep']);
     $r->post('/pages/{id}/ai-variations', [PageController::class, 'aiVariations']);
     $r->post('/pages/{id}/ai-variations/apply', [PageController::class, 'applyVariation']);

@@ -11043,3 +11043,62 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 .pp-update-backup-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--pp-border,#e5e7eb);border-radius:9px;background:#fff}
 .pp-update-backup-list strong{display:block;font-size:.9rem}
 .pp-update-backup-list small{color:var(--pp-text-muted,#6b7280);font-size:.78rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ============================================================
+   PAGES-OPS — acciones sobre páginas (mapa + lista)
+   ============================================================ */
+
+/* La portada, visible de un vistazo en las dos vistas. */
+.pp-badge--home{background:#fff7ed;color:#c2410c}
+
+/* Con tres badges (estado + inicio + canvas) la cabecera de la tarjeta se
+   quedaba sin sitio y el título se partía letra a letra: las badges bajan a su
+   propia línea antes de estrujar el título. */
+.pp-map-card__top{flex-wrap:wrap}
+.pp-map-card__title{flex:1 1 140px}
+.pp-map-card__top>.pp-badge{flex:0 0 auto}
+
+/* Menú de acciones: va en <body> para que no lo recorte el overflow del mapa. */
+.pp-page-menu-btn{padding-inline:10px;font-weight:900;line-height:1}
+.pp-page-menu{position:absolute;z-index:1200;min-width:200px;padding:6px;border:1px solid var(--pp-border,#e5e7eb);border-radius:12px;background:#fff;box-shadow:0 18px 40px -20px rgba(15,23,42,.45)}
+.pp-page-menu hr{margin:6px 4px;border:0;border-top:1px solid var(--pp-border,#e5e7eb)}
+.pp-page-menu__item{display:block;width:100%;padding:8px 10px;border:0;border-radius:8px;background:none;color:var(--pp-text,#111827);font:inherit;font-size:.86rem;text-align:left;cursor:pointer}
+.pp-page-menu__item:hover{background:#f3f4f6}
+.pp-page-menu__item.is-danger{color:#b91c1c}
+.pp-page-menu__item.is-danger:hover{background:#fef2f2}
+
+/* Barra de la lista: buscador + filtros + contador */
+.pp-pages-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+.pp-pages-search{flex:1 1 260px;min-width:200px;padding:8px 12px;border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;font:inherit}
+.pp-pages-toolbar select{padding:8px 10px;border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;background:#fff;font:inherit;font-size:.86rem}
+.pp-pages-toolbar__count{color:var(--pp-text-muted,#6b7280);font-size:.82rem}
+
+/* Acciones en lote */
+.pp-pages-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;border:1px solid rgba(234,88,12,.28);border-radius:12px;background:#fff7ed}
+/* `display:flex` en la propia clase pisa el atributo [hidden]: sin esta regla
+   la barra de lote se queda visible con 0 páginas seleccionadas. */
+.pp-pages-bulk[hidden]{display:none}
+.pp-pages-bulk strong{font-size:.86rem}
+.pp-pages-check{width:36px}
+.pp-pages-check input{width:16px;height:16px;cursor:pointer}
+
+/* Arrastrar y soltar en el mapa */
+.pp-map-card[draggable="true"]{cursor:grab}
+.pp-map-card.is-dragging{opacity:.45;cursor:grabbing}
+.pp-map-card.is-drop-into{outline:2px solid var(--pp-primary,#ea580c);outline-offset:2px}
+.pp-map-card.is-drop-before{box-shadow:0 -3px 0 0 var(--pp-primary,#ea580c)}
+.pp-map-lang-filter{padding:6px 10px;border:1px solid var(--pp-border,#e5e7eb);border-radius:999px;background:#fff;font:inherit;font-size:.78rem}
+
+/* Diálogo de borrado informado */
+.pp-del-overlay{position:fixed;inset:0;z-index:1300;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.55)}
+.pp-del-dialog{width:min(560px,100%);max-height:86vh;overflow:auto;display:grid;gap:14px;padding:22px;border-radius:16px;background:#fff;box-shadow:0 30px 70px -30px rgba(15,23,42,.6)}
+.pp-del-dialog h3{margin:0;font-size:1.1rem}
+.pp-del-warnings{display:grid;gap:8px;margin:0;padding-left:18px;color:var(--pp-text,#111827);font-size:.88rem;line-height:1.5}
+.pp-del-warnings li.is-danger{color:#b91c1c}
+.pp-del-clean{margin:0;color:var(--pp-text-muted,#6b7280);font-size:.88rem}
+.pp-del-redirect{display:grid;gap:8px;padding:12px 14px;border:1px solid var(--pp-border,#e5e7eb);border-radius:12px;background:#f8fafc}
+.pp-del-redirect label{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700}
+.pp-del-redirect select{padding:8px 10px;border:1px solid var(--pp-border,#e5e7eb);border-radius:10px;background:#fff;font:inherit;font-size:.84rem}
+.pp-del-redirect small{color:var(--pp-text-muted,#6b7280);font-size:.78rem;line-height:1.45}
+.pp-del-final{margin:0;color:#b91c1c;font-size:.84rem;font-weight:700}
+.pp-del-actions{display:flex;justify-content:flex-end;gap:10px}

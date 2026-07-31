@@ -81,6 +81,9 @@ class PageController
         // esto no ve una columna nueva que no entiende.
         $data['isMultilingual']    = LanguageService::isMultilingual($siteId);
         $data['languageLabels']    = LanguageService::LANGUAGES;
+        // PAGES-OPS G7 — el mapa se enseña de un idioma cada vez.
+        $data['mapLanguages']      = LanguageService::activeFor($siteId);
+        $data['primaryLang']       = LanguageService::primaryFor($siteId);
         $data['translationStatus'] = [];
         $data['translationCoverage'] = [];
         $data['untranslatedFilter']  = '';
@@ -1441,14 +1444,492 @@ class PageController
         $id     = (int) ($params['id'] ?? 0);
         $page   = self::findOrFail($id, $siteId);
 
+        // PAGES-OPS G5 — Si la página estaba publicada, su URL puede estar
+        // indexada y enlazada: se ofrece dejar una redirección 301 en su sitio.
+        // Se crea ANTES de borrar, que es cuando todavía sabemos su slug.
+        $redirectTo = trim((string) Request::post('redirect_to', ''));
+        $redirected = null;
+        if ($redirectTo !== '' && ($page['status'] ?? '') === 'published') {
+            $redirected = self::createDeletionRedirect($siteId, $page, $redirectTo);
+        }
+
         // CASCADE en page_sections vía FK → no hace falta borrar manualmente
         Database::execute('DELETE FROM pages WHERE id = ? AND site_id = ?', [$id, $siteId]);
 
         // T7.3: invalidar cache público.
         CacheService::invalidatePage($siteId, $page);
 
-        Session::flash('success', 'Página eliminada correctamente.');
+        $message = 'Página eliminada correctamente.'
+            . ($redirected !== null ? ' Su URL ahora redirige a /' . ltrim($redirected, '/') . '.' : '');
+
+        if (self::wantsJson()) {
+            Response::json(['ok' => true, 'message' => $message, 'redirect_to' => $redirected]);
+        }
+
+        Session::flash('success', $message);
         Response::redirect(base_url('admin/pages'));
+    }
+
+    // ======================================================================
+    // PAGES-OPS — Operaciones sobre páginas desde el mapa y la lista
+    //
+    // Todo lo de aquí responde JSON: la pantalla de páginas actúa sobre la
+    // fila o la tarjeta sin recargar. Un principio en los tres endpoints de
+    // escritura: la operación completa se resuelve en el servidor (degradar la
+    // home anterior, copiar el contenido, crear la redirección), nunca en dos
+    // llamadas desde el navegador que puedan quedarse a medias.
+    // ======================================================================
+
+    /**
+     * G1 — Publicar / volver a borrador. Un único camino para páginas clásicas
+     * y canvas: hasta ahora eran dos (el formulario y el botón del Studio), y
+     * desde la lista no había ninguno.
+     *
+     * POST /admin/pages/{id}/status
+     */
+    public function updateStatus(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $page   = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+
+        $status = (string) Request::post('status', '');
+        if (!in_array($status, self::STATUSES, true)) {
+            Response::json(['ok' => false, 'error' => 'Estado no válido.'], 422);
+        }
+
+        self::applyStatus($siteId, $page, $status);
+
+        // Despublicar la home deja la web sin portada: el visitante que entra
+        // por "/" cae en la página de cortesía.
+        $warning = null;
+        if ($status === 'draft' && ($page['page_type'] ?? '') === 'home') {
+            $warning = 'Era la página de inicio: tu web se queda sin portada hasta que publiques otra.';
+        }
+
+        Response::json([
+            'ok' => true,
+            'status' => $status,
+            'message' => $status === 'published' ? 'Página publicada.' : 'Página devuelta a borrador.',
+            'warning' => $warning,
+        ]);
+    }
+
+    /**
+     * G3 — Duplicar una página con su contenido. Siempre nace en borrador: una
+     * copia recién hecha nunca debería estar viva en la web.
+     *
+     * POST /admin/pages/{id}/duplicate
+     */
+    public function duplicate(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        self::ensureHierarchySchema();
+        $page = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+
+        $title = mb_substr(trim((string) $page['title']) . ' (copia)', 0, 255);
+        // Solo puede haber una home: la copia nace como landing, que es el tipo
+        // neutro que ya usa el alta de páginas.
+        $type = (string) ($page['page_type'] ?? 'landing');
+        if ($type === 'home') $type = 'landing';
+
+        // createPageRow() genera un `translation_group` NUEVO (UUID). Importa:
+        // copiar el grupo de la original convertiría la copia en su "traducción".
+        $newId = self::createPageRow($siteId, [
+            'title' => $title,
+            'slug' => (string) $page['slug'],
+            'page_type' => $type,
+            'language' => (string) ($page['language'] ?? ''),
+            'meta_title' => (string) ($page['meta_title'] ?? ''),
+            'meta_description' => (string) ($page['meta_description'] ?? ''),
+            'seo_noindex' => (int) ($page['seo_noindex'] ?? 0),
+            'seo_exclude_sitemap' => (int) ($page['seo_exclude_sitemap'] ?? 0),
+            'canonical_url' => (string) ($page['canonical_url'] ?? ''),
+            'status' => 'draft',
+        ]);
+
+        // Lo que `createPageRow()` no cubre: sitio en el árbol y modo de render.
+        // Sin `render_mode` la copia de una canvas se abriría en el editor
+        // clásico y se vería vacía.
+        Database::execute(
+            'UPDATE pages SET parent_id = ?, nav_label = ?, tree_sort_order = ?, render_mode = ? WHERE id = ? AND site_id = ?',
+            [
+                $page['parent_id'] !== null ? (int) $page['parent_id'] : null,
+                ($page['nav_label'] ?? null) !== null ? mb_substr((string) $page['nav_label'] . ' (copia)', 0, 255) : null,
+                (int) ($page['tree_sort_order'] ?? 0),
+                (string) ($page['render_mode'] ?? 'sections'),
+                $newId, $siteId,
+            ]
+        );
+
+        self::copyPageContent((int) $page['id'], $newId);
+
+        Response::json([
+            'ok' => true,
+            'id' => $newId,
+            'message' => 'Copia creada como borrador.',
+            'edit_url' => base_url('admin/pages/' . $newId . '/edit'),
+        ]);
+    }
+
+    /**
+     * G4 — Marcar una página como inicio.
+     *
+     * Aquí no solo faltaba el botón: la home pública se resuelve por
+     * `page_type='home' AND status='published' ORDER BY updated_at DESC`, así que
+     * con dos páginas marcadas como home ganaba la editada más recientemente y
+     * la portada podía cambiar sola. Por eso esta operación DEGRADA la home
+     * anterior del mismo idioma en el mismo paso: después nunca hay dos.
+     *
+     * POST /admin/pages/{id}/set-home
+     */
+    public function setHome(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $page   = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+        $id     = (int) $page['id'];
+
+        if (($page['page_type'] ?? '') === 'article') {
+            Response::json(['ok' => false, 'error' => 'Una entrada del blog no puede ser la portada.'], 422);
+        }
+        if (($page['page_type'] ?? '') === 'home') {
+            Response::json(['ok' => true, 'message' => 'Esta página ya es el inicio.', 'warning' => null, 'demoted' => []]);
+        }
+
+        $lang = LanguageService::forPage($page, $siteId);
+        $demoted = self::demoteOtherHomes($siteId, $lang, $id);
+
+        Database::execute(
+            'UPDATE pages SET page_type = ?, updated_at = ? WHERE id = ? AND site_id = ?',
+            ['home', date('Y-m-d H:i:s'), $id, $siteId]
+        );
+
+        // La portada tiene su propia clave de caché por idioma, y las páginas
+        // degradadas cambian de tipo: se limpia todo el sitio, que es barato.
+        CacheService::flush($siteId);
+
+        Response::json([
+            'ok' => true,
+            'message' => 'Ahora «' . $page['title'] . '» es la página de inicio.',
+            'warning' => ($page['status'] ?? '') !== 'published'
+                ? 'Está en borrador: no se servirá en «/» hasta que la publiques.'
+                : null,
+            'demoted' => $demoted,
+        ]);
+    }
+
+    /**
+     * G5 — Qué se lleva por delante un borrado, ANTES de borrar. Lo pide el
+     * diálogo de confirmación.
+     *
+     * GET /admin/pages/{id}/delete-info
+     */
+    public function deleteInfo(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        self::ensureHierarchySchema();
+        $page = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+        $id   = (int) $page['id'];
+
+        // Las hijas NO se borran: la FK es `ON DELETE SET NULL`, así que suben a
+        // raíz. Es exactamente el tipo de efecto que nadie espera.
+        $children = Database::select(
+            'SELECT id, title FROM pages WHERE site_id = ? AND parent_id = ? ORDER BY tree_sort_order ASC, title ASC',
+            [$siteId, $id]
+        );
+
+        // Traducciones del mismo grupo: se quedan sin original.
+        $group = trim((string) ($page['translation_group'] ?? ''));
+        $translations = $group !== ''
+            ? Database::select(
+                'SELECT id, title, language FROM pages WHERE site_id = ? AND translation_group = ? AND id <> ?',
+                [$siteId, $group, $id]
+            )
+            : [];
+
+        $inbound = self::inboundLinks($siteId, (string) $page['slug'], $id);
+
+        Response::json([
+            'ok' => true,
+            'title' => (string) $page['title'],
+            'slug' => (string) $page['slug'],
+            'published' => ($page['status'] ?? '') === 'published',
+            'is_home' => ($page['page_type'] ?? '') === 'home',
+            'children' => array_map(static fn(array $r): array => [
+                'id' => (int) $r['id'], 'title' => (string) $r['title'],
+            ], $children),
+            'translations' => array_map(static fn(array $r): array => [
+                'id' => (int) $r['id'], 'title' => (string) $r['title'], 'language' => (string) ($r['language'] ?? ''),
+            ], $translations),
+            'inbound' => $inbound,
+            'redirect_targets' => self::redirectTargets($siteId, $id),
+        ]);
+    }
+
+    /**
+     * G7 — Mover una página en el árbol arrastrándola: nuevo padre y posición
+     * entre sus hermanas. El servidor renumera a todas las hermanas de un tirón;
+     * si lo hiciera el navegador serían N peticiones y un árbol a medio ordenar
+     * en cuanto una fallara.
+     *
+     * POST /admin/pages/{id}/move
+     */
+    public function move(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        self::ensureHierarchySchema();
+        $page = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
+        $id = (int) $page['id'];
+
+        $parentRaw = trim((string) Request::post('parent_id', ''));
+        $parentId = ($parentRaw === '' || $parentRaw === '0') ? null : (int) $parentRaw;
+        if ($parentId !== null) {
+            if ($parentId === $id || !self::pageBelongsToSite($parentId, $siteId) || self::wouldCreateCycle($id, $parentId)) {
+                Response::json(['ok' => false, 'error' => 'Ahí no: una página no puede colgar de sí misma ni de una de sus hijas.'], 422);
+            }
+        }
+
+        $position = max(0, (int) Request::post('position', 0));
+
+        $siblings = Database::select(
+            $parentId === null
+                ? 'SELECT id FROM pages WHERE site_id = ? AND parent_id IS NULL AND id <> ? AND slug <> ? ORDER BY tree_sort_order ASC, title ASC'
+                : 'SELECT id FROM pages WHERE site_id = ? AND parent_id = ? AND id <> ? AND slug <> ? ORDER BY tree_sort_order ASC, title ASC',
+            $parentId === null ? [$siteId, $id, '__forms'] : [$siteId, $parentId, $id, '__forms']
+        );
+
+        $order = array_map(static fn(array $r): int => (int) $r['id'], $siblings);
+        array_splice($order, min($position, count($order)), 0, [$id]);
+
+        Database::execute(
+            'UPDATE pages SET parent_id = ?, updated_at = ? WHERE id = ? AND site_id = ?',
+            [$parentId, date('Y-m-d H:i:s'), $id, $siteId]
+        );
+        foreach ($order as $index => $pageId) {
+            Database::execute(
+                'UPDATE pages SET tree_sort_order = ? WHERE id = ? AND site_id = ?',
+                [$index, $pageId, $siteId]
+            );
+        }
+
+        CacheService::invalidatePage($siteId, $page);
+        Response::json(['ok' => true, 'message' => 'Página movida.']);
+    }
+
+    /**
+     * G6 — Acciones en lote desde la lista. Un fallo en una página no debe
+     * tumbar el resto del lote.
+     *
+     * POST /admin/pages/bulk
+     */
+    public function bulk(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $action = (string) Request::post('action', '');
+        if (!in_array($action, ['publish', 'draft', 'delete'], true)) {
+            Response::json(['ok' => false, 'error' => 'Acción no válida.'], 422);
+        }
+
+        $ids = Request::post('ids', []);
+        $ids = is_array($ids) ? array_values(array_unique(array_filter(array_map('intval', $ids)))) : [];
+        if ($ids === []) {
+            Response::json(['ok' => false, 'error' => 'No has seleccionado ninguna página.'], 422);
+        }
+
+        $done = 0;
+        $skipped = [];
+        foreach ($ids as $id) {
+            $page = Database::selectOne('SELECT * FROM pages WHERE id = ? AND site_id = ? LIMIT 1', [$id, $siteId]);
+            if ($page === null) continue;
+
+            if ($action === 'delete') {
+                // La portada no se borra en lote: dejaría la web sin "/" en un
+                // gesto pensado para ir rápido.
+                if (($page['page_type'] ?? '') === 'home') {
+                    $skipped[] = (string) $page['title'] . ' (es el inicio)';
+                    continue;
+                }
+                Database::execute('DELETE FROM pages WHERE id = ? AND site_id = ?', [$id, $siteId]);
+                CacheService::invalidatePage($siteId, $page);
+                $done++;
+                continue;
+            }
+
+            self::applyStatus($siteId, $page, $action === 'publish' ? 'published' : 'draft');
+            $done++;
+        }
+
+        Response::json([
+            'ok' => true,
+            'done' => $done,
+            'skipped' => $skipped,
+            'message' => $done . ($done === 1 ? ' página actualizada.' : ' páginas actualizadas.'),
+        ]);
+    }
+
+    // ----------------------------------------------------------------------
+    // PAGES-OPS — internos
+    // ----------------------------------------------------------------------
+
+    /** Cambia el estado de una página e invalida su caché. */
+    private static function applyStatus(int $siteId, array $page, string $status): void
+    {
+        // Mismo criterio que `update()`: la fecha de publicación se pone la
+        // primera vez y no se borra al volver a borrador (es un histórico).
+        $publishedAt = $page['published_at'];
+        if ($status === 'published' && empty($publishedAt)) {
+            $publishedAt = date('Y-m-d H:i:s');
+        }
+
+        Database::execute(
+            'UPDATE pages SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND site_id = ?',
+            [$status, $publishedAt, date('Y-m-d H:i:s'), (int) $page['id'], $siteId]
+        );
+        CacheService::invalidatePage($siteId, $page);
+    }
+
+    /**
+     * Deja de ser home cualquier otra página del mismo idioma. Devuelve las
+     * degradadas para poder contarlo en la respuesta.
+     *
+     * @return array<int,array{id:int,title:string}>
+     */
+    private static function demoteOtherHomes(int $siteId, string $lang, int $exceptId): array
+    {
+        $primary = LanguageService::primaryFor($siteId);
+        // Las filas anteriores a la migración de idiomas tienen `language` NULL:
+        // en el idioma principal cuentan como del idioma principal.
+        $rows = Database::select(
+            "SELECT id, title, slug, page_type, language FROM pages
+             WHERE site_id = ? AND page_type = 'home' AND id <> ?",
+            [$siteId, $exceptId]
+        );
+
+        $demoted = [];
+        foreach ($rows as $row) {
+            $rowLang = trim((string) ($row['language'] ?? ''));
+            $rowLang = $rowLang !== '' ? LanguageService::normalize($rowLang) : $primary;
+            if ($rowLang !== $lang) continue;
+
+            Database::execute(
+                'UPDATE pages SET page_type = ?, updated_at = ? WHERE id = ? AND site_id = ?',
+                ['landing', date('Y-m-d H:i:s'), (int) $row['id'], $siteId]
+            );
+            $demoted[] = ['id' => (int) $row['id'], 'title' => (string) $row['title']];
+        }
+        return $demoted;
+    }
+
+    /** Copia el contenido de una página a otra: canvas o secciones clásicas. */
+    private static function copyPageContent(int $fromId, int $toId): void
+    {
+        $canvas = Database::selectOne('SELECT html, css FROM page_canvas WHERE page_id = ?', [$fromId]);
+        if ($canvas !== null) {
+            Database::execute(
+                'INSERT INTO page_canvas (page_id, html, css) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE html = VALUES(html), css = VALUES(css)',
+                [$toId, (string) $canvas['html'], (string) $canvas['css']]
+            );
+        }
+
+        $sections = Database::select(
+            'SELECT section_type, sort_order, content, style, status FROM page_sections WHERE page_id = ? ORDER BY sort_order ASC, id ASC',
+            [$fromId]
+        );
+        foreach ($sections as $s) {
+            Database::execute(
+                'INSERT INTO page_sections (page_id, section_type, sort_order, content, style, status)
+                 VALUES (?, ?, ?, ?, ?, ?)',
+                [
+                    $toId,
+                    (string) $s['section_type'],
+                    (int) $s['sort_order'],
+                    (string) $s['content'],
+                    $s['style'],
+                    (string) ($s['status'] ?? 'active'),
+                ]
+            );
+        }
+    }
+
+    /**
+     * Páginas del sitio que enlazan a este slug. Mira tanto el HTML de las
+     * páginas canvas como el contenido JSON de las secciones clásicas: si solo
+     * se mirara uno, el aviso mentiría en la mitad del producto.
+     *
+     * @return array<int,array{id:int,title:string}>
+     */
+    private static function inboundLinks(int $siteId, string $slug, int $excludeId): array
+    {
+        $slug = trim($slug, '/');
+        if ($slug === '') return [];
+
+        $needle = '%"/' . $slug . '%';        // href="/servicios..." en canvas
+        $needleJson = '%\/' . $slug . '%';    // "\/servicios" en el JSON de secciones
+
+        $rows = Database::select(
+            'SELECT DISTINCT p.id, p.title
+             FROM pages p
+             LEFT JOIN page_canvas c ON c.page_id = p.id
+             LEFT JOIN page_sections s ON s.page_id = p.id
+             WHERE p.site_id = ? AND p.id <> ? AND p.slug <> ?
+               AND (c.html LIKE ? OR s.content LIKE ? OR s.content LIKE ?)
+             ORDER BY p.title ASC
+             LIMIT 20',
+            [$siteId, $excludeId, '__forms', $needle, $needle, $needleJson]
+        );
+
+        return array_map(static fn(array $r): array => [
+            'id' => (int) $r['id'], 'title' => (string) $r['title'],
+        ], $rows);
+    }
+
+    /**
+     * Destinos posibles para la redirección al borrar: páginas publicadas del
+     * sitio (una redirección a un borrador daría un 404 con más pasos).
+     *
+     * @return array<int,array{slug:string,title:string}>
+     */
+    private static function redirectTargets(int $siteId, int $excludeId): array
+    {
+        $rows = Database::select(
+            "SELECT slug, title, page_type FROM pages
+             WHERE site_id = ? AND id <> ? AND status = 'published' AND slug <> ?
+             ORDER BY CASE WHEN page_type = 'home' THEN 0 ELSE 1 END, title ASC
+             LIMIT 100",
+            [$siteId, $excludeId, '__forms']
+        );
+
+        return array_map(static fn(array $r): array => [
+            'slug' => ($r['page_type'] ?? '') === 'home' ? '/' : '/' . ltrim((string) $r['slug'], '/'),
+            'title' => (string) $r['title'],
+        ], $rows);
+    }
+
+    /** Crea la 301 de una página que se va a borrar. Devuelve el destino o null. */
+    private static function createDeletionRedirect(int $siteId, array $page, string $target): ?string
+    {
+        try {
+            $from = SeoRedirectService::normalizePath((string) $page['slug']);
+            $to = SeoRedirectService::normalizePath($target);
+            if ($from === '' || $from === $to) return null;
+            SeoRedirectService::createManual($siteId, $from, $to, 301, Auth::id());
+            return $to;
+        } catch (\Throwable $e) {
+            error_log('[SEO] redirección al borrar la página ' . (int) $page['id'] . ': ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    private static function wantsJson(): bool
+    {
+        $xhr = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+        return $xhr || stripos((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
     }
 
     // ======================================================================

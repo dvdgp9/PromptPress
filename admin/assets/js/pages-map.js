@@ -24,6 +24,12 @@
     bindFocusChips();
     bindCanvasDismiss();
     bindDensityControls();
+    // PAGES-OPS — operaciones sobre páginas: las mismas en el mapa y en la lista.
+    bindPageActions();
+    bindListToolbar();
+    bindBulkActions();
+    bindMapLanguageFilter();
+    bindDragAndDrop();
 
     runBtn && runBtn.addEventListener('click', function () {
         expandArchitect();
@@ -152,6 +158,473 @@
                     item.classList.toggle('is-active', item === button);
                 });
             });
+        });
+    }
+
+    // ======================================================================
+    // PAGES-OPS — acciones por página
+    //
+    // El marcado de la fila (lista) y el de la tarjeta (mapa) es distinto, pero
+    // los dos llevan los mismos `data-page-*`. Todo lo de aquí trabaja sobre el
+    // contenedor más cercano con `data-page-id`, así que una acción nueva vale
+    // para las dos vistas sin escribirla dos veces.
+    // ======================================================================
+
+    var openMenu = null;
+
+    function bindPageActions() {
+        document.addEventListener('click', function (event) {
+            var trigger = event.target.closest('[data-page-menu]');
+            if (trigger) {
+                event.preventDefault();
+                event.stopPropagation();
+                togglePageMenu(trigger);
+                return;
+            }
+            var item = event.target.closest('[data-page-do]');
+            if (item) {
+                event.preventDefault();
+                runPageAction(item.getAttribute('data-page-do'), item.dataset.pageRef, item);
+                closePageMenu();
+                return;
+            }
+            closePageMenu();
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closePageMenu();
+        });
+        window.addEventListener('resize', closePageMenu);
+        window.addEventListener('scroll', closePageMenu, true);
+    }
+
+    function togglePageMenu(trigger) {
+        var holder = trigger.closest('[data-page-id]');
+        if (!holder) return;
+        if (openMenu && openMenu.trigger === trigger) {
+            closePageMenu();
+            return;
+        }
+        closePageMenu();
+
+        var data = holder.dataset;
+        var id = data.pageId;
+        var published = data.pageStatus === 'published';
+        var isHome = data.pageType === 'home';
+        var items = [];
+
+        items.push(menuItem(id, 'status', published ? 'Volver a borrador' : 'Publicar'));
+        items.push(menuItem(id, 'duplicate', 'Duplicar'));
+        // Una entrada del blog no puede ser portada, y la home ya lo es.
+        if (!isHome && data.pageType !== 'article') {
+            items.push(menuItem(id, 'set-home', 'Marcar como inicio'));
+        }
+        items.push('<hr>');
+        items.push(menuItem(id, 'delete', 'Eliminar', 'is-danger'));
+
+        var menu = document.createElement('div');
+        menu.className = 'pp-page-menu';
+        menu.setAttribute('role', 'menu');
+        menu.innerHTML = items.join('');
+        document.body.appendChild(menu);
+
+        var rect = trigger.getBoundingClientRect();
+        menu.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+        // Anclado a la derecha del botón: cerca del borde, un menú anclado a la
+        // izquierda se sale de la pantalla.
+        menu.style.left = (window.scrollX + Math.max(8, rect.right - menu.offsetWidth)) + 'px';
+
+        trigger.setAttribute('aria-expanded', 'true');
+        openMenu = { el: menu, trigger: trigger };
+    }
+
+    function menuItem(id, action, label, extraClass) {
+        return '<button type="button" role="menuitem" class="pp-page-menu__item ' + (extraClass || '') + '"'
+            + ' data-page-do="' + escapeHtml(action) + '" data-page-ref="' + escapeHtml(id) + '">'
+            + escapeHtml(label) + '</button>';
+    }
+
+    function closePageMenu() {
+        if (!openMenu) return;
+        openMenu.el.remove();
+        openMenu.trigger.setAttribute('aria-expanded', 'false');
+        openMenu = null;
+    }
+
+    /** Todos los contenedores (fila y tarjeta) de una misma página. */
+    function holdersFor(id) {
+        return Array.prototype.slice.call(document.querySelectorAll('[data-page-id="' + id + '"]'));
+    }
+
+    function runPageAction(action, id, sourceEl) {
+        // En el mapa hay DOS elementos con el mismo `data-page-id`: el <li> del
+        // árbol (que solo lo usa el drag & drop) y la tarjeta, que es la que
+        // lleva los datos. Coger el primero a secas daba "esta página".
+        var holder = holdersFor(id).filter(function (el) { return !!el.dataset.pageTitle; })[0]
+            || holdersFor(id)[0];
+        if (!holder) return;
+        var title = holder.dataset.pageTitle || 'esta página';
+
+        if (action === 'status') {
+            var next = holder.dataset.pageStatus === 'published' ? 'draft' : 'published';
+            postForm('/admin/pages/' + id + '/status', { status: next }, 20000)
+                .then(function (body) {
+                    applyStatusToUi(id, next);
+                    showToast(body.message || 'Estado actualizado.', 'success');
+                    if (body.warning) showToast(body.warning, 'error');
+                })
+                .catch(function (err) { showToast(err.message || 'No se pudo cambiar el estado.', 'error'); });
+            return;
+        }
+
+        if (action === 'duplicate') {
+            postForm('/admin/pages/' + id + '/duplicate', {}, 30000)
+                .then(function (body) {
+                    showToast(body.message || 'Copia creada.', 'success');
+                    // La copia tiene que aparecer en el árbol y en la tabla: se
+                    // recarga en vez de inventarse el marcado de una página nueva.
+                    window.location.reload();
+                })
+                .catch(function (err) { showToast(err.message || 'No se pudo duplicar.', 'error'); });
+            return;
+        }
+
+        if (action === 'set-home') {
+            if (!window.confirm('¿Quieres que «' + title + '» sea la página de inicio?\n\nLa portada actual dejará de serlo (pasa a ser una landing normal y su contenido no se toca).')) return;
+            postForm('/admin/pages/' + id + '/set-home', {}, 20000)
+                .then(function (body) {
+                    showToast(body.message || 'Inicio actualizado.', 'success');
+                    if (body.warning) showToast(body.warning, 'error');
+                    window.location.reload();
+                })
+                .catch(function (err) { showToast(err.message || 'No se pudo marcar como inicio.', 'error'); });
+            return;
+        }
+
+        if (action === 'delete') {
+            openDeleteDialog(id, title, sourceEl);
+        }
+    }
+
+    function applyStatusToUi(id, status) {
+        holdersFor(id).forEach(function (holder) {
+            holder.dataset.pageStatus = status;
+            var card = holder.classList.contains('pp-map-card') ? holder : null;
+            if (card) {
+                card.classList.remove('pp-map-card--published', 'pp-map-card--draft');
+                card.classList.add('pp-map-card--' + status);
+            }
+            var badge = holder.querySelector('.pp-badge--success, .pp-badge--muted');
+            if (badge) {
+                badge.className = 'pp-badge ' + (status === 'published' ? 'pp-badge--success' : 'pp-badge--muted');
+                badge.textContent = status === 'published' ? 'Publicada' : 'Borrador';
+            }
+        });
+    }
+
+    // ----------------------------------------------------------------------
+    // G5 — Borrado informado: primero se pregunta al servidor QUÉ se lleva por
+    // delante (hijas que suben a raíz, traducciones huérfanas, enlaces que
+    // quedarán rotos) y solo entonces se enseña la confirmación.
+    // ----------------------------------------------------------------------
+    function openDeleteDialog(id, title, sourceEl) {
+        setButtonBusy(sourceEl, true, null);
+        fetch(baseUrl + '/admin/pages/' + id + '/delete-info', {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.json().then(function (body) {
+                if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                return body;
+            });
+        }).then(function (info) {
+            renderDeleteDialog(id, title, info);
+        }).catch(function (err) {
+            showToast(err.message || 'No se pudo comprobar qué afecta al borrado.', 'error');
+        }).finally(function () {
+            setButtonBusy(sourceEl, false, null);
+        });
+    }
+
+    function renderDeleteDialog(id, title, info) {
+        var warnings = [];
+        if (info.is_home) {
+            warnings.push('<li class="is-danger"><strong>Es la página de inicio.</strong> Tu web se quedará sin portada hasta que marques otra.</li>');
+        }
+        if ((info.children || []).length) {
+            warnings.push('<li><strong>' + info.children.length + ' página(s) cuelgan de esta.</strong> No se borran, pero suben al primer nivel del mapa: '
+                + info.children.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</li>');
+        }
+        if ((info.translations || []).length) {
+            warnings.push('<li><strong>' + info.translations.length + ' traducción(es)</strong> se quedan sin original: '
+                + info.translations.map(function (t) { return escapeHtml(t.title) + (t.language ? ' (' + escapeHtml(t.language) + ')' : ''); }).join(', ') + '.</li>');
+        }
+        if ((info.inbound || []).length) {
+            warnings.push('<li><strong>' + info.inbound.length + ' página(s) enlazan aquí</strong> y ese enlace quedará roto: '
+                + info.inbound.map(function (p) { return escapeHtml(p.title); }).join(', ') + '.</li>');
+        }
+
+        var redirectBlock = '';
+        if (info.published) {
+            var options = (info.redirect_targets || []).map(function (t) {
+                return '<option value="' + escapeHtml(t.slug) + '">' + escapeHtml(t.title) + ' · ' + escapeHtml(t.slug) + '</option>';
+            }).join('');
+            redirectBlock = [
+                '<div class="pp-del-redirect">',
+                    '<label><input type="checkbox" data-del-redirect' + ((info.inbound || []).length ? ' checked' : '') + '> ',
+                    'Dejar una redirección 301 desde <code>/' + escapeHtml(String(info.slug || '').replace(/^\//, '')) + '</code> hacia:</label>',
+                    '<select data-del-target>' + options + '</select>',
+                    '<small>Estaba publicada: quien llegue desde Google o desde un enlace antiguo acabará en la página que elijas en vez de en un 404.</small>',
+                '</div>'
+            ].join('');
+        }
+
+        var overlay = document.createElement('div');
+        overlay.className = 'pp-del-overlay';
+        overlay.innerHTML = [
+            '<div class="pp-del-dialog" role="dialog" aria-modal="true" aria-labelledby="pp-del-title">',
+                '<h3 id="pp-del-title">Eliminar «' + escapeHtml(title) + '»</h3>',
+                warnings.length
+                    ? '<ul class="pp-del-warnings">' + warnings.join('') + '</ul>'
+                    : '<p class="pp-del-clean">No cuelga nada de esta página y nadie la enlaza.</p>',
+                redirectBlock,
+                '<p class="pp-del-final">Esta acción no se puede deshacer.</p>',
+                '<div class="pp-del-actions">',
+                    '<button type="button" class="pp-btn pp-btn--secondary" data-del-cancel>Cancelar</button>',
+                    '<button type="button" class="pp-btn pp-btn--danger" data-del-confirm>Eliminar la página</button>',
+                '</div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var close = function () { overlay.remove(); };
+        overlay.addEventListener('click', function (event) {
+            if (event.target === overlay || event.target.closest('[data-del-cancel]')) close();
+        });
+        document.addEventListener('keydown', function onKey(event) {
+            if (event.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+        });
+
+        overlay.querySelector('[data-del-confirm]').addEventListener('click', function (event) {
+            var button = event.currentTarget;
+            var wantsRedirect = overlay.querySelector('[data-del-redirect]');
+            var target = overlay.querySelector('[data-del-target]');
+            var payload = {};
+            if (wantsRedirect && wantsRedirect.checked && target && target.value) {
+                payload.redirect_to = target.value;
+            }
+            setButtonBusy(button, true, 'Eliminando…');
+            postForm('/admin/pages/' + id + '/delete', payload, 25000)
+                .then(function (body) {
+                    showToast(body.message || 'Página eliminada.', 'success');
+                    window.location.reload();
+                })
+                .catch(function (err) {
+                    showToast(err.message || 'No se pudo eliminar.', 'error');
+                    setButtonBusy(button, false, 'Eliminar la página');
+                });
+        });
+    }
+
+    // ----------------------------------------------------------------------
+    // G6 — Buscador, filtros y acciones en lote de la lista
+    // ----------------------------------------------------------------------
+    function bindListToolbar() {
+        var toolbar = root.querySelector('[data-pages-toolbar]');
+        if (!toolbar) return;
+        var search = toolbar.querySelector('[data-pages-search]');
+        var counter = toolbar.querySelector('[data-pages-count]');
+        var filters = Array.prototype.slice.call(toolbar.querySelectorAll('[data-pages-filter]'));
+        var rows = Array.prototype.slice.call(root.querySelectorAll('[data-pages-row]'));
+
+        var apply = function () {
+            var term = (search ? search.value : '').trim().toLowerCase();
+            var wanted = {};
+            filters.forEach(function (select) { wanted[select.getAttribute('data-pages-filter')] = select.value; });
+
+            var visible = 0;
+            rows.forEach(function (row) {
+                var ok = (term === '' || (row.dataset.search || '').indexOf(term) !== -1)
+                    && (!wanted.status || row.dataset.pageStatus === wanted.status)
+                    && (!wanted.type || row.dataset.pageType === wanted.type);
+                row.hidden = !ok;
+                if (ok) visible++;
+                // Una fila oculta no puede quedarse seleccionada: el lote actuaría
+                // sobre páginas que el usuario ya no está viendo.
+                if (!ok) {
+                    var box = row.querySelector('[data-bulk-item]');
+                    if (box) box.checked = false;
+                }
+            });
+            if (counter) counter.textContent = visible + (visible === 1 ? ' página' : ' páginas');
+            refreshBulkBar();
+        };
+
+        search && search.addEventListener('input', apply);
+        filters.forEach(function (select) { select.addEventListener('change', apply); });
+    }
+
+    function bindBulkActions() {
+        var bar = root.querySelector('[data-pages-bulk]');
+        if (!bar) return;
+
+        root.addEventListener('change', function (event) {
+            if (event.target.matches('[data-bulk-all]')) {
+                root.querySelectorAll('[data-pages-row]').forEach(function (row) {
+                    if (row.hidden) return;
+                    var box = row.querySelector('[data-bulk-item]');
+                    if (box) box.checked = event.target.checked;
+                });
+            }
+            if (event.target.matches('[data-bulk-item], [data-bulk-all]')) refreshBulkBar();
+        });
+
+        bar.querySelector('[data-bulk-clear]').addEventListener('click', function () {
+            root.querySelectorAll('[data-bulk-item], [data-bulk-all]').forEach(function (box) { box.checked = false; });
+            refreshBulkBar();
+        });
+
+        bar.querySelectorAll('[data-bulk-action]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var action = button.getAttribute('data-bulk-action');
+                var ids = selectedIds();
+                if (!ids.length) return;
+                if (action === 'delete' && !window.confirm('Vas a eliminar ' + ids.length + ' página(s). No se puede deshacer.\n\nSi alguna es la portada, se saltará.')) return;
+
+                var params = new URLSearchParams();
+                params.set('_csrf', csrf);
+                params.set('action', action);
+                ids.forEach(function (id) { params.append('ids[]', id); });
+
+                setButtonBusy(button, true, null);
+                fetch(baseUrl + '/admin/pages/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                    credentials: 'same-origin'
+                }).then(function (res) {
+                    return res.json().then(function (body) {
+                        if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+                        return body;
+                    });
+                }).then(function (body) {
+                    if ((body.skipped || []).length) showToast('Sin tocar: ' + body.skipped.join(', '), 'error');
+                    showToast(body.message || 'Hecho.', 'success');
+                    window.location.reload();
+                }).catch(function (err) {
+                    showToast(err.message || 'No se pudo completar la acción.', 'error');
+                    setButtonBusy(button, false, null);
+                });
+            });
+        });
+    }
+
+    function selectedIds() {
+        return Array.prototype.slice.call(root.querySelectorAll('[data-bulk-item]'))
+            .filter(function (box) { return box.checked; })
+            .map(function (box) { return box.value; });
+    }
+
+    function refreshBulkBar() {
+        var bar = root.querySelector('[data-pages-bulk]');
+        if (!bar) return;
+        var count = selectedIds().length;
+        bar.hidden = count === 0;
+        var label = bar.querySelector('[data-bulk-count]');
+        if (label) label.textContent = String(count);
+    }
+
+    // ----------------------------------------------------------------------
+    // G7 — El mapa, de un idioma cada vez
+    // ----------------------------------------------------------------------
+    function bindMapLanguageFilter() {
+        var select = root.querySelector('[data-map-lang]');
+        if (!select) return;
+        var apply = function () {
+            root.querySelectorAll('.pp-map-node[data-page-lang]').forEach(function (node) {
+                var lang = node.getAttribute('data-page-lang') || '';
+                // Las filas anteriores a la migración de idiomas no tienen idioma:
+                // se enseñan siempre en vez de desaparecer del mapa.
+                node.hidden = lang !== '' && lang !== select.value;
+            });
+        };
+        select.addEventListener('change', apply);
+        apply();
+    }
+
+    // ----------------------------------------------------------------------
+    // G7 — Arrastrar para reordenar. Soltar SOBRE una tarjeta la convierte en
+    // hija; soltar en la línea entre dos tarjetas la coloca ahí como hermana.
+    // La renumeración la hace el servidor de una vez.
+    // ----------------------------------------------------------------------
+    function bindDragAndDrop() {
+        var tree = root.querySelector('.pp-map-tree');
+        if (!tree) return;
+        var draggedId = null;
+
+        tree.addEventListener('dragstart', function (event) {
+            var card = event.target.closest('.pp-map-card');
+            if (!card) return;
+            draggedId = card.dataset.pageId;
+            card.classList.add('is-dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            // Firefox no inicia el arrastre sin datos en el dataTransfer.
+            event.dataTransfer.setData('text/plain', draggedId);
+        });
+
+        tree.addEventListener('dragend', function () {
+            draggedId = null;
+            tree.querySelectorAll('.is-dragging, .is-drop-into, .is-drop-before').forEach(function (el) {
+                el.classList.remove('is-dragging', 'is-drop-into', 'is-drop-before');
+            });
+        });
+
+        tree.addEventListener('dragover', function (event) {
+            if (!draggedId) return;
+            var card = event.target.closest('.pp-map-card');
+            if (!card || card.dataset.pageId === draggedId) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+
+            var rect = card.getBoundingClientRect();
+            var before = (event.clientY - rect.top) < rect.height * 0.35;
+            card.classList.toggle('is-drop-before', before);
+            card.classList.toggle('is-drop-into', !before);
+        });
+
+        tree.addEventListener('dragleave', function (event) {
+            var card = event.target.closest('.pp-map-card');
+            if (card) card.classList.remove('is-drop-into', 'is-drop-before');
+        });
+
+        tree.addEventListener('drop', function (event) {
+            if (!draggedId) return;
+            var card = event.target.closest('.pp-map-card');
+            if (!card || card.dataset.pageId === draggedId) return;
+            event.preventDefault();
+
+            var asSibling = card.classList.contains('is-drop-before');
+            var targetNode = card.closest('.pp-map-node');
+            var payload;
+
+            if (asSibling) {
+                var parentNode = targetNode.parentElement.closest('.pp-map-node');
+                var siblings = Array.prototype.slice.call(targetNode.parentElement.children)
+                    .filter(function (li) { return li.dataset.pageId !== draggedId; });
+                payload = {
+                    parent_id: parentNode ? parentNode.dataset.pageId : '',
+                    position: siblings.indexOf(targetNode)
+                };
+            } else {
+                var childList = targetNode.querySelector(':scope > .pp-map-children');
+                payload = {
+                    parent_id: card.dataset.pageId,
+                    position: childList ? childList.children.length : 0
+                };
+            }
+
+            postForm('/admin/pages/' + draggedId + '/move', payload, 20000)
+                .then(function () { window.location.reload(); })
+                .catch(function (err) { showToast(err.message || 'No se pudo mover la página.', 'error'); });
         });
     }
 
@@ -429,7 +902,13 @@
         var id = Number(card.closest('[data-page-id]').getAttribute('data-page-id') || 0);
         var data = card.dataset;
         inspector.innerHTML = [
-            '<div class="pp-map-inspector__dialog" role="dialog" aria-modal="true" aria-labelledby="pp-map-inspector-title">',
+            // PAGES-OPS G2 — el inspector lleva los mismos `data-page-*` que la
+            // tarjeta y la fila: así el menú de acciones funciona también aquí.
+            '<div class="pp-map-inspector__dialog" role="dialog" aria-modal="true" aria-labelledby="pp-map-inspector-title"'
+                + ' data-page-id="' + escapeHtml(String(id)) + '"'
+                + ' data-page-title="' + escapeHtml(data.pageTitle || '') + '"'
+                + ' data-page-status="' + escapeHtml(data.pageStatus || 'draft') + '"'
+                + ' data-page-type="' + escapeHtml(data.pageType || '') + '">',
                 '<button type="button" class="pp-map-inspector__close" data-close-inspector aria-label="Cerrar">&times;</button>',
                 '<div class="pp-map-inspector__head">',
                     '<span>' + escapeHtml(data.pageType || 'Página') + '</span>',
@@ -441,6 +920,7 @@
                     '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + escapeHtml(data.pageEdit || '#') + '">Editar</a>',
                     '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + escapeHtml(data.pagePreview || '#') + '">Preview</a>',
                     '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-create-child="' + id + '" data-parent-title="' + escapeHtml(data.pageLabel || data.pageTitle || 'esta página') + '">Crear hija con IA</button>',
+                    '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-page-menu-btn" data-page-menu aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">⋯</button>',
                 '</div>',
                 '<form class="pp-map-inspector-form" action="' + escapeHtml(data.pageStructure || '') + '" method="POST">',
                     '<label><span>Etiqueta navegación</span><input type="text" name="nav_label" value="' + escapeHtml(data.pageNav || '') + '" placeholder="' + escapeHtml(data.pageTitle || '') + '"></label>',
