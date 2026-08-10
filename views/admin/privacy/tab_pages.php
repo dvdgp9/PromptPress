@@ -23,17 +23,27 @@ $controllerReady = trim((string) ($controller['legal_name'] ?? '')) !== ''
 <?php
 $missingPages = array_filter($legalTypes, fn ($info, $key) => ($legalPagesState[$key] ?? null) === null, ARRAY_FILTER_USE_BOTH);
 $missingCount = count($missingPages);
+$typesCount   = count($legalTypes);
+
+// Config para el progreso por página (privacy-generate.js).
+$genTypes = [];
+foreach ($legalTypes as $typeKey => $typeInfo) {
+    $genTypes[] = ['key' => $typeKey, 'label' => $typeInfo['label']];
+}
 ?>
 <?php if ($controllerReady): ?>
 <div class="pp-privacy-bulk">
-    <form method="POST" action="<?= e(base_url('admin/privacy/pages/generate-all')) ?>" class="pp-privacy-bulk__form">
+    <form method="POST" action="<?= e(base_url('admin/privacy/pages/generate-all')) ?>" class="pp-privacy-bulk__form"
+          data-legal-generate="<?= e(json_encode($genTypes, JSON_UNESCAPED_UNICODE)) ?>"
+          data-generate-url="<?= e(base_url('admin/privacy/pages/generate')) ?>"
+          data-done-url="<?= e(base_url('admin/privacy?tab=pages')) ?>">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
         <div class="pp-privacy-bulk__text">
-            <strong><?= $missingCount === 3 ? 'Genera tus 3 páginas legales de una vez' : 'Regenerar todas las páginas legales' ?></strong>
-            <p>La IA usará los mismos datos para las tres y tardará menos de un minuto. Cualquier hueco quedará marcado con <code>TODO-LEGAL:</code>.</p>
+            <strong><?= $missingCount === $typesCount ? 'Genera tus ' . $typesCount . ' páginas legales de una vez' : 'Regenerar todas las páginas legales' ?></strong>
+            <p>La IA las escribe una a una y verás el progreso aquí mismo. Cualquier hueco quedará marcado con <code>TODO-LEGAL:</code>.</p>
         </div>
         <button type="submit" class="pp-btn pp-btn--primary">
-            <?= $missingCount > 0 ? 'Generar las 3 con IA' : 'Regenerar las 3 con IA' ?>
+            <?= $missingCount > 0 ? 'Generar las ' . $typesCount . ' con IA' : 'Regenerar las ' . $typesCount . ' con IA' ?>
         </button>
     </form>
 </div>
@@ -63,7 +73,10 @@ $missingCount = count($missingPages);
         </header>
 
         <div class="pp-privacy-pagecard__actions">
-            <form method="POST" action="<?= e(base_url('admin/privacy/pages/generate')) ?>" class="pp-privacy-pagecard__form">
+            <form method="POST" action="<?= e(base_url('admin/privacy/pages/generate')) ?>" class="pp-privacy-pagecard__form"
+                  data-legal-generate="<?= e(json_encode([['key' => $typeKey, 'label' => $info['label']]], JSON_UNESCAPED_UNICODE)) ?>"
+                  data-progress-target=".pp-privacy-pagecard"
+                  data-done-url="<?= e(base_url('admin/privacy?tab=pages')) ?>">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <input type="hidden" name="type" value="<?= e($typeKey) ?>">
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" <?= !$controllerReady ? 'disabled aria-disabled="true"' : '' ?>>

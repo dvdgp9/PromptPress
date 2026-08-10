@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\BrandService;
+use App\Services\CacheService;
 use App\Services\ChromeService;
 use App\Services\LanguageService;
 use App\Services\DesignSystem;
@@ -47,6 +48,11 @@ class ChromeController
         $siteId = $this->requireSiteId();
         $config = ChromeService::sanitize($this->decodePayload());
         ChromeService::save($siteId, $config);
+        // El header y el pie van dentro del HTML cacheado de cada página, así
+        // que un cambio aquí afecta a todo el sitio: sin este flush, las
+        // páginas ya cacheadas (típicamente la home) siguen sirviendo el pie
+        // viejo hasta que caduca el TTL.
+        CacheService::flush($siteId);
         if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch') {
             Response::json(['ok' => true, 'message' => 'Header y pie actualizados.']);
         }

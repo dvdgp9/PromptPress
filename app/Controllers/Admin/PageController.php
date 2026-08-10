@@ -468,7 +468,10 @@ class PageController
             'UPDATE pages SET parent_id = ?, nav_label = ?, tree_sort_order = ?, updated_at = ? WHERE id = ? AND site_id = ?',
             [$parentId, $navLabel !== '' ? $navLabel : null, $treeOrder, date('Y-m-d H:i:s'), $id, $siteId]
         );
-        CacheService::invalidatePage($siteId, $page);
+        // Flush del sitio, no solo de esta página: el menú del header se
+        // construye con las páginas publicadas, así que cambiar jerarquía,
+        // etiqueta u orden cambia el chrome de TODAS las páginas cacheadas.
+        CacheService::flush($siteId);
 
         Response::json(['ok' => true, 'message' => 'Estructura actualizada.']);
     }
@@ -1407,16 +1410,12 @@ class PageController
             }
         }
 
-        // T7.3: invalidar cache público — incluye slug viejo si cambió, y home si aplica.
-        CacheService::invalidatePage(
-            $siteId,
-            ['slug' => $input['slug'], 'page_type' => $input['page_type']],
-            (string) ($page['slug'] ?? '')
-        );
-        // Si la página vieja era home y la nueva ya no, también limpia __home.
-        if (($page['page_type'] ?? '') === 'home' && $input['page_type'] !== 'home') {
-            CacheService::forget($siteId, CacheService::HOME_KEY);
-        }
+        // T7.3: invalidar cache público. Flush del sitio entero y no solo de
+        // esta página: el título, el slug, el tipo y el estado se reflejan en el
+        // chrome global (menú del header, enlaces legales del footer), así que
+        // un cambio aquí desactualiza el HTML cacheado de todas las demás.
+        // Cubre además el slug viejo y la home del idioma que toque.
+        CacheService::flush($siteId);
 
         // E-GDPR G6 — Aviso suave si se publica con privacidad incompleta.
         $becameLive = $input['status'] === 'published'
@@ -1460,8 +1459,9 @@ class PageController
         // CASCADE en page_sections vía FK → no hace falta borrar manualmente
         Database::execute('DELETE FROM pages WHERE id = ? AND site_id = ?', [$id, $siteId]);
 
-        // T7.3: invalidar cache público.
-        CacheService::invalidatePage($siteId, $page);
+        // T7.3: invalidar cache público. Flush del sitio: la página borrada
+        // desaparece del menú del header y de los enlaces legales del footer.
+        CacheService::flush($siteId);
 
         $message = 'Página eliminada correctamente.'
             . ($redirected !== null ? ' Su URL ahora redirige a /' . ltrim($redirected, '/') . '.' : '');
@@ -1719,7 +1719,9 @@ class PageController
             );
         }
 
-        CacheService::invalidatePage($siteId, $page);
+        // Flush del sitio: mover una página reordena el menú del header, que
+        // va dentro del HTML cacheado de todas las páginas.
+        CacheService::flush($siteId);
         Response::json(['ok' => true, 'message' => 'Página movida.']);
     }
 
@@ -1759,7 +1761,7 @@ class PageController
                     continue;
                 }
                 Database::execute('DELETE FROM pages WHERE id = ? AND site_id = ?', [$id, $siteId]);
-                CacheService::invalidatePage($siteId, $page);
+                CacheService::flush($siteId);
                 $done++;
                 continue;
             }
@@ -1780,7 +1782,7 @@ class PageController
     // PAGES-OPS — internos
     // ----------------------------------------------------------------------
 
-    /** Cambia el estado de una página e invalida su caché. */
+    /** Cambia el estado de una página e invalida la caché del sitio. */
     private static function applyStatus(int $siteId, array $page, string $status): void
     {
         // Mismo criterio que `update()`: la fecha de publicación se pone la
@@ -1794,7 +1796,9 @@ class PageController
             'UPDATE pages SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND site_id = ?',
             [$status, $publishedAt, date('Y-m-d H:i:s'), (int) $page['id'], $siteId]
         );
-        CacheService::invalidatePage($siteId, $page);
+        // Publicar o despublicar mete o saca la página del menú del header y de
+        // los enlaces legales del footer, así que el flush es del sitio entero.
+        CacheService::flush($siteId);
     }
 
     /**
@@ -2778,6 +2782,12 @@ class PageController
                 $status === 'published' ? $now : null,
             ]
         );
+
+        // Una página nueva publicada entra en el menú del header (y, si es
+        // legal, en el footer): el HTML cacheado del resto queda desfasado.
+        if ($status === 'published') {
+            CacheService::flush($siteId);
+        }
 
         return (int) Database::lastInsertId();
     }

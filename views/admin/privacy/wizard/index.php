@@ -28,6 +28,9 @@ if ($wizardDone) $activeStep = 3;
 ?>
 
 <?php \Core\View::start('title'); ?>Asistente de Privacidad<?php \Core\View::end(); ?>
+<?php \Core\View::start('scripts'); ?>
+<script src="<?= e(base_url('admin/assets/js/privacy-generate.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/privacy-generate.js') ?: '1' ?>"></script>
+<?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
     <div>

@@ -917,6 +917,48 @@ input[name="model"], input[name="model_light"], input#pp-ai-model {
 .pp-wizard__finish .pp-btn--lg { padding: 12px 28px; font-size: 15.5px; }
 .pp-wizard__finish-note { margin: 12px 0 0; font-size: 13px; opacity: 0.9; }
 
+/* WZ-UX — progreso de generación de páginas legales (privacy-generate.js). */
+.pp-legalgen {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 20px;
+    padding: 16px;
+    border: 1px solid #c7d2fe;
+    border-radius: 14px;
+    background: #eef2ff;
+    color: #475569;
+}
+.pp-legalgen.is-error { border-color: #fecaca; background: #fef2f2; }
+.pp-legalgen > strong { color: #1e1b4b; font-size: 14.5px; }
+.pp-legalgen > small { color: #4c1d95; font-size: 13px; font-weight: 600; }
+.pp-legalgen__bar { height: 7px; border-radius: 999px; background: rgba(79,70,229,0.16); overflow: hidden; }
+.pp-legalgen__bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: #4f46e5; transition: width 0.3s ease; }
+.pp-legalgen p {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.7);
+}
+.pp-legalgen p span { width: 9px; height: 9px; border-radius: 999px; background: #cbd5e1; }
+.pp-legalgen p em { overflow: hidden; color: #1e1b4b; font-style: normal; font-weight: 650; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+.pp-legalgen p small { color: #64748b; font-size: 12.5px; font-weight: 600; }
+.pp-legalgen p.is-active span { background: #4f46e5; animation: pp-legalgen-pulse 1s ease-in-out infinite; }
+.pp-legalgen p.is-active small { color: #4338ca; }
+.pp-legalgen p.is-done span { background: #16a34a; }
+.pp-legalgen p.is-done small { color: #166534; }
+.pp-legalgen p.is-error span { background: #dc2626; }
+.pp-legalgen p.is-error small { color: #991b1b; }
+@keyframes pp-legalgen-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(79,70,229,0.18); }
+    50%      { box-shadow: 0 0 0 6px rgba(79,70,229,0.05); }
+}
+.pp-privacy-pagecard .pp-legalgen { margin: 12px 0 0; }
+.pp-btn[aria-busy="true"] { position: relative; opacity: 0.85; cursor: progress; }
+
 .pp-wizard__done {
     text-align: center;
     background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%);

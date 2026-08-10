@@ -158,9 +158,19 @@ class PrivacyController
     {
         CSRF::check();
         $siteId = self::requireSiteId();
-        $type = (string) Request::post('type', '');
+
+        // WZ-UX — el front genera página a página vía fetch para poder pintar
+        // progreso real. Misma ruta: si el body es JSON respondemos JSON, si no
+        // seguimos con el flujo clásico de redirect + flash (fallback sin JS).
+        $isJson = Request::isJson();
+        $type = $isJson
+            ? (string) (Request::json()['type'] ?? '')
+            : (string) Request::post('type', '');
 
         if (!isset(LegalPageGenerator::typesFor($siteId)[$type])) {
+            if ($isJson) {
+                Response::json(['ok' => false, 'error' => 'Tipo de página legal no válido.'], 422);
+            }
             Session::flash('error', 'Tipo de página legal no válido.');
             Response::redirect(base_url('admin/privacy?tab=pages'));
         }
@@ -170,18 +180,38 @@ class PrivacyController
         $missingCore = array_filter(['legal_name', 'address', 'email'],
             fn ($k) => trim((string) ($controller[$k] ?? '')) === '');
         if (!empty($missingCore)) {
-            Session::flash('error', 'Antes de generar páginas legales rellena al menos: razón social, dirección y email de contacto.');
+            $msg = 'Antes de generar páginas legales rellena al menos: razón social, dirección y email de contacto.';
+            if ($isJson) {
+                Response::json(['ok' => false, 'error' => $msg, 'redirect_url' => base_url('admin/privacy?tab=legal')], 422);
+            }
+            Session::flash('error', $msg);
             Response::redirect(base_url('admin/privacy?tab=legal'));
         }
 
         try {
             $result = LegalPageGenerator::generate($siteId, $type);
         } catch (AIException $e) {
+            if ($isJson) {
+                Response::json(['ok' => false, 'error' => 'La IA no pudo generar la página: ' . $e->getMessage()], 502);
+            }
             Session::flash('error', 'La IA no pudo generar la página: ' . $e->getMessage());
             Response::redirect(base_url('admin/privacy?tab=pages'));
         } catch (\Throwable $e) {
+            if ($isJson) {
+                Response::json(['ok' => false, 'error' => 'Error generando la página: ' . $e->getMessage()], 500);
+            }
             Session::flash('error', 'Error generando la página: ' . $e->getMessage());
             Response::redirect(base_url('admin/privacy?tab=pages'));
+        }
+
+        if ($isJson) {
+            Response::json([
+                'ok'      => true,
+                'type'    => $type,
+                'title'   => $result['title'],
+                'todos'   => (int) $result['todos'],
+                'page_id' => (int) $result['page_id'],
+            ]);
         }
 
         $todosNote = $result['todos'] > 0

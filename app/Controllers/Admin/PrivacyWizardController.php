@@ -94,6 +94,13 @@ class PrivacyWizardController
         CSRF::check();
         $siteId = PrivacyController::requireSiteId();
 
+        // WZ-UX — cuando hay JS, el navegador genera las páginas una a una
+        // (progreso real) y llama aquí solo para cerrar el asistente.
+        if (Request::isJson()) {
+            $this->finishJson($siteId);
+            return;
+        }
+
         $result = LegalPageGenerator::generateAllLegalPages($siteId);
 
         // Precondición fallida: faltan datos del responsable → volver al paso 1.
@@ -124,6 +131,37 @@ class PrivacyWizardController
         ComplianceService::patch($siteId, ['wizard' => ['completed_at' => date('Y-m-d H:i:s')]]);
 
         Response::redirect(base_url('admin/privacy/wizard?step=3&done=1'));
+    }
+
+    /**
+     * Cierre del asistente en modo JSON: no genera nada, solo comprueba que las
+     * páginas legales existen de verdad y marca el wizard como completado.
+     */
+    private function finishJson(int $siteId): void
+    {
+        $state   = PrivacyController::loadLegalPagesState($siteId);
+        $types   = LegalPageGenerator::typesFor($siteId);
+        $missing = [];
+        foreach ($types as $key => $info) {
+            if (($state[$key] ?? null) === null) {
+                $missing[] = $info['label'];
+            }
+        }
+
+        if ($missing !== []) {
+            Response::json([
+                'ok'      => false,
+                'error'   => 'Faltan páginas por generar: ' . implode(' · ', $missing),
+                'missing' => $missing,
+            ], 409);
+        }
+
+        ComplianceService::patch($siteId, ['wizard' => ['completed_at' => date('Y-m-d H:i:s')]]);
+
+        Response::json([
+            'ok'           => true,
+            'redirect_url' => base_url('admin/privacy/wizard?step=3&done=1'),
+        ]);
     }
 
     // ======================================================================

@@ -13,18 +13,41 @@ if (!function_exists('e')) {
 }
 
 if (!function_exists('slugify')) {
-    /** Convierte un string a slug URL-friendly. */
+    /**
+     * Convierte un string a slug URL-friendly.
+     *
+     * La transliteración es un mapa explícito y NO `iconv('ASCII//TRANSLIT')`:
+     * iconv depende del locale y de la librería del sistema, así que sin locale
+     * no transcribe sino que sustituye — «Ubicación» salía como `Ubicaci'on` en
+     * macOS y `Ubicaci?on` en glibc, y ese carácter acababa convertido en un
+     * guión (`contacto-y-ubicaci-n`). Con el mapa, el mismo título da el mismo
+     * slug en cualquier servidor.
+     */
     function slugify(string $text): string
     {
+        static $map = [
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o', 'ø' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+            'ñ' => 'n', 'ç' => 'c', 'ý' => 'y', 'ÿ' => 'y',
+            'æ' => 'ae', 'œ' => 'oe', 'ß' => 'ss',
+            'ā' => 'a', 'ē' => 'e', 'ī' => 'i', 'ō' => 'o', 'ū' => 'u',
+            'ă' => 'a', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
+            'č' => 'c', 'ć' => 'c', 'ď' => 'd', 'ě' => 'e', 'ł' => 'l', 'ń' => 'n',
+            'ř' => 'r', 'š' => 's', 'ť' => 't', 'ů' => 'u', 'ž' => 'z', 'ź' => 'z', 'ż' => 'z',
+            'ð' => 'd', 'þ' => 'th', 'đ' => 'd',
+            '€' => 'eur', '&' => '-y-', '@' => '-at-',
+        ];
+
         $text = trim($text);
-        // Transliteración básica
-        if (function_exists('iconv')) {
-            $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-            if ($converted !== false) {
-                $text = $converted;
-            }
-        }
-        $text = strtolower($text);
+        // Minúsculas antes de mapear: así el mapa solo lleva minúsculas y
+        // «Ubicación» y «UBICACIÓN» dan el mismo slug.
+        $text = function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
+        $text = strtr($text, $map);
+        // Lo que no esté en el mapa (alfabetos no latinos, símbolos) cae aquí y
+        // se convierte en separador, como cualquier otro carácter no válido.
         $text = preg_replace('/[^a-z0-9]+/', '-', $text) ?? '';
         return trim($text, '-');
     }

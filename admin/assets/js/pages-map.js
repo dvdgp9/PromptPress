@@ -331,15 +331,13 @@
         fetch(baseUrl + '/admin/pages/' + id + '/delete-info', {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function (res) {
-            return res.json().then(function (body) {
-                if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
-                return body;
-            });
-        }).then(function (info) {
+        }).then(readJson).then(function (info) {
             renderDeleteDialog(id, title, info);
         }).catch(function (err) {
-            showToast(err.message || 'No se pudo comprobar qué afecta al borrado.', 'error');
+            showToast(err.message || 'No se pudo comprobar qué afecta al borrado.', err.gone ? 'success' : 'error');
+            // La tarjeta es un fantasma: la página ya no está en la base de
+            // datos. Recargar es lo único que deja la pantalla en su sitio.
+            if (err.gone) setTimeout(function () { window.location.reload(); }, 1200);
         }).finally(function () {
             setButtonBusy(sourceEl, false, null);
         });
@@ -1022,14 +1020,41 @@
         Object.keys(data).forEach(function (key) { params.set(key, data[key]); });
         return fetchWithTimeout(baseUrl + path, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                // Sin esta cabecera, los endpoints que comparten camino con el
+                // formulario clásico (p. ej. `destroy()`) contestan con un
+                // redirect a /admin/pages en vez de JSON: la operación se hace
+                // en el servidor, pero aquí revienta el parseo y la pantalla no
+                // se refresca. El GET de delete-info ya la mandaba.
+                'X-Requested-With': 'XMLHttpRequest'
+            },
             body: params.toString(),
             credentials: 'same-origin'
-        }, timeoutMs).then(function (res) {
-            return res.json().then(function (body) {
-                if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
-                return body;
-            });
+        }, timeoutMs).then(readJson);
+    }
+
+    /**
+     * Lee la respuesta como JSON y, si no lo es (un HTML de 404, de login
+     * caducado o un redirect seguido), lanza un mensaje legible en vez del
+     * «Unexpected token '<'» del parser.
+     */
+    function readJson(res) {
+        return res.text().then(function (text) {
+            var body;
+            try {
+                body = JSON.parse(text);
+            } catch (e) {
+                if (res.status === 404) {
+                    var err404 = new Error('Esa página ya no existe. Refresco la pantalla.');
+                    err404.gone = true;
+                    throw err404;
+                }
+                throw new Error('El servidor no ha contestado en JSON (HTTP ' + res.status + ').'
+                    + ' Si has iniciado sesión hace mucho, recarga y vuelve a entrar.');
+            }
+            if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
+            return body;
         });
     }
 
