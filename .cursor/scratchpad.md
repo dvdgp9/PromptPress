@@ -6070,6 +6070,23 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   locales ni secretos, push normal a `origin/main`, paquete aceptado por el
   fingerprint del actualizador y verificado con `unzip -t` + SHA-256.
 
+### Release 1.1.0 preparada para producción (26/08/2026, Executor)
+
+- Snapshot de producto versionado en `83654f1` y publicado mediante push normal
+  en `origin/main`; HEAD remoto comprobado contra el commit local.
+- Regresión verde: Gemini 3.7, normalizador y composer enriquecidos, referencias
+  de Medios, taxonomía del Assistant, idiomas del panel, formularios, reservas,
+  Canvas y todas las suites de Recursos ejecutadas para esta entrega.
+- ZIP generado en
+  `deliverables/promptpress-1.1.0-assistant-rich-ar3-20260826.zip`: 1.031
+  archivos, 2,6 MB y versión declarada `1.1.0`.
+- SHA-256:
+  `b7124bd155a89a79b9aa40f7612aafeedf669c864067e2b9dadb8243b6ccef2c`.
+- `unzip -t` sin errores; fingerprint y archivos de AR3 presentes; credenciales,
+  `.git`, herramientas locales, entregables y todo el storage runtime ausentes.
+- No se ha desplegado desde este entorno. AR3 continúa pendiente únicamente de
+  la validación manual que el usuario realizará en producción.
+
 ## Lessons (ASSISTANT-RICH)
 
 - “Aceptar rich text” y “mandar HTML al modelo” no son equivalentes. El valor
