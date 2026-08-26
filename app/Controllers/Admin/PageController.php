@@ -41,7 +41,7 @@ class PageController
         'service' => 'Servicio',
         'product' => 'Producto',
         'landing' => 'Landing',
-        'article' => 'Artículo',
+        'article' => 'Artículo', // i18n-ignore: etiqueta de tipo, ver page_type.* en el catálogo
         'contact' => 'Contacto',
         'legal'   => 'Legal',
     ];
@@ -166,7 +166,7 @@ class PageController
 
         $title = trim((string) Request::post('title', ''));
         if ($title === '' || mb_strlen($title) > 500) {
-            Response::json(['ok' => false, 'errors' => ['title' => 'El título es obligatorio (máx. 500 caracteres).']], 422);
+            Response::json(['ok' => false, 'errors' => ['title' => __('page_ctrl.title_required_max')]], 422);
         }
         $type = (string) Request::post('page_type', 'landing');
         if (!isset(self::PAGE_TYPES[$type])) {
@@ -309,6 +309,8 @@ class PageController
         }
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     // POST /admin/pages/ai-brief
     public function aiBrief(array $params = []): void
     {
@@ -318,7 +320,7 @@ class PageController
         $notes = trim((string) Request::post('notes', ''));
 
         if ($idea === '') {
-            Response::json(['ok' => false, 'error' => 'Describe qué página quieres crear o elige una oportunidad.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.describe_or_pick')], 422);
         }
 
         $input = [
@@ -374,7 +376,7 @@ class PageController
                     'ok' => true,
                     'fallback' => true,
                     'data' => self::fallbackBrief($idea, $notes),
-                    'error_note' => 'El modelo devolvió un plan con formato incompleto. He preparado un plan base para que puedas continuar.',
+                    'error_note' => __('page_ctrl.plan_incomplete'),
                     'provider' => '',
                     'model' => '',
                     'tokens_in' => 0,
@@ -388,6 +390,7 @@ class PageController
     }
 
     // POST /admin/pages/architecture/analyze
+    // i18n-ignore-end
     public function architectureAnalyze(array $params = []): void
     {
         CSRF::check();
@@ -460,7 +463,7 @@ class PageController
 
         if ($parentId !== null) {
             if ($parentId === $id || !self::pageBelongsToSite($parentId, $siteId) || self::wouldCreateCycle($id, $parentId)) {
-                Response::json(['ok' => false, 'error' => 'La jerarquía seleccionada no es válida.'], 422);
+                Response::json(['ok' => false, 'error' => __('page_ctrl.bad_hierarchy')], 422);
             }
         }
 
@@ -473,7 +476,7 @@ class PageController
         // etiqueta u orden cambia el chrome de TODAS las páginas cacheadas.
         CacheService::flush($siteId);
 
-        Response::json(['ok' => true, 'message' => 'Estructura actualizada.']);
+        Response::json(['ok' => true, 'message' => __('page_ctrl.structure_updated')]);
     }
 
     // ----------------------------------------------------------------------
@@ -499,7 +502,7 @@ class PageController
         // idioma, prefijo de slug y grupo de traducción.
         self::createPageRow($siteId, $input);
 
-        Session::flash('success', 'Página creada correctamente.');
+        Session::flash('success', __('page_ctrl.created'));
         Response::redirect(base_url('admin/pages'));
     }
 
@@ -517,6 +520,8 @@ class PageController
         return in_array($type, ['home', 'service', 'product', 'landing', 'contact'], true);
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     public function aiCreate(array $params = []): void
     {
         CSRF::check();
@@ -547,16 +552,16 @@ class PageController
         }
 
         if ($title === '') {
-            Response::json(['ok' => false, 'error' => 'Añade un título para la página.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.need_title')], 422);
         }
         if (!isset(self::PAGE_TYPES[$pageType])) {
-            Response::json(['ok' => false, 'error' => 'Tipo de página inválido.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_type')], 422);
         }
         if ($goal === '') {
-            Response::json(['ok' => false, 'error' => 'Describe el objetivo de la página.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.need_goal')], 422);
         }
         if ($parentId > 0 && !self::pageBelongsToSite($parentId, $siteId)) {
-            Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.parent_not_owned')], 422);
         }
 
         // Modelo elegido por el usuario: override para TODAS las llamadas IA de
@@ -581,7 +586,7 @@ class PageController
                 $result = OnboardingController::generateCanvasPageForPanel(
                     $siteId, $title, $pageType, $goal, $canvasContext, $parentId
                 );
-                Session::flash('success', 'Página generada con IA. Revísala en el Studio antes de publicar.');
+                Session::flash('success', __('page_ctrl.generated_studio'));
                 if (!empty($result['image_warning'])) Session::flash('warning', (string) $result['image_warning']);
                 Response::json([
                     'ok' => true,
@@ -616,7 +621,7 @@ class PageController
                 $structure = $structureResult['data']['sections'] ?? [];
             }
             if (!is_array($structure) || $structure === []) {
-                Response::json(['ok' => false, 'error' => 'La IA no propuso secciones válidas.'], 422);
+                Response::json(['ok' => false, 'error' => __('page_ctrl.no_sections')], 422);
             }
 
             $generatedSections = [];
@@ -658,7 +663,7 @@ class PageController
         }
 
         if ($generatedSections === []) {
-            Response::json(['ok' => false, 'error' => 'No se pudo generar contenido de secciones.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_section_content')], 422);
         }
 
         // D-Slice 2 — LayoutSelector reemplaza la variante propuesta por la IA
@@ -749,7 +754,7 @@ class PageController
             $pdo->commit();
         } catch (\Throwable $e) {
             if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-            Response::json(['ok' => false, 'error' => 'Error guardando la página: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.save_error', ['error' => $e->getMessage()])], 500);
         }
 
         // D-Slice 2 — Persistir preferencias inter-página para futuras páginas
@@ -763,7 +768,7 @@ class PageController
             error_log('LayoutSelector rememberPage aiCreate failed: ' . $e->getMessage());
         }
 
-        Session::flash('success', 'Página generada con IA. Revísala antes de publicar.');
+        Session::flash('success', __('page_ctrl.generated'));
         Response::json([
             'ok' => true,
             'page_id' => $pageId,
@@ -773,10 +778,13 @@ class PageController
         ]);
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     // ----------------------------------------------------------------------
     // D-MB — Crear página desde una REFERENCIA visual (captura) con IA de visión.
     // POST /admin/pages/ai-from-reference   (multipart: references[] + title + goal)
     // ----------------------------------------------------------------------
+    // i18n-ignore-end
     public function aiCreateFromReference(array $params = []): void
     {
         CSRF::check();
@@ -794,17 +802,17 @@ class PageController
         $sourceText  = trim((string) Request::post('source_content', ''));
 
         if ($title === '') {
-            Response::json(['ok' => false, 'error' => 'Añade un título para tu página.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.need_title')], 422);
         }
         // La referencia SIEMPRE genera una página canvas de marketing (sin bloques).
         if (!self::isCanvasMarketingType($pageType)) {
             $pageType = 'landing';
         }
         if ($goal === '') {
-            Response::json(['ok' => false, 'error' => 'Describe el objetivo de tu página.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.need_goal')], 422);
         }
         if ($parentId > 0 && !self::pageBelongsToSite($parentId, $siteId)) {
-            Response::json(['ok' => false, 'error' => 'La página padre no pertenece a este sitio.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.parent_not_owned')], 422);
         }
 
         // Fuente visual: una captura aporta estructura; una página base puede
@@ -853,11 +861,11 @@ class PageController
             error_log('[aiCreateFromReference] canvas falló: ' . get_class($e) . ': ' . $e->getMessage());
             Response::json([
                 'ok' => false,
-                'error' => 'No se pudo generar la página desde la referencia. Inténtalo de nuevo o prueba con otro modelo.',
+                'error' => __('page_ctrl.ref_failed'),
             ], 422);
         }
 
-        Session::flash('success', 'Página generada desde tu referencia. Revísala en el Studio antes de publicar.');
+        Session::flash('success', __('page_ctrl.generated_from_ref'));
         if (!empty($result['image_warning'])) Session::flash('warning', (string) $result['image_warning']);
         Response::json([
             'ok' => true,
@@ -875,13 +883,14 @@ class PageController
      *
      * @param array<int,array{mime:string,data:string}> $images
      */
+    // i18n-ignore-end
     private static function referenceSourceError(int $siteId, int $seedPageId, array $images): ?string
     {
         if ($images !== []) {
             return null;
         }
         if ($seedPageId <= 0) {
-            return 'Sube una captura de referencia o elige una página base.';
+            return __('page_ctrl.need_reference');
         }
         $seed = Database::selectOne(
             "SELECT p.id
@@ -893,7 +902,7 @@ class PageController
         );
         return $seed !== null
             ? null
-            : 'La página base elegida ya no está disponible. Elige otra o sube una captura.';
+            : __('page_ctrl.base_page_gone');
     }
 
     /**
@@ -950,10 +959,10 @@ class PageController
         $count = 0;
         foreach ($names as $i => $tmp) {
             if (($errors[$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
-            if (($errors[$i] ?? 1) !== UPLOAD_ERR_OK) return [[], 'Error al subir una de las imágenes.'];
-            if (++$count > $maxCount) return [[], 'Máximo ' . $maxCount . ' imágenes de referencia.'];
-            if (($sizes[$i] ?? 0) > $maxBytes) return [[], 'Cada imagen debe pesar menos de 8 MB.'];
-            if (!is_uploaded_file((string) $tmp)) return [[], 'Subida no válida.'];
+            if (($errors[$i] ?? 1) !== UPLOAD_ERR_OK) return [[], __('page_ctrl.image_upload_error')];
+            if (++$count > $maxCount) return [[], __('page_ctrl.max_ref_images', ['n' => $maxCount])];
+            if (($sizes[$i] ?? 0) > $maxBytes) return [[], __('page_ctrl.image_too_big')];
+            if (!is_uploaded_file((string) $tmp)) return [[], __('page_ctrl.bad_upload')];
 
             $finfo = new \finfo(FILEINFO_MIME_TYPE);
             $mime  = (string) $finfo->file((string) $tmp);
@@ -961,7 +970,7 @@ class PageController
 
             $raw = (string) file_get_contents((string) $tmp);
             $normalized = self::downscaleForVision($raw);
-            if ($normalized === null) return [[], 'No se pudo procesar una de las imágenes.'];
+            if ($normalized === null) return [[], __('page_ctrl.image_process_failed')];
             $out[] = $normalized;
         }
         return [$out, null];
@@ -1113,6 +1122,8 @@ class PageController
         Response::html($html);
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     // ----------------------------------------------------------------------
     // T18.7 — Variaciones IA de layout para una página existente
     // POST /admin/pages/{id}/ai-variations
@@ -1132,7 +1143,7 @@ class PageController
             [$pageId]
         );
         if (empty($sections)) {
-            Response::json(['ok' => false, 'error' => 'Esta página no tiene secciones para variar.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_sections_to_vary')], 422);
         }
 
         $layoutData = [];
@@ -1146,7 +1157,7 @@ class PageController
             ];
         }
         if (empty($layoutData)) {
-            Response::json(['ok' => false, 'error' => 'No hay secciones válidas para proponer variaciones.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_valid_sections')], 422);
         }
 
         $layoutLines = [];
@@ -1177,7 +1188,7 @@ class PageController
             if ($normalized !== null) $variations[] = $normalized;
         }
         if (empty($variations)) {
-            Response::json(['ok' => false, 'error' => 'La IA no devolvió variaciones aplicables.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_variations')], 422);
         }
 
         Response::json([
@@ -1196,6 +1207,7 @@ class PageController
     // T18.7 — Aplicar una variación de layout existente
     // POST /admin/pages/{id}/ai-variations/apply
     // ----------------------------------------------------------------------
+    // i18n-ignore-end
     public function applyVariation(array $params = []): void
     {
         CSRF::check();
@@ -1206,7 +1218,7 @@ class PageController
         $raw = trim((string) Request::post('variation_json', ''));
         $variation = json_decode($raw, true);
         if (!is_array($variation)) {
-            Response::json(['ok' => false, 'error' => 'Variación inválida.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_variation')], 422);
         }
 
         $sections = Database::select(
@@ -1217,7 +1229,7 @@ class PageController
             [$pageId]
         );
         if (empty($sections)) {
-            Response::json(['ok' => false, 'error' => 'La página no tiene secciones para aplicar variación.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_sections_for_variation')], 422);
         }
 
         $baseLayout = [];
@@ -1231,12 +1243,12 @@ class PageController
             ];
         }
         if (empty($baseLayout)) {
-            Response::json(['ok' => false, 'error' => 'No hay layout base aplicable.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.no_base_layout')], 422);
         }
 
         $normalized = self::normalizeVariation($variation, $baseLayout, 1, $siteId);
         if ($normalized === null) {
-            Response::json(['ok' => false, 'error' => 'La variación no es compatible con el layout actual.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.variation_incompatible')], 422);
         }
 
         $orderIds = [];
@@ -1259,19 +1271,21 @@ class PageController
             $pdo->commit();
         } catch (\Throwable $e) {
             if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-            Response::json(['ok' => false, 'error' => 'No se pudo aplicar la variación: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.variation_failed', ['error' => $e->getMessage()])], 500);
         }
 
         Response::json([
             'ok' => true,
             'applied' => [
-                'label' => (string) ($normalized['label'] ?? 'Variación aplicada'),
+                'label' => (string) ($normalized['label'] ?? __('page_ctrl.variation_applied')),
                 'sections' => $normalized['sections'],
                 'order_ids' => $orderIds,
             ],
         ]);
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /**
      * T18.6 — Hint de longitud/tono según la variante visual elegida. Se pasa
      * a la IA dentro de `extra_context` para que el contenido encaje con el
@@ -1310,6 +1324,7 @@ class PageController
     // ----------------------------------------------------------------------
     // Formulario de edición
     // ----------------------------------------------------------------------
+    // i18n-ignore-end
     public function edit(array $params = []): void
     {
         $siteId = self::requireSiteId();
@@ -1427,13 +1442,13 @@ class PageController
                 if ($level === 'orange' || $level === 'red') {
                     Session::flash(
                         'warning',
-                        'Página publicada. Te recomendamos completar los datos de privacidad pendientes en /admin/privacy.'
+                        __('page_ctrl.published_privacy_pending')
                     );
                 }
             } catch (\Throwable $e) {}
         }
 
-        Session::flash('success', 'Página actualizada correctamente.');
+        Session::flash('success', __('page_ctrl.updated'));
         Response::redirect(base_url('admin/pages/' . $id . '/edit'));
     }
 
@@ -1463,7 +1478,7 @@ class PageController
         // desaparece del menú del header y de los enlaces legales del footer.
         CacheService::flush($siteId);
 
-        $message = 'Página eliminada correctamente.'
+        $message = __('page_ctrl.deleted')
             . ($redirected !== null ? ' Su URL ahora redirige a /' . ltrim($redirected, '/') . '.' : '');
 
         if (self::wantsJson()) {
@@ -1499,7 +1514,7 @@ class PageController
 
         $status = (string) Request::post('status', '');
         if (!in_array($status, self::STATUSES, true)) {
-            Response::json(['ok' => false, 'error' => 'Estado no válido.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_status')], 422);
         }
 
         self::applyStatus($siteId, $page, $status);
@@ -1508,13 +1523,13 @@ class PageController
         // por "/" cae en la página de cortesía.
         $warning = null;
         if ($status === 'draft' && ($page['page_type'] ?? '') === 'home') {
-            $warning = 'Era la página de inicio: tu web se queda sin portada hasta que publiques otra.';
+            $warning = __('page_ctrl.was_home');
         }
 
         Response::json([
             'ok' => true,
             'status' => $status,
-            'message' => $status === 'published' ? 'Página publicada.' : 'Página devuelta a borrador.',
+            'message' => $status === 'published' ? __('page_ctrl.published') : __('page_ctrl.back_to_draft'),
             'warning' => $warning,
         ]);
     }
@@ -1572,7 +1587,7 @@ class PageController
         Response::json([
             'ok' => true,
             'id' => $newId,
-            'message' => 'Copia creada como borrador.',
+            'message' => __('page_ctrl.copy_created'),
             'edit_url' => base_url('admin/pages/' . $newId . '/edit'),
         ]);
     }
@@ -1596,10 +1611,10 @@ class PageController
         $id     = (int) $page['id'];
 
         if (($page['page_type'] ?? '') === 'article') {
-            Response::json(['ok' => false, 'error' => 'Una entrada del blog no puede ser la portada.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.post_cant_be_home')], 422);
         }
         if (($page['page_type'] ?? '') === 'home') {
-            Response::json(['ok' => true, 'message' => 'Esta página ya es el inicio.', 'warning' => null, 'demoted' => []]);
+            Response::json(['ok' => true, 'message' => __('page_ctrl.already_home'), 'warning' => null, 'demoted' => []]);
         }
 
         $lang = LanguageService::forPage($page, $siteId);
@@ -1616,9 +1631,9 @@ class PageController
 
         Response::json([
             'ok' => true,
-            'message' => 'Ahora «' . $page['title'] . '» es la página de inicio.',
+            'message' => __('page_ctrl.now_home', ['titulo' => $page['title']]),
             'warning' => ($page['status'] ?? '') !== 'published'
-                ? 'Está en borrador: no se servirá en «/» hasta que la publiques.'
+                ? __('page_ctrl.home_is_draft')
                 : null,
             'demoted' => $demoted,
         ]);
@@ -1692,7 +1707,7 @@ class PageController
         $parentId = ($parentRaw === '' || $parentRaw === '0') ? null : (int) $parentRaw;
         if ($parentId !== null) {
             if ($parentId === $id || !self::pageBelongsToSite($parentId, $siteId) || self::wouldCreateCycle($id, $parentId)) {
-                Response::json(['ok' => false, 'error' => 'Ahí no: una página no puede colgar de sí misma ni de una de sus hijas.'], 422);
+                Response::json(['ok' => false, 'error' => __('page_ctrl.bad_parent')], 422);
             }
         }
 
@@ -1722,7 +1737,7 @@ class PageController
         // Flush del sitio: mover una página reordena el menú del header, que
         // va dentro del HTML cacheado de todas las páginas.
         CacheService::flush($siteId);
-        Response::json(['ok' => true, 'message' => 'Página movida.']);
+        Response::json(['ok' => true, 'message' => __('page_ctrl.moved')]);
     }
 
     /**
@@ -1738,13 +1753,13 @@ class PageController
 
         $action = (string) Request::post('action', '');
         if (!in_array($action, ['publish', 'draft', 'delete'], true)) {
-            Response::json(['ok' => false, 'error' => 'Acción no válida.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_action')], 422);
         }
 
         $ids = Request::post('ids', []);
         $ids = is_array($ids) ? array_values(array_unique(array_filter(array_map('intval', $ids)))) : [];
         if ($ids === []) {
-            Response::json(['ok' => false, 'error' => 'No has seleccionado ninguna página.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.none_selected')], 422);
         }
 
         $done = 0;
@@ -1774,7 +1789,7 @@ class PageController
             'ok' => true,
             'done' => $done,
             'skipped' => $skipped,
-            'message' => $done . ($done === 1 ? ' página actualizada.' : ' páginas actualizadas.'),
+            'message' => __($done === 1 ? 'page_ctrl.n_updated_one' : 'page_ctrl.n_updated_other', ['n' => $done]),
         ]);
     }
 
@@ -1919,6 +1934,8 @@ class PageController
         ], $rows);
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** Crea la 301 de una página que se va a borrar. Devuelve el destino o null. */
     private static function createDeletionRedirect(int $siteId, array $page, string $target): ?string
     {
@@ -1934,6 +1951,7 @@ class PageController
         }
     }
 
+    // i18n-ignore-end
     private static function wantsJson(): bool
     {
         $xhr = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
@@ -1988,7 +2006,7 @@ class PageController
             'errors'       => $ctx['errors'],
             'pageTypes'    => self::PAGE_TYPES,
             'sections'     => $ctx['sections'] ?? [],
-            'sectionTypes' => SectionController::SECTION_TYPES,
+            'sectionTypes' => SectionController::sectionTypesForView(Auth::siteId()),
             'pagesForLinks' => $pagesForLinks,
             'csrf'         => CSRF::token(),
             'compliance'   => $compliance,
@@ -2056,36 +2074,36 @@ class PageController
         $errors = [];
 
         if ($input['title'] === '') {
-            $errors['title'] = 'El título es obligatorio.';
+            $errors['title'] = __('page_ctrl.title_required');
         } elseif (mb_strlen($input['title']) > 500) {
-            $errors['title'] = 'El título no puede superar 500 caracteres.';
+            $errors['title'] = __('page_ctrl.title_too_long');
         }
 
         if (!isset(self::PAGE_TYPES[$input['page_type']])) {
-            $errors['page_type'] = 'Tipo de página inválido.';
+            $errors['page_type'] = __('page_ctrl.bad_type');
         }
 
         if (!in_array($input['status'], self::STATUSES, true)) {
-            $errors['status'] = 'Estado inválido.';
+            $errors['status'] = __('page_ctrl.bad_status2');
         }
 
         if (mb_strlen($input['meta_title']) > 255) {
-            $errors['meta_title'] = 'El meta título no puede superar 255 caracteres.';
+            $errors['meta_title'] = __('page_ctrl.meta_title_long');
         }
         if (mb_strlen($input['meta_description']) > 500) {
-            $errors['meta_description'] = 'La meta descripción no puede superar 500 caracteres.';
+            $errors['meta_description'] = __('page_ctrl.meta_desc_long');
         }
         if ($input['canonical_url'] !== '' && SeoIndexingService::normalizeCanonical($input['canonical_url']) === null) {
-            $errors['canonical_url'] = 'La canonical debe ser una URL completa que empiece por http:// o https://.';
+            $errors['canonical_url'] = __('page_ctrl.bad_canonical');
         }
 
         // (El slug ya viene autogenerado desde collectInput si estaba vacío)
         if ($input['slug'] === '') {
-            $errors['slug'] = 'El slug es obligatorio (se autogenera del título si lo dejas vacío).';
+            $errors['slug'] = __('page_ctrl.slug_required');
         } elseif (!preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*$#', $input['slug'])) {
-            $errors['slug'] = 'El slug solo puede contener minúsculas, números, guiones simples y barras (para anidar, ej: servicios/diseno-web).';
+            $errors['slug'] = __('page_ctrl.slug_format');
         } elseif (mb_strlen($input['slug']) > 500) {
-            $errors['slug'] = 'El slug no puede superar 500 caracteres.';
+            $errors['slug'] = __('page_ctrl.slug_too_long');
         } else {
             // Check unicidad (site_id, slug)
             $sql = 'SELECT id FROM pages WHERE site_id = ? AND slug = ?';
@@ -2096,7 +2114,7 @@ class PageController
             }
             $exists = Database::selectOne($sql . ' LIMIT 1', $params);
             if ($exists) {
-                $errors['slug'] = 'Ya existe una página con ese slug.';
+                $errors['slug'] = __('page_ctrl.slug_taken');
             }
         }
 
@@ -2114,11 +2132,10 @@ class PageController
             }
             if (LanguageService::slugCollidesWithLanguage($siteId, $input['slug'], $pageLang)) {
                 $first = explode('/', trim($input['slug'], '/'))[0];
-                $errors['slug'] = sprintf(
-                    '«%s/» está reservado para las páginas en %s. Elige otro slug o cambia el idioma de la página.',
-                    $first,
-                    LanguageService::label($first)
-                );
+                $errors['slug'] = __('page_ctrl.slug_reserved', [
+                    'prefijo' => $first,
+                    'idioma'  => LanguageService::label($first),
+                ]);
             }
         }
 
@@ -2132,7 +2149,7 @@ class PageController
             [$id, $siteId]
         );
         if (!$page) {
-            Response::notFound('Página no encontrada');
+            Response::notFound(__('post_ctrl.page_not_found'));
         }
         return $page;
     }
@@ -2381,6 +2398,8 @@ class PageController
         return self::opportunityFingerprint($siteId, 'architecture-v1');
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     private static function siteMapContext(int $siteId): string
     {
         $pages = Database::select(
@@ -2446,6 +2465,7 @@ class PageController
     }
 
     /** @return array<string,mixed>|null */
+    // i18n-ignore-end
     private static function cachedArchitecture(int $siteId, string $fingerprint): ?array
     {
         $row = Database::selectOne(
@@ -2538,7 +2558,7 @@ class PageController
         }
 
         return [
-            'summary' => mb_substr(trim((string) ($data['summary'] ?? 'Arquitectura analizada.')), 0, 500),
+            'summary' => mb_substr(trim((string) ($data['summary'] ?? __('page_ctrl.architecture_analyzed'))), 0, 500),
             'health' => [
                 'score' => max(0, min(100, (int) ($data['health']['score'] ?? 60))),
                 'label' => mb_substr(trim((string) ($data['health']['label'] ?? 'En progreso')), 0, 120),
@@ -2549,12 +2569,14 @@ class PageController
         ];
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     private static function fallbackArchitecture(int $siteId): array
     {
         $pages = self::loadExistingPages($siteId);
         $hasContact = array_filter($pages, fn($p) => ($p['page_type'] ?? '') === 'contact' || str_contains((string) ($p['slug'] ?? ''), 'contact'));
         return [
-            'summary' => 'Arquitectura calculada localmente. La IA podrá afinarla cuando el proveedor responda.',
+            'summary' => __('page_ctrl.architecture_local'),
             'health' => ['score' => count($pages) > 3 ? 68 : 42, 'label' => count($pages) > 3 ? 'Base navegable' : 'Estructura inicial'],
             'suggested_groups' => [],
             'missing_pages' => $hasContact ? [] : [[
@@ -2568,14 +2590,15 @@ class PageController
                 'architecture_context' => 'Página de cierre de conversión para la navegación principal.',
             ]],
             'diagnostics' => [[
-                'label' => 'Revisión local',
+                'label' => __('page_ctrl.local_review'),
                 'severity' => 'info',
-                'detail' => 'Se ha generado una lectura básica sin llamada IA.',
+                'detail' => __('page_ctrl.local_review_detail'),
             ]],
         ];
     }
 
     /** @param array<string,mixed> $content */
+    // i18n-ignore-end
     private static function filterSectionContent(string $type, array $content): array
     {
         $schema = SectionSchemas::forType($type);
@@ -2662,7 +2685,7 @@ class PageController
             if (!($translation['ok'] ?? false)) {
                 Response::json([
                     'ok'      => false,
-                    'message' => (string) ($translation['message'] ?? 'No hemos podido traducir esta página.'),
+                    'message' => (string) ($translation['message'] ?? __('page_ctrl.translate_failed')),
                 ], 422);
             }
 
@@ -2673,7 +2696,7 @@ class PageController
             if (!($saved['ok'] ?? false)) {
                 Response::json([
                     'ok'      => false,
-                    'message' => (string) ($saved['message'] ?? 'No hemos podido guardar la traducción.'),
+                    'message' => (string) ($saved['message'] ?? __('page_ctrl.translate_save_failed')),
                     'edit_url' => isset($saved['page_id']) ? $editUrlFor((int) $saved['page_id']) : null,
                 ], 409);
             }
@@ -2682,18 +2705,13 @@ class PageController
             Response::json([
                 'ok'       => true,
                 'page_id'  => $newId,
-                'message'  => sprintf(
-                    'Listo: ya tienes esta página en %s. La hemos guardado como BORRADOR para que la revises '
-                    . 'antes de publicarla — tu página original no ha cambiado.',
-                    LanguageService::label($lang)
-                ),
+                'message'  => __('page_ctrl.translated_ok', ['idioma' => LanguageService::label($lang)]),
                 'edit_url' => $editUrlFor($newId),
             ]);
         } catch (AIException $e) {
             Response::json([
                 'ok'      => false,
-                'message' => 'La traducción no ha llegado a completarse. No se ha guardado nada, '
-                    . 'así que puedes volver a intentarlo sin perder nada.',
+                'message' => __('page_ctrl.translate_incomplete'),
             ], 502);
         }
     }
@@ -2863,7 +2881,7 @@ class PageController
     {
         $pages = self::loadExistingPages($siteId);
         if ($pages === []) {
-            return 'Todavía no hay páginas creadas.';
+            return __('page_ctrl.no_pages_yet');
         }
 
         $lines = [];
@@ -2999,6 +3017,8 @@ class PageController
         ];
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** @return array<string,mixed> */
     private static function fallbackOpportunities(int $siteId): array
     {
@@ -3041,7 +3061,10 @@ class PageController
         ];
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** @return array<string,mixed> */
+    // i18n-ignore-end
     private static function normalizeBrief(array $data): array
     {
         $allowedPageTypes = array_keys(self::PAGE_TYPES);
@@ -3076,6 +3099,7 @@ class PageController
     }
 
     /** @return array<string,mixed> */
+    // i18n-ignore-end
     private static function normalizeRecommendedForm(array $form): array
     {
         $fields = [];
@@ -3112,11 +3136,13 @@ class PageController
     private static function publicAiBriefError(AIException $e): string
     {
         if (self::isJsonParseAiError($e)) {
-            return 'La IA devolvió un plan con formato incompleto. Reinténtalo o cambia de modelo.';
+            return __('page_ctrl.plan_incomplete_retry');
         }
         return $e->getMessage();
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** @return array<string,mixed> */
     private static function fallbackBrief(string $idea, string $notes = ''): array
     {
@@ -3175,6 +3201,7 @@ class PageController
     }
 
     /** @return array<string,mixed> */
+    // i18n-ignore-end
     private static function decodePostedBrief(string $raw): array
     {
         $raw = trim($raw);
@@ -3183,6 +3210,8 @@ class PageController
         return is_array($decoded) ? self::normalizeBrief($decoded) : [];
     }
 
+    // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
+    // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** @param array<string,mixed> $brief */
     private static function briefToContext(array $brief): string
     {
@@ -3216,6 +3245,7 @@ class PageController
      * @param array<string,mixed> $brief
      * @return array<int,array<string,string>>
      */
+    // i18n-ignore-end
     private static function structureFromBrief(array $brief): array
     {
         $out = [];
@@ -3296,8 +3326,8 @@ class PageController
 
         if ($countsSeen !== $countsExpected) return null;
 
-        $label = trim((string) ($raw['label'] ?? 'Variación ' . $index));
-        if ($label === '') $label = 'Variación ' . $index;
+        $label = trim((string) ($raw['label'] ?? __('page_ctrl.variation_n', ['n' => $index])));
+        if ($label === '') $label = __('page_ctrl.variation_n', ['n' => $index]);
         $rationale = trim((string) ($raw['rationale'] ?? ''));
 
         return [
@@ -3397,7 +3427,7 @@ class PageController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo en la sesión.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/logout'));
         }
         return $siteId;

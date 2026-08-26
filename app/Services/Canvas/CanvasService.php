@@ -8,6 +8,7 @@ use App\Services\CacheService;
 use App\Services\FormPlacementStore;
 use App\Services\FormStore;
 use App\Services\FormTemplates;
+use App\Services\LanguageService;
 use App\Services\Renderer\SectionRenderer;
 use Core\Database;
 
@@ -196,18 +197,25 @@ final class CanvasService
     /**
      * HTML público de la página canvas: placeholders expandidos, CSS scoped.
      *
-     * @return array{html:string,has_form:bool}
+     * FORMS-LANG T1 — el idioma de render es el de la PÁGINA, no el del sitio.
+     * Antes esto llamaba a `setSiteContext($siteId)` a secas y pisaba el idioma
+     * que el controlador público ya había fijado: en una web bilingüe, todo lo
+     * que pinta el canvas (empezando por los formularios) salía en el idioma
+     * principal. Si no se pasa, se deduce de la propia fila de `pages`.
+     *
+     * @return array{html:string,has_form:bool,has_resources:bool}
      */
-    public static function renderPublic(int $pageId, int $siteId): array
+    public static function renderPublic(int $pageId, int $siteId, ?string $lang = null): array
     {
         $canvas = self::get($pageId);
         if ($canvas === null) {
-            return ['html' => '<!-- canvas empty -->', 'has_form' => false];
+            return ['html' => '<!-- canvas empty -->', 'has_form' => false, 'has_resources' => false];
         }
 
-        SectionRenderer::setSiteContext($siteId);
+        $lang = $lang ?? self::pageLanguage($pageId, $siteId);
         $hasForm = false;
-        $html = self::expandPlaceholders($canvas['html'], $siteId, $hasForm);
+        $hasResources = false;
+        $html = self::expandPlaceholders($canvas['html'], $siteId, $hasForm, $lang, $hasResources);
 
         $scope = '#pp-canvas-' . $pageId;
         $css = $canvas['css'] !== '' ? CanvasSanitizer::sanitizeCss($canvas['css'], $scope) : '';
@@ -216,20 +224,23 @@ final class CanvasService
         if ($css !== '') {
             $out .= '<style>' . $css . '</style>';
         }
-        return ['html' => $out, 'has_form' => $hasForm];
+        return ['html' => $out, 'has_form' => $hasForm, 'has_resources' => $hasResources];
     }
 
     /**
      * {{form:...}}, {{posts:recent}} y {{products:featured}} → componentes
      * reales del sistema.
      */
-    public static function expandPlaceholders(string $html, int $siteId, bool &$hasForm = false): string
+    public static function expandPlaceholders(string $html, int $siteId, bool &$hasForm = false, ?string $lang = null, bool &$hasResources = false): string
     {
-        SectionRenderer::setSiteContext($siteId);
+        SectionRenderer::setSiteContext($siteId, $lang);
+        // Idioma efectivo de la página: lo necesita el calendario para hablarle
+        // al visitante en el idioma que está leyendo.
+        $pageLang = \App\Services\LanguageService::normalize($lang ?? \App\Services\LanguageService::codeFor($siteId));
 
         $result = preg_replace_callback(
-            '/\{\{\s*(form|posts|products)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
-            static function (array $m) use ($siteId, &$hasForm): string {
+            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            static function (array $m) use ($siteId, &$hasForm, &$hasResources, $pageLang): string {
                 $kind = strtolower($m[1]);
                 $ref = strtolower($m[2]);
                 $optionsRaw = (string) ($m[3] ?? '');
@@ -239,6 +250,17 @@ final class CanvasService
                 // inline pueda revertirlo a su placeholder al guardar la sección.
                 $wrap = static fn(string $html): string =>
                     '<div class="pp-canvas-embed" data-pp-placeholder="' . htmlspecialchars($placeholderRef, ENT_QUOTES, 'UTF-8') . '">' . $html . '</div>';
+
+                if ($kind === 'resources') {
+                    $content = \App\Modules\Resources\FeaturedResourcesRenderer::render(
+                        $siteId,
+                        $pageLang,
+                        self::parsePlaceholderOptions($optionsRaw)
+                    );
+                    if ($content === '') return '<!-- pp:resources (módulo apagado o sin publicaciones) -->';
+                    $hasResources = true;
+                    return $wrap($content);
+                }
 
                 // C7 — productos destacados; solo con el módulo Commerce activo.
                 if ($kind === 'products') {
@@ -252,6 +274,30 @@ final class CanvasService
                     return $content === ''
                         ? '<!-- pp:products (sin productos activos) -->'
                         : $wrap($content);
+                }
+
+                // MODULOS M2 — calendario de reservas; solo con el módulo activo.
+                if ($kind === 'booking') {
+                    if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')) {
+                        return '<!-- pp:booking (módulo de reservas desactivado) -->';
+                    }
+                    $opts = self::parsePlaceholderOptions($optionsRaw);
+                    // `{{booking:auto}}` (o cualquier ref no numérica) = el primer
+                    // servicio activo: así la IA puede insertarlo sin conocer ids.
+                    $content = \App\Modules\Booking\BookingEmbedRenderer::render($siteId, [
+                        'service_id' => ctype_digit($ref) ? (int) $ref : 0,
+                        'days'       => $opts['days'] ?? null,
+                        'lang'       => $pageLang,
+                    ]);
+                    if ($content !== '') {
+                        return $wrap($content);
+                    }
+                    // Distinguir los dos motivos ayuda a entender una página que
+                    // "ha perdido" el calendario: puede que no haya servicios, o
+                    // que el que se eligió esté desactivado o borrado.
+                    return \App\Modules\Booking\BookingEmbedRenderer::embeddableServices($siteId) === []
+                        ? '<!-- pp:booking (sin servicios reservables activos) -->'
+                        : '<!-- pp:booking "' . htmlspecialchars($ref, ENT_QUOTES, 'UTF-8') . '" no disponible -->';
                 }
 
                 if ($kind === 'posts') {
@@ -273,13 +319,79 @@ final class CanvasService
             },
             $html
         );
-        return $result ?? $html;
+        $expanded = $result ?? $html;
+        return $hasResources ? self::collapseRedundantResourceHeadings($expanded) : $expanded;
+    }
+
+    /**
+     * Si una sección editorial ya tiene su propio h1-h6, el heading genérico
+     * del grid ("Recursos") repite la misma información y rompe la jerarquía.
+     * Se quita solo en ese contexto. Un bloque independiente conserva su h2;
+     * el `<section aria-label>` del renderer mantiene el nombre accesible.
+     */
+    private static function collapseRedundantResourceHeadings(string $html): string
+    {
+        if (!str_contains($html, 'pp-featured-resources__head')) return $html;
+
+        [$doc, $root] = self::domFromHtml($html);
+        if (!$root) return $html;
+
+        $embeds = [];
+        foreach ($root->getElementsByTagName('*') as $element) {
+            if (!$element instanceof \DOMElement) continue;
+            $placeholder = strtolower(trim($element->getAttribute('data-pp-placeholder')));
+            if (str_starts_with($placeholder, 'resources:')) $embeds[] = $element;
+        }
+
+        $changed = false;
+        foreach ($embeds as $embed) {
+            $section = $embed->parentNode;
+            while ($section instanceof \DOMElement && $section !== $root && !$section->hasAttribute('data-pp-section')) {
+                $section = $section->parentNode;
+            }
+            if (!$section instanceof \DOMElement || !$section->hasAttribute('data-pp-section')) continue;
+
+            $hasContextHeading = false;
+            foreach (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as $tag) {
+                foreach ($section->getElementsByTagName($tag) as $heading) {
+                    if (!self::nodeIsInside($heading, $embed)) {
+                        $hasContextHeading = true;
+                        break 2;
+                    }
+                }
+            }
+            if (!$hasContextHeading) continue;
+
+            $headers = [];
+            foreach ($embed->getElementsByTagName('header') as $header) {
+                if (!$header instanceof \DOMElement) continue;
+                $classes = ' ' . preg_replace('/\s+/', ' ', trim($header->getAttribute('class'))) . ' ';
+                if (str_contains($classes, ' pp-featured-resources__head ')) $headers[] = $header;
+            }
+            foreach ($headers as $header) {
+                $header->parentNode?->removeChild($header);
+                $changed = true;
+            }
+        }
+
+        if (!$changed) return $html;
+        $out = '';
+        foreach ($root->childNodes as $child) $out .= $doc->saveHTML($child);
+        return trim($out);
+    }
+
+    private static function nodeIsInside(\DOMNode $node, \DOMNode $ancestor): bool
+    {
+        for ($cursor = $node; $cursor !== null; $cursor = $cursor->parentNode) {
+            if ($cursor === $ancestor) return true;
+        }
+        return false;
     }
 
     private static function canonicalizePlaceholders(string $html): string
     {
         return preg_replace_callback(
-            '/\{\{\s*(form|posts|products)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
             static fn(array $m): string => '{{' . self::canonicalPlaceholderRef(
                 strtolower($m[1]),
                 strtolower($m[2]),
@@ -295,10 +407,12 @@ final class CanvasService
             return $kind . ':' . $ref;
         }
 
-        // posts y products llevan opciones canónicas ordenadas.
-        $optionKeys = $kind === 'posts'
-            ? ['limit', 'variant', 'heading', 'subheading']
-            : ['limit', 'heading'];
+        // posts, products y booking llevan opciones canónicas ordenadas.
+        $optionKeys = match ($kind) {
+            'posts'   => ['limit', 'variant', 'heading', 'subheading'],
+            'booking' => ['days'],
+            default   => ['limit', 'heading'],
+        };
         $opts = self::parsePlaceholderOptions($optionsRaw);
         $parts = [];
         foreach ($optionKeys as $key) {
@@ -339,15 +453,64 @@ final class CanvasService
      */
     /**
      * C7 — Pista para los prompts canvas ({modules_hint}) sobre los bloques
-     * de módulos disponibles en ESTE sitio. Con el módulo Commerce apagado
-     * devuelve una negativa explícita para que la IA no invente el placeholder.
+     * de módulos disponibles en ESTE sitio. Con un módulo apagado devuelve una
+     * negativa explícita para que la IA no invente su placeholder.
+     *
+     * MODULOS M2 — aquí entra también Reservas: es lo que permite que el gestor
+     * escriba "pon un calendario para pedir cita" en el chat del studio y la IA
+     * inserte el placeholder real en vez de dibujar un calendario de mentira.
      */
     public static function modulesHint(int $siteId): string
     {
-        if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'commerce')) {
-            return '(este sitio no tiene tienda online: NO uses placeholders {{products:...}})';
+        $parts = [];
+
+        if (\App\Modules\ModuleRegistry::isEnabled($siteId, 'commerce')) {
+            // i18n-ignore: contexto de tienda que viaja al prompt.
+            $parts[] = "Este sitio tiene TIENDA ONLINE activa. Si la página pide enseñar productos (o encaja de forma natural), inserta el placeholder `{{products:featured}}` (opciones: `{{products:featured|limit=4|heading=Nuestros productos}}`): el sistema lo sustituye por una cuadrícula real de productos con foto, precio y enlace a la tienda. NUNCA dibujes tarjetas de producto a mano ni inventes productos o precios. La tienda vive en /tienda (puedes enlazar CTAs a esa ruta).";
+        } else {
+            // i18n-ignore: relleno del prompt.
+            $parts[] = '(este sitio no tiene tienda online: NO uses placeholders {{products:...}})';
         }
-        return "Este sitio tiene TIENDA ONLINE activa. Si la página pide enseñar productos (o encaja de forma natural), inserta el placeholder `{{products:featured}}` (opciones: `{{products:featured|limit=4|heading=Nuestros productos}}`): el sistema lo sustituye por una cuadrícula real de productos con foto, precio y enlace a la tienda. NUNCA dibujes tarjetas de producto a mano ni inventes productos o precios. La tienda vive en /tienda (puedes enlazar CTAs a esa ruta).";
+
+        $services = \App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')
+            ? \App\Modules\Booking\BookingEmbedRenderer::embeddableServices($siteId)
+            : [];
+        if ($services !== []) {
+            // La ficha de cada servicio viaja ENTERA (duración y precio incluidos):
+            // sin estos datos el modelo escribía el texto de alrededor a ojo y
+            // acababa anunciando "Duración 15 minutos" al lado de un calendario
+            // que daba huecos de 60. Los datos reales son estos y no otros.
+            $list = implode('; ', array_map(
+                static function (array $s): string {
+                    $ficha = $s['id'] . ' = "' . $s['name'] . '" (' . $s['duration_min'] . ' min';
+                    if (trim($s['price_label']) !== '') {
+                        $ficha .= ', ' . $s['price_label'];
+                    }
+                    return $ficha . ')';
+                },
+                array_slice($services, 0, 8)
+            ));
+            // i18n-ignore-start: contexto de reservas que viaja al prompt, no al panel.
+            $parts[] = "Este sitio tiene RESERVAS DE CITAS activas. Si la página pide pedir cita, reservar o ver disponibilidad, inserta el placeholder `{{booking:auto}}`: el sistema lo sustituye por el calendario real con los huecos libres y el formulario de reserva. Para un servicio concreto usa su id; `auto` coge el primero activo. Opción: `{{booking:auto|days=7}}` para acortar la agenda visible. NUNCA dibujes un calendario, unas horas o un formulario de reserva a mano: no funcionarían.\n"
+                . "SERVICIOS REALES (id = nombre (duración, precio)): {$list}.\n"
+                . "El calendario YA muestra el nombre, la duración y el precio de cada servicio: no hace falta repetirlos en el texto de alrededor. Si aun así los mencionas, usa EXACTAMENTE estos valores. NUNCA inventes una duración, un precio, unos horarios ni un número de plazas: si no está en esta lista, no lo escribas.";
+            // i18n-ignore-end
+        } else {
+            // i18n-ignore: relleno del prompt.
+            $parts[] = '(este sitio no tiene reservas de citas: NO uses placeholders {{booking:...}})';
+        }
+
+        $resourcesAvailable = \App\Modules\ModuleRegistry::isEnabled($siteId, 'resources')
+            && \App\Modules\Resources\ResourceStore::hasPublished($siteId);
+        if ($resourcesAvailable) {
+            // i18n-ignore: contexto funcional para el prompt de Canvas.
+            $parts[] = "Este sitio tiene RECURSOS DESCARGABLES publicados. Para mostrarlos usa `{{resources:featured}}` (opciones: `{{resources:featured|limit=3|heading=Recursos destacados}}`). El sistema inserta únicamente las fichas disponibles en el idioma de la página y sus enlaces. NUNCA inventes ebooks, guías, archivos ni tarjetas de descarga a mano.";
+        } else {
+            // i18n-ignore: negativa explícita para evitar bloques ficticios.
+            $parts[] = '(este sitio no tiene recursos descargables publicados: NO uses placeholders {{resources:...}})';
+        }
+
+        return implode("\n", $parts);
     }
 
     private static function parsePlaceholderOptions(string $raw): array
@@ -360,7 +523,7 @@ final class CanvasService
             if ($part === '' || !str_contains($part, '=')) continue;
             [$key, $value] = array_map('trim', explode('=', $part, 2));
             $key = strtolower($key);
-            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading'], true)) continue;
+            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading', 'days'], true)) continue;
             $value = trim(strip_tags($value));
             $value = preg_replace('/[\x00-\x1F\x7F]/u', '', $value) ?? '';
             if ($value === '') continue;
@@ -394,6 +557,24 @@ final class CanvasService
              ORDER BY ps.sort_order ASC LIMIT 1",
             [$siteId, $ref]
         );
+    }
+
+    /**
+     * FORMS-LANG T1 — idioma de una página canvas. Nunca lanza: si la fila no
+     * existe o la BD falla, cae al idioma del sitio (que es lo que se hacía
+     * antes de esto).
+     */
+    private static function pageLanguage(int $pageId, int $siteId): string
+    {
+        try {
+            $row = Database::selectOne('SELECT language FROM pages WHERE id = ? LIMIT 1', [$pageId]);
+            if ($row !== null && trim((string) $row['language']) !== '') {
+                return LanguageService::normalize((string) $row['language']);
+            }
+        } catch (\Throwable $e) {
+            // Silencio deliberado: el fallback de abajo es correcto.
+        }
+        return LanguageService::codeFor($siteId);
     }
 
     // ==================================================================
@@ -450,10 +631,145 @@ final class CanvasService
         foreach ($root->childNodes as $node) {
             if ($node instanceof \DOMElement && $node->hasAttribute('data-pp-section')) {
                 $id = $node->getAttribute('data-pp-section');
-                $out[] = ['id' => $id, 'label' => ucfirst(str_replace(['-', '_'], ' ', $id))];
+                // `data-pp-label` lo ponen los bloques insertados desde el panel
+                // (formulario, calendario) porque su id lleva un sufijo aleatorio
+                // para no repetirse: sin esto, "Partes de esta página" mostraba
+                // "Booking 3 cf4f44f6" en vez de "Calendario: Consulta inicial".
+                $label = trim($node->getAttribute('data-pp-label'));
+                $out[] = [
+                    'id'    => $id,
+                    'label' => $label !== '' ? $label : ucfirst(str_replace(['-', '_'], ' ', $id)),
+                ];
             }
         }
         return $out;
+    }
+
+    /**
+     * STUDIO-STRUCTURE S1 — Inserta UNA sección top-level respecto a un ancla.
+     *
+     * Sin ancla, `before` significa principio y `after`, final. A diferencia
+     * del helper histórico `insertAfterSection()`, un ancla desconocida o un
+     * fragmento que no sea exactamente una sección se rechaza con null: las
+     * operaciones manuales nunca deben degradar silenciosamente a "al final".
+     */
+    public static function insertSectionRelative(
+        string $pageHtml,
+        string $insertHtml,
+        string $anchorId = '',
+        string $position = 'after'
+    ): ?string {
+        if (!in_array($position, ['before', 'after'], true)) return null;
+
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        [, $insertRoot] = self::domFromHtml($insertHtml);
+        if (!$root || !$insertRoot) return null;
+
+        $insertElements = [];
+        foreach ($insertRoot->childNodes as $node) {
+            if ($node instanceof \DOMElement) $insertElements[] = $node;
+        }
+        if (count($insertElements) !== 1) return null;
+
+        $source = $insertElements[0];
+        $newId = trim($source->getAttribute('data-pp-section'));
+        if (strtolower($source->tagName) !== 'section' || $newId === '') return null;
+
+        $sections = self::topLevelSections($root);
+        foreach ($sections as $section) {
+            if ($section->getAttribute('data-pp-section') === $newId) return null;
+        }
+
+        $anchor = null;
+        if ($anchorId !== '') {
+            foreach ($sections as $section) {
+                if ($section->getAttribute('data-pp-section') === $anchorId) {
+                    $anchor = $section;
+                    break;
+                }
+            }
+            if (!$anchor) return null;
+        }
+
+        $imported = $doc->importNode($source, true);
+        if ($anchor) {
+            $before = $position === 'before' ? $anchor : $anchor->nextSibling;
+            $root->insertBefore($imported, $before);
+        } elseif ($position === 'before' && $sections !== []) {
+            $root->insertBefore($imported, $sections[0]);
+        } else {
+            $root->appendChild($imported);
+        }
+
+        return self::serializeCanvasRoot($doc, $root);
+    }
+
+    /** Elimina exclusivamente una sección top-level; null si el id no existe. */
+    public static function deleteSection(string $pageHtml, string $sectionId): ?string
+    {
+        if ($sectionId === '') return null;
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        if (!$root) return null;
+
+        foreach (self::topLevelSections($root) as $section) {
+            if ($section->getAttribute('data-pp-section') !== $sectionId) continue;
+            $root->removeChild($section);
+            return self::serializeCanvasRoot($doc, $root);
+        }
+        return null;
+    }
+
+    /**
+     * Mueve una sección top-level un solo puesto. En un extremo devuelve el
+     * mismo HTML normalizado (no-op válido); dirección/id inválidos dan null.
+     */
+    public static function moveSection(string $pageHtml, string $sectionId, string $direction): ?string
+    {
+        if ($sectionId === '' || !in_array($direction, ['up', 'down'], true)) return null;
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        if (!$root) return null;
+
+        $sections = self::topLevelSections($root);
+        $index = null;
+        foreach ($sections as $i => $section) {
+            if ($section->getAttribute('data-pp-section') === $sectionId) {
+                $index = $i;
+                break;
+            }
+        }
+        if ($index === null) return null;
+
+        if ($direction === 'up' && $index > 0) {
+            $root->insertBefore($sections[$index], $sections[$index - 1]);
+        } elseif ($direction === 'down' && $index < count($sections) - 1) {
+            $next = $sections[$index + 1];
+            $root->insertBefore($sections[$index], $next->nextSibling);
+        }
+
+        return self::serializeCanvasRoot($doc, $root);
+    }
+
+    /** @return array<int,\DOMElement> */
+    private static function topLevelSections(\DOMElement $root): array
+    {
+        $sections = [];
+        foreach ($root->childNodes as $node) {
+            if (
+                $node instanceof \DOMElement
+                && strtolower($node->tagName) === 'section'
+                && $node->hasAttribute('data-pp-section')
+            ) {
+                $sections[] = $node;
+            }
+        }
+        return $sections;
+    }
+
+    private static function serializeCanvasRoot(\DOMDocument $doc, \DOMElement $root): string
+    {
+        $out = '';
+        foreach ($root->childNodes as $child) $out .= $doc->saveHTML($child);
+        return trim($out);
     }
 
     /** Inserta HTML despues de una seccion top-level; sin seleccion, al final. */
@@ -516,10 +832,12 @@ final class CanvasService
 
         $parts = [];
         if ($roles !== []) {
+            // i18n-ignore: descripción de la semilla que viaja al prompt.
             $parts[] = 'Secuencia de secciones de la semilla: ' . implode(' → ', $roles) . '.';
         }
         if ($css !== '') {
-            $parts[] = "CSS de la semilla (úsalo como referencia de TRATAMIENTO —escala de espaciados, radios, sombras, tipografía, estilo de tarjetas y botones—; NO lo copies literal, escribe tu propio CSS coherente con él):\n" . $css;
+            // i18n-ignore: instrucción sobre la semilla, viaja al prompt.
+        $parts[] = "CSS de la semilla (úsalo como referencia de TRATAMIENTO —escala de espaciados, radios, sombras, tipografía, estilo de tarjetas y botones—; NO lo copies literal, escribe tu propio CSS coherente con él):\n" . $css;
         }
 
         return trim(implode("\n\n", $parts));
@@ -546,7 +864,7 @@ final class CanvasService
         }
         foreach ($embeds as $el) {
             $ref = trim($el->getAttribute('data-pp-placeholder'));
-            if (preg_match('/^(form|posts):([a-z0-9\-_\/]+)((?:\|[a-z0-9_-]+=[^|}]+)*)$/iu', $ref, $m)) {
+            if (preg_match('/^(form|posts|products|booking|resources):([a-z0-9\-_\/]+)((?:\|[a-z0-9_-]+=[^|}]+)*)$/iu', $ref, $m)) {
                 $canonical = self::canonicalPlaceholderRef(strtolower($m[1]), strtolower($m[2]), (string) ($m[3] ?? ''));
                 $el->parentNode?->replaceChild($doc->createTextNode('{{' . $canonical . '}}'), $el);
             } else {

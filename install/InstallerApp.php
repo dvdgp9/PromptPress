@@ -19,16 +19,19 @@ use Core\Session;
  */
 final class InstallerApp
 {
+    /** Claves de traducción: el nombre visible sale de `steps()`. */
     private const STEPS = [
-        'requirements' => 'Requisitos',
-        'database'     => 'Base de datos',
-        'admin'        => 'Administrador',
-        'ai_provider'  => 'IA',
-        'complete'     => 'Finalizar',
+        'requirements' => 'inst.step.requirements',
+        'database'     => 'inst.step.database',
+        'admin'        => 'inst.step.admin',
+        'ai_provider'  => 'inst.step.ai',
+        'complete'     => 'inst.step.complete',
     ];
 
     public static function run(): void
     {
+        self::resolveLanguage();
+
         // Bloquear si el sistema ya está instalado
         if (is_installed()) {
             self::renderAlreadyInstalled();
@@ -58,9 +61,41 @@ final class InstallerApp
         require $stepFile;
     }
 
+    /** Los pasos con el nombre ya traducido, para pintar la barra de progreso. */
     public static function steps(): array
     {
-        return self::STEPS;
+        return array_map(static fn (string $key): string => __($key), self::STEPS);
+    }
+
+    /**
+     * Idioma del instalador. Aquí no hay ni usuario ni sitio de los que
+     * deducirlo, así que manda `?lang=`, luego lo que se eligió antes en esta
+     * misma instalación y, si no hay nada, el idioma del navegador.
+     */
+    private static function resolveLanguage(): void
+    {
+        $requested = (string) (Request::get('lang') ?? '');
+        if ($requested !== '' && in_array($requested, \App\Services\AdminI18n::LOCALES, true)) {
+            Session::set('install_lang', $requested);
+            \App\Services\AdminI18n::setLocale($requested);
+            return;
+        }
+        $saved = (string) (Session::get('install_lang') ?? '');
+        if ($saved !== '') {
+            \App\Services\AdminI18n::setLocale($saved);
+            return;
+        }
+        \App\Services\AdminI18n::setLocale(\App\Services\AdminI18n::resolveFrom(
+            null,
+            null,
+            $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null
+        ));
+    }
+
+    /** El idioma activo del instalador (para el selector del layout). */
+    public static function language(): string
+    {
+        return \App\Services\AdminI18n::locale();
     }
 
     public static function currentStepIndex(string $current): int
@@ -90,8 +125,8 @@ final class InstallerApp
     {
         $layoutFile = __DIR__ . '/views/layout.php';
         $stepKey  = $step;
-        $stepName = self::STEPS[$step] ?? $step;
-        $steps    = self::STEPS;
+        $stepName = isset(self::STEPS[$step]) ? __(self::STEPS[$step]) : $step;
+        $steps    = self::steps();
         $stepIdx  = self::currentStepIndex($step);
         ob_start();
         require $layoutFile;
@@ -203,22 +238,21 @@ PHP;
 
     private static function renderAlreadyInstalled(): void
     {
-        $title = 'Ya instalado';
+        $title = __('inst.done.title');
         $content = '<div class="pp-alert pp-alert--warn">'
-            . '<h2>El sistema ya está instalado</h2>'
-            . '<p>PromptPress ya ha sido configurado en este servidor. Si quieres reinstalar, '
-            . 'borra <code>config/config.php</code> y <code>install/.installed</code> manualmente.</p>'
-            . '<p><a class="pp-btn pp-btn--primary" href="' . e(base_url('admin/')) . '">Ir al panel</a></p>'
+            . '<h2>' . e(__('inst.done.heading')) . '</h2>'
+            . '<p>' . __('inst.done.body.html') . '</p>'
+            . '<p><a class="pp-btn pp-btn--primary" href="' . e(base_url('admin/')) . '">' . e(__('inst.done.go_panel')) . '</a></p>'
             . '</div>';
         self::renderStep('requirements', $title, $content);
     }
 
     private static function renderStub(string $step): void
     {
-        $title = 'Paso pendiente';
+        $title = __('inst.stub.title');
         $content = '<div class="pp-alert pp-alert--info">'
-            . '<h2>Paso "' . e($step) . '" en desarrollo</h2>'
-            . '<p>Este paso será implementado en una tarea futura.</p>'
+            . '<h2>' . e(__('inst.stub.heading', ['paso' => $step])) . '</h2>'
+            . '<p>' . e(__('inst.stub.body')) . '</p>'
             . '</div>';
         self::renderStep($step, $title, $content);
     }

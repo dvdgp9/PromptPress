@@ -55,7 +55,7 @@
             if (!text) return;
             var ok = function () {
                 var orig = copyBtn.textContent;
-                copyBtn.textContent = '✓ Copiado';
+                copyBtn.textContent = '✓ ' + pp.t('js.doc.copied');
                 copyBtn.classList.add('is-success');
                 setTimeout(function () {
                     copyBtn.textContent = orig;
@@ -109,11 +109,11 @@
             if (count === 0) {
                 searchInfo.hidden = false;
                 searchInfo.className = 'pp-doc-search-info pp-err';
-                searchInfo.textContent = 'Sin coincidencias';
+                searchInfo.textContent = pp.t('js.doc.no_matches');
             } else {
                 searchInfo.hidden = false;
                 searchInfo.className = 'pp-doc-search-info pp-ok';
-                searchInfo.textContent = count + ' coincidencia' + (count > 1 ? 's' : '');
+                searchInfo.textContent = pp.t(count === 1 ? 'js.doc.matches_one' : 'js.doc.matches_other', { n: count });
                 // Scroll al primer match
                 var firstMark = textEl.querySelector('mark');
                 if (firstMark) firstMark.scrollIntoView({ behavior: 'smooth', block: 'center' });

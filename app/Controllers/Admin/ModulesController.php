@@ -40,7 +40,7 @@ class ModulesController
         $on  = Request::post('enabled', '0') === '1';
 
         if (!ModuleRegistry::exists($key) || !ModuleRegistry::isAvailable($key)) {
-            Session::flash('error', 'Ese módulo no está disponible.');
+            Session::flash('error', __('modules.err.unavailable'));
             Response::redirect(base_url('admin/modules'));
         }
 
@@ -48,9 +48,9 @@ class ModulesController
         // Algunos módulos (Analytics) inyectan markup en el HTML público, que se
         // cachea. Vaciar la caché del sitio para que el cambio se refleje ya.
         \App\Services\CacheService::flush($siteId);
-        Session::flash('success', $on
-            ? 'Módulo «' . ModuleRegistry::MODULES[$key]['label'] . '» activado.'
-            : 'Módulo «' . ModuleRegistry::MODULES[$key]['label'] . '» desactivado.');
+        Session::flash('success', __($on ? 'modules.ok.enabled' : 'modules.ok.disabled', [
+            'modulo' => __('module.' . $key . '.label'),
+        ]));
         Response::redirect(base_url('admin/modules'));
     }
 
@@ -58,7 +58,7 @@ class ModulesController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

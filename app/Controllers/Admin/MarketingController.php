@@ -54,7 +54,7 @@ class MarketingController
             Response::redirect(base_url('admin/marketing'));
         }
 
-        Session::flash('success', 'Integraciones de marketing actualizadas.');
+        Session::flash('success', __('mkt.ok.saved'));
         Response::redirect(base_url('admin/marketing'));
     }
 
@@ -75,16 +75,16 @@ class MarketingController
 
         $errors = [];
         if ($label === '') {
-            $errors[] = 'Ponle un nombre al snippet para reconocerlo (p. ej. "Pixel de Pinterest").';
+            $errors[] = __('mkt.err.name');
         }
         if (!isset(TrackingCatalog::CATEGORIES[$category])) {
-            $errors[] = 'Elige una categoría de consentimiento válida.';
+            $errors[] = __('mkt.err.category');
         }
         if (!isset(TrackingCatalog::PLACEMENTS[$placement])) {
             $placement = 'body_end';
         }
         if (trim($code) === '') {
-            $errors[] = 'Pega el código del snippet.';
+            $errors[] = __('mkt.err.code');
         }
 
         if (!empty($errors)) {
@@ -124,7 +124,7 @@ class MarketingController
         ComplianceService::patch($siteId, ['tracking' => ['custom' => $custom]]);
         CacheService::flush($siteId);
 
-        Session::flash('success', $found ? 'Snippet actualizado.' : 'Snippet añadido.');
+        Session::flash('success', __($found ? 'mkt.ok.snippet_updated' : 'mkt.ok.snippet_added'));
         Response::redirect(base_url('admin/marketing'));
     }
 
@@ -148,7 +148,7 @@ class MarketingController
         ComplianceService::patch($siteId, ['tracking' => ['custom' => $custom]]);
         CacheService::flush($siteId);
 
-        Session::flash('success', 'Snippet eliminado.');
+        Session::flash('success', __('mkt.ok.snippet_deleted'));
         Response::redirect(base_url('admin/marketing'));
     }
 
@@ -168,12 +168,12 @@ class MarketingController
         $data = DashboardController::getCommonData();
         $data = array_merge($data, [
             'manifest'           => $manifest,
-            'trackingCatalog'    => TrackingCatalog::services(),
-            'trackingCategories' => TrackingCatalog::CATEGORIES,
+            'trackingCatalog'    => TrackingCatalog::servicesForView(),
+            'trackingCategories' => TrackingCatalog::categoriesForView(),
             'serviceState'       => $serviceState,
             'customSnippets'     => (array) ($manifest['tracking']['custom'] ?? []),
             'customCategories'   => TrackingCatalog::customCategoryChoices(),
-            'customPlacements'   => TrackingCatalog::PLACEMENTS,
+            'customPlacements'   => TrackingCatalog::placementChoices(),
             'needsBanner'        => TrackingCatalog::needsBanner($manifest),
             'csrf'               => CSRF::token(),
         ], $extra);
@@ -190,7 +190,7 @@ class MarketingController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

@@ -25,23 +25,46 @@ class SectionController
 {
     /** Tipos de sección soportados. T3.3 añadirá schemas y forms para cada uno. */
     public const SECTION_TYPES = [
-        'hero'         => 'Hero',
-        'text_image'   => 'Texto + Imagen',
-        'benefits'     => 'Beneficios',
-        'testimonials' => 'Testimonios',
-        'stats'        => 'Estadísticas',
-        'gallery'      => 'Galería',
-        'steps'        => 'Pasos / Proceso',
-        'logos_strip'  => 'Banda de logos',
-        'pricing'      => 'Planes / Precios',
-        'faq'          => 'FAQ',
-        'cta'          => 'Llamada a la acción',
-        'form'         => 'Formulario',
-        'article_body' => 'Cuerpo de artículo',
-        'posts_listing'=> 'Listado de entradas',
-        'custom_block' => 'Bloque PP-friendly',
-        'generic'      => 'Genérica',
+        'hero'         => 'section_type.hero',
+        'text_image'   => 'section_type.text_image',
+        'benefits'     => 'section_type.benefits',
+        'testimonials' => 'section_type.testimonials',
+        'stats'        => 'section_type.stats',
+        'gallery'      => 'section_type.gallery',
+        'steps'        => 'section_type.steps',
+        'logos_strip'  => 'section_type.logos_strip',
+        'pricing'      => 'section_type.pricing',
+        'faq'          => 'section_type.faq',
+        'cta'          => 'section_type.cta',
+        'form'         => 'section_type.form',
+        'booking'      => 'section_type.booking',
+        'article_body' => 'section_type.article_body',
+        'posts_listing'=> 'section_type.posts_listing',
+        'custom_block' => 'section_type.custom_block',
+        'generic'      => 'section_type.generic',
     ];
+
+    /**
+     * Los mismos tipos con la etiqueta ya traducida. La constante guarda CLAVES
+     * (se evalúa antes de saber el idioma) y todo el código que solo comprueba
+     * `isset(SECTION_TYPES[$x])` sigue funcionando igual.
+     *
+     * @return array<string,string>
+     */
+    public static function sectionTypesForView(?int $siteId = null): array
+    {
+        $siteId = $siteId ?? \Core\Auth::siteId();
+        $out = [];
+        foreach (self::SECTION_TYPES as $type => $key) {
+            // MODULOS M2 — un tipo que depende de un módulo apagado no se ofrece:
+            // se elegiría en el desplegable y luego no pintaría nada.
+            if (!\App\Services\SectionSchemas::isAvailableForSite($type, $siteId)) {
+                continue;
+            }
+            $out[$type] = __($key);
+        }
+        return $out;
+    }
 
     // ----------------------------------------------------------------------
     // Crear sección (en una página)
@@ -55,8 +78,9 @@ class SectionController
         self::requirePage($pageId, $siteId);
 
         $type = (string) Request::post('section_type', 'generic');
-        if (!isset(self::SECTION_TYPES[$type])) {
-            Response::json(['ok' => false, 'error' => 'Tipo de sección inválido'], 422);
+        if (!isset(self::SECTION_TYPES[$type])
+            || !\App\Services\SectionSchemas::isAvailableForSite($type, $siteId)) {
+            Response::json(['ok' => false, 'error' => __('section.error.bad_type')], 422);
         }
 
         // sort_order: último + 1
@@ -107,10 +131,10 @@ class SectionController
         }
 
         if (!isset(self::SECTION_TYPES[$type])) {
-            Response::json(['ok' => false, 'error' => 'Tipo de sección inválido'], 422);
+            Response::json(['ok' => false, 'error' => __('section.error.bad_type')], 422);
         }
         if (!in_array($status, ['editable', 'locked'], true)) {
-            Response::json(['ok' => false, 'error' => 'Estado inválido'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_status2')], 422);
         }
 
         // Validar JSON de content
@@ -118,7 +142,7 @@ class SectionController
         if ($contentRaw !== '' && json_last_error() !== JSON_ERROR_NONE) {
             Response::json([
                 'ok'    => false,
-                'error' => 'JSON de contenido inválido: ' . json_last_error_msg(),
+                'error' => __('section.error.bad_content_json', ['error' => json_last_error_msg()]),
             ], 422);
         }
         if (!is_array($content)) {
@@ -132,7 +156,7 @@ class SectionController
             if (json_last_error() !== JSON_ERROR_NONE) {
                 Response::json([
                     'ok'    => false,
-                    'error' => 'JSON de estilo inválido: ' . json_last_error_msg(),
+                    'error' => __('section.error.bad_style_json', ['error' => json_last_error_msg()]),
                 ], 422);
             }
         }
@@ -242,27 +266,27 @@ class SectionController
         $version = VersionService::loadSectionVersion($id, $versionId);
 
         if ($version === null) {
-            Response::json(['ok' => false, 'error' => 'Versión no encontrada'], 404);
+            Response::json(['ok' => false, 'error' => __('section.error.version_not_found')], 404);
         }
 
         $data = $version['data'];
         $type = (string) ($data['section_type'] ?? '');
         $status = (string) ($data['status'] ?? 'editable');
         if (!isset(self::SECTION_TYPES[$type]) || !in_array($status, ['editable', 'locked'], true)) {
-            Response::json(['ok' => false, 'error' => 'La versión guardada no es restaurable'], 422);
+            Response::json(['ok' => false, 'error' => __('section.error.not_restorable')], 422);
         }
 
         $contentRaw = (string) ($data['content'] ?? '{}');
         json_decode($contentRaw, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            Response::json(['ok' => false, 'error' => 'La versión contiene JSON de contenido inválido'], 422);
+            Response::json(['ok' => false, 'error' => __('section.error.version_bad_content')], 422);
         }
 
         $styleRaw = $data['style'] ?? null;
         if ($styleRaw !== null) {
             json_decode((string) $styleRaw, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                Response::json(['ok' => false, 'error' => 'La versión contiene JSON de estilo inválido'], 422);
+                Response::json(['ok' => false, 'error' => __('section.error.version_bad_style')], 422);
             }
         }
 
@@ -298,7 +322,7 @@ class SectionController
         $ids = array_values(array_filter(array_map('intval', explode(',', $orderRaw))));
 
         if (empty($ids)) {
-            Response::json(['ok' => false, 'error' => 'No se recibió orden'], 422);
+            Response::json(['ok' => false, 'error' => __('section.error.no_order')], 422);
         }
 
         // Verificar que todos los ids pertenezcan al page
@@ -313,7 +337,7 @@ class SectionController
         if ($existingIds !== $sortedInput) {
             Response::json([
                 'ok'    => false,
-                'error' => 'El orden recibido no coincide con las secciones de la página',
+                'error' => __('section.error.order_mismatch'),
             ], 422);
         }
 
@@ -343,7 +367,7 @@ class SectionController
             [$id, $siteId]
         );
         if (!$row) {
-            Response::json(['ok' => false, 'error' => 'Sección no encontrada'], 404);
+            Response::json(['ok' => false, 'error' => __('section.error.not_found')], 404);
         }
         return $row;
     }
@@ -355,7 +379,7 @@ class SectionController
             [$pageId, $siteId]
         );
         if (!$page) {
-            Response::json(['ok' => false, 'error' => 'Página no encontrada'], 404);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.page_not_found')], 404);
         }
         return $page;
     }
@@ -407,7 +431,7 @@ class SectionController
         $variant = (string) ($isPost ? Request::post('variant', 'default') : Request::get('variant', 'default'));
         if (!isset(self::SECTION_TYPES[$type])) {
             http_response_code(404);
-            echo '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;padding:24px;color:#64748b">Tipo no válido.</body>';
+            echo '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;padding:24px;color:#64748b">' . e(__('section.error.bad_type_short')) . '</body>';
             return;
         }
         $variant = SectionSchemas::normalizeVariant($type, $variant);
@@ -470,6 +494,12 @@ class SectionController
 
         SectionRenderer::setSiteContext($siteId);
         $body = SectionRenderer::render($fake);
+        // El iframe es `sandbox="allow-same-origin"`: los scripts NO se ejecutan
+        // aquí. Se quitan para que el navegador no llene la consola del panel de
+        // "Blocked script execution" cada vez que se abre una sección que trae
+        // uno (el calendario de reservas). Lo que se ve en su lugar es el avance
+        // que el propio bloque pinta en el servidor.
+        $body = preg_replace('#<script\b[^>]*>.*?</script>#is', '', $body) ?? $body;
         $designHead = DesignSystem::renderHead($siteId);
 
         $html  = '<!doctype html><html lang="es"><head>';
@@ -503,6 +533,10 @@ class SectionController
     /**
      * Contenido por defecto para cada tipo de sección (placeholders hasta T3.3).
      */
+    // i18n-ignore-start: CONTENIDO por defecto de una sección nueva. Lo lee el
+    // VISITANTE de la web, no el gestor: su idioma es el del sitio, no el del
+    // panel. Traducirlo aquí sería meterle el idioma equivocado (ver la nota de
+    // `PageController` en el scratchpad).
     private static function defaultContent(string $type): array
     {
         return match ($type) {
@@ -531,4 +565,5 @@ class SectionController
             default        => [],
         };
     }
+    // i18n-ignore-end
 }

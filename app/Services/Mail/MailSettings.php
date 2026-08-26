@@ -15,7 +15,8 @@ use Core\Database;
  */
 final class MailSettings
 {
-    public const KEY_TRANSPORT   = 'mail_transport';      // 'smtp' (único por ahora)
+    // De momento solo hay un transporte: smtp.
+    public const KEY_TRANSPORT   = 'mail_transport';
     public const KEY_SMTP_HOST   = 'mail_smtp_host';
     public const KEY_SMTP_PORT   = 'mail_smtp_port';
     public const KEY_SMTP_USER   = 'mail_smtp_user';

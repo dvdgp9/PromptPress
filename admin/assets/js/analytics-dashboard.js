@@ -19,10 +19,11 @@
   var breakdowns = root.querySelector('[data-breakdowns]');
 
   var LABELS = {
-    referrer: { '': 'Directo' },
-    device: { desktop: 'Ordenador', mobile: 'Móvil', tablet: 'Tablet' },
-    browser: { chrome: 'Chrome', safari: 'Safari', firefox: 'Firefox', edge: 'Edge', opera: 'Opera', other: 'Otros' },
-    event: { form_submit: 'Envío de formulario', booking_created: 'Reserva', purchase: 'Compra' }
+    // Las claves son valores de la BD; solo la etiqueta se traduce.
+    referrer: { '': pp.t('js.an.direct') },
+    device: { desktop: pp.t('js.an.desktop'), mobile: pp.t('chrome.mobile_js'), tablet: 'Tablet' },
+    browser: { chrome: 'Chrome', safari: 'Safari', firefox: 'Firefox', edge: 'Edge', opera: 'Opera', other: pp.t('js.an.other') },
+    event: { form_submit: pp.t('js.an.form_submit'), booking_created: pp.t('js.an.booking'), purchase: pp.t('js.an.purchase'), resource_download: pp.t('js.an.resource_download') }
   };
   var DEVICE_ICONS = { desktop: '🖥️', mobile: '📱', tablet: '📲' };
 
@@ -61,7 +62,7 @@
     delta.textContent = (pct >= 0 ? '↑ +' : '↓ ') + pct + '%';
     delta.className = 'pp-analytics-kpi__delta ' +
       (pct >= 0 ? 'pp-analytics-kpi__delta--up' : 'pp-analytics-kpi__delta--down');
-    delta.title = 'Respecto a los ' + stats.range + ' días anteriores';
+    delta.title = pp.t('js.an.vs_previous', { n: stats.range });
   }
 
   // ----------------------------------------------------------------- Chart
@@ -89,7 +90,7 @@
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     svg.setAttribute('class', 'pp-analytics-svg');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'Gráfica de páginas vistas y visitantes por día');
+    svg.setAttribute('aria-label', pp.t('js.an.chart_aria'));
 
     var x = function (i) { return PAD_L + slot * i + slot / 2; };
     var y = function (v) { return PAD_T + plotH * (1 - v / top); };
@@ -226,7 +227,7 @@
     box.innerHTML = '';
     var total = rows.reduce(function (acc, r) { return acc + r.pv; }, 0);
     if (!total) {
-      box.innerHTML = '<p class="pp-analytics-list__empty">Sin datos en este periodo.</p>';
+      box.innerHTML = '<p class="pp-analytics-list__empty">' + pp.t('js.analytics.no_data') + '</p>';
       return;
     }
     rows.forEach(function (row) {

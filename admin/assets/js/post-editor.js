@@ -137,7 +137,7 @@
     }
 
     function renderParagraph(block) {
-        return makeTextarea('Escribe un párrafo… Usa la barra inferior para añadir subtítulos, imágenes, listas o citas.', block.text, 'pp-block__input--paragraph');
+        return makeTextarea(pp.t('js.post_editor.paragraph_placeholder'), block.text, 'pp-block__input--paragraph');
     }
 
     function renderHeading(block) {
@@ -146,7 +146,7 @@
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'pp-block__input pp-block__input--h' + lvl;
-        input.placeholder = lvl === 2 ? 'Subtítulo importante (H2)' : 'Subtítulo de detalle (H3)';
+        input.placeholder = pp.t(lvl === 2 ? 'js.post_editor.h2' : 'js.post_editor.h3');
         input.value = block.text || '';
         input.maxLength = 300;
         input.setAttribute('data-field', 'text');
@@ -172,7 +172,7 @@
                 ? '<img src="' + escAttr(absUrl(block.src)) + '" alt="' + escAttr(block.alt || '') + '">'
                 : '<div class="pp-block__image-empty">'
                   + '<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
-                  + '<span>Aún sin imagen</span>'
+                  + '<span>' + pp.t('js.post_editor.no_image') + '</span>'
                 + '</div>'
                 )
             + '</div>'
@@ -197,7 +197,7 @@
 
         const ta = document.createElement('textarea');
         ta.className = 'pp-block__input pp-block__input--list';
-        ta.placeholder = 'Un elemento por línea';
+        ta.placeholder = pp.t('js.post_editor.one_per_line');
         ta.value = (block.items || []).join('\n');
         ta.setAttribute('data-field', 'items');
         ta.rows = Math.max(3, (block.items || []).length || 1);
@@ -222,7 +222,7 @@
         const attr = document.createElement('input');
         attr.type = 'text';
         attr.className = 'pp-block__input pp-block__input--attribution';
-        attr.placeholder = 'Atribución (opcional)';
+        attr.placeholder = pp.t('js.post_editor.attribution');
         attr.value = block.attribution || '';
         attr.maxLength = 200;
         attr.setAttribute('data-field', 'attribution');
@@ -358,7 +358,7 @@
         if (window.PPMediaPicker && typeof window.PPMediaPicker.open === 'function') {
             window.PPMediaPicker.open({ onSelect: (m) => apply(m.path || m.url, m.alt_text || '') });
         } else {
-            const url = prompt('Pega la URL/ruta de la imagen (puedes subirla antes en /admin/media):');
+            const url = prompt(pp.t('js.post.image_url_prompt'));
             if (url) apply(url.trim(), '');
         }
     }
@@ -464,7 +464,7 @@
     // Título: sync al state y autosave
     titleInput.addEventListener('input', () => {
         state.title = titleInput.value;
-        if (titleDisplay) titleDisplay.textContent = state.title || 'Sin título';
+        if (titleDisplay) titleDisplay.textContent = state.title || pp.t('js.onb.untitled');
         scheduleSave();
     });
 

@@ -13,10 +13,10 @@
 use App\Modules\Commerce\CommerceSettings;
 
 $statusLabels = [
-    'pending_payment' => 'Pendiente de pago',
-    'paid'            => 'Pagado',
-    'shipped'         => 'Enviado',
-    'cancelled'       => 'Cancelado',
+    'pending_payment' => __('order.status.pending'),
+    'paid'            => __('order.status.paid'),
+    'shipped'         => __('order.status.shipped'),
+    'cancelled'       => __('order.status.cancelled'),
 ];
 $statusPill = [
     'pending_payment' => ' pp-status-pill--yellow',
@@ -24,7 +24,7 @@ $statusPill = [
     'shipped'         => ' pp-status-pill--green',
     'cancelled'       => ' pp-status-pill--muted',
 ];
-$methodLabels = ['stripe' => 'Tarjeta', 'manual' => 'Transferencia'];
+$methodLabels = ['stripe' => __('order.method.card'), 'manual' => __('order.method.transfer')];
 
 // Enlace a un filtro conservando búsqueda y método.
 $filterUrl = static function (string $status) use ($filters): string {
@@ -42,11 +42,11 @@ $total = array_sum($counts);
 
 <div class="pp-page-header">
     <div>
-        <h2>Pedidos</h2>
-        <p class="pp-page-header__lead">Todos los pedidos de tu tienda. Marca cuándo recibes el pago y cuándo envías; avisamos al cliente por email en cada paso.</p>
+        <h2><?= e(__('shop.orders')) ?></h2>
+        <p class="pp-page-header__lead"><?= e(__('order.intro')) ?></p>
     </div>
     <div>
-        <a class="pp-btn pp-btn--ghost" href="<?= e(base_url('admin/commerce')) ?>">← Productos</a>
+        <a class="pp-btn pp-btn--ghost" href="<?= e(base_url('admin/commerce')) ?>">← <?= e(__('order.products')) ?></a>
     </div>
 </div>
 
@@ -55,7 +55,7 @@ $total = array_sum($counts);
 
 <div class="pp-order-tabs">
     <a class="pp-order-tab<?= $filters['status'] === '' ? ' is-active' : '' ?>" href="<?= e($filterUrl('')) ?>">
-        Todos <span class="pp-order-tab__count"><?= (int) $total ?></span>
+        <?= e(__('inbox.all')) ?> <span class="pp-order-tab__count"><?= (int) $total ?></span>
     </a>
     <?php foreach ($statusLabels as $key => $label): ?>
         <a class="pp-order-tab<?= $filters['status'] === $key ? ' is-active' : '' ?>" href="<?= e($filterUrl($key)) ?>">
@@ -67,32 +67,32 @@ $total = array_sum($counts);
 <div class="pp-card pp-booking-filters">
     <form method="get" action="<?= e(base_url('admin/commerce/pedidos')) ?>" class="pp-booking-filters__form">
         <input type="hidden" name="status" value="<?= e((string) $filters['status']) ?>">
-        <input type="search" name="q" value="<?= e((string) $filters['q']) ?>" placeholder="Buscar nº de pedido, nombre o email…" class="pp-order-search">
+        <input type="search" name="q" value="<?= e((string) $filters['q']) ?>" placeholder="<?= e(__('order.search_placeholder')) ?>" class="pp-order-search">
         <select name="method">
-            <option value="">Cualquier método de pago</option>
-            <option value="stripe" <?= $filters['method'] === 'stripe' ? 'selected' : '' ?>>Tarjeta</option>
-            <option value="manual" <?= $filters['method'] === 'manual' ? 'selected' : '' ?>>Transferencia</option>
+            <option value=""><?= e(__('order.any_method')) ?></option>
+            <option value="stripe" <?= $filters['method'] === 'stripe' ? 'selected' : '' ?>><?= e(__('order.method.card')) ?></option>
+            <option value="manual" <?= $filters['method'] === 'manual' ? 'selected' : '' ?>><?= e(__('order.method.transfer')) ?></option>
         </select>
-        <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Buscar</button>
+        <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('bank.search')) ?></button>
     </form>
 </div>
 
 <?php if ($orders === []): ?>
     <div class="pp-card pp-booking-empty">
         <p><?= $total === 0
-            ? 'Todavía no has recibido ningún pedido. Cuando alguien compre en tu tienda, aparecerá aquí.'
-            : 'No hay pedidos con estos filtros. Prueba a quitar la búsqueda o cambiar el estado.' ?></p>
+            ? __('order.empty')
+            : __('order.empty_filtered') ?></p>
     </div>
 <?php else: ?>
     <div class="pp-card">
         <table class="pp-table">
             <thead>
                 <tr>
-                    <th>Pedido</th>
-                    <th>Cliente</th>
-                    <th>Total</th>
-                    <th>Pago</th>
-                    <th>Estado</th>
+                    <th><?= e(__('order.order')) ?></th>
+                    <th><?= e(__('order.customer')) ?></th>
+                    <th><?= e(__('order.total')) ?></th>
+                    <th><?= e(__('order.payment')) ?></th>
+                    <th><?= e(__('table.status')) ?></th>
                     <th></th>
                 </tr>
             </thead>
@@ -101,7 +101,7 @@ $total = array_sum($counts);
                 <tr>
                     <td>
                         <a href="<?= e(base_url('admin/commerce/pedidos/' . (int) $o['id'])) ?>"><strong><?= e((string) $o['order_number']) ?></strong></a>
-                        <br><span class="pp-booking-soft"><?= e((new DateTimeImmutable((string) $o['created_at']))->format('d/m/Y H:i')) ?> · <?= (int) $o['item_count'] ?> artículo<?= (int) $o['item_count'] === 1 ? '' : 's' ?></span>
+                        <br><span class="pp-booking-soft"><?= e((new DateTimeImmutable((string) $o['created_at']))->format('d/m/Y H:i')) ?> · <?= e(__('order.n_items', ['n' => (int) $o['item_count']])) ?><span hidden>artículo<?= (int) $o['item_count'] === 1 ? '' : 's' ?></span>
                     </td>
                     <td>
                         <?= e((string) $o['customer_name']) ?><br>
@@ -111,7 +111,7 @@ $total = array_sum($counts);
                     <td><span class="pp-booking-soft"><?= e($methodLabels[(string) $o['payment_method']] ?? (string) $o['payment_method']) ?></span></td>
                     <td><span class="pp-status-pill<?= $statusPill[$st] ?? '' ?>"><?= e($statusLabels[$st] ?? $st) ?></span></td>
                     <td class="pp-table__actions">
-                        <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url('admin/commerce/pedidos/' . (int) $o['id'])) ?>">Ver</a>
+                        <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url('admin/commerce/pedidos/' . (int) $o['id'])) ?>"><?= e(__('common.view')) ?></a>
                     </td>
                 </tr>
                 <?php endforeach; ?>

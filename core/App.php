@@ -158,7 +158,9 @@ final class App
             echo e($e->getTraceAsString());
             echo '</pre>';
         } else {
-            echo '<h1>500 — Error interno</h1><p>Algo ha ido mal. Si el problema persiste, contacta con el administrador.</p>';
+            // i18n-ignore: página de error 500; la puede ver el VISITANTE y salta antes
+        // de que se pueda resolver idioma con garantías.
+        echo '<h1>500 — Error interno</h1><p>Algo ha ido mal. Si el problema persiste, contacta con el administrador.</p>';
         }
         exit;
     }

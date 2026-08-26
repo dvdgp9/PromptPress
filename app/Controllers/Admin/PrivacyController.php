@@ -106,7 +106,7 @@ class PrivacyController
         }
 
         ComplianceService::patch($siteId, ['controller' => $input]);
-        Session::flash('success', 'Datos legales guardados.');
+        Session::flash('success', __('priv.ok.legal_saved'));
         Response::redirect(base_url('admin/privacy?tab=legal'));
     }
 
@@ -119,32 +119,32 @@ class PrivacyController
         $errors = [];
 
         if ($input['legal_name'] === '') {
-            $errors['legal_name'] = 'La razón social es obligatoria.';
+            $errors['legal_name'] = __('priv.err.legal_name');
         } elseif (mb_strlen($input['legal_name']) > 255) {
-            $errors['legal_name'] = 'Máximo 255 caracteres.';
+            $errors['legal_name'] = __('priv.err.max255');
         }
 
         if ($input['email'] === '') {
-            $errors['email'] = 'El email de contacto es obligatorio.';
+            $errors['email'] = __('priv.err.email_required');
         } elseif (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors['email'] = 'Email no válido.';
+            $errors['email'] = __('priv.err.email_invalid');
         }
 
         if ($input['address'] === '') {
-            $errors['address'] = 'La dirección es obligatoria para el aviso legal.';
+            $errors['address'] = __('priv.err.address');
         }
 
         // Validación NIF/CIF/NIE solo si país = ES y se ha rellenado.
         if ($input['country'] === 'ES' && $input['tax_id'] !== '') {
             if (!NifValidator::isValid($input['tax_id'])) {
-                $errors['tax_id'] = 'NIF/CIF/NIE no válido. Revisa el formato y dígito de control.';
+                $errors['tax_id'] = __('priv.err.tax_id');
             }
         }
 
         // DPO email si se marca "tengo DPO".
         if (is_array($input['dpo']) && !empty($input['dpo']['email'])) {
             if (!filter_var($input['dpo']['email'], FILTER_VALIDATE_EMAIL)) {
-                $errors['dpo_email'] = 'Email del DPO no válido.';
+                $errors['dpo_email'] = __('priv.err.dpo_email');
             }
         }
 
@@ -169,9 +169,9 @@ class PrivacyController
 
         if (!isset(LegalPageGenerator::typesFor($siteId)[$type])) {
             if ($isJson) {
-                Response::json(['ok' => false, 'error' => 'Tipo de página legal no válido.'], 422);
+                Response::json(['ok' => false, 'error' => __('priv.err.bad_type')], 422);
             }
-            Session::flash('error', 'Tipo de página legal no válido.');
+            Session::flash('error', __('priv.err.bad_type'));
             Response::redirect(base_url('admin/privacy?tab=pages'));
         }
 
@@ -180,7 +180,7 @@ class PrivacyController
         $missingCore = array_filter(['legal_name', 'address', 'email'],
             fn ($k) => trim((string) ($controller[$k] ?? '')) === '');
         if (!empty($missingCore)) {
-            $msg = 'Antes de generar páginas legales rellena al menos: razón social, dirección y email de contacto.';
+            $msg = __('priv.err.missing_core');
             if ($isJson) {
                 Response::json(['ok' => false, 'error' => $msg, 'redirect_url' => base_url('admin/privacy?tab=legal')], 422);
             }
@@ -192,15 +192,15 @@ class PrivacyController
             $result = LegalPageGenerator::generate($siteId, $type);
         } catch (AIException $e) {
             if ($isJson) {
-                Response::json(['ok' => false, 'error' => 'La IA no pudo generar la página: ' . $e->getMessage()], 502);
+                Response::json(['ok' => false, 'error' => __('priv.err.ai', ['detalle' => $e->getMessage()])], 502);
             }
-            Session::flash('error', 'La IA no pudo generar la página: ' . $e->getMessage());
+            Session::flash('error', __('priv.err.ai', ['detalle' => $e->getMessage()]));
             Response::redirect(base_url('admin/privacy?tab=pages'));
         } catch (\Throwable $e) {
             if ($isJson) {
-                Response::json(['ok' => false, 'error' => 'Error generando la página: ' . $e->getMessage()], 500);
+                Response::json(['ok' => false, 'error' => __('priv.err.generate', ['detalle' => $e->getMessage()])], 500);
             }
-            Session::flash('error', 'Error generando la página: ' . $e->getMessage());
+            Session::flash('error', __('priv.err.generate', ['detalle' => $e->getMessage()]));
             Response::redirect(base_url('admin/privacy?tab=pages'));
         }
 
@@ -215,9 +215,9 @@ class PrivacyController
         }
 
         $todosNote = $result['todos'] > 0
-            ? ' Quedan ' . $result['todos'] . ' campos marcados como `TODO-LEGAL:` para que revises.'
+            ? ' ' . __('priv.todos_note', ['n' => (string) (int) $result['todos']])
             : '';
-        Session::flash('success', 'Página "' . $result['title'] . '" generada.' . $todosNote);
+        Session::flash('success', __('priv.ok.page_generated', ['titulo' => (string) $result['title']]) . $todosNote);
         Response::redirect(base_url('admin/privacy?tab=pages'));
     }
 
@@ -233,7 +233,7 @@ class PrivacyController
 
         if (!$result['ok'] && isset($result['error']) && !isset($result['results'])) {
             // Precondición fallida: faltan datos del responsable.
-            Session::flash('error', 'Antes de generar las páginas legales rellena al menos: razón social, dirección y email de contacto.');
+            Session::flash('error', __('priv.err.missing_core_all'));
             Response::redirect(base_url('admin/privacy?tab=legal'));
         }
 
@@ -248,19 +248,22 @@ class PrivacyController
                 $totalTodos += (int) ($r['todos'] ?? 0);
             } else {
                 $label = LegalPageGenerator::TYPES[$type]['label'] ?? $type;
-                $failedTitles[] = $label . ' (' . ($r['error'] ?? 'error desconocido') . ')';
+                $failedTitles[] = $label . ' (' . ($r['error'] ?? __('priv.err.unknown')) . ')';
             }
         }
 
         if ($failed > 0) {
-            $msg = 'Se generaron ' . $generated . ' de ' . ($generated + $failed) . ' páginas. Fallaron: '
-                 . implode(' · ', $failedTitles) . '. Pulsa de nuevo para reintentar las que faltan.';
+            $msg = __('priv.err.partial', [
+                'hechas' => (string) $generated,
+                'total'  => (string) ($generated + $failed),
+                'fallos' => implode(' · ', $failedTitles),
+            ]);
             Session::flash('error', $msg);
         } else {
             $todosNote = $totalTodos > 0
-                ? ' Quedan ' . $totalTodos . ' campos `TODO-LEGAL:` para que revises.'
+                ? ' ' . __('priv.todos_note_short', ['n' => (string) $totalTodos])
                 : '';
-            Session::flash('success', 'Se generaron las 3 páginas legales.' . $todosNote);
+            Session::flash('success', __('priv.ok.all_generated') . $todosNote);
         }
 
         Response::redirect(base_url('admin/privacy?tab=pages'));
@@ -325,7 +328,7 @@ class PrivacyController
             Response::redirect(base_url('admin/privacy?tab=cookies'));
         }
 
-        Session::flash('success', 'Configuración de cookies actualizada.');
+        Session::flash('success', __('priv.ok.cookies_saved'));
         Response::redirect(base_url('admin/privacy?tab=cookies'));
     }
 
@@ -355,7 +358,7 @@ class PrivacyController
         ComplianceService::patch($siteId, ['banner' => $banner]);
         \App\Services\CacheService::flush($siteId);
 
-        Session::flash('success', 'Textos del banner actualizados.');
+        Session::flash('success', __('priv.ok.banner_saved'));
         Response::redirect(base_url('admin/privacy?tab=cookies'));
     }
 
@@ -393,8 +396,8 @@ class PrivacyController
             'legalErrors'     => $legalErrors,
             'legalPagesState' => $legalPagesState,
             'legalTypes'      => LegalPageGenerator::typesFor($siteId),
-            'trackingCatalog' => TrackingCatalog::services(),
-            'trackingCategories' => TrackingCatalog::CATEGORIES,
+            'trackingCatalog' => TrackingCatalog::servicesForView(),
+            'trackingCategories' => TrackingCatalog::categoriesForView(),
             'formsList'       => $formsList,
             'csrf'            => CSRF::token(),
         ]);
@@ -411,12 +414,11 @@ class PrivacyController
     {
         $out = [];
         foreach (LegalPageGenerator::typesFor($siteId) as $key => $info) {
-            $row = \Core\Database::selectOne(
-                "SELECT id, title, slug, updated_at, status
-                 FROM pages
-                 WHERE site_id = ? AND page_type = 'legal' AND slug = ? LIMIT 1",
-                [$siteId, $info['slug']]
-            );
+            // LEGAL-SLUG — se busca por el id del manifest y por cualquiera de
+            // los slugs conocidos del tipo: buscar solo por el slug castellano
+            // haría "desaparecer" del panel las páginas de una web en otro
+            // idioma, y el botón de generar crearía un duplicado.
+            $row = LegalPageGenerator::findExistingPage($siteId, $key);
             $out[$key] = $row ? [
                 'id'         => (int) $row['id'],
                 'title'      => (string) $row['title'],
@@ -458,6 +460,8 @@ class PrivacyController
                 'page_status'      => (string) ($r['page_status'] ?? 'draft'),
                 'heading'          => trim((string) ($content['heading'] ?? '')),
                 'lawful_basis'     => (string) ($content['lawful_basis'] ?? 'legitimate_interest'),
+                // i18n-ignore: valor por defecto del CONTENIDO del formulario, no
+                // texto de panel: acaba en la política de privacidad que lee el visitante.
                 'retention_period' => (string) ($content['retention_period'] ?? '12 meses tras la última comunicación'),
                 'marketing_opt_in' => ((string) ($content['marketing_opt_in'] ?? '0')) === '1',
                 'fields_count'     => is_array($content['fields'] ?? null) ? count($content['fields']) : 0,
@@ -470,7 +474,7 @@ class PrivacyController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

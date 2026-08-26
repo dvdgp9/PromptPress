@@ -17,14 +17,14 @@ $fmtCost = fn(float $c) => '$' . number_format($c, $c < 0.01 ? 6 : 4, '.', ',');
 $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
 ?>
 
-<?php \Core\View::start('title'); ?>Uso de IA<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('ai_usage.title')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Uso de IA</h2>
+    <h2><?= e(__('ai_usage.title')) ?></h2>
     <div class="pp-page-header__actions">
-        <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--secondary">Test manual →</a>
-        <a href="<?= e(base_url('admin/ai/prompts')) ?>" class="pp-btn pp-btn--secondary">Explorador de prompts →</a>
-        <a href="<?= e(base_url('admin/settings/ai')) ?>" class="pp-btn pp-btn--secondary">Ajustes IA →</a>
+        <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('ai_usage.manual_test')) ?> →</a>
+        <a href="<?= e(base_url('admin/ai/prompts')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('ai_usage.prompt_explorer')) ?> →</a>
+        <a href="<?= e(base_url('admin/settings/ai')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('settings_ai.title')) ?> →</a>
     </div>
 </div>
 
@@ -34,19 +34,19 @@ $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
 
 <div class="pp-ai-kpi-grid">
     <?php foreach ([
-        ['label' => 'Hoy',              'data' => $kpiToday],
-        ['label' => 'Últimos 30 días',  'data' => $kpiMonth],
-        ['label' => 'Acumulado',        'data' => $kpiAll],
+        ['label' => __('ai_usage.today'),     'data' => $kpiToday],
+        ['label' => __('inbox.last_30'),     'data' => $kpiMonth],
+        ['label' => __('ai_usage.all_time'), 'data' => $kpiAll],
     ] as $kpi): $d = $kpi['data']; ?>
         <div class="pp-ai-kpi">
             <div class="pp-ai-kpi__label"><?= e($kpi['label']) ?></div>
-            <div class="pp-ai-kpi__value"><?= $fmtNum($d['calls']) ?><small> llamadas</small></div>
+            <div class="pp-ai-kpi__value"><?= $fmtNum($d['calls']) ?><small> <?= e(__('ai_usage.calls')) ?></small></div>
             <div class="pp-ai-kpi__row">
                 <span><?= $fmtNum($d['tokens_in']) ?> in / <?= $fmtNum($d['tokens_out']) ?> out tokens</span>
             </div>
             <div class="pp-ai-kpi__row pp-ai-kpi__cost"><?= $fmtCost($d['cost']) ?></div>
             <?php if ($d['errors'] > 0): ?>
-                <div class="pp-ai-kpi__errors"><?= $d['errors'] ?> error<?= $d['errors'] !== 1 ? 'es' : '' ?></div>
+                <div class="pp-ai-kpi__errors"><?= e(__($d['errors'] === 1 ? 'ai_usage.errors_one' : 'ai_usage.errors_other', ['n' => $d['errors']])) ?></div>
             <?php endif; ?>
         </div>
     <?php endforeach; ?>
@@ -56,15 +56,15 @@ $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
 <div class="pp-ai-summary-grid">
     <?php if ($byAction !== []): ?>
         <div class="pp-ai-summary">
-            <h3>Por acción (30 días)</h3>
+            <h3><?= e(__('ai_usage.by_action')) ?></h3>
             <table class="pp-table pp-table--compact">
                 <thead>
                     <tr>
-                        <th>Acción</th>
-                        <th class="right">Llamadas</th>
+                        <th><?= e(__('table.action')) ?></th>
+                        <th class="right"><?= e(__('ai_usage.calls_col')) ?></th>
                         <th class="right">Tokens</th>
-                        <th class="right">Coste</th>
-                        <th class="right">Errores</th>
+                        <th class="right"><?= e(__('ai_usage.cost')) ?></th>
+                        <th class="right"><?= e(__('ai_usage.errors')) ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,14 +84,14 @@ $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
 
     <?php if ($byModel !== []): ?>
         <div class="pp-ai-summary">
-            <h3>Por modelo (30 días)</h3>
+            <h3><?= e(__('ai_usage.by_model')) ?></h3>
             <table class="pp-table pp-table--compact">
                 <thead>
                     <tr>
-                        <th>Modelo</th>
-                        <th class="right">Llamadas</th>
+                        <th><?= e(__('table.model')) ?></th>
+                        <th class="right"><?= e(__('ai_usage.calls_col')) ?></th>
                         <th class="right">Tokens in/out</th>
-                        <th class="right">Coste</th>
+                        <th class="right"><?= e(__('ai_usage.cost')) ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -114,25 +114,25 @@ $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
 <?php endif; ?>
 
 <div class="pp-ai-logs">
-    <h3>Llamadas recientes <small>(<?= $fmtNum($total) ?> total)</small></h3>
+    <h3><?= e(__('ai_usage.recent_calls')) ?> <small>(<?= $fmtNum($total) ?> <?= e(__('ai_usage.total')) ?>)</small></h3>
 
     <?php if ($logs === []): ?>
         <div class="pp-empty-state">
-            <p>Aún no se ha registrado ninguna llamada a IA para este sitio.</p>
-            <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--primary">Hacer una llamada de test →</a>
+            <p><?= e(__('ai_usage.no_calls')) ?></p>
+            <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--primary"><?= e(__('ai_usage.make_test_call')) ?> →</a>
         </div>
     <?php else: ?>
         <table class="pp-table">
             <thead>
                 <tr>
-                    <th>Fecha</th>
-                    <th>Usuario</th>
-                    <th>Acción</th>
-                    <th>Modelo</th>
+                    <th><?= e(__('table.date')) ?></th>
+                    <th><?= e(__('ai_usage.user')) ?></th>
+                    <th><?= e(__('table.action')) ?></th>
+                    <th><?= e(__('table.model')) ?></th>
                     <th class="right">Tokens</th>
-                    <th class="right">Latencia</th>
-                    <th class="right">Coste</th>
-                    <th>Estado</th>
+                    <th class="right"><?= e(__('ai_usage.latency')) ?></th>
+                    <th class="right"><?= e(__('ai_usage.cost')) ?></th>
+                    <th><?= e(__('table.status')) ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -163,11 +163,11 @@ $fmtNum  = fn(int $n)   => number_format($n, 0, ',', '.');
         <?php if ($totalPages > 1): ?>
             <nav class="pp-pagination">
                 <?php if ($page > 1): ?>
-                    <a href="?page=<?= $page - 1 ?>" class="pp-btn pp-btn--secondary">← Anterior</a>
+                    <a href="?page=<?= $page - 1 ?>" class="pp-btn pp-btn--secondary">← <?= e(__('common.previous')) ?></a>
                 <?php endif; ?>
-                <span class="pp-pagination__info">Página <?= $page ?> de <?= $totalPages ?></span>
+                <span class="pp-pagination__info"><?= e(__('common.page_of', ['n' => $page, 'total' => $totalPages])) ?></span>
                 <?php if ($page < $totalPages): ?>
-                    <a href="?page=<?= $page + 1 ?>" class="pp-btn pp-btn--secondary">Siguiente →</a>
+                    <a href="?page=<?= $page + 1 ?>" class="pp-btn pp-btn--secondary"><?= e(__('common.next')) ?> →</a>
                 <?php endif; ?>
             </nav>
         <?php endif; ?>

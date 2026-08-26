@@ -69,15 +69,15 @@
         button.addEventListener('click', function () {
             var pageTitle = title.value.trim();
             if (!pageTitle) {
-                renderPanel('error', 'Añade primero un título de página para que la IA tenga una base clara.');
+                renderPanel('error', pp.t('js.pages_form.need_title'));
                 title.focus();
                 return;
             }
 
             button.disabled = true;
             button.setAttribute('aria-busy', 'true');
-            button.textContent = 'Generando...';
-            renderPanel('loading', 'Analizando contenido y preparando propuesta SEO. Si el modelo tarda demasiado, te avisaremos aquí.');
+            button.textContent = pp.t('js.pages.generating_short');
+            renderPanel('loading', pp.t('js.pages_form.analyzing_seo'));
 
             postForm('/admin/ai/actions/run', {
                 action: 'improve_seo',
@@ -133,7 +133,7 @@
                 slug: String(data.slug || '').trim()
             };
             if (!suggestion.meta_title || !suggestion.meta_description || !suggestion.slug) {
-                renderPanel('error', 'La IA respondió, pero faltan campos SEO en la propuesta.');
+                renderPanel('error', pp.t('js.pages_form.missing_seo'));
                 return;
             }
 
@@ -148,8 +148,8 @@
                     '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-ai-seo-apply="all">Aplicar todo</button>',
                 '</div>',
                 warningHtml(body.warnings || []),
-                suggestionRow('Meta título', suggestion.meta_title, 'meta_title', metaTitle.value.length + ' actual'),
-                suggestionRow('Meta descripción', suggestion.meta_description, 'meta_description', metaDescription.value.length + ' actual'),
+                suggestionRow(pp.t('js.pages_form.meta_title'), suggestion.meta_title, 'meta_title', pp.t('js.pages_form.current', { n: metaTitle.value.length })),
+                suggestionRow(pp.t('js.pages_form.meta_desc'), suggestion.meta_description, 'meta_description', pp.t('js.pages_form.current', { n: metaDescription.value.length })),
                 suggestionRow('Slug', suggestion.slug, 'slug', slug.value ? '/' + slug.value : 'sin slug'),
             ].join('');
 
@@ -230,12 +230,12 @@
             var pageTitle = title.value.trim();
             var pageGoal = goal.value.trim();
             if (!pageTitle) {
-                showCreateStatus('error', 'Añade primero el título de la página.');
+                showCreateStatus('error', pp.t('js.pages_form.need_title_short'));
                 title.focus();
                 return;
             }
             if (!pageGoal) {
-                showCreateStatus('error', 'Describe el objetivo de la página para generar un borrador útil.');
+                showCreateStatus('error', pp.t('js.pages_form.need_goal'));
                 goal.focus();
                 return;
             }
@@ -243,7 +243,7 @@
             button.disabled = true;
             button.setAttribute('aria-busy', 'true');
             button.textContent = 'Generando...';
-            showCreateStatus('loading', 'Generando estructura, contenido inicial y SEO. Estamos creando varias secciones; puede tardar hasta un par de minutos.');
+            showCreateStatus('loading', pp.t('js.pages.generating'));
 
             var params = new URLSearchParams();
             params.set('_csrf', csrf);
@@ -268,7 +268,7 @@
                 showCreateStatus('success', 'Borrador creado con ' + body.sections_count + ' secciones. ' + formatUsageSummary(body.ai_usage) + ' Abriendo editor...');
                 window.location.href = body.edit_url;
             }).catch(function (err) {
-                showCreateStatus('error', err.message || 'No se pudo crear la página con IA.');
+                showCreateStatus('error', err.message || pp.t('js.pages_form.create_failed'));
                 button.disabled = false;
                 button.removeAttribute('aria-busy');
                 button.textContent = 'Generar borrador';
@@ -336,7 +336,7 @@
         options.signal = controller.signal;
         return fetch(url, options).catch(function (err) {
             if (err && err.name === 'AbortError') {
-                throw new Error('La llamada IA ha tardado demasiado. No se ha aplicado ningún cambio; prueba de nuevo o usa un modelo más rápido.');
+                throw new Error(pp.t('js.pages_form.ai_timeout'));
             }
             throw err;
         }).finally(function () {

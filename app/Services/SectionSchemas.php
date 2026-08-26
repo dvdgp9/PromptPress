@@ -35,6 +35,178 @@ namespace App\Services;
  */
 final class SectionSchemas
 {
+    /**
+     * El mismo catálogo con TODO el texto visible traducido al idioma del gestor.
+     *
+     * `all()` se queda en castellano a propósito: es la fuente del prompt que
+     * describe los schemas al modelo (`AIActionRunner::renderSectionSchemaHint`).
+     * Aquí se hace una copia traducida para el editor de secciones, derivando la
+     * clave del catálogo de la propia ruta (`section_schema.hero.field.heading.label`),
+     * de modo que añadir un campo nuevo solo obliga a añadir su clave.
+     *
+     * Además, aquí se adapta el catálogo a ESTE sitio (MODULOS M2): los tipos
+     * que dependen de un módulo desaparecen si el módulo está apagado, y los
+     * selectores que enumeran cosas del sitio (los servicios reservables) se
+     * rellenan con datos reales. Es a propósito que eso NO esté en `all()`:
+     * `all()` describe el catálogo al modelo y no debe depender de la BD.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function allForView(?int $siteId = null): array
+    {
+        $siteId = $siteId ?? \Core\Auth::siteId();
+
+        $out = [];
+        foreach (self::allForSite($siteId) as $type => $schema) {
+            $base = 'section_schema.' . $type;
+            if (isset($schema['label'])) {
+                $schema['label'] = __($base . '.label');
+            }
+            if (isset($schema['description'])) {
+                $schema['description'] = __($base . '.description');
+            }
+            if (isset($schema['variants']) && is_array($schema['variants'])) {
+                foreach ($schema['variants'] as $vKey => $_) {
+                    $schema['variants'][$vKey] = __($base . '.variant.' . $vKey);
+                }
+            }
+            if (isset($schema['fields']) && is_array($schema['fields'])) {
+                $schema['fields'] = self::translateFields($schema['fields'], $base . '.field');
+            }
+            // Después de traducir: los nombres de los servicios son datos del
+            // usuario y no pasan nunca por el catálogo de idiomas.
+            $schema = self::withSiteOptions($type, $schema, $siteId);
+            $out[$type] = $schema;
+        }
+        return $out;
+    }
+
+    /**
+     * El catálogo (en castellano, sin traducir) recortado a lo que este sitio
+     * puede usar de verdad. Lo usan el editor y los prompts que le proponen
+     * tipos de sección al modelo: sin esto, la IA podía montar una página con
+     * un calendario de reservas en un sitio sin el módulo, y esa sección se
+     * pintaba vacía.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function allForSite(?int $siteId = null): array
+    {
+        $siteId = $siteId ?? \Core\Auth::siteId();
+        $out = [];
+        foreach (self::all() as $type => $schema) {
+            if (self::availableForSite($type, $siteId)) {
+                $out[$type] = $schema;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * ¿Este tipo de sección tiene sentido en este sitio? Los tipos que solo
+     * existen gracias a un módulo desaparecen del editor cuando el módulo está
+     * apagado, para no ofrecer una sección que se pintaría vacía.
+     *
+     * Público porque el catálogo del desplegable "Añadir sección" vive en
+     * `SectionController::SECTION_TYPES` (otra lista, con `generic`) y filtra
+     * con este mismo criterio.
+     */
+    public static function isAvailableForSite(string $type, ?int $siteId = null): bool
+    {
+        return self::availableForSite($type, $siteId ?? \Core\Auth::siteId());
+    }
+
+    private static function availableForSite(string $type, ?int $siteId): bool
+    {
+        if ($type !== 'booking') {
+            return true;
+        }
+        if ($siteId === null || !\App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')) {
+            return false;
+        }
+        // MODULOS M5 — y con el módulo activo pero SIN servicios reservables
+        // tampoco: no hay ningún calendario que poner. Mismo criterio que la
+        // pantalla de Reservas, que sin servicios no habla de publicar nada.
+        return self::bookableServices($siteId) !== [];
+    }
+
+    /**
+     * Servicios reservables del sitio. Sin memorizar a propósito: son dos o tres
+     * consultas indexadas por render del editor, y una caché estática mentiría
+     * en cuanto alguien creara un servicio y volviera a pedir el catálogo en el
+     * mismo proceso (justo lo que hacen los tests).
+     *
+     * @return array<int, array{id:int, name:string, duration_min:int, price_label:string}>
+     */
+    private static function bookableServices(int $siteId): array
+    {
+        return \App\Modules\Booking\BookingEmbedRenderer::embeddableServices($siteId);
+    }
+
+    /**
+     * Rellena los selectores que enumeran cosas del sitio. Hoy solo el servicio
+     * del calendario de reservas: el gestor elige por nombre, nunca por id.
+     *
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
+    private static function withSiteOptions(string $type, array $schema, ?int $siteId): array
+    {
+        if ($type !== 'booking' || $siteId === null || !is_array($schema['fields'] ?? null)) {
+            return $schema;
+        }
+        // Si llega aquí, el tipo pasó el filtro de `availableForSite()`, así que
+        // hay al menos un servicio activo.
+        $services = self::bookableServices($siteId);
+        foreach ($schema['fields'] as $i => $field) {
+            if (($field['key'] ?? '') !== 'service_id') {
+                continue;
+            }
+            $options = $field['options'] ?? [];
+            foreach ($services as $s) {
+                $label = $s['name'] . ' · ' . $s['duration_min'] . ' min';
+                $options[(string) $s['id']] = $label;
+            }
+            $field['options'] = $options;
+            $schema['fields'][$i] = $field;
+        }
+        return $schema;
+    }
+
+    /**
+     * Traduce una lista de campos (y los de dentro de un repeater, un nivel más).
+     *
+     * @param array<int, array<string, mixed>> $fields
+     * @return array<int, array<string, mixed>>
+     */
+    private static function translateFields(array $fields, string $prefix): array
+    {
+        foreach ($fields as $i => $field) {
+            $key = (string) ($field['key'] ?? $i);
+            $base = $prefix . '.' . $key;
+            foreach (['label', 'placeholder', 'help', 'itemLabel'] as $prop) {
+                if (isset($field[$prop]) && is_string($field[$prop]) && $field[$prop] !== '') {
+                    $field[$prop] = __($base . '.' . $prop);
+                }
+            }
+            if (isset($field['options']) && is_array($field['options'])) {
+                foreach ($field['options'] as $oKey => $oVal) {
+                    if (is_string($oVal)) {
+                        $field['options'][$oKey] = __($base . '.option.' . $oKey);
+                    }
+                }
+            }
+            if (isset($field['fields']) && is_array($field['fields'])) {
+                $field['fields'] = self::translateFields($field['fields'], $base . '.item');
+            }
+            $fields[$i] = $field;
+        }
+        return $fields;
+    }
+
+    // i18n-ignore-start: este catálogo es la FUENTE del prompt que describe los
+    // schemas al modelo (`AIActionRunner::renderSectionSchemaHint`). El editor
+    // pinta la copia traducida de `allForView()`.
     public static function all(): array
     {
         return [
@@ -364,6 +536,36 @@ final class SectionSchemas
                 ],
             ],
 
+            // MODULOS M2 — Calendario de reservas en una página del propio sitio.
+            //
+            // Solo aparece en el editor si el módulo Reservas está activo (lo
+            // filtra `allForView()`), y su selector de servicio se rellena con
+            // los servicios REALES del sitio: quien no es técnico elige "Consulta
+            // inicial" en un desplegable, nunca un id. Dejarlo en "Automático"
+            // usa el primer servicio activo, así que la sección recién añadida ya
+            // funciona sin configurar nada.
+            'booking' => [
+                'label' => 'Calendario de reservas',
+                'description' => 'Deja que tus clientes pidan cita desde esta página: elige el servicio y se pinta su calendario con los huecos libres.',
+                'variants' => [
+                    'default'  => 'Calendario solo',
+                    'with-text' => 'Con título y texto',
+                ],
+                'fields' => [
+                    // La opción "0" es "el primero activo": `resolveServiceId()`
+                    // trata cualquier valor <= 0 como automático.
+                    ['key' => 'service_id', 'label' => 'Servicio', 'type' => 'select', 'default' => '0',
+                        'options' => ['0' => 'Automático (el primero activo)'],
+                        'help'    => 'Los servicios se crean y se configuran en Reservas.'],
+                    ['key' => 'heading',     'label' => 'Título', 'type' => 'text', 'placeholder' => 'Pide tu cita'],
+                    ['key' => 'description', 'label' => 'Texto de apoyo', 'type' => 'textarea', 'rows' => 2,
+                        'placeholder' => 'Elige el día y la hora que mejor te venga.'],
+                    ['key' => 'days', 'label' => 'Días de agenda a mostrar', 'type' => 'select', 'default' => '14',
+                        'options' => ['7' => '7 días', '14' => '14 días', '21' => '21 días', '31' => '31 días'],
+                        'help'    => 'Cuánto futuro ve el visitante de una vez. La ventana máxima real la manda el servicio.'],
+                ],
+            ],
+
             // F21.T21.3 — Listado de entradas (índice de blog).
             // El contenido es dinámico: el renderer consulta `pages` y `post_meta`
             // para listar las últimas N entradas publicadas. Los fields aquí solo
@@ -415,6 +617,7 @@ final class SectionSchemas
             ],
         ];
     }
+    // i18n-ignore-end
 
     public static function forType(string $type): ?array
     {

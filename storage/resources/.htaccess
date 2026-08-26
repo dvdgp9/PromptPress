@@ -1,0 +1,3 @@
+# Los recursos nunca son accesibles por su path físico; solo via controller.
+Require all denied
+

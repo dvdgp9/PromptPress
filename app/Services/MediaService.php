@@ -35,29 +35,29 @@ final class MediaService
     public static function validate(?array $file): ?string
     {
         if (!is_array($file) || !isset($file['error'])) {
-            return 'No se recibió ningún archivo.';
+            return __('documents.error.no_file');
         }
         switch ($file['error']) {
             case UPLOAD_ERR_OK:
                 break;
             case UPLOAD_ERR_INI_SIZE:
             case UPLOAD_ERR_FORM_SIZE:
-                return 'La imagen excede el tamaño máximo permitido por el servidor.';
+                return __('media.error.too_big');
             case UPLOAD_ERR_NO_FILE:
                 return 'Debes seleccionar una imagen.';
             case UPLOAD_ERR_PARTIAL:
-                return 'La subida se interrumpió. Inténtalo de nuevo.';
+                return __('documents.error.interrupted');
             default:
-                return 'Error al subir el archivo (código ' . $file['error'] . ').';
+                return __('documents.error.upload_code', ['code' => $file['error']]);
         }
         if ($file['size'] > self::MAX_SIZE) {
             return 'La imagen supera los ' . (self::MAX_SIZE / 1024 / 1024) . ' MB permitidos.';
         }
         if (!is_uploaded_file($file['tmp_name'])) {
-            return 'Archivo subido no válido.';
+            return __('documents.error.invalid_upload');
         }
         if (self::detectMime($file) === null) {
-            return 'Tipo de imagen no soportado. Usa JPG, PNG, WebP o GIF.';
+            return __('media.error.bad_type');
         }
         return null;
     }
@@ -151,9 +151,11 @@ final class MediaService
         array $meta = []
     ): array {
         if (!isset(self::ALLOWED[$mime])) {
+            // i18n-ignore: excepción interna.
             throw new \RuntimeException('Tipo de imagen no soportado: ' . $mime);
         }
         if (!is_file($absolutePath)) {
+            // i18n-ignore: excepción interna.
             throw new \RuntimeException('No existe el archivo descargado: ' . $absolutePath);
         }
 

@@ -28,14 +28,14 @@
     }
 
     function loadLibrary() {
-        grid.innerHTML = '<p class="pp-booking-soft">Cargando…</p>';
+        grid.innerHTML = '<p class="pp-booking-soft">' + pp.t('js.common.loading') + '</p>';
         fetch(libraryUrl, { headers: { 'Accept': 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 loaded = true;
                 var items = (data && data.items) || [];
                 if (!items.length) {
-                    grid.innerHTML = '<p class="pp-booking-soft">No hay imágenes en la biblioteca todavía.</p>';
+                    grid.innerHTML = '<p class="pp-booking-soft">' + pp.t('js.media.empty') + '</p>';
                     return;
                 }
                 grid.innerHTML = '';
@@ -55,7 +55,7 @@
                 });
             })
             .catch(function () {
-                grid.innerHTML = '<p class="pp-alert pp-alert--error">No se pudo cargar la biblioteca.</p>';
+                grid.innerHTML = '<p class="pp-alert pp-alert--error">' + pp.t('js.media.load_error') + '</p>';
             });
     }
 

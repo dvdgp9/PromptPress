@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers\Admin;
 
+use App\Services\AdminI18n;
 use App\Services\CacheService;
 use App\Services\ArticleTemplateService;
 use App\Services\LanguageService;
@@ -30,17 +31,22 @@ class SettingsController
      */
     public const LANGUAGES = LanguageService::LANGUAGES;
 
+    /**
+     * Zonas horarias admitidas. La CLAVE es el identificador de la BD y no se
+     * traduce nunca; la etiqueta se resuelve al pintarla (`timezoneOptions()`),
+     * no aquí: una constante se evalúa antes de saber el idioma del usuario.
+     */
     public const TIMEZONES = [
-        'Europe/Madrid'          => 'Europa / Madrid',
-        'Europe/London'          => 'Europa / Londres',
-        'Europe/Paris'           => 'Europa / París',
-        'Europe/Berlin'          => 'Europa / Berlín',
-        'America/New_York'       => 'América / Nueva York',
-        'America/Mexico_City'    => 'América / Ciudad de México',
-        'America/Bogota'         => 'América / Bogotá',
-        'America/Buenos_Aires'   => 'América / Buenos Aires',
-        'America/Santiago'       => 'América / Santiago de Chile',
-        'UTC'                    => 'UTC',
+        'Europe/Madrid'          => 'timezone.europe_madrid',
+        'Europe/London'          => 'timezone.europe_london',
+        'Europe/Paris'           => 'timezone.europe_paris',
+        'Europe/Berlin'          => 'timezone.europe_berlin',
+        'America/New_York'       => 'timezone.america_new_york',
+        'America/Mexico_City'    => 'timezone.america_mexico_city',
+        'America/Bogota'         => 'timezone.america_bogota',
+        'America/Buenos_Aires'   => 'timezone.america_buenos_aires',
+        'America/Santiago'       => 'timezone.america_santiago',
+        'UTC'                    => 'timezone.utc',
     ];
 
     public function index(): void
@@ -117,13 +123,9 @@ class SettingsController
         LanguageService::forget($siteId);
 
         CacheService::flush($siteId);
-        $notice = 'Ajustes generales guardados. Caché pública regenerada.';
+        $notice = __('settings.flash.saved');
         if ($languageChanged) {
-            $notice .= ' Idioma cambiado a ' . LanguageService::label($input['language']) . ':'
-                . ' los textos automáticos del sitio (botones de formulario, avisos, banner de cookies)'
-                . ' y todo lo que genere la IA a partir de ahora usarán el nuevo idioma.'
-                . ' El contenido ya escrito, los títulos de página y las etiquetas del menú NO se traducen solos:'
-                . ' revísalos o pídeselo al asistente.';
+            $notice .= ' ' . __('settings.flash.language_changed', ['idioma' => LanguageService::label($input['language'])]);
         }
         Session::flash('notice', $notice);
         Response::redirect(base_url('admin/settings'));
@@ -135,16 +137,16 @@ class SettingsController
         $siteId = $this->requireSiteId();
         $site = $this->loadSite($siteId);
         if (Auth::role() !== 'admin') {
-            Response::forbidden('Acceso denegado');
+            Response::forbidden(__('common.access_denied'));
         }
         $confirmation = trim((string) Request::post('confirmation', ''));
         if ($confirmation !== (string) $site['name']) {
-            Session::flash('error', 'El nombre no coincide. No hemos reiniciado nada.');
+            Session::flash('error', __('settings.reset.name_mismatch'));
             Response::redirect(base_url('admin/settings'));
         }
         SiteResetService::reset($siteId);
         Auth::logout();
-        Session::flash('success', 'Sitio reiniciado. Pasa de nuevo por el onboarding.');
+        Session::flash('success', __('settings.reset.done'));
         Response::redirect(base_url('admin/login'));
     }
 
@@ -154,7 +156,7 @@ class SettingsController
         $siteId = $this->requireSiteId();
         $status = UpdateService::checkNow($siteId);
         $msg = $status['has_update']
-            ? 'Nueva versión detectada: ' . ($status['latest_version'] ?? 'desconocida') . '.'
+            ? __('settings.update.new_detected', ['version' => $status['latest_version'] ?? __('settings.update.unknown_version')])
             : $status['message'];
         Session::flash('notice', $msg);
         Response::redirect(base_url('admin/settings'));
@@ -164,17 +166,17 @@ class SettingsController
     {
         CSRF::check();
         if (Auth::role() !== 'admin') {
-            Response::forbidden('Acceso denegado');
+            Response::forbidden(__('common.access_denied'));
         }
 
         $siteId = $this->requireSiteId();
 
         try {
             $result = UpdateInstallerService::apply($siteId);
-            $label = $result['version'] ? ('v' . $result['version']) : 'la nueva versión';
-            Session::flash('notice', 'Actualización aplicada (' . $label . '). Backup: ' . $result['backup']);
+            $label = $result['version'] ? ('v' . $result['version']) : __('settings.update.the_new_version');
+            Session::flash('notice', __('settings.update.applied', ['version' => $label, 'backup' => $result['backup']]));
         } catch (\Throwable $e) {
-            Session::flash('error', 'No se pudo aplicar la actualización: ' . $e->getMessage());
+            Session::flash('error', __('settings.update.apply_failed', ['error' => $e->getMessage()]));
         }
 
         Response::redirect(base_url('admin/settings'));
@@ -188,7 +190,7 @@ class SettingsController
     {
         CSRF::check();
         if (Auth::role() !== 'admin') {
-            Response::forbidden('Acceso denegado');
+            Response::forbidden(__('common.access_denied'));
         }
         $this->requireSiteId();
 
@@ -199,12 +201,13 @@ class SettingsController
 
         try {
             $result = UpdateInstallerService::applyFromUpload($_FILES['package'] ?? [], $checksum);
-            $label = $result['version'] ? ('v' . $result['version']) : 'el paquete subido';
-            Session::flash('notice',
-                'Actualización aplicada (' . $label . '). Se ha guardado una copia de seguridad previa: '
-                . basename($result['backup']) . '. Si algo no funciona, puedes restaurarla desde aquí mismo.');
+            $label = $result['version'] ? ('v' . $result['version']) : __('settings.update.uploaded_package');
+            Session::flash('notice', __('settings.update.applied_upload', [
+                'version' => $label,
+                'backup'  => basename($result['backup']),
+            ]));
         } catch (\Throwable $e) {
-            Session::flash('error', 'No se pudo aplicar la actualización: ' . $e->getMessage());
+            Session::flash('error', __('settings.update.apply_failed', ['error' => $e->getMessage()]));
         }
 
         Response::redirect(base_url('admin/settings'));
@@ -218,7 +221,7 @@ class SettingsController
     {
         CSRF::check();
         if (Auth::role() !== 'admin') {
-            Response::forbidden('Acceso denegado');
+            Response::forbidden(__('common.access_denied'));
         }
         $this->requireSiteId();
         @set_time_limit(300);
@@ -227,12 +230,52 @@ class SettingsController
 
         try {
             $result = UpdateInstallerService::restore($name);
-            Session::flash('notice',
-                'Copia restaurada (' . $result['restored'] . '). Antes de restaurar guardamos el estado anterior en '
-                . $result['safety_backup'] . ', por si necesitas volver.');
+            Session::flash('notice', __('settings.backups.restored', [
+                'copia'  => $result['restored'],
+                'previa' => $result['safety_backup'],
+            ]));
         } catch (\Throwable $e) {
-            Session::flash('error', 'No se pudo restaurar la copia: ' . $e->getMessage());
+            Session::flash('error', __('settings.backups.restore_failed', ['error' => $e->getMessage()]));
         }
+
+        Response::redirect(base_url('admin/settings'));
+    }
+
+    /**
+     * Idioma del PANEL para el usuario logueado (ADMIN-I18N T0.4).
+     *
+     * Vacío = heredar del sitio, que es el defecto y lo que hace que una web
+     * francesa dé panel francés sin configurar nada. Es preferencia personal:
+     * solo toca la fila del usuario en sesión, nunca la del sitio.
+     */
+    public function panelLanguage(): void
+    {
+        CSRF::check();
+        $userId = Auth::id();
+        if ($userId === null) {
+            Response::redirect(base_url('admin/login'));
+        }
+
+        $code = strtolower(trim((string) Request::post('panel_language', '')));
+        $inherit = $code === '';
+
+        if (!$inherit && !in_array($code, AdminI18n::LOCALES, true)) {
+            Session::flash('error', __('settings.panel_language.unavailable'));
+            Response::redirect(base_url('admin/settings'));
+        }
+
+        Database::execute('UPDATE users SET language = ? WHERE id = ?', [$inherit ? null : $code, $userId]);
+
+        // Sin esto el aviso de abajo saldría en el idioma ANTERIOR: `locale()`
+        // ya está resuelto y cacheado para este request.
+        AdminI18n::forget();
+        if (!$inherit) {
+            AdminI18n::setLocale($code);
+        }
+
+        Session::flash('notice', $inherit
+            ? __('settings.panel_language.saved_inherit')
+            : __('settings.panel_language.saved', ['idioma' => LanguageService::label($code)]));
 
         Response::redirect(base_url('admin/settings'));
     }
@@ -251,16 +294,14 @@ class SettingsController
 
         $result = LanguageService::enable($siteId, $code);
         if (!($result['ok'] ?? false)) {
-            Session::flash('error', 'Idioma no válido.');
+            Session::flash('error', __('settings.lang.invalid'));
         } elseif (!empty($result['already'])) {
-            Session::flash('notice', LanguageService::label($code) . ' ya estaba activo.');
+            Session::flash('notice', __('settings.lang.already_active', ['idioma' => LanguageService::label($code)]));
         } else {
-            Session::flash('notice', sprintf(
-                'Idioma %s añadido. Sus páginas vivirán bajo /%s/ y el idioma principal mantiene sus URLs actuales.'
-                . ' Todavía no hay contenido traducido: créalo o pídeselo al asistente.',
-                LanguageService::label($code),
-                LanguageService::normalize($code)
-            ));
+            Session::flash('notice', __('settings.lang.added', [
+                'idioma' => LanguageService::label($code),
+                'code'   => LanguageService::normalize($code),
+            ]));
         }
         Response::redirect(base_url('admin/settings'));
     }
@@ -277,18 +318,16 @@ class SettingsController
 
         $result = LanguageService::disable($siteId, $code);
         if ($result['ok'] ?? false) {
-            Session::flash('notice', 'Idioma ' . LanguageService::label($code) . ' desactivado.');
+            Session::flash('notice', __('settings.lang.disabled', ['idioma' => LanguageService::label($code)]));
         } elseif (($result['error'] ?? '') === 'primary') {
-            Session::flash('error', 'No puedes desactivar el idioma principal del sitio.');
+            Session::flash('error', __('settings.lang.cannot_disable_primary'));
         } elseif (($result['error'] ?? '') === 'has_pages') {
-            Session::flash('error', sprintf(
-                'No se puede desactivar %s: todavía tiene %d página(s). Bórralas o cámbialas de idioma primero'
-                . ' — desactivar un idioma nunca borra contenido.',
-                LanguageService::label($code),
-                (int) ($result['pages'] ?? 0)
-            ));
+            Session::flash('error', __('settings.lang.has_pages', [
+                'idioma' => LanguageService::label($code),
+                'n'      => (int) ($result['pages'] ?? 0),
+            ]));
         } else {
-            Session::flash('error', 'No se pudo desactivar el idioma.');
+            Session::flash('error', __('settings.lang.disable_failed'));
         }
         Response::redirect(base_url('admin/settings'));
     }
@@ -305,7 +344,15 @@ class SettingsController
                 'languages' => self::LANGUAGES,
                 'activeLanguages' => LanguageService::activeFor((int) $ctx['site']['id']),
                 'primaryLanguage' => LanguageService::primaryFor((int) $ctx['site']['id']),
-                'timezones' => self::TIMEZONES,
+                // ADMIN-I18N — idioma del panel (preferencia del usuario, no del sitio).
+                'panelLanguages' => $this->panelLanguageOptions(),
+                'panelLanguage'  => $this->userPanelLanguage(),
+                'panelLanguageInherited' => LanguageService::label(AdminI18n::resolveFrom(
+                    null,
+                    LanguageService::primaryFor((int) $ctx['site']['id']),
+                    null
+                )),
+                'timezones' => $this->timezoneOptions(),
                 'articleTemplate' => $ctx['articleTemplate'] ?? ArticleTemplateService::forSite((int) $ctx['site']['id']),
                 'articleTemplateOptions' => $this->articleTemplateOptions(),
                 'errors'    => $ctx['errors'],
@@ -315,41 +362,83 @@ class SettingsController
         ));
     }
 
+    /**
+     * Idiomas que el panel sabe hablar hoy, con su etiqueta.
+     *
+     * Se deriva de `AdminI18n::LOCALES`, no de una lista propia: añadir
+     * `lang/admin/ca.php` y su código a esa constante tiene que bastar para que
+     * aparezca aquí, sin tocar Ajustes.
+     *
+     * @return array<string,string>
+     */
+    private function panelLanguageOptions(): array
+    {
+        $out = [];
+        foreach (AdminI18n::LOCALES as $code) {
+            $out[$code] = LanguageService::label($code);
+        }
+        return $out;
+    }
+
+    /**
+     * Zonas horarias con la etiqueta ya traducida, en el orden de la constante.
+     *
+     * @return array<string,string>
+     */
+    private function timezoneOptions(): array
+    {
+        $out = [];
+        foreach (self::TIMEZONES as $tz => $key) {
+            $out[$tz] = __($key);
+        }
+        return $out;
+    }
+
+    /** Preferencia guardada del usuario, o '' si hereda del sitio. */
+    private function userPanelLanguage(): string
+    {
+        $userId = Auth::id();
+        if ($userId === null) {
+            return '';
+        }
+        $row = Database::selectOne('SELECT language FROM users WHERE id = ? LIMIT 1', [$userId]);
+        return (string) ($row['language'] ?? '');
+    }
+
     private function validate(array $input, int $siteId): array
     {
         $errors = [];
 
         if ($input['name'] === '') {
-            $errors['name'] = 'El nombre del sitio es obligatorio.';
+            $errors['name'] = __('settings.error.name_required');
         } elseif (mb_strlen($input['name']) > 255) {
-            $errors['name'] = 'El nombre del sitio no puede superar 255 caracteres.';
+            $errors['name'] = __('settings.error.name_too_long');
         }
 
         if ($input['url'] === '') {
-            $errors['url'] = 'La URL del sitio es obligatoria.';
+            $errors['url'] = __('settings.error.url_required');
         } elseif (mb_strlen($input['url']) > 500) {
-            $errors['url'] = 'La URL del sitio no puede superar 500 caracteres.';
+            $errors['url'] = __('settings.error.url_too_long');
         } elseif (!filter_var($input['url'], FILTER_VALIDATE_URL)) {
-            $errors['url'] = 'La URL debe ser válida y empezar por http:// o https://.';
+            $errors['url'] = __('settings.error.url_invalid');
         } else {
             $scheme = strtolower((string) parse_url($input['url'], PHP_URL_SCHEME));
             if (!in_array($scheme, ['http', 'https'], true)) {
-                $errors['url'] = 'La URL debe usar http:// o https://.';
+                $errors['url'] = __('settings.error.url_scheme');
             }
         }
 
         if (!array_key_exists($input['language'], self::LANGUAGES)) {
-            $errors['language'] = 'Idioma no válido.';
+            $errors['language'] = __('settings.error.language_invalid');
         } elseif (LanguageService::isMultilingual($siteId)
             && LanguageService::normalize($input['language']) !== LanguageService::primaryFor($siteId)) {
             // Cambiar el principal en una web multi-idioma reescribiría las URLs
             // de todas las páginas (el idioma sin prefijo pasaría a tenerlo).
-            $errors['language'] = 'No puedes cambiar el idioma principal mientras haya idiomas adicionales activos:'
-                . ' cambiarían las URLs de todas las páginas. Desactiva primero los adicionales.';
+            $errors['language'] = __('settings.error.language_locked');
         }
 
         if (!array_key_exists($input['timezone'], self::TIMEZONES)) {
-            $errors['timezone'] = 'Zona horaria no válida.';
+            $errors['timezone'] = __('settings.error.timezone_invalid');
         }
 
         return $errors;
@@ -358,8 +447,13 @@ class SettingsController
     /** @return array<string,string> */
     private function articleTemplateOptions(): array
     {
-        $all = ArticleTemplateService::options();
-        return array_intersect_key($all, array_flip(['classic', 'visual']));
+        // Las claves son valores de BD; la etiqueta se traduce al pintarla.
+        $all = array_intersect_key(ArticleTemplateService::options(), array_flip(['classic', 'visual']));
+        $out = [];
+        foreach (array_keys($all) as $slug) {
+            $out[$slug] = __('article_template.' . $slug);
+        }
+        return $out;
     }
 
     private function saveSetting(int $siteId, string $key, string $value): void
@@ -380,7 +474,7 @@ class SettingsController
             [$siteId]
         );
         if (!$site) {
-            Session::flash('error', 'No se encontró el sitio activo.');
+            Session::flash('error', __('common.site_not_found'));
             Response::redirect(base_url('admin/logout'));
         }
         return $site;
@@ -390,7 +484,7 @@ class SettingsController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

@@ -30,25 +30,25 @@ final class SeoTechnicalAuditService
             $desc = trim((string) ($page['meta_description'] ?? ''));
 
             if ($stats['h1_count'] === 0) {
-                $issues[] = self::issue($page, 'warning', 'h1_missing', 'Sin H1 detectable', 'La página no parece tener un título principal en el contenido público.');
+                $issues[] = self::issue($page, 'warning', 'h1_missing', __('seo.audit.h1_missing'), __('seo.audit.h1_missing_desc'));
             } elseif ($stats['h1_count'] > 1) {
-                $issues[] = self::issue($page, 'warning', 'h1_multiple', 'Varios H1 detectados', 'Hay ' . $stats['h1_count'] . ' títulos H1. Normalmente debería haber uno principal.');
+                $issues[] = self::issue($page, 'warning', 'h1_multiple', __('seo.audit.h1_multiple'), __('seo.audit.h1_multiple_desc', ['n' => (string) $stats['h1_count']]));
             }
 
             if ($stats['images_without_alt'] > 0) {
-                $issues[] = self::issue($page, 'warning', 'image_alt_missing', 'Imágenes sin texto alternativo', $stats['images_without_alt'] . ' imagen(es) no tienen alt útil.');
+                $issues[] = self::issue($page, 'warning', 'image_alt_missing', __('seo.audit.alt_missing'), __('seo.audit.alt_missing_desc', ['n' => (string) $stats['images_without_alt']]));
             }
 
             if (trim((string) ($page['canonical_url'] ?? '')) !== '' && SeoIndexingService::normalizeCanonical((string) $page['canonical_url']) === null) {
-                $issues[] = self::issue($page, 'error', 'canonical_invalid', 'Canonical inválida', 'La canonical debe ser una URL completa con http:// o https://.');
+                $issues[] = self::issue($page, 'error', 'canonical_invalid', __('seo.audit.canonical'), __('seo.audit.canonical_desc'));
             }
 
             if ($pageType !== 'article' && $desc === '') {
-                $issues[] = self::issue($page, 'info', 'og_description_missing', 'Descripción social vacía', 'Open Graph usará menos información porque no hay meta descripción.');
+                $issues[] = self::issue($page, 'info', 'og_description_missing', __('seo.audit.og_desc'), __('seo.audit.og_desc_desc'));
             }
 
             if ($title === '') {
-                $issues[] = self::issue($page, 'info', 'og_title_missing', 'Título social vacío', 'Open Graph necesita un título legible para compartir enlaces.');
+                $issues[] = self::issue($page, 'info', 'og_title_missing', __('seo.audit.og_title'), __('seo.audit.og_title_desc'));
             }
         }
 

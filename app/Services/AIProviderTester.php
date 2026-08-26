@@ -28,7 +28,7 @@ final class AIProviderTester
     /** Modelos sugeridos por proveedor (texto libre, el usuario puede personalizar). */
     public const SUGGESTED_MODELS = [
         'openrouter' => [
-            'google/gemini-3-flash-preview',
+            'google/gemini-3.7-flash',
             'google/gemini-3.1-flash-lite',
             'google/gemini-3.5-flash',
             'openai/gpt-4o-mini',
@@ -50,7 +50,7 @@ final class AIProviderTester
     {
         $apiKey = trim($apiKey);
         if ($apiKey === '') {
-            return ['ok' => false, 'error' => 'La API key está vacía.'];
+            return ['ok' => false, 'error' => __('aitester.err.empty_key')];
         }
 
         return match ($provider) {
@@ -58,7 +58,7 @@ final class AIProviderTester
             'openai'    => self::testOpenAI($apiKey, $model),
             'anthropic' => self::testAnthropic($apiKey, $model),
             'mistral'   => self::testMistral($apiKey, $model),
-            default     => ['ok' => false, 'error' => 'Proveedor no soportado: ' . $provider],
+            default     => ['ok' => false, 'error' => __('aitester.err.unsupported', ['proveedor' => $provider])],
         };
     }
 
@@ -119,11 +119,11 @@ final class AIProviderTester
         try {
             [$status, $body, $err] = self::httpGet($url, $headers);
         } catch (RuntimeException $e) {
-            return ['ok' => false, 'error' => 'Error de red al contactar con ' . $providerLabel . ': ' . $e->getMessage()];
+            return ['ok' => false, 'error' => __('aitester.err.network', ['proveedor' => $providerLabel, 'detalle' => $e->getMessage()])];
         }
 
         if ($err !== null) {
-            return ['ok' => false, 'error' => 'No se pudo conectar con ' . $providerLabel . ': ' . $err];
+            return ['ok' => false, 'error' => __('aitester.err.connect', ['proveedor' => $providerLabel, 'detalle' => $err])];
         }
 
         if ($status === 200) {
@@ -144,14 +144,14 @@ final class AIProviderTester
         }
 
         if ($status === 401 || $status === 403) {
-            return ['ok' => false, 'error' => 'API key rechazada por ' . $providerLabel . ' (HTTP ' . $status . '). Verifica que sea correcta y esté activa.'];
+            return ['ok' => false, 'error' => __('aitester.err.rejected', ['proveedor' => $providerLabel, 'status' => (string) $status])];
         }
 
         if ($status === 429) {
-            return ['ok' => false, 'error' => $providerLabel . ' ha respondido con rate-limit (HTTP 429). Espera unos segundos y vuelve a intentarlo.'];
+            return ['ok' => false, 'error' => __('aitester.err.rate_limit', ['proveedor' => $providerLabel])];
         }
 
-        return ['ok' => false, 'error' => $providerLabel . ' respondió HTTP ' . $status . '. Detalles: ' . substr($body, 0, 200)];
+        return ['ok' => false, 'error' => __('aitester.err.http', ['proveedor' => $providerLabel, 'status' => (string) $status, 'detalle' => substr($body, 0, 200)])];
     }
 
     /**
@@ -163,6 +163,7 @@ final class AIProviderTester
     private static function httpGet(string $url, array $headers): array
     {
         if (!function_exists('curl_init')) {
+            // i18n-ignore: excepción interna; se registra en el log, no se pinta.
             throw new RuntimeException('cURL no está disponible en este servidor');
         }
         $ch = curl_init($url);

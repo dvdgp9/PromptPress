@@ -113,14 +113,14 @@ final class SeoRedirectService
         ?int $createdBy
     ): array {
         if (!in_array($statusCode, self::ALLOWED_STATUS, true)) {
-            throw new \InvalidArgumentException('Tipo de redirección no válido.');
+            throw new \InvalidArgumentException(__('seo.err.redirect_type'));
         }
 
         $source = self::normalizePath($sourcePath);
         $target = $statusCode === 410 ? null : self::normalizePath((string) $targetPath);
 
         if ($source === '/' || $source === '') {
-            throw new \InvalidArgumentException('No se puede redirigir la página de inicio desde aquí.');
+            throw new \InvalidArgumentException(__('seo.err.redirect_home'));
         }
         if ($statusCode !== 410 && ($target === null || $target === '/')) {
             throw new \InvalidArgumentException('Indica una URL de destino.');
@@ -129,7 +129,7 @@ final class SeoRedirectService
             throw new \InvalidArgumentException('La URL antigua y la nueva no pueden ser iguales.');
         }
         if ($statusCode !== 410 && self::wouldLoop($siteId, $source, (string) $target)) {
-            throw new \InvalidArgumentException('Esa redirección crearía un bucle.');
+            throw new \InvalidArgumentException(__('seo.err.redirect_loop'));
         }
 
         Database::execute(

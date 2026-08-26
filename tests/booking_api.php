@@ -160,6 +160,36 @@ $r = http('GET', $base . '/api/booking/v1/services');
 $found = array_filter($r['body']['services'] ?? [], fn ($s) => (int) $s['id'] === $svcId);
 check_api('GET services 200 + timezone + servicio de prueba', $r['status'] === 200 && ($r['body']['timezone'] ?? '') === $tz && $found !== [], json_encode($r));
 
+// Idioma del widget: `?lang=` (lo manda el calendario incrustado en una página
+// de PromptPress, que sabe en qué idioma se lee) gana al idioma del servicio.
+$r = http('GET', $base . "/api/booking/v1/services?service=$svcId");
+$langServicio = $r['body']['lang'] ?? '';
+$r = http('GET', $base . "/api/booking/v1/services?service=$svcId&lang=fr");
+check_api('?lang=fr manda sobre el idioma del servicio',
+    ($r['body']['lang'] ?? '') === 'fr' && ($r['body']['texts']['ph_name'] ?? '') === 'Votre nom *',
+    json_encode(['servicio' => $langServicio, 'pedido' => $r['body']['lang'] ?? null]));
+$r = http('GET', $base . "/api/booking/v1/services?service=$svcId&lang=marciano");
+check_api('?lang basura se ignora (no rompe)',
+    ($r['status'] ?? 0) === 200 && ($r['body']['lang'] ?? '') === $langServicio, json_encode($r['body']['lang'] ?? null));
+
+// La reserva guarda el idioma de la página donde se hizo: de ahí salen los
+// emails al cliente y su página de cancelación.
+$r = http('POST', $base . '/api/booking/v1/bookings', [
+    'service_id' => $svcId, 'start' => $tomorrow . 'T10:00:00+02:00',
+    'name' => 'Client FR', 'email' => 'fr@example.test', 'lang' => 'fr',
+]);
+$bookingFrId = (int) ($r['body']['id'] ?? 0);
+$rowFr = $bookingFrId > 0
+    ? Database::selectOne('SELECT language FROM booking_bookings WHERE id = ?', [$bookingFrId])
+    : null;
+check_api('la reserva guarda el idioma pedido por la página',
+    (string) ($rowFr['language'] ?? '') === 'fr', json_encode($r['body']));
+check_api('y el mensaje de vuelta va en ese idioma',
+    str_contains((string) ($r['body']['message'] ?? ''), 'Réservation'), (string) ($r['body']['message'] ?? ''));
+if ($bookingFrId > 0) {
+    Database::execute('DELETE FROM booking_bookings WHERE id = ?', [$bookingFrId]);
+}
+
 // Disponibilidad: validación de rango y contrato de días.
 $r = http('GET', $base . "/api/booking/v1/services/$svcId/availability?from=$tomorrow&to=" . substr($tomorrow, 0, 8) . '99');
 check_api('availability fechas inválidas → 422', $r['status'] === 422);

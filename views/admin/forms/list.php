@@ -11,25 +11,25 @@ $templates = $templates ?? [];
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Formularios<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('forms.title')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-forms-wrap">
 <div class="pp-page-header">
     <div>
-        <h2>Formularios</h2>
+        <h2><?= e(__('forms.title')) ?></h2>
         <p class="pp-page-intro">
-            Crea formularios (contacto, inscripción…) y luego insértalos en tus páginas. Las respuestas que recibas aparecen en <a href="<?= e(base_url('admin/forms')) ?>">Mensajes</a>.
+            <?= __('forms.intro.html', ['enlace' => '<a href="' . e(base_url('admin/forms')) . '">' . e(__('nav.messages')) . '</a>']) ?>
         </p>
     </div>
     <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>" class="pp-form-create">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-        <label class="pp-form-create__label" for="form-template">Plantilla</label>
+        <label class="pp-form-create__label" for="form-template"><?= e(__('forms.template')) ?></label>
         <select id="form-template" name="template" class="pp-form-create__select">
             <?php foreach ($templates as $key => $tpl): ?>
             <option value="<?= e($key) ?>"><?= e($tpl['label']) ?></option>
             <?php endforeach; ?>
         </select>
-        <button type="submit" class="pp-btn pp-btn--primary">+ Nuevo formulario</button>
+        <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('forms.new')) ?></button>
     </form>
 </div>
 
@@ -38,8 +38,8 @@ $templates = $templates ?? [];
 
 <?php if (empty($forms)): ?>
     <div class="pp-empty-state">
-        <p><strong>Aún no tienes formularios.</strong></p>
-        <p>Empieza desde una plantilla. Luego puedes ajustar los campos a tu gusto.</p>
+        <p><strong><?= e(__('forms.empty_title')) ?></strong></p>
+        <p><?= e(__('forms.empty_text')) ?></p>
         <div class="pp-form-templates">
             <?php foreach ($templates as $key => $tpl): ?>
             <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>" class="pp-form-template-card">
@@ -61,21 +61,21 @@ $templates = $templates ?? [];
                 <a class="pp-forms-row__main" href="<?= e(base_url('admin/formularios/' . $f['id'])) ?>">
                     <span class="pp-forms-row__title"><?= e($f['heading']) ?></span>
                     <span class="pp-forms-row__meta">
-                        <?= (int) $f['field_count'] ?> <?= $f['field_count'] == 1 ? 'campo' : 'campos' ?>
+                        <?= e(__((int) $f['field_count'] === 1 ? 'forms.fields_one' : 'forms.fields_other', ['n' => (int) $f['field_count']])) ?>
                         ·
                         <?php if ($used > 0): ?>
-                            usado en <?= $used ?> <?= $used == 1 ? 'página' : 'páginas' ?>
+                            <?= e(__($used === 1 ? 'forms.used_one' : 'forms.used_other', ['n' => $used])) ?>
                         <?php else: ?>
-                            sin usar todavía
+                            <?= e(__('forms.unused')) ?>
                         <?php endif; ?>
                     </span>
                 </a>
                 <div class="pp-forms-row__actions">
-                    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/formularios/' . $f['id'])) ?>">Editar</a>
+                    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/formularios/' . $f['id'])) ?>"><?= e(__('common.edit')) ?></a>
                     <form method="POST" action="<?= e(base_url('admin/formularios/' . $f['id'] . '/delete')) ?>"
-                          onsubmit="return confirm('¿Eliminar este formulario? Si está insertado en alguna página, dejará de funcionar.');">
+                          onsubmit="return confirm(<?= e(json_encode(__('forms.confirm_delete'), JSON_UNESCAPED_UNICODE)) ?>);">
                         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                        <button type="submit" class="pp-btn pp-btn--ghost pp-btn--sm">Eliminar</button>
+                        <button type="submit" class="pp-btn pp-btn--ghost pp-btn--sm"><?= e(__('common.delete')) ?></button>
                     </form>
                 </div>
             </div>

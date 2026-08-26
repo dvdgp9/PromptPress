@@ -18,7 +18,7 @@
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Ajustes · IA<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('settings_ai.title')) ?><?php \Core\View::end(); ?>
 
 <?php \Core\View::start('scripts'); ?>
 <script>
@@ -46,8 +46,8 @@
         });
         if (help) {
             help.innerHTML = arr.length
-                ? 'También puedes escribir cualquier ID compatible. Ejemplos: ' + arr.slice(0, 4).map(function (m) { return '<code>' + m + '</code>'; }).join(', ')
-                : 'Escribe el ID exacto del modelo que quieres usar.';
+                ? pp.t('js.settings_ai.examples') + ' ' + arr.slice(0, 4).map(function (m) { return '<code>' + m + '</code>'; }).join(', ')
+                : pp.t('js.settings_ai.exact_id');
         }
         updateSelectedPreset();
     }
@@ -68,23 +68,23 @@
 
 <div class="pp-page-header pp-ai-settings-header">
     <div>
-        <span class="pp-ai-kicker">Motor de contenido</span>
-        <h2>Ajustes · IA</h2>
+        <span class="pp-ai-kicker"><?= e(__('settings_ai.kicker')) ?></span>
+        <h2><?= e(__('settings_ai.title')) ?></h2>
         <p class="pp-page-intro">
-            Elige el modelo base que usará PromptPress para generar y mejorar contenido. Puedes empezar con un preset y cambiar a un ID avanzado cuando quieras.
+            <?= e(__('settings_ai.intro')) ?>
         </p>
     </div>
     <div class="pp-ai-status-card <?= $has_api_key ? 'is-ready' : 'is-empty' ?>">
         <span class="pp-ai-status-dot"></span>
-        <strong><?= $has_api_key ? 'API key configurada' : 'Falta API key' ?></strong>
-        <small><?= $has_api_key ? 'Las pruebas pueden usar la credencial guardada.' : 'Guarda una credencial para activar las llamadas reales.' ?></small>
+        <strong><?= e($has_api_key ? __('settings_ai.key_set') : __('settings_ai.key_missing')) ?></strong>
+        <small><?= e($has_api_key ? __('settings_ai.key_set_help') : __('settings_ai.key_missing_help')) ?></small>
     </div>
 </div>
 
-<nav class="pp-settings-tabs" aria-label="Secciones de ajustes">
-    <a href="<?= e(base_url('admin/settings')) ?>">General</a>
-    <a href="<?= e(base_url('admin/settings/ai')) ?>" class="is-active">IA</a>
-    <a href="<?= e(base_url('admin/settings/mail')) ?>">Correo</a>
+<nav class="pp-settings-tabs" aria-label="<?= e(__('settings.tabs_aria')) ?>">
+    <a href="<?= e(base_url('admin/settings')) ?>"><?= e(__('settings.tab.general')) ?></a>
+    <a href="<?= e(base_url('admin/settings/ai')) ?>" class="is-active"><?= e(__('settings.tab.ai')) ?></a>
+    <a href="<?= e(base_url('admin/settings/mail')) ?>"><?= e(__('settings.tab.mail')) ?></a>
 </nav>
 
 <?php if ($notice): ?>
@@ -93,7 +93,7 @@
 
 <?php if (!empty($errors)): ?>
     <div class="pp-alert pp-alert--error">
-        <strong>Revisa lo siguiente:</strong>
+        <strong><?= e(__('settings_ai.check_errors')) ?></strong>
         <ul>
             <?php foreach ($errors as $err): ?>
                 <li><?= e($err) ?></li>
@@ -108,13 +108,13 @@
     <section class="pp-ai-config-panel" aria-labelledby="pp-ai-config-title">
         <div class="pp-ai-section-head">
             <div>
-                <h3 id="pp-ai-config-title">Modelo principal</h3>
-                <p>Se usa para tareas de creación de contenido: <strong>generar páginas con IA</strong> y <strong>generar secciones</strong>. Prioriza calidad sobre coste.</p>
+                <h3 id="pp-ai-config-title"><?= e(__('settings_ai.main_model')) ?></h3>
+                <p><?= __('settings_ai.main_model_help.html') ?></p>
             </div>
         </div>
 
         <div class="pp-form-group pp-ai-provider-field">
-            <label for="pp-ai-provider">Proveedor</label>
+            <label for="pp-ai-provider"><?= e(__('settings_ai.provider')) ?></label>
             <select id="pp-ai-provider" name="provider" required>
                 <?php foreach ($providers as $code => $label): ?>
                     <option value="<?= e($code) ?>" <?= $code === $current_provider ? 'selected' : '' ?>>
@@ -122,7 +122,7 @@
                     </option>
                 <?php endforeach; ?>
             </select>
-            <small>OpenRouter es el mejor laboratorio para probar familias de modelos sin cambiar integración.</small>
+            <small><?= e(__('settings_ai.provider_help')) ?></small>
         </div>
 
         <div class="pp-ai-presets-wrap">
@@ -140,7 +140,7 @@
                             <span class="pp-ai-model-card__summary"><?= e($preset['summary']) ?></span>
                             <span class="pp-ai-model-card__meta">
                                 <span><?= e($preset['use_case']) ?></span>
-                                <span><?= e($preset['cost']) ?> / 1M tokens</span>
+                                <span><?= e($preset['cost']) ?> <?= e(__('settings_ai.per_million')) ?></span>
                             </span>
                             <code><?= e($preset['model']) ?></code>
                         </button>
@@ -150,7 +150,7 @@
         </div>
 
         <div class="pp-form-group">
-            <label for="pp-ai-model">ID del modelo</label>
+            <label for="pp-ai-model"><?= e(__('settings_ai.model_id')) ?></label>
             <input type="text" id="pp-ai-model" name="model"
                    value="<?= e($current_model) ?>" required maxlength="100"
                    list="pp-ai-model-list"
@@ -169,62 +169,57 @@
     <section class="pp-ai-config-panel" aria-labelledby="pp-ai-config-aux-title">
         <div class="pp-ai-section-head">
             <div>
-                <h3 id="pp-ai-config-aux-title">Modelo auxiliar <span class="pp-ai-optional-tag">opcional</span></h3>
-                <p>Se usa para tareas cortas y frecuentes: <strong>reescribir texto</strong> y <strong>mejorar SEO</strong>. Aquí prima la rapidez y el coste bajo. Si lo dejas vacío, estas tareas usarán el modelo principal.</p>
+                <h3 id="pp-ai-config-aux-title"><?= e(__('settings_ai.aux_model')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></h3>
+                <p><?= __('settings_ai.aux_model_help.html') ?></p>
             </div>
         </div>
 
         <div class="pp-form-group">
-            <label for="pp-ai-model-light">ID del modelo auxiliar</label>
+            <label for="pp-ai-model-light"><?= e(__('settings_ai.aux_model_id')) ?></label>
             <input type="text" id="pp-ai-model-light" name="model_light"
                    value="<?= e($current_model_light ?? '') ?>" maxlength="100"
                    list="pp-ai-model-list"
-                   placeholder="Ej: google/gemini-3.1-flash-lite, anthropic/claude-3.5-haiku, gpt-4o-mini">
+                   placeholder="<?= e(__('settings_ai.aux_placeholder')) ?>">
             <small class="pp-design-hint">
-                Sugerencia: usa la misma familia de proveedor que el modelo principal y elige una variante <em>flash / mini / haiku / lite</em>.
-                Compatible con la misma API key configurada abajo.
+                <?= __('settings_ai.aux_hint.html') ?>
             </small>
         </div>
     </section>
 
     <div class="pp-form-card">
-        <h3>Credenciales</h3>
+        <h3><?= e(__('settings_ai.credentials')) ?></h3>
 
         <div class="pp-form-group">
             <label for="pp-ai-key">API Key</label>
             <input type="password" id="pp-ai-key" name="api_key"
-                   placeholder="<?= $has_api_key ? '•••••••••••••• (deja vacío para no cambiar)' : 'sk-... / sk-or-v1-...' ?>"
+                   placeholder="<?= e($has_api_key ? __('settings_ai.key_placeholder_set') : 'sk-... / sk-or-v1-...') ?>"
                    autocomplete="new-password">
             <small>
-                <?php if ($has_api_key): ?>
-                    Ya hay una key guardada. Déjalo en blanco para mantenerla, o pega una nueva para reemplazarla.
-                <?php else: ?>
-                    Requerida. Se encripta con la clave única de esta instalación antes de guardarla.
-                <?php endif; ?>
+                <?= e($has_api_key ? __('settings_ai.key_exists_help') : __('settings_ai.key_required_help')) ?>
             </small>
         </div>
 
         <div class="pp-ai-security-note">
-            <strong>Guardado seguro</strong>
-            <span>La key se encripta con AES-256-GCM y no vuelve a mostrarse en pantalla.</span>
+            <strong><?= e(__('settings_ai.secure_title')) ?></strong>
+            <span><?= e(__('settings_ai.secure_text')) ?></span>
         </div>
 
         <div class="pp-form-group pp-ai-test-row">
             <label class="pp-checkbox-label">
                 <input type="checkbox" name="test_connection" value="1" checked>
-                Verificar conexión antes de guardar
+                <?= e(__('settings_ai.verify_connection')) ?>
             </label>
-            <small>Hace una llamada mínima al modelo seleccionado para evitar guardar una configuración rota.</small>
+            <small><?= e(__('settings_ai.verify_help')) ?></small>
         </div>
     </div>
 
     <div class="pp-form-actions">
         <button type="submit" class="pp-btn pp-btn--primary">
             <span class="pp-icon pp-icon--check"></span>
-            Guardar
+            <?= e(__('common.save')) ?>
         </button>
         <?php if ($has_api_key): ?>
-            <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--secondary">Probar con un prompt real →</a>
+            <a href="<?= e(base_url('admin/ai/test')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('settings_ai.test_prompt')) ?> →</a>
         <?php endif; ?>
     </div>
 </form>
@@ -232,13 +227,13 @@
 <section class="pp-ai-config-panel" aria-labelledby="pp-img-title" style="margin-top:2rem;">
     <div class="pp-ai-section-head">
         <div>
-            <h3 id="pp-img-title">Imágenes · Unsplash <span class="pp-ai-optional-tag">opcional</span></h3>
-            <p>Permite que las páginas se generen con fotos reales de Unsplash. La clave es única para toda la instalación.</p>
+            <h3 id="pp-img-title"><?= e(__('settings_ai.images_title')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></h3>
+            <p><?= e(__('settings_ai.images_help')) ?></p>
         </div>
         <div class="pp-ai-status-card <?= $unsplash_configured ? 'is-ready' : 'is-empty' ?>">
             <span class="pp-ai-status-dot"></span>
-            <strong><?= $unsplash_configured ? 'Conectado' : 'Sin configurar' ?></strong>
-            <small><?= $unsplash_configured ? e($unsplash_masked) : 'Las páginas se generan sin imágenes.' ?></small>
+            <strong><?= e($unsplash_configured ? __('settings_ai.connected') : __('settings_ai.not_configured')) ?></strong>
+            <small><?= $unsplash_configured ? e($unsplash_masked) : e(__('settings_ai.images_off')) ?></small>
         </div>
     </div>
 
@@ -253,13 +248,12 @@
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
         <div class="pp-form-group">
-            <label for="pp-unsplash-key">Unsplash Access Key</label>
+            <label for="pp-unsplash-key"><?= e(__('settings_ai.unsplash_key')) ?></label>
             <input type="password" id="pp-unsplash-key" name="unsplash_key"
-                   placeholder="<?= $unsplash_configured ? '•••••••••••••• (deja vacío para no cambiar)' : 'Tu Access Key de Unsplash' ?>"
+                   placeholder="<?= e($unsplash_configured ? __('settings_ai.key_placeholder_set') : __('settings_ai.unsplash_placeholder')) ?>"
                    autocomplete="new-password">
             <small>
-                Consíguela gratis en <a href="https://unsplash.com/developers" target="_blank" rel="noopener">unsplash.com/developers</a>
-                (crea una app → copia la <em>Access Key</em>; 50 imágenes/hora en modo demo). Verificamos la clave antes de guardarla.
+                <?= __('settings_ai.unsplash_help.html') ?>
             </small>
         </div>
 
@@ -267,7 +261,7 @@
             <div class="pp-form-group pp-ai-test-row">
                 <label class="pp-checkbox-label">
                     <input type="checkbox" name="remove_unsplash" value="1">
-                    Quitar la clave actual (desactivar imágenes)
+                    <?= e(__('settings_ai.remove_key')) ?>
                 </label>
             </div>
         <?php endif; ?>
@@ -275,7 +269,7 @@
         <div class="pp-form-actions">
             <button type="submit" class="pp-btn pp-btn--primary">
                 <span class="pp-icon pp-icon--check"></span>
-                Guardar imágenes
+                <?= e(__('settings_ai.save_images')) ?>
             </button>
         </div>
     </form>

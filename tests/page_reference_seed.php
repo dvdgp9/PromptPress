@@ -63,12 +63,24 @@ checkReferenceSeed(
     'La habilitación del botón debe reaccionar a archivos o página base.'
 );
 
+// ADMIN-I18N: el texto ya no está en la vista, sino en el catálogo. Se
+// comprueba lo mismo en dos pasos: que la vista pinta la clave y que la clave
+// sigue diciendo lo que tiene que decir en los cuatro idiomas.
 $view = (string) file_get_contents(PP_ROOT . '/views/admin/pages/studio.php');
 checkReferenceSeed(
     'view_explains_optional_capture',
-    str_contains($view, 'opcional si eliges una página base'),
+    str_contains($view, "__('studio.optional_if_base')"),
     'La interfaz debe explicar por qué se puede continuar sin captura.'
 );
+
+foreach (\App\Services\AdminI18n::LOCALES as $loc) {
+    $catalog = require PP_ROOT . '/lang/admin/' . $loc . '.php';
+    checkReferenceSeed(
+        'optional_capture_translated_' . $loc,
+        trim((string) ($catalog['studio.optional_if_base'] ?? '')) !== '',
+        "Falta la traducción de studio.optional_if_base en {$loc}."
+    );
+}
 
 echo $failed === 0 ? "ALL PASS\n" : "{$failed} FAILED\n";
 exit($failed === 0 ? 0 : 1);

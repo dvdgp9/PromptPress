@@ -21,7 +21,7 @@
         if (!logoName || !logoSubmit) return;
         logoFile.addEventListener('change', function () {
             var file = logoFile.files && logoFile.files[0];
-            logoName.textContent = file ? file.name : 'Ningún archivo seleccionado';
+            logoName.textContent = file ? file.name : pp.t('js.onb.no_file');
             logoSubmit.disabled = !file;
         });
     });

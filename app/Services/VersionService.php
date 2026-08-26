@@ -75,10 +75,10 @@ final class VersionService
     public static function reasonLabel(string $reason): string
     {
         return match ($reason) {
-            'before_manual_update' => 'Antes de edición manual',
-            'before_delete'        => 'Antes de eliminar',
-            'before_restore'       => 'Antes de restaurar',
-            'before_ai_edit'       => 'Antes de edición IA',
+            'before_manual_update' => __('ver.reason.manual'),
+            'before_delete'        => __('ver.reason.delete'),
+            'before_restore'       => __('ver.reason.restore'),
+            'before_ai_edit'       => __('ver.reason.ai'),
             default                => $reason,
         };
     }

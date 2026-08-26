@@ -51,7 +51,9 @@ final class AIActionRunner
             $extras['available_icons']  = implode(', ', \App\Services\Renderer\Icons::names());
         }
         if ($action === Actions::GENERATE_PAGE_STRUCTURE || $action === Actions::RECREATE_FROM_REFERENCE) {
-            $all = SectionSchemas::all();
+            // Solo los tipos que este sitio puede usar: proponer un tipo de un
+            // módulo apagado acaba en una sección que se pinta vacía.
+            $all = SectionSchemas::allForSite();
             $extras['available_section_types'] = implode(', ', array_keys($all));
             $map = [];
             foreach ($all as $type => $schema) {
@@ -64,7 +66,9 @@ final class AIActionRunner
             $extras['variants_by_type'] = implode("\n", $map);
         }
         if ($action === Actions::PROPOSE_LAYOUT_VARIATIONS) {
-            $all = SectionSchemas::all();
+            // Solo los tipos que este sitio puede usar: proponer un tipo de un
+            // módulo apagado acaba en una sección que se pinta vacía.
+            $all = SectionSchemas::allForSite();
             $extras['available_section_types'] = implode(', ', array_keys($all));
             $map = [];
             foreach ($all as $type => $schema) {
@@ -75,6 +79,15 @@ final class AIActionRunner
                 $map[] = $type . ': ' . implode(', ', $variants);
             }
             $extras['variants_by_type'] = implode("\n", $map);
+        }
+
+        if ($action === Actions::TRANSLATE_ADMIN_UI) {
+            // Mismo motivo que abajo: son EJEMPLOS de variable que el modelo
+            // tiene que ver con sus llaves puestas. Escritos literales en la
+            // instrucción, el expandidor de plantillas los borraría.
+            $extras['var_token']   = '{n}';
+            $extras['var_token_2'] = '{nombre}';
+            $extras['var_token_3'] = '{total}';
         }
 
         if ($action === Actions::DESIGN_FORM || $action === Actions::DRAFT_FORM_AUTORESPONDER) {
@@ -118,7 +131,7 @@ final class AIActionRunner
 
         try {
             if ($outputType === 'json') {
-                $data = self::parseJsonStrict($resp->content);
+                $data = self::normalizeActionData($action, self::parseJsonStrict($resp->content));
                 $warnings = self::validateActionOutput($action, $input, $data);
             } else {
                 $data = trim($resp->content);
@@ -167,6 +180,26 @@ final class AIActionRunner
     // ======================================================================
     // Output validators
     // ======================================================================
+
+    /**
+     * Algunos modelos Gemini envuelven ocasionalmente un único plan en
+     * `[{...}]` aun usando json_object. Solo se tolera esa forma inequívoca
+     * para el planner; listas múltiples o cualquier otro shape siguen fallando.
+     */
+    private static function normalizeActionData(string $action, mixed $data): mixed
+    {
+        if (
+            $action === Actions::PLAN_SITE_CHANGES
+            && is_array($data)
+            && array_is_list($data)
+            && count($data) === 1
+            && is_array($data[0])
+            && array_key_exists('items', $data[0])
+        ) {
+            return $data[0];
+        }
+        return $data;
+    }
 
     /** @return string[] warnings */
     private static function validateActionOutput(string $action, array $input, mixed $data): array
@@ -230,6 +263,15 @@ final class AIActionRunner
             }
             if (trim((string) ($item['status'] ?? '')) === '') {
                 throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "status".');
+            }
+            if (trim((string) ($item['capability_id'] ?? '')) === '') {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "capability_id".');
+            }
+            if (!in_array((string) ($item['category'] ?? ''), \App\Services\AssistantCapabilityRegistry::CATEGORIES, true)) {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene una "category" válida.');
+            }
+            if (isset($item['required_inputs']) && !is_array($item['required_inputs'])) {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "required_inputs" válido.');
             }
         }
         $warnings = [];

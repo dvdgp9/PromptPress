@@ -33,6 +33,9 @@ use Core\Database;
 final class LegalPageGenerator
 {
     /** Tipos de página legal soportados. Mapea a slug + título por defecto. */
+    // i18n-ignore-start: `title` es el título de la página que ve el VISITANTE
+    // (idioma del sitio) y `label` es castellano de referencia: lo que se pinta
+    // en el panel sale traducido de `typesFor()`.
     public const TYPES = [
         'privacy_policy' => [
             'slug'  => 'privacidad',
@@ -57,11 +60,79 @@ final class LegalPageGenerator
             'label' => 'Condiciones de compra',
         ],
     ];
+    // i18n-ignore-end
+
+    /**
+     * LEGAL-SLUG — Slug por idioma. El de `TYPES` es el castellano histórico y
+     * sigue siendo el fallback: una web en francés con textos franceses en
+     * `/privacidad` se veía rara, pero cambiarle la URL a una página YA
+     * publicada rompería enlaces, así que esto solo afecta a las que nacen a
+     * partir de ahora (ver `findExistingPage()`).
+     *
+     * @var array<string, array<string, string>>
+     */
+    private const SLUGS = [
+        'privacy_policy' => [
+            'es' => 'privacidad',            'en' => 'privacy-policy',
+            'ca' => 'privacitat',            'gl' => 'privacidade',
+            'eu' => 'pribatutasuna',         'fr' => 'politique-de-confidentialite',
+            'pt' => 'privacidade',
+        ],
+        'cookie_policy' => [
+            'es' => 'politica-de-cookies',   'en' => 'cookie-policy',
+            'ca' => 'politica-de-cookies',   'gl' => 'politica-de-cookies',
+            'eu' => 'cookie-politika',       'fr' => 'politique-de-cookies',
+            'pt' => 'politica-de-cookies',
+        ],
+        'legal_notice' => [
+            'es' => 'aviso-legal',           'en' => 'legal-notice',
+            'ca' => 'avis-legal',            'gl' => 'aviso-legal',
+            'eu' => 'lege-oharra',           'fr' => 'mentions-legales',
+            'pt' => 'aviso-legal',
+        ],
+        'purchase_conditions' => [
+            'es' => 'condiciones-de-compra', 'en' => 'terms-of-sale',
+            'ca' => 'condicions-de-compra',  'gl' => 'condicions-de-compra',
+            'eu' => 'erosketa-baldintzak',   'fr' => 'conditions-generales-de-vente',
+            'pt' => 'condicoes-de-compra',
+        ],
+    ];
+
+    /**
+     * Slug que le toca a una página legal en un sitio: el del idioma PRINCIPAL.
+     * Si el tipo o el idioma no están en el mapa, el castellano histórico.
+     */
+    public static function slugFor(int $siteId, string $type): string
+    {
+        $lang = LanguageService::primaryFor($siteId);
+        return self::SLUGS[$type][$lang] ?? (self::TYPES[$type]['slug'] ?? $type);
+    }
+
+    /**
+     * Todos los slugs con los que una página de este tipo puede estar guardada
+     * (cualquier idioma + el castellano histórico). Sirve para RECONOCER lo que
+     * ya existe aunque el sitio haya cambiado de idioma por el camino.
+     *
+     * @return array<int,string>
+     */
+    public static function knownSlugs(string $type): array
+    {
+        $slugs = array_values(self::SLUGS[$type] ?? []);
+        $legacy = self::TYPES[$type]['slug'] ?? '';
+        if ($legacy !== '' && !in_array($legacy, $slugs, true)) {
+            $slugs[] = $legacy;
+        }
+        return array_values(array_unique($slugs));
+    }
 
     /**
      * Tipos aplicables a un sitio concreto: `purchase_conditions` solo existe
      * si el módulo Commerce está activo (una web sin tienda no debe ver ni
      * generar condiciones de compra).
+     *
+     * El `slug` que se devuelve es el REAL: el de la página ya creada si
+     * existe, y si no el que le tocaría por idioma. Así el panel enseña la URL
+     * que el visitante va a ver, no una que quizá nunca exista.
      *
      * @return array<string, array{slug:string, title:string, label:string}>
      */
@@ -71,7 +142,61 @@ final class LegalPageGenerator
         if (!ModuleRegistry::isEnabled($siteId, 'commerce')) {
             unset($types['purchase_conditions']);
         }
+        // El manifest se lee UNA vez para todos los tipos: `manifest()` va a la
+        // base de datos en cada llamada y esto se pinta en cada carga del panel.
+        $legalPages = (array) (ComplianceService::manifest($siteId)['legal_pages'] ?? []);
+        foreach ($types as $key => $info) {
+            // La etiqueta la lee el gestor en el panel: va en SU idioma. El
+            // `title` no se toca: es el título de la página que ve el visitante.
+            $types[$key]['label'] = __('legal.type.' . $key);
+            $existing = self::findExistingPage($siteId, $key, $legalPages);
+            $types[$key]['slug'] = $existing !== null
+                ? (string) $existing['slug']
+                : self::slugFor($siteId, $key);
+        }
         return $types;
+    }
+
+    /**
+     * La página legal de un tipo, si ya existe. Se busca en dos pasos porque el
+     * slug ha dejado de ser una clave fiable:
+     *
+     *   1. por el id que guarda el manifest (la fuente de verdad desde G3);
+     *   2. por cualquiera de los slugs conocidos del tipo, para sitios
+     *      anteriores al manifest o cuyo idioma cambió después de generar.
+     *
+     * @param array<string,mixed>|null $legalPages `manifest.legal_pages` ya
+     *        leído, para no releer el manifest una vez por tipo.
+     * @return array<string,mixed>|null fila de `pages`
+     */
+    public static function findExistingPage(int $siteId, string $type, ?array $legalPages = null): ?array
+    {
+        $legalPages ??= (array) (ComplianceService::manifest($siteId)['legal_pages'] ?? []);
+        $pageId = (int) ($legalPages[$type] ?? 0);
+        if ($pageId > 0) {
+            // El `page_type = 'legal'` no sobra: si el usuario reconvirtió esa
+            // página en otra cosa, regenerar encima le borraría el contenido.
+            // Mejor tratarla como inexistente y crear una nueva.
+            $row = Database::selectOne(
+                "SELECT id, title, slug, status, updated_at FROM pages
+                 WHERE id = ? AND site_id = ? AND page_type = 'legal' LIMIT 1",
+                [$pageId, $siteId]
+            );
+            if ($row !== null) {
+                return $row;
+            }
+        }
+
+        $slugs = self::knownSlugs($type);
+        if ($slugs === []) {
+            return null;
+        }
+        $marks = implode(',', array_fill(0, count($slugs), '?'));
+        return Database::selectOne(
+            "SELECT id, title, slug, status, updated_at FROM pages
+             WHERE site_id = ? AND page_type = 'legal' AND slug IN ($marks) LIMIT 1",
+            array_merge([$siteId], $slugs)
+        );
     }
 
     /**
@@ -84,6 +209,7 @@ final class LegalPageGenerator
     public static function generate(int $siteId, string $type): array
     {
         if (!isset(self::typesFor($siteId)[$type])) {
+            // i18n-ignore: excepción interna; el controlador ya valida antes de pintar.
             throw new \InvalidArgumentException('Tipo de página legal no válido: ' . $type);
         }
 
@@ -108,6 +234,7 @@ final class LegalPageGenerator
         $result = AIActionRunner::run(Actions::GENERATE_LEGAL_PAGE, $aiInput, $siteId);
         $data = $result['data'] ?? null;
         if (!is_array($data) || !isset($data['blocks']) || !is_array($data['blocks'])) {
+            // i18n-ignore: excepción interna del pipeline de IA.
             throw new AIException('La IA no devolvió bloques válidos para la página legal.');
         }
 
@@ -168,7 +295,7 @@ final class LegalPageGenerator
         if ($missing !== []) {
             return [
                 'ok'    => false,
-                'error' => 'Faltan datos del responsable: ' . implode(', ', $missing),
+                'error' => __('priv.err.missing_controller', ['campos' => implode(', ', $missing)]),
             ];
         }
 
@@ -213,6 +340,8 @@ final class LegalPageGenerator
         return LanguageService::promptLabel($code);
     }
 
+    // i18n-ignore-start: de aquí en adelante son etiquetas y frases que viajan
+    // DENTRO del prompt de generación legal, no interfaz del panel.
     private static function formatControllerData(array $c): string
     {
         $pairs = [];
@@ -380,6 +509,8 @@ final class LegalPageGenerator
      * Limpia los blocks devueltos por IA: tipos válidos, niveles válidos, sin
      * HTML/markdown infiltrado en `text`.
      */
+    // i18n-ignore-end
+
     private static function sanitizeBlocks(array $blocks): array
     {
         $out = [];
@@ -435,16 +566,18 @@ final class LegalPageGenerator
      */
     private static function upsertLegalPage(int $siteId, string $type, string $title, array $blocks): int
     {
-        $info = self::TYPES[$type];
-        $slug = $info['slug'];
         $now  = date('Y-m-d H:i:s');
         $contentJson = json_encode(['blocks' => $blocks], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        // Buscar página existente: prioridad por slug reservado dentro del sitio.
-        $existing = Database::selectOne(
-            'SELECT id FROM pages WHERE site_id = ? AND slug = ? LIMIT 1',
-            [$siteId, $slug]
-        );
+        // LEGAL-SLUG — La página que ya existe se actualiza CONSERVANDO su slug:
+        // regenerar el texto no puede cambiar una URL publicada (enlaces del pie,
+        // enlaces desde formularios, lo que haya indexado un buscador).
+        $existing = self::findExistingPage($siteId, $type);
+
+        // Solo las que nacen ahora estrenan slug en el idioma del sitio.
+        $slug = $existing === null
+            ? PageController::uniqueSlug($siteId, self::slugFor($siteId, $type))
+            : (string) $existing['slug'];
 
         $pdo = Database::connection();
         $pdo->beginTransaction();

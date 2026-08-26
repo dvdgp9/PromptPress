@@ -21,7 +21,8 @@ final class CommerceSettings
     private const DEFAULTS = [
         'commerce_prices_include_tax'      => '1',   // B2C por defecto (precio final con IVA)
         'commerce_shipping_cents'          => '0',
-        'commerce_free_shipping_over_cents' => '',   // '' = sin umbral de envío gratis
+        // vacío = sin umbral de envío gratis
+        'commerce_free_shipping_over_cents' => '',
         'commerce_manual_instructions'     => '',
     ];
 

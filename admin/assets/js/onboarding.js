@@ -56,8 +56,8 @@
             var total = files.reduce(function (sum, file) { return sum + (file.size || 0); }, 0);
             if (fileLabel) {
                 fileLabel.textContent = files.length === 0
-                    ? 'Elegir documentos'
-                    : (files.length === 1 ? files[0].name : files.length + ' documentos seleccionados');
+                    ? pp.t('js.onb.choose_docs')
+                    : (files.length === 1 ? files[0].name : pp.t('js.onb.docs_selected', { n: files.length }));
             }
             status.textContent = files.length
                 ? 'Listo para analizar: ' + (files.length === 1 ? formatBytes(total) : files.length + ' documentos · ' + formatBytes(total))
@@ -68,7 +68,7 @@
         button.addEventListener('click', function () {
             var files = Array.prototype.slice.call(fileInput.files || []);
             if (!files.length) {
-                status.textContent = 'Elige primero uno o varios documentos del negocio.';
+                status.textContent = pp.t('js.onb.pick_docs');
                 status.className = 'is-error';
                 return;
             }
@@ -76,7 +76,7 @@
             data.set('_csrf', csrf);
             files.forEach(function (file) { data.append('dossier[]', file); });
             setBusy(button, true, 'Leyendo documentos…');
-            status.textContent = 'Extrayendo información, cruzando documentos y preparando memoria inicial.';
+            status.textContent = pp.t('js.onb.extracting');
             status.className = 'is-loading';
             fetch(baseUrl + '/admin/onboarding/autofill-memory', {
                 method: 'POST',
@@ -88,7 +88,7 @@
                     try {
                         body = text ? JSON.parse(text) : {};
                     } catch (err) {
-                        throw new Error(res.ok ? 'Respuesta no válida del servidor.' : ('HTTP ' + res.status + ': el servidor no devolvió JSON.'));
+                        throw new Error(res.ok ? pp.t('js.onb.bad_response') : ('HTTP ' + res.status + ': ' + pp.t('js.onb.not_json')));
                     }
                     if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
                     return body;
@@ -97,7 +97,7 @@
                 applyMemoryFields(body.fields || {});
                 var msg = 'Campos rellenados. Revisa y ajusta lo que quieras antes de continuar.';
                 if (body.company_name) msg += ' Empresa detectada: ' + body.company_name + '.';
-                if (body.documents && body.documents.length > 1) msg += ' Documentos leídos: ' + body.documents.length + '.';
+                if (body.documents && body.documents.length > 1) msg += ' ' + pp.t('js.onb.docs_read', { n: body.documents.length });
                 if (body.model) msg += ' Modelo: ' + body.model + '.';
                 status.textContent = msg;
                 status.className = 'is-success';
@@ -369,7 +369,7 @@
                 return res.text().then(function (text) {
                     var body = {};
                     try { body = text ? JSON.parse(text) : {}; }
-                    catch (err) { throw new Error('Respuesta no válida del servidor.'); }
+                    catch (err) { throw new Error(pp.t('js.onb.bad_response')); }
                     if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
                     return body;
                 });
@@ -379,7 +379,7 @@
                 if (status) {
                     status.textContent = added === 0
                         ? 'Esos colores ya estaban en la lista.'
-                        : (added === 1 ? 'Añadido 1 color del logo.' : 'Añadidos ' + added + ' colores del logo.');
+                        : (added === 1 ? pp.t('js.onb.logo_color_one') : pp.t('js.onb.logo_colors_other', { n: added }));
                     status.className = added === 0 ? '' : 'is-success';
                 }
             }).catch(function (err) {
@@ -448,7 +448,7 @@
             if (primary) data.set('primary_color_hex', primary.value);
 
             setBusy(button, true, 'Pensando en color…');
-            status.textContent = 'Derivando paletas de tus colores y comprobando contrastes.';
+            status.textContent = pp.t('js.onb.deriving_palettes');
             status.className = 'is-loading';
             fetch(baseUrl + '/admin/onboarding/generate-palette', {
                 method: 'POST',
@@ -458,7 +458,7 @@
                 return res.text().then(function (text) {
                     var body = {};
                     try { body = text ? JSON.parse(text) : {}; }
-                    catch (err) { throw new Error('Respuesta no válida del servidor.'); }
+                    catch (err) { throw new Error(pp.t('js.onb.bad_response')); }
                     if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
                     return body;
                 });
@@ -478,7 +478,7 @@
                 }
                 if (empty) empty.hidden = true;
                 status.textContent = body.notice
-                    || (palettes.length + ' paletas listas' + (body.model ? ' · ' + body.model : '') + '. Elige la que más te suene a tu marca.');
+                    || (pp.t('js.onb.palettes_ready', { n: palettes.length }) + (body.model ? ' · ' + body.model : '') + '. ' + pp.t('js.onb.pick_palette'));
                 status.className = body.fallback ? '' : 'is-success';
             }).catch(function (err) {
                 status.textContent = err.message || 'No hemos podido preparar las paletas.';
@@ -505,7 +505,7 @@
                 state.textContent = files[0].name + ' · ' + formatBytes(files[0].size);
                 return;
             }
-            state.textContent = files.length + ' documentos seleccionados · ' + formatBytes(total);
+            state.textContent = pp.t('js.onb.docs_selected', { n: files.length }) + ' · ' + formatBytes(total);
         });
 
         // ONB2 O2.2 — Dos zonas de logo (fondo claro / fondo oscuro): el mismo
@@ -522,7 +522,7 @@
             input.addEventListener('change', function () {
                 var file = input.files && input.files[0] ? input.files[0] : null;
                 if (!file) return;
-                state.textContent = file.name + ' · ' + formatBytes(file.size) + ' · Se guardará al continuar';
+                state.textContent = file.name + ' · ' + formatBytes(file.size) + ' · ' + pp.t('js.onb.will_save_one');
                 state.className = 'is-success';
                 wrap.classList.add('has-file');
                 if (!img && slot) {
@@ -558,13 +558,13 @@
             input.addEventListener('change', function () {
                 var files = input.files ? Array.prototype.slice.call(input.files) : [];
                 if (!files.length) {
-                    state.textContent = 'Ningún archivo seleccionado.';
+                    state.textContent = pp.t('js.onb.no_file');
                     state.className = '';
                     return;
                 }
                 var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
                 state.textContent = files.length + (files.length === 1 ? ' archivo' : ' archivos')
-                    + ' · ' + formatBytes(total) + ' · Se guardarán al continuar';
+                    + ' · ' + formatBytes(total) + ' · ' + pp.t('js.onb.will_save_other');
                 state.className = 'is-success';
             });
         });
@@ -577,7 +577,7 @@
                 if (bodySlot) bodySlot.hidden = fontsSame.checked;
                 if (headingSlot) {
                     var title = headingSlot.querySelector('strong');
-                    if (title) title.textContent = fontsSame.checked ? 'Para títulos y textos' : 'Para los títulos';
+                    if (title) title.textContent = fontsSame.checked ? pp.t('js.onb.for_both') : pp.t('js.onb.for_headings');
                 }
             };
             fontsSame.addEventListener('change', syncSlots);
@@ -592,7 +592,7 @@
             if (!files.length) return;
             if (referenceWrap) referenceWrap.classList.add('has-file');
             var total = files.reduce(function (sum, file) { return sum + (file.size || 0); }, 0);
-            referenceState.textContent = files.length + ' referencia' + (files.length === 1 ? '' : 's') + ' seleccionada' + (files.length === 1 ? '' : 's') + ' · ' + formatBytes(total) + ' · Guardando…';
+            referenceState.textContent = pp.t(files.length === 1 ? 'js.onb.refs_selected_one' : 'js.onb.refs_selected_other', { n: files.length }) + ' · ' + formatBytes(total) + ' · Guardando…';
             referenceState.className = 'is-loading';
 
             var data = new FormData();
@@ -609,7 +609,7 @@
                 });
             }).then(function (body) {
                 var count = Number(body.count || files.length);
-                referenceState.textContent = count + ' referencia' + (count === 1 ? '' : 's') + ' guardada' + (count === 1 ? '' : 's') + '. El preview del paso 5 usará IA con estas capturas.';
+                referenceState.textContent = pp.t(count === 1 ? 'js.onb.refs_saved_one' : 'js.onb.refs_saved_other', { n: count });
                 referenceState.className = 'is-success';
                 referenceInput.value = '';
             }).catch(function (err) {
@@ -691,7 +691,7 @@
         function uploadAll(files) {
             var slots = max - grid.querySelectorAll('[data-photo-id]').length;
             if (slots <= 0) {
-                setStatus('Ya tienes el máximo de ' + max + ' fotos. Podrás añadir más desde Medios.', 'is-error');
+                setStatus(pp.t('js.onb.photos_full', { max: max }), 'is-error');
                 return;
             }
             var queue = files.slice(0, slots);
@@ -709,13 +709,13 @@
                         setBusyState(false);
                         return;
                     }
-                    var tail = skipped > 0 ? ' (' + skipped + ' no cabían: máximo ' + max + ')' : '';
+                    var tail = skipped > 0 ? ' ' + pp.t('js.onb.photos_skipped', { n: skipped, max: max }) : '';
                     setStatus(uploaded + (uploaded === 1 ? ' foto subida' : ' fotos subidas') + tail + '. Analizando con IA…', 'is-loading');
                     describeMissing();
                     return;
                 }
                 var file = queue[index++];
-                setStatus('Subiendo ' + file.name + ' (' + index + '/' + queue.length + ')…', 'is-loading');
+                setStatus(pp.t('js.onb.uploading', { archivo: file.name, i: index, total: queue.length }), 'is-loading');
                 var data = new FormData();
                 data.set('_csrf', csrf);
                 data.set('photo', file);
@@ -754,13 +754,13 @@
                 var remaining = Number(body.remaining || 0);
                 if (body.blocked || remaining <= 0) {
                     setStatus(pendingCount() > 0
-                        ? 'Algunas fotos se han quedado sin descripción. Puedes escribirla tú en cada foto.'
-                        : 'Fotos analizadas. La IA ya sabe qué muestra cada una y las usará al crear tu web.',
+                        ? pp.t('js.onb.photos_missing_alt')
+                        : pp.t('js.onb.photos_analyzed'),
                         pendingCount() > 0 ? 'is-error' : 'is-success');
                     setBusyState(false);
                     return;
                 }
-                setStatus('Analizando con IA… quedan ' + remaining + '.', 'is-loading');
+                setStatus(pp.t('js.onb.analyzing', { n: remaining }), 'is-loading');
                 describeMissing();
             }).catch(function (err) {
                 setStatus((err.message || 'No hemos podido analizar las fotos.')
@@ -778,7 +778,7 @@
                 + '<img src="' + escapeHtml(item.url) + '" alt="">'
                 + '<button type="button" class="pp-onboarding-photo__remove" data-photo-remove aria-label="Quitar esta foto">×</button>'
                 + '</div>'
-                + '<textarea class="pp-onboarding-photo__alt" rows="3" data-photo-alt placeholder="Sin descripción">'
+                + '<textarea class="pp-onboarding-photo__alt" rows="3" data-photo-alt placeholder="' + escapeHtml(pp.t('js.onb.no_alt')) + '">'
                 + escapeHtml(item.alt_text || '') + '</textarea>'
                 + '<small data-photo-state>' + (item.alt_text ? 'Descrita' : 'Analizando…') + '</small>';
             grid.appendChild(li);
@@ -791,7 +791,7 @@
             var field = card.querySelector('[data-photo-alt]');
             var state = card.querySelector('[data-photo-state]');
             if (field) field.value = alt || '';
-            if (state) state.textContent = alt ? 'Descrita' : 'Sin describir';
+            if (state) state.textContent = pp.t(alt ? 'js.onb.described' : 'js.onb.undescribed');
         }
 
         function pendingCount() {
@@ -805,7 +805,7 @@
         function saveAlt(card, value) {
             if (!card) return;
             var state = card.querySelector('[data-photo-state]');
-            if (state) state.textContent = 'Guardando…';
+            if (state) state.textContent = pp.t('js.saving');
             fetch(panel.dataset.altUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -813,10 +813,10 @@
             }).then(function (res) { return res.json(); })
               .then(function (body) {
                   if (state) state.textContent = body && body.ok
-                      ? (body.alt_text ? 'Descrita' : 'Sin describir')
+                      ? pp.t(body.alt_text ? 'js.onb.described' : 'js.onb.undescribed')
                       : 'No se pudo guardar';
               })
-              .catch(function () { if (state) state.textContent = 'No se pudo guardar'; });
+              .catch(function () { if (state) state.textContent = pp.t('js.onb.save_failed'); });
         }
 
         function removePhoto(card) {
@@ -831,10 +831,10 @@
                   card.remove();
                   if (!grid.querySelector('[data-photo-id]')) {
                       grid.hidden = true;
-                      setStatus('Si no subes ninguna, usaremos un banco de imágenes genérico.', '');
+                      setStatus(pp.t('js.onb.photos_none'), '');
                   }
               })
-              .catch(function () { setStatus('No se pudo quitar la foto.', 'is-error'); });
+              .catch(function () { setStatus(pp.t('js.onb.photo_remove_failed'), 'is-error'); });
         }
 
         function setStatus(text, className) {
@@ -872,7 +872,7 @@
             var target = event.target.closest('a, button[type="submit"], form button:not([type]), .pp-onboarding-topbar button');
             if (!target) return;
             if (target.matches('[data-next-button]')) return;
-            var ok = window.confirm('La IA sigue generando páginas. Si sales ahora, puede que el proceso se interrumpa. ¿Quieres salir igualmente?');
+            var ok = window.confirm(pp.t('js.onb.confirm_leave'));
             if (!ok) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -927,14 +927,15 @@
         if (loading) loading.hidden = false;
         var msg = loading && loading.querySelector('[data-loading-msg]');
         if (msg && intent) {
+            // Las claves son los slugs de intent, que son datos: no se traducen.
             var labels = {
-                presence:  'Diseñando una presencia mínima clara…',
-                services:  'Pensando la estructura para captar clientes…',
-                seo:       'Preparando un mapa con foco en SEO y blog…',
-                portfolio: 'Diseñando un sitio para mostrar tu trabajo…',
-                product:   'Planificando una landing para tu lanzamiento…'
+                presence:  pp.t('js.onb.loading_presence'),
+                services:  pp.t('js.onb.loading_services'),
+                seo:       pp.t('js.onb.loading_seo'),
+                portfolio: pp.t('js.onb.loading_portfolio'),
+                product:   pp.t('js.onb.loading_product')
             };
-            msg.textContent = labels[intent] || 'Pensando en la mejor arquitectura para tu negocio…';
+            msg.textContent = labels[intent] || pp.t('js.onb.loading_default');
         }
         analyzeArchitecture(intent, force);
     }
@@ -949,7 +950,7 @@
 
         var slowTimer = setTimeout(function () {
             var p = loading.querySelector('p');
-            if (p) p.textContent = 'La IA está siendo más cuidadosa de lo habitual. Un momento más…';
+            if (p) p.textContent = pp.t('js.onb.taking_longer');
         }, 15000);
 
         // ONB-REV — el análisis SEO añade una 2ª llamada IA (ideas de blog);
@@ -992,27 +993,26 @@
         root.dataset.visualStyle = '';
         var rows = pages.map(function (page, index) {
             var priority = priorityLabel(page);
-            var checked = priority === 'Imprescindible' || priority === 'Alta prioridad';
+            var checked = isEssentialPage(page);
             return [
                 '<label class="pp-onboarding-page-card" style="--delay:' + index + '">',
                     '<input type="checkbox" data-proposed-page="' + escapeHtml(JSON.stringify(page)) + '" ' + (checked ? 'checked' : '') + '>',
                     '<span class="pp-onboarding-check"></span>',
                     '<span class="pp-onboarding-page-card__body">',
                         '<small>' + escapeHtml(priority) + '</small>',
-                        '<strong>' + escapeHtml(page.title || 'Página') + '</strong>',
+                        '<strong>' + escapeHtml(page.title || pp.t('js.onb.page')) + '</strong>',
                         '<em>' + escapeHtml(page.reason || page.goal || '') + '</em>',
                     '</span>',
                     '<span class="pp-onboarding-page-type">' + escapeHtml(typeLabel(page.page_type || 'landing')) + '</span>',
-                    '<details><summary>Ver más detalle</summary><p>' + escapeHtml(page.goal || page.architecture_context || page.reason || '') + '</p></details>',
+                    '<details><summary>' + escapeHtml(pp.t('js.onb.more_detail')) + '</summary><p>' + escapeHtml(page.goal || page.architecture_context || page.reason || '') + '</p></details>',
                 '</label>'
             ].join('');
         }).join('');
         var selectedCount = pages.filter(function (page) {
-            var priority = priorityLabel(page);
-            return priority === 'Imprescindible' || priority === 'Alta prioridad';
+            return isEssentialPage(page);
         }).length;
         var route = pages.slice(0, 5).map(function (page) {
-            return '<span>' + escapeHtml(page.title || 'Página') + '</span>';
+            return '<span>' + escapeHtml(page.title || pp.t('js.onb.page')) + '</span>';
         }).join('');
 
         // ONB-REV T4 — Entradas de blog sugeridas (solo llegan con intent SEO):
@@ -1024,41 +1024,41 @@
                     '<span class="pp-onboarding-check"></span>',
                     '<span class="pp-onboarding-page-card__body">',
                         '<small>Blog</small>',
-                        '<strong>' + escapeHtml(post.title || 'Entrada') + '</strong>',
+                        '<strong>' + escapeHtml(post.title || pp.t('js.onb.post')) + '</strong>',
                         '<em>' + escapeHtml(post.angle || '') + '</em>',
                     '</span>',
-                    '<span class="pp-onboarding-page-type">Entrada</span>',
+                    '<span class="pp-onboarding-page-type">' + escapeHtml(pp.t('js.onb.post')) + '</span>',
                 '</label>'
             ].join('');
         }).join('');
         var blogGroup = postRows === '' ? '' : [
             '<div class="pp-onboarding-blog-group">',
-                '<header><strong>Entradas de blog para posicionar</strong><span>Las generamos junto a las páginas, ya redactadas como borrador. Desmarca las que no encajen.</span></header>',
+                '<header><strong>' + escapeHtml(pp.t('js.onb.posts_title')) + '</strong><span>' + escapeHtml(pp.t('js.onb.posts_desc')) + '</span></header>',
                 '<div class="pp-onboarding-page-list">' + postRows + '</div>',
             '</div>'
         ].join('');
 
         resultWrap.innerHTML = [
             '<section class="pp-onboarding-flow-guide">',
-                '<article class="is-active" data-flow-step="structure"><small>1</small><strong>Páginas</strong><p>Elige qué crear.</p></article>',
-                '<article data-flow-step="style"><small>2</small><strong>Estilo</strong><p>Tu diseño a medida.</p></article>',
-                '<article data-flow-step="generate"><small>3</small><strong>Generación</strong><p>Creamos borradores.</p></article>',
+                '<article class="is-active" data-flow-step="structure"><small>1</small><strong>' + escapeHtml(pp.t('js.onb.flow_pages')) + '</strong><p>' + escapeHtml(pp.t('js.onb.flow_pages_desc')) + '</p></article>',
+                '<article data-flow-step="style"><small>2</small><strong>' + escapeHtml(pp.t('js.onb.flow_style')) + '</strong><p>' + escapeHtml(pp.t('js.onb.flow_style_desc')) + '</p></article>',
+                '<article data-flow-step="generate"><small>3</small><strong>' + escapeHtml(pp.t('js.onb.flow_generate')) + '</strong><p>' + escapeHtml(pp.t('js.onb.flow_generate_desc')) + '</p></article>',
             '</section>',
             '<section class="pp-onboarding-structure-panel" data-arch-stage="structure">',
                 '<div class="pp-onboarding-route" aria-label="Ruta sugerida">' + route + '</div>',
-                '<div class="pp-onboarding-arch-toolbar"><strong data-selection-count>' + selectedCount + ' seleccionadas</strong><span>Las imprescindibles vienen marcadas.</span></div>',
+                '<div class="pp-onboarding-arch-toolbar"><strong data-selection-count>' + escapeHtml(pp.t('js.onb.n_selected', { n: selectedCount })) + '</strong><span>' + escapeHtml(pp.t('js.onb.essentials_checked')) + '</span></div>',
                 '<div class="pp-onboarding-page-list">' + rows + '</div>',
                 blogGroup,
                 '<div class="pp-onboarding-alt-actions">',
-                    '<button type="button" data-create-home>Crear solo "Inicio"</button>',
-                    '<button type="button" data-reanalyze>Volver a proponer</button>',
-                    '<form method="POST" action="' + baseUrl + '/admin/onboarding/skip"><input type="hidden" name="_csrf" value="' + escapeHtml(csrf) + '"><input type="hidden" name="step" value="5"><button type="submit">Empezar desde el mapa vacío</button></form>',
+                    '<button type="button" data-create-home>' + escapeHtml(pp.t('js.onb.only_home')) + '</button>',
+                    '<button type="button" data-reanalyze>' + escapeHtml(pp.t('js.onb.reanalyze')) + '</button>',
+                    '<form method="POST" action="' + baseUrl + '/admin/onboarding/skip"><input type="hidden" name="_csrf" value="' + escapeHtml(csrf) + '"><input type="hidden" name="step" value="5"><button type="submit">' + escapeHtml(pp.t('js.onb.empty_map')) + '</button></form>',
                 '</div>',
             '</section>',
             '<section class="pp-onboarding-style-panel" data-arch-stage="style" hidden>',
                 renderSkinPreviewStage(),
-                '<div class="pp-onboarding-style-summary"><strong data-style-count>' + selectedCount + ' páginas seleccionadas</strong><span>Se generarán con este estilo único.</span><button type="button" data-back-to-structure>Volver a páginas</button></div>',
-                '<p class="pp-onboarding-create-note" data-create-note>La generación puede tardar 1-2 min. Te llevaremos al mapa cuando termine.</p>',
+                '<div class="pp-onboarding-style-summary"><strong data-style-count>' + escapeHtml(pp.t('js.onb.pages_selected', { n: selectedCount })) + '</strong><span>' + escapeHtml(pp.t('js.onb.same_style')) + '</span><button type="button" data-back-to-structure>' + escapeHtml(pp.t('js.onb.back_to_pages')) + '</button></div>',
+                '<p class="pp-onboarding-create-note" data-create-note>' + escapeHtml(pp.t('js.onb.generation_time')) + '</p>',
             '</section>',
             '<div class="pp-onboarding-generation" data-generation hidden></div>'
         ].join('');
@@ -1132,6 +1132,7 @@
         homePrepPromise = post('/admin/onboarding/prepare-home', {
             home_page: JSON.stringify(homeData)
         }, 180000, false).catch(function (err) {
+            // i18n-ignore: traza de consola para depurar, no se pinta en la UI.
             console.warn('prepareHome failed (se generará en el paso de estilo):', err);
         });
     }
@@ -1159,7 +1160,7 @@
         });
         var button = root.querySelector('[data-next-button]');
         if (button) {
-            button.textContent = stage === 'style' ? 'Generar páginas con este estilo →' : 'Continuar al estilo →';
+            button.textContent = (stage === 'style' ? pp.t('js.onb.generate_with_style') : pp.t('js.onb.continue_to_style')) + ' →';
         }
         var count = root.querySelector('[data-style-count]');
         if (count) {
@@ -1181,24 +1182,24 @@
             '<section class="pp-onboarding-skin">',
                 '<header class="pp-onboarding-skin__head">',
                     '<small>Tu estilo</small>',
-                    '<h3>Así te ha quedado</h3>',
-                    '<p>Lo componemos para tu marca a partir de lo que nos has contado. Si subiste referencias, esta vista también se inspira en su estructura y ritmo.</p>',
+                    '<h3>' + escapeHtml(pp.t('js.onb.skin_title')) + '</h3>',
+                    '<p>' + escapeHtml(pp.t('js.onb.skin_desc')) + '</p>',
                 '</header>',
                 '<div class="pp-onboarding-skin__preview" data-skin-preview>',
                     '<div class="pp-onboarding-skin__loading" data-skin-loading>',
                         '<div><span></span><span></span><span></span></div>',
                         '<p>Componiendo tu preview…</p>',
                     '</div>',
-                    '<iframe data-skin-iframe title="Vista previa de tu estilo" hidden></iframe>',
+                    '<iframe data-skin-iframe title="' + pp.t('js.onb.skin_preview_title') + '" hidden></iframe>',
                     '<div class="pp-onboarding-skin__error" data-skin-error hidden>',
-                        '<p>No hemos podido componer el preview. Continúa igualmente — generaremos tu sitio con valores neutros.</p>',
+                        '<p>' + escapeHtml(pp.t('js.onb.skin_failed')) + '</p>',
                     '</div>',
                 '</div>',
                 '<div class="pp-onboarding-skin__nudges" data-skin-nudges hidden>',
-                    '<span class="pp-onboarding-skin__nudges-label">¿Algo te chirría? Ajústalo:</span>',
-                    nudgePairHtml('warmth',   'Más cálido',  'Más sobrio'),
-                    nudgePairHtml('modernity','Más moderno', 'Más clásico'),
-                    nudgePairHtml('energy',   'Más rotundo', 'Más suave'),
+                    '<span class="pp-onboarding-skin__nudges-label">' + escapeHtml(pp.t('js.onb.nudges_label')) + '</span>',
+                    nudgePairHtml('warmth',    pp.t('js.onb.nudge_warmer'),  pp.t('js.onb.nudge_soberer')),
+                    nudgePairHtml('modernity', pp.t('js.onb.nudge_modern'),  pp.t('js.onb.nudge_classic')),
+                    nudgePairHtml('energy',    pp.t('js.onb.nudge_bolder'),  pp.t('js.onb.nudge_softer')),
                     '<button type="button" class="pp-onboarding-skin__regen" data-regenerate-skin>Regenerar desde cero</button>',
                 '</div>',
             '</section>'
@@ -1231,7 +1232,7 @@
         if (errorBox) errorBox.hidden = true;
         // FH6 — mientras se genera el Inicio canvas real, avisamos al usuario.
         var loadingText = loading && loading.querySelector('p');
-        if (loadingText) loadingText.textContent = 'Creando tu inicio…';
+        if (loadingText) loadingText.textContent = pp.t('js.onb.creating_home');
 
         // FH6 — si el prefetch del Inicio sigue en marcha, esperamos a que
         // acabe (el backend reutilizará su borrador y responderá rápido).
@@ -1261,7 +1262,7 @@
                     if (p) {
                         p.textContent = (err && err.message)
                             ? 'Error: ' + err.message
-                            : 'No hemos podido componer el preview. Continúa igualmente — generaremos tu sitio con valores neutros.';
+                            : pp.t('js.onb.skin_failed');
                     }
                 }
                 if (nudges) nudges.hidden = true;
@@ -1277,7 +1278,7 @@
         if (loading) loading.hidden = false;
         // FH6 — el nudge solo recompone tokens y recarga el iframe (sin IA).
         var loadingText = loading && loading.querySelector('p');
-        if (loadingText) loadingText.textContent = 'Aplicando tu ajuste…';
+        if (loadingText) loadingText.textContent = pp.t('js.onb.applying_nudge');
         iframe.hidden = true;
 
         post('/admin/onboarding/nudge', { axis: axis, direction: direction }, 30000, false)
@@ -1349,9 +1350,9 @@
         // ONB-REV T5 — cola única: primero páginas (canvas), después entradas
         // de blog (artículo estructurado, más rápido). Misma barra de progreso.
         var items = pages.map(function (page) {
-            return { kind: 'page', data: page, label: page.title || 'Página' };
+            return { kind: 'page', data: page, label: page.title || pp.t('js.onb.page') };
         }).concat(posts.map(function (post) {
-            return { kind: 'post', data: post, label: 'Entrada · ' + (post.title || 'Sin título') };
+            return { kind: 'post', data: post, label: pp.t('js.onb.post') + ' · ' + (post.title || pp.t('js.onb.untitled')) };
         }));
         if (!items.length) return;
         var button = root.querySelector('[data-next-button]');
@@ -1361,12 +1362,12 @@
         isGenerating = true;
         root.classList.add('is-generating');
         setArchitectureStage('generate');
-        var busyLabel = 'Generando ' + pages.length + ' páginas' + (posts.length ? ' y ' + posts.length + ' entradas' : '') + '…';
+        var busyLabel = pp.t('js.onb.generating_pages', { n: pages.length }) + (posts.length ? pp.t('js.onb.and_posts', { n: posts.length }) : '') + '…';
         setBusy(button, true, busyLabel);
         if (gen) {
             gen.hidden = false;
             gen.innerHTML = '<strong>Creando borradores con IA</strong>'
-                + '<small data-gen-summary>Preparando la primera página.</small>'
+                + '<small data-gen-summary>' + escapeHtml(pp.t('js.onb.preparing_first')) + '</small>'
                 + '<div class="pp-onboarding-generation__bar"><i data-gen-bar></i></div>'
                 + items.map(function (item, index) {
                     return '<p data-gen-row="' + index + '" class="' + (index === 0 ? 'is-active' : 'is-pending') + '"><span></span><em>' + escapeHtml(item.label) + '</em><small>' + (index === 0 ? 'Generando ahora' : 'En cola') + '</small></p>';
@@ -1391,7 +1392,7 @@
                     var itemCreated = Array.isArray(body.created) ? body.created : [];
                     created = created.concat(itemCreated);
                     failed = failed.concat(itemFailed);
-                    markGenerationRow(index, itemFailed.length ? 'error' : 'done', itemFailed[0] && itemFailed[0].error ? itemFailed[0].error : 'Borrador creado');
+                    markGenerationRow(index, itemFailed.length ? 'error' : 'done', itemFailed[0] && itemFailed[0].error ? itemFailed[0].error : pp.t('js.onb.draft_created'));
                     createItemAt(index + 1);
                 })
                 .catch(function (err) {
@@ -1410,8 +1411,8 @@
                         setBusy(button, false, 'Ir al mapa →');
                         if (gen) {
                             var summary = gen.querySelector('[data-gen-summary]');
-                            if (summary) summary.textContent = 'Hemos creado ' + created.length + ' páginas. ' + failed.length + ' necesitan revisarse.';
-                            gen.insertAdjacentHTML('beforeend', '<p class="pp-onboarding-warning">Algunas páginas no se han podido crear. Puedes seguir con las que ya están listas.</p><p><button type="button" data-go-pages>Ir al mapa</button></p>');
+                            if (summary) summary.textContent = pp.t('js.onb.created_summary', { creadas: created.length, fallidas: failed.length });
+                            gen.insertAdjacentHTML('beforeend', '<p class="pp-onboarding-warning">' + escapeHtml(pp.t('js.onb.some_failed')) + '</p><p><button type="button" data-go-pages>' + escapeHtml(pp.t('js.onb.go_to_map')) + '</button></p>');
                             var go = gen.querySelector('[data-go-pages]');
                             if (go) go.addEventListener('click', function () {
                                 window.location.href = body.redirect_url || (baseUrl + '/admin/pages');
@@ -1427,7 +1428,7 @@
                     isGenerating = false;
                     root.classList.remove('is-generating');
                     setBusy(button, false, 'Ir al mapa →');
-                    if (gen) gen.insertAdjacentHTML('beforeend', '<p class="pp-onboarding-warning">Las páginas se han creado, pero no hemos podido cerrar el onboarding automáticamente. Entra al mapa para revisarlas.</p>');
+                    if (gen) gen.insertAdjacentHTML('beforeend', '<p class="pp-onboarding-warning">' + escapeHtml(pp.t('js.onb.finish_failed')) + '</p>');
                 });
         }
 
@@ -1438,14 +1439,14 @@
         if (!gen) return;
         var summary = gen.querySelector('[data-gen-summary]');
         var bar = gen.querySelector('[data-gen-bar]');
-        if (summary) summary.textContent = 'Borrador ' + Math.min(index + 1, total) + ' de ' + total + '. Creados: ' + created + (failed ? '. Con error: ' + failed : '') + '.';
+        if (summary) summary.textContent = pp.t('js.onb.draft_progress', { i: Math.min(index + 1, total), total: total, creados: created }) + (failed ? '. ' + pp.t('js.onb.with_errors') + ': ' + failed : '') + '.';
         if (bar) bar.style.width = Math.round((index / Math.max(total, 1)) * 100) + '%';
         gen.querySelectorAll('[data-gen-row]').forEach(function (row) {
             var rowIndex = Number(row.getAttribute('data-gen-row') || 0);
             if (rowIndex === index && !row.classList.contains('is-done') && !row.classList.contains('is-error')) {
                 row.className = 'is-active';
                 var status = row.querySelector('small');
-                if (status) status.textContent = 'Generando ahora';
+                if (status) status.textContent = pp.t('js.onb.generating_now');
             }
         });
     }
@@ -1463,7 +1464,7 @@
         if (next && !next.classList.contains('is-done') && !next.classList.contains('is-error')) {
             next.className = 'is-active';
             var nextStatus = next.querySelector('small');
-            if (nextStatus) nextStatus.textContent = 'Preparando';
+            if (nextStatus) nextStatus.textContent = pp.t('js.onb.preparing');
         }
     }
 
@@ -1481,9 +1482,9 @@
     function selectionLabel() {
         var pages = root.querySelectorAll('[data-proposed-page]:checked').length;
         var posts = root.querySelectorAll('[data-proposed-post]:checked').length;
-        var label = pages + ' página' + (pages === 1 ? '' : 's');
-        if (posts > 0) label += ' + ' + posts + ' entrada' + (posts === 1 ? '' : 's');
-        return label + ' seleccionadas';
+        var label = pp.t(pages === 1 ? 'js.onb.pages_one' : 'js.onb.pages_other', { n: pages });
+        if (posts > 0) label += ' + ' + pp.t(posts === 1 ? 'js.onb.posts_one' : 'js.onb.posts_other', { n: posts });
+        return pp.t('js.onb.n_selected_suffix', { texto: label });
     }
 
     function post(path, data, timeoutMs, json) {
@@ -1508,14 +1509,14 @@
                 try {
                     body = text ? JSON.parse(text) : {};
                 } catch (err) {
-                    throw new Error(res.ok ? 'Respuesta vacía o no válida del servidor.' : ('HTTP ' + res.status + ': el servidor no devolvió JSON.'));
+                    throw new Error(res.ok ? pp.t('js.onb.empty_response') : ('HTTP ' + res.status + ': ' + pp.t('js.onb.not_json')));
                 }
                 if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
                 return body;
             });
         }).catch(function (err) {
             clearTimeout(timer);
-            if (err && err.name === 'AbortError') throw new Error('La operación ha tardado demasiado. Prueba de nuevo.');
+            if (err && err.name === 'AbortError') throw new Error(pp.t('js.onb.timeout'));
             throw err;
         });
     }
@@ -1539,19 +1540,35 @@
     }
 
     function typeLabel(type) {
+        // Las claves son `page_type` de base de datos: no se traducen.
         return {
-            home: 'Inicio',
-            service: 'Servicio',
-            contact: 'Contacto',
-            article: 'Contenido',
-            landing: 'Landing'
-        }[type] || 'Página';
+            home: pp.t('js.onb.type_home'),
+            service: pp.t('js.onb.type_service'),
+            contact: pp.t('js.onb.type_contact'),
+            article: pp.t('js.onb.type_article'),
+            landing: pp.t('js.onb.type_landing')
+        }[type] || pp.t('js.onb.page');
+    }
+
+    /**
+      * ¿Esta página va marcada de serie? Se decide sobre los DATOS, nunca sobre
+      * la etiqueta: antes se comparaba el texto visible ('Imprescindible'), y
+      * traducirlo habría dejado todas las casillas desmarcadas sin avisar.
+      */
+    function isEssentialPage(page) {
+        var slug = (page.page_type || '').toLowerCase();
+        return slug === 'home' || slug === 'contact' || page.priority === 'high';
     }
 
     function priorityLabel(page) {
-        var title = (page.title || '').toLowerCase();
-        if (title === 'inicio' || title === 'contacto') return 'Imprescindible';
-        return { high: 'Alta prioridad', medium: 'Media', low: 'Baja' }[page.priority] || 'Media';
+        if (isEssentialPage(page) && (page.page_type === 'home' || page.page_type === 'contact')) {
+            return pp.t('js.onb.priority_essential');
+        }
+        return {
+            high: pp.t('js.onb.priority_high'),
+            medium: pp.t('js.onb.priority_medium'),
+            low: pp.t('js.onb.priority_low')
+        }[page.priority] || pp.t('js.onb.priority_medium');
     }
 
     function setBusy(button, busy, label) {

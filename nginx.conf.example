@@ -14,7 +14,8 @@ location ~ \.php$ {
     include fastcgi_params;
 }
 
-# Bloquear acceso directo a directorios sensibles
+# Bloquear acceso directo a directorios sensibles. Esto incluye
+# storage/resources: los ebooks se sirven únicamente mediante su controller.
 location ~ ^/(config|core|app|views|install/views|install/steps|storage)/ {
     deny all;
     return 403;

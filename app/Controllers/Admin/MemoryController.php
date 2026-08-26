@@ -23,6 +23,21 @@ class MemoryController
      * Schema de los campos de memoria.
      * key => [label, type, placeholder, help, rows, options]
      */
+    /**
+     * Esquema de la memoria del negocio.
+     *
+     * OJO: este texto castellano tiene DOS consumidores con necesidades
+     * opuestas, y por eso se queda como está:
+     *   - la pantalla (y el paso 1 del onboarding), que lo quiere traducido;
+     *   - `OnboardingController::memoryFieldSchema()`, que se lo pasa a la IA
+     *     como descripción de qué extraer de los documentos del cliente.
+     *
+     * Traducirlo aquí cambiaría el prompt. Así que la constante es la fuente
+     * para la IA, y `fieldsForView()` devuelve la copia traducida para pintar.
+     */
+    // i18n-ignore-start: castellano deliberado — esta constante es la fuente
+    // del PROMPT de extracción (`memoryFieldSchema`). Lo que se pinta sale de
+    // `fieldsForView()`, que sí traduce.
     public const FIELDS = [
         'business_description' => [
             'label'       => '¿Qué hace tu empresa?',
@@ -88,6 +103,38 @@ class MemoryController
             'help'        => 'Datos de contacto que aparecerán en secciones de contacto y footer.',
         ],
     ];
+    // i18n-ignore-end
+
+    /**
+     * El mismo esquema con etiquetas, ayudas, placeholders y opciones ya
+     * traducidos al idioma del gestor. Solo para pintar: lo que viaja a la IA
+     * sigue leyendo `FIELDS`.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function fieldsForView(): array
+    {
+        $out = [];
+        foreach (self::FIELDS as $key => $def) {
+            $def['label'] = __('memory.field.' . $key . '.label');
+            if (isset($def['help'])) {
+                $def['help'] = __('memory.field.' . $key . '.help');
+            }
+            if (isset($def['placeholder'])) {
+                $def['placeholder'] = __('memory.field.' . $key . '.placeholder');
+            }
+            if (($def['type'] ?? '') === 'select' && isset($def['options'])) {
+                $options = [];
+                foreach (array_keys((array) $def['options']) as $value) {
+                    // La clave es el valor que se guarda y viaja a la IA.
+                    $options[$value] = __('memory.tone.' . ($value === '' ? 'none' : $value));
+                }
+                $def['options'] = $options;
+            }
+            $out[$key] = $def;
+        }
+        return $out;
+    }
 
     // ----------------------------------------------------------------------
     // GET /admin/memory
@@ -120,10 +167,10 @@ class MemoryController
             $raw = str_replace(["\r\n", "\r"], "\n", $raw);
 
             if ($def['type'] === 'select' && $raw !== '' && !isset($def['options'][$raw])) {
-                $errors[$key] = 'Valor no válido.';
+                $errors[$key] = __('memory.error.invalid_value');
             }
             if (mb_strlen($raw) > 5000) {
-                $errors[$key] = 'Demasiado largo (máximo 5000 caracteres).';
+                $errors[$key] = __('memory.error.too_long');
             }
             $input[$key] = $raw;
         }
@@ -150,7 +197,7 @@ class MemoryController
             }
         }
 
-        Session::flash('success', 'Memoria del sitio guardada correctamente.');
+        Session::flash('success', __('memory.saved'));
         Response::redirect(base_url('admin/memory'));
     }
 
@@ -202,7 +249,7 @@ class MemoryController
         $data = array_merge($data, [
             'values' => $ctx['values'],
             'errors' => $ctx['errors'],
-            'fields' => self::FIELDS,
+            'fields' => self::fieldsForView(),
             'csrf'   => CSRF::token(),
         ]);
         View::send('admin/memory/index', $data);
@@ -212,7 +259,7 @@ class MemoryController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

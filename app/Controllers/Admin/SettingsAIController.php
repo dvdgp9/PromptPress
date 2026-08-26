@@ -32,7 +32,7 @@ class SettingsAIController
         'mistral'    => ['mistral-small-latest', 'mistral-large-latest', 'codestral-latest'],
         'openrouter' => [
             // Gemini en OpenRouter (IDs confirmados desde la plataforma).
-            'google/gemini-3-flash-preview',
+            'google/gemini-3.7-flash',
             'google/gemini-3.1-flash-lite',
             'google/gemini-3.5-flash',
 
@@ -53,34 +53,40 @@ class SettingsAIController
         return self::SUGGESTED_MODELS[$provider] ?? [];
     }
 
-    /** Presets pensados para la UI: nombres humanos sobre IDs técnicos. */
+    /**
+     * Presets pensados para la UI: nombres humanos sobre IDs técnicos.
+     *
+     * `badge`, `summary` y `use_case` son CLAVES de traducción, no texto: la
+     * constante se evalúa antes de saber el idioma del gestor. Se resuelven en
+     * `modelPresetsForView()`.
+     */
     private const MODEL_PRESETS = [
         'openrouter' => [
             [
-                'model' => 'google/gemini-3-flash-preview',
-                'name' => 'Gemini 3 Flash',
-                'badge' => 'Principal',
+                'model' => 'google/gemini-3.7-flash',
+                'name' => 'Gemini 3.7 Flash',
+                'badge' => 'model.badge.main',
                 'tone' => 'balanced',
-                'summary' => 'Modelo recomendado para generación de páginas, secciones y contenido largo dentro de PromptPress.',
-                'use_case' => 'Principal',
+                'summary' => 'model.summary.gemini_flash',
+                'use_case' => 'model.use.main',
                 'cost' => 'OpenRouter',
             ],
             [
                 'model' => 'google/gemini-3.1-flash-lite',
                 'name' => 'Gemini 3.1 Flash Lite',
-                'badge' => 'Pequeño',
+                'badge' => 'model.badge.small',
                 'tone' => 'standard',
-                'summary' => 'Opción ligera para reescrituras, SEO, resúmenes y tareas frecuentes de bajo coste.',
-                'use_case' => 'Auxiliar',
+                'summary' => 'model.summary.gemini_lite',
+                'use_case' => 'model.use.aux',
                 'cost' => 'OpenRouter',
             ],
             [
                 'model' => 'google/gemini-3.5-flash',
                 'name' => 'Gemini 3.5 Flash',
-                'badge' => 'Avanzado',
+                'badge' => 'model.badge.advanced',
                 'tone' => 'premium',
-                'summary' => 'Alternativa más capaz para contenido exigente manteniendo la familia Gemini en OpenRouter.',
-                'use_case' => 'Calidad',
+                'summary' => 'model.summary.gemini_35',
+                'use_case' => 'model.use.quality',
                 'cost' => 'OpenRouter',
             ],
         ],
@@ -88,19 +94,19 @@ class SettingsAIController
             [
                 'model' => 'gpt-4o-mini',
                 'name' => 'GPT-4o mini',
-                'badge' => 'Rápido',
+                'badge' => 'model.badge.fast',
                 'tone' => 'balanced',
-                'summary' => 'Buena opción general para pruebas, reescritura y tareas cortas.',
-                'use_case' => 'Día a día',
+                'summary' => 'model.summary.gpt4o_mini',
+                'use_case' => 'model.use.daily',
                 'cost' => '$0.15 / $0.60',
             ],
             [
                 'model' => 'gpt-4o',
                 'name' => 'GPT-4o',
-                'badge' => 'Calidad',
+                'badge' => 'model.badge.quality',
                 'tone' => 'premium',
-                'summary' => 'Más sólido para generación de contenido largo o decisiones editoriales.',
-                'use_case' => 'Contenido',
+                'summary' => 'model.summary.gpt4o',
+                'use_case' => 'model.use.content',
                 'cost' => '$2.50 / $10.00',
             ],
         ],
@@ -108,19 +114,19 @@ class SettingsAIController
             [
                 'model' => 'claude-3-5-haiku-latest',
                 'name' => 'Claude Haiku',
-                'badge' => 'Ligero',
+                'badge' => 'model.badge.light',
                 'tone' => 'balanced',
-                'summary' => 'Respuesta ágil para copy breve, resúmenes y variaciones.',
-                'use_case' => 'Rápido',
+                'summary' => 'model.summary.haiku',
+                'use_case' => 'model.use.fast',
                 'cost' => '$0.80 / $4.00',
             ],
             [
                 'model' => 'claude-3-5-sonnet-latest',
                 'name' => 'Claude Sonnet',
-                'badge' => 'Editorial',
+                'badge' => 'model.badge.editorial',
                 'tone' => 'premium',
-                'summary' => 'Mejor cuando el tono, la estructura y la redacción pesan bastante.',
-                'use_case' => 'Contenido',
+                'summary' => 'model.summary.sonnet',
+                'use_case' => 'model.use.content',
                 'cost' => '$3.00 / $15.00',
             ],
         ],
@@ -128,19 +134,19 @@ class SettingsAIController
             [
                 'model' => 'mistral-small-latest',
                 'name' => 'Mistral Small',
-                'badge' => 'Económico',
+                'badge' => 'model.badge.cheap',
                 'tone' => 'balanced',
-                'summary' => 'Modelo rápido y barato para tareas auxiliares.',
-                'use_case' => 'Auxiliar',
+                'summary' => 'model.summary.mistral_small',
+                'use_case' => 'model.use.aux',
                 'cost' => '$0.20 / $0.60',
             ],
             [
                 'model' => 'mistral-large-latest',
                 'name' => 'Mistral Large',
-                'badge' => 'Avanzado',
+                'badge' => 'model.badge.advanced',
                 'tone' => 'premium',
-                'summary' => 'Más capacidad para generación compleja manteniendo proveedor Mistral.',
-                'use_case' => 'Contenido',
+                'summary' => 'model.summary.mistral_large',
+                'use_case' => 'model.use.content',
                 'cost' => '$2.00 / $6.00',
             ],
         ],
@@ -157,7 +163,7 @@ class SettingsAIController
             [
                 'providers'        => AIProviderFactory::PROVIDERS,
                 'suggested_models' => self::SUGGESTED_MODELS,
-                'model_presets'    => self::MODEL_PRESETS,
+                'model_presets'    => self::modelPresetsForView(),
                 'current_provider'    => $meta['provider'] ?: 'openrouter',
                 'current_model'       => $meta['model'],
                 'current_model_light' => $meta['model_light'] ?? '',
@@ -186,10 +192,10 @@ class SettingsAIController
 
         $errors = [];
         if (!array_key_exists($provider, AIProviderFactory::PROVIDERS)) {
-            $errors[] = 'Proveedor no válido.';
+            $errors[] = __('settings_ai.error.provider');
         }
         if ($model === '' || mb_strlen($model) > 100) {
-            $errors[] = 'El modelo principal es obligatorio (máx. 100 caracteres).';
+            $errors[] = __('settings_ai.error.model_required');
         }
         if ($modelLight !== '' && mb_strlen($modelLight) > 100) {
             $errors[] = 'El modelo auxiliar no puede superar 100 caracteres.';
@@ -198,7 +204,7 @@ class SettingsAIController
         $keyProvided = trim($apiKey) !== '';
         $hadKey      = $this->hasApiKey($siteId);
         if (!$keyProvided && !$hadKey) {
-            $errors[] = 'La API key es obligatoria en la primera configuración.';
+            $errors[] = __('settings_ai.error.key_required');
         }
 
         if ($errors !== []) {
@@ -217,7 +223,9 @@ class SettingsAIController
                 $p = AIProviderFactory::make($provider, $testKey, $model);
                 $p->chat(
                     [['role' => 'user', 'content' => 'ping']],
-                    ['max_tokens' => 5, 'temperature' => 0, 'timeout' => 20]
+                    // Los Gemini recientes pueden consumir primero tokens de
+                    // razonamiento; 5 dejaba una respuesta válida sin texto.
+                    ['max_tokens' => 128, 'temperature' => 0, 'timeout' => 30]
                 );
             } catch (AIException $e) {
                 $this->renderWithErrors(
@@ -257,8 +265,8 @@ class SettingsAIController
         }
 
         Session::flash('notice', $test
-            ? 'Configuración guardada y conexión verificada ✓'
-            : 'Configuración guardada.');
+            ? __('settings_ai.saved_verified')
+            : __('settings_ai.saved'));
         Response::redirect(base_url('admin/settings/ai'));
     }
 
@@ -299,7 +307,7 @@ class SettingsAIController
             [
                 'providers'           => AIProviderFactory::PROVIDERS,
                 'suggested_models'    => self::SUGGESTED_MODELS,
-                'model_presets'       => self::MODEL_PRESETS,
+                'model_presets'       => self::modelPresetsForView(),
                 'current_provider'    => $provider,
                 'current_model'       => $model,
                 'current_model_light' => $modelLight,
@@ -324,7 +332,7 @@ class SettingsAIController
     {
         CSRF::check();
         if (Auth::role() !== 'admin') {
-            Response::forbidden('Solo un administrador puede cambiar la conexión de imágenes.');
+            Response::forbidden(__('settings_ai.error.images_admin_only'));
         }
         $this->requireSiteId();
 
@@ -333,7 +341,7 @@ class SettingsAIController
 
         if ($remove) {
             if (ImageBankService::writeConfig('')) {
-                Session::flash('image_notice', 'Clave de Unsplash eliminada. Las páginas se generarán sin imágenes hasta que añadas otra.');
+                Session::flash('image_notice', __('settings_ai.unsplash_removed'));
             } else {
                 Session::flash('image_error', 'No se pudo escribir config/image_bank.php (revisa los permisos de la carpeta config/).');
             }
@@ -347,24 +355,44 @@ class SettingsAIController
 
         $check = ImageBankService::validateKey($key);
         if (!$check['ok']) {
-            Session::flash('image_error', 'Unsplash no aceptó la clave: ' . ($check['error'] ?? 'motivo desconocido') . '.');
+            Session::flash('image_error', __('settings_ai.unsplash_rejected', ['motivo' => $check['error'] ?? __('settings_ai.unknown_reason')]));
             Response::redirect(base_url('admin/settings/ai'));
         }
 
         if (!ImageBankService::writeConfig($key)) {
-            Session::flash('image_error', 'La clave es válida, pero no se pudo escribir config/image_bank.php. Revisa los permisos de la carpeta config/ o crea el archivo a mano.');
+            Session::flash('image_error', __('settings_ai.unsplash_write_failed'));
             Response::redirect(base_url('admin/settings/ai'));
         }
 
-        Session::flash('image_notice', 'Clave de Unsplash guardada y verificada ✓ Ya puedes generar páginas con imágenes.');
+        Session::flash('image_notice', __('settings_ai.unsplash_saved'));
         Response::redirect(base_url('admin/settings/ai'));
+    }
+
+    /**
+     * Presets con `badge`, `summary` y `use_case` ya traducidos. El ID del
+     * modelo, su nombre comercial y el coste no se tocan.
+     *
+     * @return array<string, array<int, array<string,string>>>
+     */
+    private static function modelPresetsForView(): array
+    {
+        $out = [];
+        foreach (self::MODEL_PRESETS as $provider => $presets) {
+            foreach ($presets as $preset) {
+                $preset['badge']    = __($preset['badge']);
+                $preset['summary']  = __($preset['summary']);
+                $preset['use_case'] = __($preset['use_case']);
+                $out[$provider][] = $preset;
+            }
+        }
+        return $out;
     }
 
     private function requireSiteId(): int
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

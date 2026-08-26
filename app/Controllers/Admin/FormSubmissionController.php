@@ -148,7 +148,7 @@ final class FormSubmissionController
             ['read', date('Y-m-d H:i:s'), $id, $siteId]
         );
 
-        Session::flash('success', 'Mensaje marcado como leído.');
+        Session::flash('success', __('inbox.flash.marked_read'));
         Response::redirect(base_url('admin/forms'));
     }
 
@@ -173,7 +173,7 @@ final class FormSubmissionController
             [$id, $siteId]
         );
 
-        Session::flash('success', 'Mensaje eliminado.');
+        Session::flash('success', __('inbox.flash.deleted'));
         Response::redirect(base_url('admin/forms'));
     }
 
@@ -226,7 +226,7 @@ final class FormSubmissionController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

@@ -107,19 +107,21 @@ final class FormSubmissionService
     /** @param array<string,mixed> $payload */
     public static function emailBody(array $meta, array $payload): string
     {
+        // Este correo lo recibe QUIEN GESTIONA el sitio, no el visitante: va en
+        // el idioma del panel (igual que los avisos de Reservas y Tienda).
         $lines = [
-            'Nuevo mensaje recibido desde PromptPress',
+            __('form.mail.new_message'),
             '',
-            'Página: ' . (string) ($meta['page_title'] ?? ''),
-            'Sección: ' . (string) ($meta['section_heading'] ?? 'Formulario'),
-            'Fecha: ' . date('Y-m-d H:i:s'),
+            __('form.mail.page') . ': ' . (string) ($meta['page_title'] ?? ''),
+            __('form.mail.section') . ': ' . (string) ($meta['section_heading'] ?? __('form.mail.form')),
+            __('form.mail.date') . ': ' . date('Y-m-d H:i:s'),
             '',
-            'Datos enviados:',
+            __('form.mail.submitted_data') . ':',
         ];
 
         foreach ($payload as $label => $value) {
             if (is_array($value) && ($value['type'] ?? '') === 'file') {
-                $lines[] = '- ' . $label . ': ' . (string) ($value['original_name'] ?? 'Archivo adjunto')
+                $lines[] = '- ' . $label . ': ' . (string) ($value['original_name'] ?? __('form.mail.attachment'))
                     . ' (' . self::formatBytes((int) ($value['size'] ?? 0)) . ')';
                 continue;
             }
@@ -145,11 +147,14 @@ final class FormSubmissionService
         return implode(',', array_map(static fn(string $ext): string => '.' . $ext, $extensions));
     }
 
-    public static function fileHelpForField(array $field): string
+    /** FORMS-LANG T2 — la ayuda se pinta en el idioma de la página, no en castellano fijo. */
+    public static function fileHelpForField(array $field, ?string $lang = null): string
     {
         $extensions = self::allowedExtensionsForField($field);
-        $maxMb = self::maxMbForField($field);
-        return 'Formatos permitidos: ' . strtoupper(implode(', ', $extensions)) . '. Máximo ' . $maxMb . ' MB.';
+        return Microcopy::t('form.file_help', $lang ?? LanguageService::DEFAULT, [
+            'formats' => strtoupper(implode(', ', $extensions)),
+            'max'     => (string) self::maxMbForField($field),
+        ]);
     }
 
     public static function maxMbForField(array $field): int
@@ -161,6 +166,10 @@ final class FormSubmissionService
     /**
      * @return array{ok:bool,error?:string,file?:array<string,mixed>}
      */
+    // i18n-ignore-start: los mensajes de esta zona los ve el VISITANTE al subir
+    // un archivo en un formulario público. Su idioma es el de la web, así que su
+    // sitio natural es `Microcopy`, no el catálogo del panel. Gap preexistente:
+    // hoy salen fijos en castellano también en una web francesa.
     public static function storeUploadedFile(array $file, array $field, int $siteId, int $sectionId, string $fieldName): array
     {
         $error = self::validateUploadedFile($file, $field);
@@ -318,4 +327,5 @@ final class FormSubmissionService
         }
         return $mime === self::MIME_BY_EXT[$ext];
     }
+    // i18n-ignore-end
 }

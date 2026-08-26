@@ -29,7 +29,8 @@ use Core\Router;
  *     responden cuando el módulo está activo.
  *
  * El autoloader no necesita cambios: `App\` ya mapea a `app/`, de modo que
- * `App\Modules\Hello\HelloController` se resuelve a `app/Modules/Hello/HelloController.php`.
+ * `App\Modules\Analytics\AnalyticsController` se resuelve a
+ * `app/Modules/Analytics/AnalyticsController.php`.
  */
 final class ModuleRegistry
 {
@@ -40,12 +41,9 @@ final class ModuleRegistry
      *
      * @var array<string, array{label:string, description:string, available:bool}>
      */
+    // i18n-ignore-start: castellano de referencia. Lo que se PINTA sale de
+    // `statusFor()`, que traduce por `module.<key>.*`.
     public const MODULES = [
-        'hello' => [
-            'label'       => 'Módulo de prueba',
-            'description' => 'Módulo de demostración para validar el sistema de módulos. Sin efecto en el sitio; puedes activarlo y desactivarlo con seguridad.',
-            'available'   => true,
-        ],
         'analytics' => [
             'label'       => 'Analítica propia',
             'description' => 'Estadísticas de visitas sin cookies ni Google Analytics: el dato es tuyo y respeta la privacidad.',
@@ -61,7 +59,13 @@ final class ModuleRegistry
             'description' => 'Tienda online: catálogo, carrito y pagos (Stripe o transferencia).',
             'available'   => true,
         ],
+        'resources' => [
+            'label'       => 'Recursos',
+            'description' => 'Publica ebooks y otros recursos descargables, con descarga directa o tras completar un formulario.',
+            'available'   => true,
+        ],
     ];
+    // i18n-ignore-end
 
     public static function exists(string $key): bool
     {
@@ -117,8 +121,10 @@ final class ModuleRegistry
         foreach (self::MODULES as $key => $meta) {
             $out[] = [
                 'key'         => $key,
-                'label'       => $meta['label'],
-                'description' => $meta['description'],
+                // Las etiquetas se traducen aquí (`statusFor` solo alimenta la
+                // pantalla de Módulos); la constante guarda el castellano.
+                'label'       => __('module.' . $key . '.label'),
+                'description' => __('module.' . $key . '.description'),
                 'available'   => (bool) $meta['available'],
                 'enabled'     => self::isEnabled($siteId, $key),
             ];

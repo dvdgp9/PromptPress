@@ -3,6 +3,8 @@
 namespace App\Controllers\Admin;
 
 use App\Services\AI\AIException;
+use App\Services\AssistantContentNormalizer;
+use App\Services\AssistantMediaReferences;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
 use App\Services\TextExtractor;
@@ -25,6 +27,8 @@ class AssistantController
 {
     /** Límite de texto extraído que se conserva como contexto (caracteres). */
     public const MAX_EXTRACT_CHARS = 60000;
+    /** HTML saneado del cliente; el backend lo vuelve a normalizar siempre. */
+    public const MAX_RICH_HTML_BYTES = 500000;
 
     // ----------------------------------------------------------------------
     // GET /admin/assistant
@@ -53,19 +57,19 @@ class AssistantController
 
         $file = $_FILES['file'] ?? null;
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            Response::json(['ok' => false, 'error' => 'No se recibió ningún archivo válido.'], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.no_file')], 422);
         }
         if ($file['size'] > DocumentController::MAX_SIZE) {
             $maxMb = (int) (DocumentController::MAX_SIZE / 1024 / 1024);
             Response::json(['ok' => false, 'error' => "El archivo supera los {$maxMb} MB permitidos."], 422);
         }
         if (!is_uploaded_file($file['tmp_name'])) {
-            Response::json(['ok' => false, 'error' => 'Archivo subido no válido.'], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.bad_file')], 422);
         }
 
         $type = self::detectType($file);
         if ($type === null) {
-            Response::json(['ok' => false, 'error' => 'Tipo no soportado. Sube PDF, DOCX o TXT.'], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.unsupported')], 422);
         }
 
         // TextExtractor necesita la extensión correcta en algunos parsers; el tmp
@@ -73,7 +77,7 @@ class AssistantController
         $tmpBase = tempnam(sys_get_temp_dir(), 'ppa_');
         $tmpPath = $tmpBase . '.' . $type;
         if ($tmpBase === false || !move_uploaded_file($file['tmp_name'], $tmpPath)) {
-            Response::json(['ok' => false, 'error' => 'No se pudo procesar el archivo.'], 500);
+            Response::json(['ok' => false, 'error' => __('asst.err.process')], 500);
         }
 
         // Ojo: Response::json hace exit (never), así que un finally no correría
@@ -91,7 +95,7 @@ class AssistantController
 
         if ($extractError !== null) {
             error_log('[AssistantController::extract] ' . $extractError);
-            Response::json(['ok' => false, 'error' => 'No se pudo extraer texto del documento: ' . $extractError], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.extract', ['detalle' => $extractError])], 422);
         }
 
         $truncated = false;
@@ -100,7 +104,7 @@ class AssistantController
             $truncated = true;
         }
         if (trim($text) === '') {
-            Response::json(['ok' => false, 'error' => 'El documento no contiene texto extraíble (¿es un PDF escaneado?).'], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.empty_doc')], 422);
         }
 
         Response::json([
@@ -123,19 +127,39 @@ class AssistantController
 
         $instruction = trim((string) Request::post('instruction', ''));
         $docText     = (string) Request::post('doc_text', '');
-        if (mb_strlen($instruction) > 4000) {
-            Response::json(['ok' => false, 'error' => 'La petición es demasiado larga (máx. 4000 caracteres).'], 422);
+        $richHtml    = (string) Request::post('rich_html', '');
+        if (strlen($richHtml) > self::MAX_RICH_HTML_BYTES) {
+            Response::json(['ok' => false, 'error' => __('asst.err.rich_payload')], 422);
+        }
+        if ($richHtml === '' && mb_strlen($instruction) > 4000) {
+            Response::json(['ok' => false, 'error' => __('asst.err.too_long')], 422);
+        }
+
+        $normalized = null;
+        if (trim($richHtml) !== '') {
+            $normalized = AssistantMediaReferences::resolve(
+                AssistantContentNormalizer::normalize($richHtml, $instruction),
+                $siteId
+            );
+            $richContext = trim((string) ($normalized['prompt_text'] ?? ''));
+            if ($richContext !== '') {
+                $docText = "[Contenido enriquecido pegado]\n" . $richContext
+                    . (trim($docText) !== '' ? "\n\n[Documento adjunto]\n" . $docText : '');
+            }
         }
         if (mb_strlen($docText) > self::MAX_EXTRACT_CHARS) {
             $docText = mb_substr($docText, 0, self::MAX_EXTRACT_CHARS);
         }
-        if ($instruction === '' && trim($docText) === '') {
-            Response::json(['ok' => false, 'error' => 'Escribe la petición o adjunta un documento.'], 422);
+        if (($normalized !== null && trim($docText) === '')
+            || ($normalized === null && $instruction === '' && trim($docText) === '')) {
+            Response::json(['ok' => false, 'error' => __('asst.err.empty_request')], 422);
         }
 
-        $requestText = $instruction !== ''
+        $requestText = $normalized !== null
+            ? 'Analiza y clasifica la petición pegada respetando su estructura y el orden de sus referencias.'
+            : ($instruction !== ''
             ? $instruction
-            : 'Aplica los cambios descritos en el documento adjunto.';
+            : 'Aplica los cambios descritos en el documento adjunto.');
 
         @set_time_limit(180);
         try {
@@ -144,18 +168,27 @@ class AssistantController
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
             error_log('[assistant plan] error_id=' . $errorId . ' site=' . $siteId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
             $message = match (true) {
-                in_array($e->getHttpStatus(), [401, 403], true) => 'La configuración del proveedor de IA no es válida. Revisa Ajustes de IA.',
-                $e->getHttpStatus() === 429 => 'El proveedor de IA ha alcanzado temporalmente su límite. Espera un momento y vuelve a intentarlo.',
-                $e->getHttpStatus() >= 500 => 'El proveedor de IA no está disponible ahora mismo. Vuelve a intentarlo en un rato.',
-                default => 'No he podido generar el plan. Prueba a formular la petición de otra forma.',
+                in_array($e->getHttpStatus(), [401, 403], true) => __('asst.err.ai_config'),
+                $e->getHttpStatus() === 429 => __('asst.err.ai_rate'),
+                $e->getHttpStatus() >= 500 => __('asst.err.ai_down'),
+                default => __('asst.err.rephrase'),
             };
             Response::json(['ok' => false, 'error' => $message, 'error_id' => $errorId], 502);
         } catch (\Throwable $e) {
             error_log('[assistant plan] site=' . $siteId . ' ' . get_class($e) . ': ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => 'No he podido generar el plan. Inténtalo de nuevo.'], 502);
+            Response::json(['ok' => false, 'error' => __('asst.err.no_plan')], 502);
         }
 
-        Response::json(['ok' => true, 'plan' => $plan]);
+        Response::json([
+            'ok' => true,
+            'plan' => $plan,
+            'ingestion' => $normalized === null ? null : [
+                'status' => $normalized['status'],
+                'blocks' => count($normalized['blocks']),
+                'images' => count($normalized['media']),
+                'warnings' => $normalized['warnings'],
+            ],
+        ]);
     }
 
     // ----------------------------------------------------------------------
@@ -169,7 +202,7 @@ class AssistantController
         $raw = (string) Request::post('items', '');
         $items = json_decode($raw, true);
         if (!is_array($items) || $items === []) {
-            Response::json(['ok' => false, 'error' => 'No se recibió ningún cambio que aplicar.'], 422);
+            Response::json(['ok' => false, 'error' => __('asst.err.no_changes')], 422);
         }
 
         $requestText = trim((string) Request::post('request_text', ''));
@@ -235,7 +268,7 @@ class AssistantController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

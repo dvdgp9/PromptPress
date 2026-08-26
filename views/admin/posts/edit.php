@@ -16,10 +16,10 @@ $isPublished  = ($page['status'] ?? '') === 'published';
 $publicUrl    = base_url('/' . ltrim((string) $page['slug'], '/'));
 $isLegalPage  = ($page['page_type'] ?? '') === 'legal';
 $backUrl      = $isLegalPage ? base_url('admin/privacy?tab=pages') : base_url('admin/posts');
-$backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
+$backLabel    = $isLegalPage ? __('post_edit.back_privacy') : __('post_edit.back_list');
 ?>
 
-<?php \Core\View::start('title'); ?>Editar entrada · <?= e((string) $page['title']) ?><?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('post_edit.title')) ?> · <?= e((string) $page['title']) ?><?php \Core\View::end(); ?>
 <?php \Core\View::start('bodyClass'); ?>pp-editor-mode pp-post-editor-mode<?php \Core\View::end(); ?>
 
 <!-- Barra de editor (sticky) — acciones globales del post -->
@@ -36,10 +36,10 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
     <div class="pp-post-editor__bar-right">
         <span class="pp-post-editor__save-state" data-save-state aria-live="polite"></span>
         <?php if ($isPublished): ?>
-            <a href="<?= e($publicUrl) ?>" target="_blank" rel="noopener" class="pp-btn pp-btn--secondary">Ver en sitio ↗</a>
-            <button type="button" class="pp-btn pp-btn--secondary" data-action="unpublish">Despublicar</button>
+            <a href="<?= e($publicUrl) ?>" target="_blank" rel="noopener" class="pp-btn pp-btn--secondary"><?= e(__('posts.view_on_site')) ?> ↗</a>
+            <button type="button" class="pp-btn pp-btn--secondary" data-action="unpublish"><?= e(__('post_edit.unpublish')) ?></button>
         <?php else: ?>
-            <button type="button" class="pp-btn pp-btn--primary" data-action="publish">Publicar</button>
+            <button type="button" class="pp-btn pp-btn--primary" data-action="publish"><?= e(__('pages.publish')) ?></button>
         <?php endif; ?>
     </div>
 </header>
@@ -56,12 +56,12 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
     <main class="pp-post-editor__body">
         <!-- Título editable inline -->
         <div class="pp-post-editor__title-block">
-            <label class="pp-vh" for="pp-post-title">Título de la entrada</label>
+            <label class="pp-vh" for="pp-post-title"><?= e(__('post_edit.post_title')) ?></label>
             <input id="pp-post-title" type="text"
                    class="pp-post-editor__title-input"
                    data-field="title"
                    value="<?= e((string) $page['title']) ?>"
-                   placeholder="Título de la entrada"
+                   placeholder="<?= e(__('post_edit.post_title')) ?>"
                    maxlength="300"
                    autocomplete="off">
         </div>
@@ -70,21 +70,21 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
         <div class="pp-post-blocks" data-blocks data-initial='<?= e(json_encode(['blocks' => $blocks], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>'>
             <?php if (empty($blocks)): ?>
                 <div class="pp-post-blocks__empty" data-empty>
-                    <p>Empieza escribiendo tu primer párrafo.</p>
+                    <p><?= e(__('post_edit.start_writing')) ?></p>
                 </div>
             <?php endif; ?>
         </div>
 
         <!-- Toolbar para añadir bloques (sticky abajo) -->
         <div class="pp-post-toolbar" data-toolbar>
-            <span class="pp-post-toolbar__label">Añadir bloque:</span>
-            <button type="button" data-add="paragraph">¶ Párrafo</button>
+            <span class="pp-post-toolbar__label"><?= e(__('post_edit.add_block')) ?></span>
+            <button type="button" data-add="paragraph">¶ <?= e(__('post_edit.block_paragraph')) ?></button>
             <button type="button" data-add="heading-2">H2</button>
             <button type="button" data-add="heading-3">H3</button>
-            <button type="button" data-add="image">Imagen</button>
-            <button type="button" data-add="list">Lista</button>
-            <button type="button" data-add="quote">Cita</button>
-            <button type="button" data-add="divider">— Divisor</button>
+            <button type="button" data-add="image"><?= e(__('post_edit.block_image')) ?></button>
+            <button type="button" data-add="list"><?= e(__('post_edit.block_list')) ?></button>
+            <button type="button" data-add="quote"><?= e(__('post_edit.block_quote')) ?></button>
+            <button type="button" data-add="divider">— <?= e(__('post_edit.block_divider')) ?></button>
         </div>
     </main>
 
@@ -94,12 +94,12 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
            data-csrf="<?= e($csrf) ?>"
            data-base-url="<?= e(base_url('')) ?>">
         <header class="pp-post-editor__sidebar-head">
-            <span class="pp-posts-header__eyebrow">Metadatos</span>
-            <h3>Sobre la entrada</h3>
+            <span class="pp-posts-header__eyebrow"><?= e(__('post_edit.metadata')) ?></span>
+            <h3><?= e(__('post_edit.about_post')) ?></h3>
         </header>
 
         <div class="pp-post-meta__featured">
-            <span class="pp-post-meta__label">Imagen destacada</span>
+            <span class="pp-post-meta__label"><?= e(__('post_meta.featured_image')) ?></span>
             <?php $img = (string) ($meta['featured_image_path'] ?? ''); ?>
             <div class="pp-post-meta__featured-slot <?= $img ? 'has-image' : '' ?>" data-image-slot>
                 <?php if ($img): ?>
@@ -109,7 +109,7 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
                 <?php endif; ?>
                 <div class="pp-post-meta__featured-empty" data-image-empty <?= $img ? 'hidden' : '' ?>>
                     <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <span>Aún sin imagen</span>
+                    <span><?= e(__('post_meta.no_image')) ?></span>
                 </div>
             </div>
             <div class="pp-post-meta__featured-actions">
@@ -117,75 +117,75 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
                     <?= $img ? 'Cambiar…' : 'Elegir…' ?>
                 </button>
                 <?php if (\App\Services\ImageBankService::isAvailable()): ?>
-                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="search-bank" title="Buscar en Unsplash">
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="search-bank" title="<?= e(__('media.search_unsplash')) ?>">
                     Unsplash
                 </button>
-                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="suggest-auto" title="Buscar automáticamente según el contenido">
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="suggest-auto" title="<?= e(__('post_edit.auto_image')) ?>">
                     ✨ Auto
                 </button>
                 <?php endif; ?>
-                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="clear" <?= $img ? '' : 'hidden' ?>>Quitar</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="clear" <?= $img ? '' : 'hidden' ?>><?= e(__('post_meta.remove')) ?></button>
             </div>
             <input type="hidden" data-image-path value="<?= e($img) ?>">
             <input type="hidden" data-image-alt-store value="<?= e((string) ($meta['featured_image_alt'] ?? '')) ?>">
         </div>
 
         <div class="pp-form-group">
-            <label class="pp-form-label" for="pp-post-meta-excerpt">Resumen</label>
+            <label class="pp-form-label" for="pp-post-meta-excerpt"><?= e(__('documents.summary')) ?></label>
             <textarea id="pp-post-meta-excerpt" class="pp-input" rows="3" maxlength="500" placeholder="Frase o dos que enganchen." data-field="excerpt"><?= e((string) ($meta['excerpt'] ?? '')) ?></textarea>
-            <small class="pp-form-hint"><span data-excerpt-count>0</span> / 500 · aparece en la entrada y en los listados del blog</small>
+            <small class="pp-form-hint"><span data-excerpt-count>0</span> <?= e(__('post_edit.excerpt_hint')) ?></small>
         </div>
 
         <div class="pp-post-seo-box" id="pp-post-seo">
             <div class="pp-post-seo-box__head">
                 <span>SEO</span>
-                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="copy-excerpt-to-meta">Usar resumen</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="copy-excerpt-to-meta"><?= e(__('post_edit.use_excerpt')) ?></button>
             </div>
             <div class="pp-form-group">
-                <label class="pp-form-label" for="pp-post-meta-description">Meta descripción</label>
-                <textarea id="pp-post-meta-description" class="pp-input" rows="3" maxlength="500" placeholder="Texto que aparecerá como descripción en Google." data-field="meta_description"><?= e((string) ($page['meta_description'] ?? '')) ?></textarea>
-                <small class="pp-form-hint"><span data-meta-description-count>0</span> / 500 · recomendado 120-160. Si la dejas vacía, se usará el resumen.</small>
+                <label class="pp-form-label" for="pp-post-meta-description"><?= e(__('page_form.meta_desc')) ?></label>
+                <textarea id="pp-post-meta-description" class="pp-input" rows="3" maxlength="500" placeholder="<?= e(__('post_edit.meta_desc_placeholder')) ?>" data-field="meta_description"><?= e((string) ($page['meta_description'] ?? '')) ?></textarea>
+                <small class="pp-form-hint"><span data-meta-description-count>0</span> <?= e(__('post_edit.meta_desc_hint')) ?></small>
             </div>
             <details class="pp-seo-advanced pp-seo-advanced--compact">
-                <summary>Indexación avanzada</summary>
+                <summary><?= e(__('page_form.advanced_index')) ?></summary>
                 <div class="pp-seo-advanced__body">
                     <label class="pp-checkline">
                         <input type="checkbox" data-field="seo_noindex" value="1" <?= (int) ($page['seo_noindex'] ?? 0) === 1 ? 'checked' : '' ?>>
-                        <span>No mostrar esta entrada en buscadores</span>
+                        <span><?= e(__('post_edit.noindex')) ?></span>
                     </label>
-                    <small>Útil para borradores publicados, contenido duplicado o artículos temporales.</small>
+                    <small><?= e(__('post_edit.noindex_help')) ?></small>
                     <label class="pp-checkline">
                         <input type="checkbox" data-field="seo_exclude_sitemap" value="1" <?= (int) ($page['seo_exclude_sitemap'] ?? 0) === 1 ? 'checked' : '' ?>>
-                        <span>Excluir del sitemap</span>
+                        <span><?= e(__('page_form.no_sitemap')) ?></span>
                     </label>
-                    <small>Normalmente conviene dejarlo desactivado.</small>
+                    <small><?= e(__('page_form.no_sitemap_help')) ?></small>
                     <div class="pp-form-group">
-                        <label class="pp-form-label" for="pp-post-canonical-url">Canonical personalizada</label>
+                        <label class="pp-form-label" for="pp-post-canonical-url"><?= e(__('page_form.canonical')) ?></label>
                         <input id="pp-post-canonical-url" type="url" class="pp-input" maxlength="500" placeholder="https://tudominio.com/articulo-principal" data-field="canonical_url" value="<?= e((string) ($page['canonical_url'] ?? '')) ?>">
-                        <small class="pp-form-hint">Solo si esta entrada duplica otra URL principal.</small>
+                        <small class="pp-form-hint"><?= e(__('post_edit.canonical_help')) ?></small>
                     </div>
                 </div>
             </details>
         </div>
 
         <div class="pp-form-group">
-            <label class="pp-form-label" for="pp-post-meta-alt">Alt de la imagen</label>
-            <input id="pp-post-meta-alt" type="text" class="pp-input" maxlength="255" placeholder="Para accesibilidad y SEO" data-field="featured_image_alt" value="<?= e((string) ($meta['featured_image_alt'] ?? '')) ?>">
+            <label class="pp-form-label" for="pp-post-meta-alt"><?= e(__('post_edit.image_alt')) ?></label>
+            <input id="pp-post-meta-alt" type="text" class="pp-input" maxlength="255" placeholder="<?= e(__('post_edit.alt_placeholder')) ?>" data-field="featured_image_alt" value="<?= e((string) ($meta['featured_image_alt'] ?? '')) ?>">
         </div>
 
         <div class="pp-form-group">
-            <label class="pp-form-label" for="pp-post-meta-author">Autor</label>
-            <input id="pp-post-meta-author" type="text" class="pp-input" maxlength="120" placeholder="Tu nombre" data-field="author_name" value="<?= e((string) ($meta['author_name'] ?? '')) ?>">
+            <label class="pp-form-label" for="pp-post-meta-author"><?= e(__('post_meta.author')) ?></label>
+            <input id="pp-post-meta-author" type="text" class="pp-input" maxlength="120" placeholder="<?= e(__('post_edit.author_placeholder')) ?>" data-field="author_name" value="<?= e((string) ($meta['author_name'] ?? '')) ?>">
         </div>
 
         <div class="pp-post-editor__meta-footer">
             <small data-reading-display>
                 <?php $rm = (int) ($meta['reading_minutes'] ?? 0); ?>
-                <?= $rm > 0 ? $rm . ' min de lectura' : 'Tiempo de lectura: aún sin calcular' ?>
+                <?= e($rm > 0 ? __('posts.reading_min', ['n' => $rm]) : __('post_edit.reading_pending')) ?>
             </small>
             <div class="pp-post-editor__meta-actions">
                 <span data-status class="pp-post-meta__status" aria-live="polite"></span>
-                <button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-action="save">Guardar</button>
+                <button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-action="save"><?= e(__('common.save')) ?></button>
             </div>
         </div>
     </aside>
@@ -254,7 +254,7 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
         if (window.PPMediaPicker && typeof window.PPMediaPicker.open === 'function') {
             window.PPMediaPicker.open({ onSelect: (media) => setImage(media.path || media.url, media.alt_text || '') });
         } else {
-            const url = prompt('Pega la URL/ruta de la imagen (puedes subirla antes en /admin/media):');
+            const url = prompt(pp.t('js.post.image_url_prompt'));
             if (url) setImage(url.trim(), '');
         }
     });
@@ -297,7 +297,7 @@ $backLabel    = $isLegalPage ? 'Volver a Privacidad' : 'Volver al listado';
             autoBtn.disabled = true;
             const prevText = autoBtn.textContent;
             autoBtn.textContent = 'Buscando…';
-            status.textContent = autoAttempt === 0 ? 'Buscando imagen…' : 'Buscando otra opción…';
+            status.textContent = pp.t(autoAttempt === 0 ? 'js.post_edit.searching_image' : 'js.post_edit.searching_other');
             status.className = 'pp-post-meta__status is-loading';
             const fd = new FormData();
             fd.append('_csrf', csrf);

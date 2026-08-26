@@ -26,6 +26,8 @@ use Core\Database;
 final class LanguageService
 {
     /** Idiomas admitidos: código ISO 639-1 => etiqueta para la UI (endónimo). */
+    // i18n-ignore-start: endónimos. Cada idioma se nombra en SÍ MISMO, así que
+    // no se traducen nunca: «Español» se lee igual en un panel francés.
     public const LANGUAGES = [
         'es' => 'Español',
         'en' => 'English',
@@ -35,6 +37,7 @@ final class LanguageService
         'fr' => 'Français',
         'pt' => 'Português',
     ];
+    // i18n-ignore-end
 
     public const DEFAULT = 'es';
 
@@ -88,6 +91,7 @@ final class LanguageService
      * minúscula ("français", "português") porque instruir al modelo EN el
      * idioma de destino ancla mucho mejor la salida que pasarle el código ISO.
      */
+    // i18n-ignore-start: endónimos otra vez, esta vez para el prompt.
     public static function promptLabel(string $code): string
     {
         return match (self::normalize($code)) {
@@ -101,6 +105,7 @@ final class LanguageService
             default => 'español',
         };
     }
+    // i18n-ignore-end
 
     /** Atajo: nombre para prompts a partir del sitio. */
     public static function promptLabelFor(int $siteId): string

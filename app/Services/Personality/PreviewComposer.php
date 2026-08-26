@@ -21,6 +21,10 @@ use Core\Database;
  */
 final class PreviewComposer
 {
+    // i18n-ignore-start: contenido de RELLENO de la web de ejemplo (titulares,
+    // testimonios, CTA). Es contenido de sitio, no interfaz: su idioma es el de
+    // la web. Su sitio natural es `Microcopy`. Gap preexistente, no de ADMIN-I18N.
+
     /**
      * Construye las secciones de la home del preview.
      *
@@ -313,4 +317,5 @@ final class PreviewComposer
         }
         return $out;
     }
+    // i18n-ignore-end
 }

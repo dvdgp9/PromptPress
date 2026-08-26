@@ -36,21 +36,23 @@ if ($siteId <= 0) {
     exit(1);
 }
 
-// Estado inicial: guardar para restaurar y arrancar limpio.
-$settingKey = ModuleRegistry::settingKey('hello');
+// Estado inicial: guardar para restaurar y arrancar limpio. Se usa `booking`
+// como cobaya del flag (el módulo de prueba `hello` ya no existe): activarlo y
+// desactivarlo no toca datos, y al final se restaura el valor original.
+$settingKey = ModuleRegistry::settingKey('booking');
 $original = Database::selectOne(
     'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
     [$siteId, $settingKey]
 );
 
 // settingKey usa el prefijo esperado.
-check_mod('settingKey compone module_<key>_enabled', $settingKey === 'module_hello_enabled', $settingKey);
+check_mod('settingKey compone module_<key>_enabled', $settingKey === 'module_booking_enabled', $settingKey);
 
 // exists / isAvailable.
-check_mod('hello existe', ModuleRegistry::exists('hello'));
-check_mod('hello disponible', ModuleRegistry::isAvailable('hello'));
+check_mod('booking existe', ModuleRegistry::exists('booking'));
 check_mod('inexistente no existe', !ModuleRegistry::exists('no_such_module'));
-// Con la Fase C, TODO el catálogo está construido (available:true en los 4).
+check_mod('hello ya no está en el catálogo', !ModuleRegistry::exists('hello'));
+// Con la Fase C, TODO el catálogo está construido (available:true en los 3).
 check_mod('todo el catálogo disponible', ModuleRegistry::isAvailable('analytics') && ModuleRegistry::isAvailable('booking') && ModuleRegistry::isAvailable('commerce'));
 
 // Módulo inexistente/no disponible nunca cuenta como activo, aunque se fuerce el flag.
@@ -62,27 +64,27 @@ Database::execute(
 check_mod('módulo inexistente no se considera activo aunque el flag esté a 1', !ModuleRegistry::isEnabled($siteId, 'no_such_module'));
 Database::execute('DELETE FROM settings WHERE site_id = ? AND setting_key = ?', [$siteId, 'module_no_such_module_enabled']);
 
-// Activar / desactivar hello.
-ModuleRegistry::setEnabled($siteId, 'hello', false);
-check_mod('hello arranca desactivado', !ModuleRegistry::isEnabled($siteId, 'hello'));
+// Activar / desactivar booking.
+ModuleRegistry::setEnabled($siteId, 'booking', false);
+check_mod('booking arranca desactivado', !ModuleRegistry::isEnabled($siteId, 'booking'));
 
-ModuleRegistry::setEnabled($siteId, 'hello', true);
-check_mod('hello activado tras setEnabled(true)', ModuleRegistry::isEnabled($siteId, 'hello'));
+ModuleRegistry::setEnabled($siteId, 'booking', true);
+check_mod('booking activado tras setEnabled(true)', ModuleRegistry::isEnabled($siteId, 'booking'));
 
-ModuleRegistry::setEnabled($siteId, 'hello', false);
-check_mod('hello desactivado tras setEnabled(false)', !ModuleRegistry::isEnabled($siteId, 'hello'));
+ModuleRegistry::setEnabled($siteId, 'booking', false);
+check_mod('booking desactivado tras setEnabled(false)', !ModuleRegistry::isEnabled($siteId, 'booking'));
 
 // statusFor refleja todos los módulos del catálogo.
 $status = ModuleRegistry::statusFor($siteId);
 $keys = array_column($status, 'key');
-check_mod('statusFor lista los 4 módulos del catálogo', count($status) === count(ModuleRegistry::MODULES));
-check_mod('statusFor incluye hello y commerce', in_array('hello', $keys, true) && in_array('commerce', $keys, true));
-$helloRow = null;
-foreach ($status as $row) { if ($row['key'] === 'hello') { $helloRow = $row; } }
-check_mod('statusFor marca hello available=true enabled=false', $helloRow !== null && $helloRow['available'] === true && $helloRow['enabled'] === false);
+check_mod('statusFor lista los módulos del catálogo', count($status) === count(ModuleRegistry::MODULES));
+check_mod('statusFor incluye booking y commerce', in_array('booking', $keys, true) && in_array('commerce', $keys, true));
+$bookingRow = null;
+foreach ($status as $row) { if ($row['key'] === 'booking') { $bookingRow = $row; } }
+check_mod('statusFor marca booking available=true enabled=false', $bookingRow !== null && $bookingRow['available'] === true && $bookingRow['enabled'] === false);
 
 // requireEnabled devuelve un callable (el guard de ruta).
-check_mod('requireEnabled devuelve callable', is_callable(ModuleRegistry::requireEnabled('hello')));
+check_mod('requireEnabled devuelve callable', is_callable(ModuleRegistry::requireEnabled('booking')));
 
 // Restaurar el flag original tal cual estaba.
 if ($original === null) {

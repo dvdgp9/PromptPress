@@ -15,15 +15,15 @@ if (is_array($currentVector)) {
 
 <div class="pp-page-header">
     <div>
-        <h2>Showcase de skin anchors</h2>
+        <h2><?= e(__('design_dev.anchors')) ?></h2>
         <p class="pp-page-intro" style="margin-top:4px;">
-            Los 8 puntos materializados que usa el composer para interpolar el skin de cada sitio.
+            <?= e(__('design_dev.anchors_help')) ?>
             <?php if ($nearestId): ?>
-                <strong>El skin actual de este sitio se interpola más cerca de <code><?= e($nearestId) ?></code>.</strong>
+                <?= __('design_dev.nearest.html', ['id' => '<code>' . e($nearestId) . '</code>']) ?>
             <?php endif; ?>
         </p>
     </div>
-    <a href="<?= e(base_url('admin/design')) ?>" class="pp-btn pp-btn--secondary">← Volver a Diseño</a>
+    <a href="<?= e(base_url('admin/design')) ?>" class="pp-btn pp-btn--secondary">← <?= e(__('design_dev.back_to_design')) ?></a>
 </div>
 
 <div class="pp-anchor-grid">
@@ -60,16 +60,16 @@ if (is_array($currentVector)) {
             </p>
         </header>
         <div class="pp-anchor-card__preview">
-            <p class="pp-anc-eyebrow">Estudio de marca</p>
-            <h4 class="pp-anc-heading">Diseñamos lo que tu marca necesita</h4>
-            <p class="pp-anc-sub">Subtítulo de ejemplo con un par de líneas para ver el cuerpo del texto.</p>
+            <p class="pp-anc-eyebrow"><?= e(__('design_dev.demo_eyebrow')) ?></p>
+            <h4 class="pp-anc-heading"><?= e(__('design_dev.demo_heading')) ?></h4>
+            <p class="pp-anc-sub"><?= e(__('design_dev.demo_sub')) ?></p>
             <div class="pp-anc-actions">
-                <button type="button" class="pp-anc-btn pp-anc-btn--primary">Acción principal</button>
-                <button type="button" class="pp-anc-btn pp-anc-btn--ghost">Saber más</button>
+                <button type="button" class="pp-anc-btn pp-anc-btn--primary"><?= e(__('design_dev.demo_cta1')) ?></button>
+                <button type="button" class="pp-anc-btn pp-anc-btn--ghost"><?= e(__('design_dev.demo_cta2')) ?></button>
             </div>
             <div class="pp-anc-card">
-                <p class="pp-anc-card__title">Beneficio destacado</p>
-                <p class="pp-anc-card__body">Tarjeta de ejemplo sobre el surface del anchor para ver el contraste.</p>
+                <p class="pp-anc-card__title"><?= e(__('design_dev.demo_card_title')) ?></p>
+                <p class="pp-anc-card__body"><?= e(__('design_dev.demo_card_body')) ?></p>
             </div>
             <div class="pp-anc-swatches">
                 <?php foreach (['primary','primary_dark','accent','bg','surface','text','text_muted','border'] as $k): ?>

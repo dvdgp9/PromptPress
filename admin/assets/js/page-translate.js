@@ -43,11 +43,11 @@
             title:  btn.getAttribute('data-pp-page-title'),
             button: btn
         };
-        titleEl.textContent = 'Traducir página';
-        body.innerHTML = 'Vamos a crear la versión en <strong>' + escapeHtml(pending.label) + '</strong> de '
-            + '«' + escapeHtml(pending.title) + '».<br><br>'
-            + 'Se guardará como <strong>borrador</strong> para que la revises antes de publicarla, y '
-            + '<strong>tu página actual no cambia</strong>.';
+        titleEl.textContent = pp.t('js.tr.title_one');
+        body.innerHTML = pp.t('js.tr.intro_one.html', {
+            idioma: '<strong>' + escapeHtml(pending.label) + '</strong>',
+            pagina: '«' + escapeHtml(pending.title) + '»'
+        });
         progress.hidden = true;
         actions.hidden = false;
         confirmBtn.disabled = false;
@@ -73,10 +73,10 @@
     /** Mensajes que van cambiando: una espera larga en silencio parece un cuelgue. */
     function startProgress() {
         var steps = [
-            'Traduciendo la página…',
-            'Adaptando los textos al idioma…',
-            'Revisando enlaces y estructura…',
-            'Casi está, un momento más…'
+            pp.t('js.tr.step1'),
+            pp.t('js.tr.step2'),
+            pp.t('js.tr.step3'),
+            pp.t('js.tr.step4')
         ];
         var i = 0;
         progressTxt.textContent = steps[0];
@@ -94,13 +94,13 @@
         confirmBtn.disabled = false;
 
         if (editUrl) {
-            confirmBtn.textContent = 'Abrir la traducción';
+            confirmBtn.textContent = pp.t('js.tr.open_translation');
             confirmBtn.onclick = function () { window.location.href = editUrl; };
-            cancelBtn.textContent = 'Cerrar';
+            cancelBtn.textContent = pp.t('js.common.close');
         } else {
             confirmBtn.textContent = isError ? 'Volver a intentarlo' : 'Cerrar';
             confirmBtn.onclick = isError ? run : close;
-            cancelBtn.textContent = 'Cerrar';
+            cancelBtn.textContent = pp.t('js.common.close');
         }
     }
 
@@ -110,8 +110,7 @@
         confirmBtn.onclick = null;
         actions.hidden = true;
         progress.hidden = false;
-        body.innerHTML = 'Estamos creando la versión en <strong>' + escapeHtml(pending.label) + '</strong>. '
-            + 'Puede tardar hasta un minuto: no cierres esta ventana.';
+        body.innerHTML = pp.t('js.tr.creating', { idioma: '<strong>' + escapeHtml(pending.label) + '</strong>' });
         startProgress();
 
         var form = new FormData();
@@ -128,7 +127,7 @@
         }).then(function (res) {
             var d = res.data || {};
             if (d.ok) {
-                finish('✅ ' + escapeHtml(d.message || 'Traducción creada.'), false, d.edit_url);
+                finish('✅ ' + escapeHtml(d.message || pp.t('js.tr.created')), false, d.edit_url);
                 if (pending && pending.button) {
                     pending.button.classList.remove('is-missing');
                     pending.button.classList.add('is-done');
@@ -136,11 +135,10 @@
                     pending.button.disabled = true;
                 }
             } else {
-                finish(escapeHtml(d.message || 'No hemos podido traducir esta página.'), true, d.edit_url || null);
+                finish(escapeHtml(d.message || pp.t('js.tr.failed_one')), true, d.edit_url || null);
             }
         }).catch(function () {
-            finish('No hemos podido conectar para traducir la página. No se ha guardado nada; '
-                 + 'comprueba tu conexión y vuelve a intentarlo.', true, null);
+            finish(pp.t('js.tr.no_connection'), true, null);
         });
     }
 
@@ -165,16 +163,14 @@
         progress.hidden = true;
         actions.hidden = false;
         confirmBtn.disabled = false;
-        titleEl.textContent = 'Traducir ' + job.missing + (job.missing === 1 ? ' página' : ' páginas');
-        confirmBtn.textContent = 'Traducir las ' + job.missing;
+        titleEl.textContent = pp.t(job.missing === 1 ? 'js.tr.title_bulk_one' : 'js.tr.title_bulk_other', { n: job.missing });
+        confirmBtn.textContent = pp.t('js.tr.translate_n', { n: job.missing });
         confirmBtn.onclick = startBulk;
-        cancelBtn.textContent = 'Cancelar';
-        body.innerHTML = 'Vamos a traducir <strong>' + job.missing + ' páginas</strong> a '
-            + '<strong>' + escapeHtml(job.label) + '</strong>.<br><br>'
-            + 'Cada una se guardará como <strong>borrador</strong> para que la revises, y '
-            + '<strong>tus páginas actuales no cambian</strong>.<br><br>'
-            + 'Tardará unos minutos. <strong>No cierres esta ventana</strong> mientras avanza: '
-            + 'si la cierras, se quedará donde iba (lo ya traducido no se pierde).';
+        cancelBtn.textContent = pp.t('js.common.cancel');
+        body.innerHTML = pp.t('js.tr.intro_bulk.html', {
+            n: '<strong>' + job.missing + '</strong>',
+            idioma: '<strong>' + escapeHtml(job.label) + '</strong>'
+        });
         overlay.hidden = false;
         confirmBtn.focus();
     }
@@ -188,12 +184,12 @@
             var icon = { done: '✅', failed: '⚠️', skipped: '↷', running: '⏳', pending: '·' }[item.status] || '·';
             li.textContent = icon + ' ' + item.title;
             if (item.status === 'failed' && item.error) li.title = item.error;
-            if (item.status === 'skipped') li.title = 'Ya tenía versión en este idioma: no la hemos tocado.';
+            if (item.status === 'skipped') li.title = pp.t('js.tr.skipped');
             jobList.appendChild(li);
         });
         var c = state.counts || {};
         var doneish = (c.done || 0) + (c.failed || 0) + (c.skipped || 0);
-        progressTxt.textContent = 'Traduciendo… ' + doneish + ' de ' + (state.total || 0);
+        progressTxt.textContent = pp.t('js.tr.progress', { hechas: doneish, total: state.total || 0 });
     }
 
     function finishBulk(state) {
@@ -203,15 +199,14 @@
         confirmBtn.disabled = false;
         var c = state.counts || {};
         var parts = [];
-        if (c.done)    parts.push('<strong>' + c.done + '</strong> traducidas');
-        if (c.skipped) parts.push(c.skipped + ' ya estaban');
-        if (c.failed)  parts.push(c.failed + ' no se han podido traducir');
-        body.innerHTML = 'Trabajo terminado: ' + parts.join(' · ') + '.<br><br>'
-            + 'Están todas guardadas como <strong>borrador</strong>: revísalas y publícalas cuando quieras.'
-            + (c.failed ? '<br><br>Las que han fallado puedes traducirlas de una en una desde su fila.' : '');
-        confirmBtn.textContent = 'Ver las páginas';
+        if (c.done)    parts.push(pp.t('js.tr.n_translated', { n: '<strong>' + c.done + '</strong>' }));
+        if (c.skipped) parts.push(pp.t('js.tr.n_already', { n: c.skipped }));
+        if (c.failed)  parts.push(pp.t('js.tr.n_failed', { n: c.failed }));
+        body.innerHTML = pp.t('js.tr.finished.html', { resumen: parts.join(' · ') })
+            + (c.failed ? '<br><br>' + pp.t('js.tr.retry_hint') : '');
+        confirmBtn.textContent = pp.t('js.tr.see_pages');
         confirmBtn.onclick = function () { window.location.reload(); };
-        cancelBtn.textContent = 'Cerrar';
+        cancelBtn.textContent = pp.t('js.common.close');
     }
 
     function stepBulk() {
@@ -230,8 +225,7 @@
             if (d.job.status === 'done') { finishBulk(d.job); return; }
             stepBulk();
         }).catch(function () {
-            finish('Se ha perdido la conexión a mitad del trabajo. Lo ya traducido está guardado; '
-                 + 'puedes volver a lanzarlo para continuar con el resto.', true, null);
+            finish(pp.t('js.tr.lost_connection'), true, null);
         });
     }
 
@@ -256,7 +250,7 @@
             renderJob(d.job);
             stepBulk();
         }).catch(function () {
-            finish('No hemos podido iniciar la traducción. No se ha creado nada.', true, null);
+            finish(pp.t('js.tr.cant_start'), true, null);
         });
     }
 

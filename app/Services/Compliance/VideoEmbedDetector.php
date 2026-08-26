@@ -107,6 +107,8 @@ final class VideoEmbedDetector
 
         $thumb = self::thumbnailUrl($url);
         $providerLabel = $provider === 'youtube' ? 'YouTube' : 'Vimeo';
+        // i18n-ignore-start: marcado del bloqueo de vídeo que ve el VISITANTE; su
+        // idioma es el del sitio (Microcopy). Gap preexistente.
         $alt = htmlspecialchars($altOrCaption !== '' ? $altOrCaption : 'Vídeo de ' . $providerLabel, ENT_QUOTES, 'UTF-8');
         $embedSafe = htmlspecialchars($embedUrl, ENT_QUOTES, 'UTF-8');
 

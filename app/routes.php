@@ -43,9 +43,12 @@ use App\Controllers\Public\BrandAssetController;
 $router->get('/design.css', function () {
     $site = \Core\Database::selectOne('SELECT id FROM sites ORDER BY id ASC LIMIT 1');
     $siteId = $site ? (int) $site['id'] : 0;
-    // ONB2 O2.6 — La hoja pública también tiene que llevar la paleta elegida.
-    $tokens = DesignSystem::applyCustomPaletteToTokens($siteId, DesignSystem::load($siteId));
-    $tokens = DesignSystem::applyCustomFontsToTokens($siteId, $tokens);
+    // DESIGN-MANDA T1 — Tokens efectivos: la MISMA cadena de precedencia que usa
+    // `renderHead()`. Antes esta hoja aplicaba paleta y fuentes pero se saltaba
+    // el skin, así que servía valores distintos de los del `<style>` en línea
+    // que la pisa. Invisible en la web (gana el inline), pero engañoso para
+    // cualquiera que mirase la hoja.
+    $tokens = DesignSystem::effective($siteId);
     $css = "/* PromptPress — design system tokens (site={$siteId}) */\n"
          . \App\Services\CustomFontService::renderFontFaceCss($siteId)
          . DesignSystem::renderCssVars($tokens, $siteId)
@@ -106,6 +109,7 @@ $router->get('/__demo', function () {
         . '<div class="container">'
         . '<span class="tag">Design system activo</span>'
         . '<h1>' . e($siteName) . '</h1>'
+        // i18n-ignore: página de demostración PÚBLICA del design system.
         . '<p class="lead">Esta página está usando los tokens del design system configurados en el panel. Cambia colores, fuentes o botones en <code>/admin/design</code> y recarga aquí para verlo.</p>'
         . '<a class="btn" href="' . $adminUrl . '">Ir al panel</a>'
         . '</div>'
@@ -194,7 +198,10 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/canvas/{id}/chat',     [CanvasController::class, 'chat']);
     $r->post('/canvas/{id}/cancel',   [CanvasController::class, 'cancel']); // CANCEL — parar una generación
     $r->post('/canvas/{id}/section',  [CanvasController::class, 'updateSection']); // FH4 edición directa
+    $r->post('/canvas/{id}/structure', [CanvasController::class, 'updateCanvasStructure']); // STUDIO-STRUCTURE S2
     $r->post('/canvas/{id}/insert-form', [CanvasController::class, 'insertForm']); // FORMS F5
+    $r->post('/canvas/{id}/insert-booking', [CanvasController::class, 'insertBooking']); // MODULOS M2
+    $r->post('/canvas/{id}/insert-resources', [CanvasController::class, 'insertResources']); // RESOURCES R6
     $r->get('/canvas/{id}/versions',  [CanvasController::class, 'versions']);
     $r->post('/canvas/{id}/restore',  [CanvasController::class, 'restore']);
     $r->post('/canvas/{id}/undo',     [CanvasController::class, 'undo']);
@@ -264,6 +271,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/formularios/{id}',         [FormsController::class, 'edit']);
     $r->post('/formularios/{id}',        [FormsController::class, 'update']);
     $r->post('/formularios/{id}/delete', [FormsController::class, 'destroy']);
+    $r->post('/formularios/{id}/translate', [FormsController::class, 'translate']);
 
     // Mensajes de formularios públicos
     $r->get('/forms',                              [FormSubmissionController::class, 'index']);
@@ -291,6 +299,11 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/design/fonts/file/delete',  [DesignController::class, 'deleteFontFile']);
     $r->post('/design/fonts/file/cut',     [DesignController::class, 'updateFontCut']);
     $r->post('/design/fonts/delete',       [DesignController::class, 'deleteFontFamily']);
+    // DESIGN-MANDA T10/T11 — Editor de paleta dentro de Diseño (antes solo
+    // existía en el paso 2 del onboarding).
+    $r->post('/design/brand-colors',        [DesignController::class, 'saveBrandColors']);
+    $r->post('/design/extract-logo-colors', [DesignController::class, 'extractLogoColors']);
+    $r->post('/design/generate-palette',    [DesignController::class, 'generatePalette']);
     $r->post('/design/reset', [DesignController::class, 'reset']);
     $r->post('/design/regenerate', [DesignController::class, 'regenerate']);
     // Solo dev: showcase de los 8 skin anchors curados.
@@ -342,6 +355,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/settings/reset-site', [SettingsController::class, 'resetSite']);
     $r->post('/settings/languages/add',    [SettingsController::class, 'addLanguage']);    // I18N-FULL T1.3
     $r->post('/settings/languages/remove', [SettingsController::class, 'removeLanguage']);
+    $r->post('/settings/panel-language',   [SettingsController::class, 'panelLanguage']); // ADMIN-I18N T0.4
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
     $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install

@@ -30,50 +30,95 @@ use Core\View;
 
 final class OnboardingController
 {
+    /** Etiquetas de la barra de progreso. Claves de traducción, no texto. */
     private const STEPS = [
-        1 => 'Negocio',
-        2 => 'Identidad',
-        3 => 'IA',
-        4 => 'Materiales',
-        5 => 'Arquitectura',
+        1 => 'onboarding.nav.business',
+        2 => 'onboarding.nav.identity',
+        3 => 'onboarding.nav.ai',
+        4 => 'onboarding.nav.materials',
+        5 => 'onboarding.nav.architecture',
     ];
 
     private const SWATCHES = ['#ea580c', '#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#db2777', '#d97706', '#0f172a'];
 
-    /** ONB2 O2.4 — Colores de marca que acepta el paso 2. */
-    public const BRAND_PALETTE_KEY = 'site_brand_palette';
-    public const BRAND_PALETTE_MAX = 5;
+    /**
+     * ONB2 O2.4 — Colores de marca que acepta el paso 2.
+     * DESIGN-MANDA T11 — Alias de las constantes del servicio, que es quien
+     * manda ahora. Se conservan porque la vista del paso 2 las referencia.
+     */
+    public const BRAND_PALETTE_KEY = BrandPaletteService::BRAND_COLORS_KEY;
+    public const BRAND_PALETTE_MAX = BrandPaletteService::BRAND_COLORS_MAX;
 
+    /**
+     * Parejas tipográficas. La clave y los nombres de familia son datos (viajan
+     * al design system); `label` es una CLAVE de traducción que se resuelve al
+     * pintar el desplegable — una constante se evalúa antes de saber el idioma.
+     */
     private const TYPOGRAPHY = [
-        'Inter / Inter' => ['heading' => 'Inter', 'body' => 'Inter', 'label' => 'Sobrio y digital'],
-        'Plus Jakarta Sans / Inter' => ['heading' => 'Plus Jakarta Sans', 'body' => 'Inter', 'label' => 'SaaS moderno'],
-        'Geist / Geist' => ['heading' => 'Geist', 'body' => 'Geist', 'label' => 'Producto premium'],
-        'Outfit / Inter' => ['heading' => 'Outfit', 'body' => 'Inter', 'label' => 'Directo y comercial'],
-        'Space Grotesk / DM Sans' => ['heading' => 'Space Grotesk', 'body' => 'DM Sans', 'label' => 'Editorial tecnológico'],
-        'Playfair Display / Source Sans 3' => ['heading' => 'Playfair Display', 'body' => 'Source Sans 3', 'label' => 'Elegante editorial'],
-        'Manrope / Manrope' => ['heading' => 'Manrope', 'body' => 'Manrope', 'label' => 'Moderno y técnico'],
-        'Space Grotesk / Inter' => ['heading' => 'Space Grotesk', 'body' => 'Inter', 'label' => 'Innovador y nítido'],
-        'DM Sans / DM Sans' => ['heading' => 'DM Sans', 'body' => 'DM Sans', 'label' => 'Cercano y claro'],
-        'Lora / Inter' => ['heading' => 'Lora', 'body' => 'Inter', 'label' => 'Sereno y editorial'],
-        'Fraunces / Inter' => ['heading' => 'Fraunces', 'body' => 'Inter', 'label' => 'Cálido y de autor'],
-        'Montserrat / Open Sans' => ['heading' => 'Montserrat', 'body' => 'Open Sans', 'label' => 'Corporativo amable'],
-        'IBM Plex Sans / IBM Plex Sans' => ['heading' => 'IBM Plex Sans', 'body' => 'IBM Plex Sans', 'label' => 'Funcional y profesional'],
+        'Inter / Inter' => ['heading' => 'Inter', 'body' => 'Inter', 'label' => 'typography.sober_digital'],
+        'Plus Jakarta Sans / Inter' => ['heading' => 'Plus Jakarta Sans', 'body' => 'Inter', 'label' => 'typography.modern_saas'],
+        'Geist / Geist' => ['heading' => 'Geist', 'body' => 'Geist', 'label' => 'typography.premium_product'],
+        'Outfit / Inter' => ['heading' => 'Outfit', 'body' => 'Inter', 'label' => 'typography.direct_commercial'],
+        'Space Grotesk / DM Sans' => ['heading' => 'Space Grotesk', 'body' => 'DM Sans', 'label' => 'typography.tech_editorial'],
+        'Playfair Display / Source Sans 3' => ['heading' => 'Playfair Display', 'body' => 'Source Sans 3', 'label' => 'typography.elegant_editorial'],
+        'Manrope / Manrope' => ['heading' => 'Manrope', 'body' => 'Manrope', 'label' => 'typography.modern_technical'],
+        'Space Grotesk / Inter' => ['heading' => 'Space Grotesk', 'body' => 'Inter', 'label' => 'typography.innovative_sharp'],
+        'DM Sans / DM Sans' => ['heading' => 'DM Sans', 'body' => 'DM Sans', 'label' => 'typography.close_clear'],
+        'Lora / Inter' => ['heading' => 'Lora', 'body' => 'Inter', 'label' => 'typography.serene_editorial'],
+        'Fraunces / Inter' => ['heading' => 'Fraunces', 'body' => 'Inter', 'label' => 'typography.warm_authorial'],
+        'Montserrat / Open Sans' => ['heading' => 'Montserrat', 'body' => 'Open Sans', 'label' => 'typography.friendly_corporate'],
+        'IBM Plex Sans / IBM Plex Sans' => ['heading' => 'IBM Plex Sans', 'body' => 'IBM Plex Sans', 'label' => 'typography.functional_professional'],
     ];
 
+    /** `badge` y `summary` son claves de traducción; el resto son IDs de modelo. */
     private const AI_MODELS = [
-        'google/gemini-3-flash-preview' => [
-            'name' => 'Gemini 3 Flash',
-            'badge' => 'Recomendado',
-            'summary' => 'Equilibrio fuerte para crear páginas completas con buena velocidad y coste contenido.',
+        'google/gemini-3.7-flash' => [
+            'name' => 'Gemini 3.7 Flash',
+            'badge' => 'onboarding.model.recommended',
+            'summary' => 'onboarding.model.flash_summary',
             'model_light' => 'google/gemini-3.1-flash-lite',
         ],
         'google/gemini-3.5-flash' => [
             'name' => 'Gemini 3.5 Flash',
-            'badge' => 'Más calidad',
-            'summary' => 'Más capaz para páginas largas y contenido donde importa más la calidad final.',
+            'badge' => 'onboarding.model.more_quality',
+            'summary' => 'onboarding.model.quality_summary',
             'model_light' => 'google/gemini-3.1-flash-lite',
         ],
     ];
+
+    /**
+     * Parejas tipográficas con la etiqueta ya traducida. Solo para pintar: el
+     * resto del controlador sigue leyendo `self::TYPOGRAPHY`, donde `label` es
+     * la clave y no el texto.
+     *
+     * @return array<string,array<string,string>>
+     */
+    private static function typographyForView(): array
+    {
+        $out = [];
+        foreach (self::TYPOGRAPHY as $pair => $cfg) {
+            $cfg['label'] = __($cfg['label']);
+            $out[$pair] = $cfg;
+        }
+        return $out;
+    }
+
+    /**
+     * Modelos de IA con `badge` y `summary` traducidos. El ID del modelo y su
+     * `name` comercial nunca se tocan.
+     *
+     * @return array<string,array<string,string>>
+     */
+    private static function aiModelsForView(): array
+    {
+        $out = [];
+        foreach (self::AI_MODELS as $id => $cfg) {
+            $cfg['badge']   = __($cfg['badge']);
+            $cfg['summary'] = __($cfg['summary']);
+            $out[$id] = $cfg;
+        }
+        return $out;
+    }
 
     public function index(): void
     {
@@ -85,9 +130,9 @@ final class OnboardingController
         View::send('admin/onboarding/index', [
             'site' => self::site($siteId),
             'csrf' => CSRF::token(),
-            'steps' => self::STEPS,
+            'steps' => array_map(fn(string $key): string => __($key), self::STEPS),
             'step' => $step,
-            'memoryFields' => MemoryController::FIELDS,
+            'memoryFields' => MemoryController::fieldsForView(),
             'memoryValues' => MemoryController::loadValues($siteId),
             'designValues' => $designValues,
             // ONB2 O2.5 — El paso ya no ofrece el catálogo de presets: enseña la
@@ -96,9 +141,9 @@ final class OnboardingController
             'brandValues' => self::loadBrandValues($siteId),
             'referenceValues' => self::loadReferenceValues($siteId),
             'aiValues' => self::loadAiValues($siteId),
-            'aiModels' => self::AI_MODELS,
+            'aiModels' => self::aiModelsForView(),
             'swatches' => self::SWATCHES,
-            'typographyOptions' => self::TYPOGRAPHY,
+            'typographyOptions' => self::typographyForView(),
             'document' => self::latestDocument($siteId),
             'documents' => self::latestDocuments($siteId),
             // ONB-FOTOS — fotos propias ya subidas + tope, para el paso 4.
@@ -149,7 +194,7 @@ final class OnboardingController
         $step = max(1, min(5, (int) Request::post('step', 1)));
         if ($step >= 5) {
             self::complete($siteId, false);
-            Session::flash('success', 'Listo. Entramos al mapa vacío.');
+            Session::flash('success', __('onboarding.flash.empty_map'));
             Response::redirect(base_url('admin/pages'));
         }
         $next = $step + 1;
@@ -182,7 +227,7 @@ final class OnboardingController
                 $docs[] = self::saveExtractedDocument($siteId, $file);
             }
             if ($docs === []) {
-                Response::json(['ok' => false, 'error' => 'No se ha podido leer ningún documento válido.'], 422);
+                Response::json(['ok' => false, 'error' => __('onboarding.error.no_readable_doc')], 422);
             }
 
             $result = AIActionRunner::run(Actions::EXTRACT_BUSINESS_PROFILE, [
@@ -207,7 +252,7 @@ final class OnboardingController
         } catch (\Throwable $e) {
             Response::json([
                 'ok' => false,
-                'error' => 'No hemos podido leer los documentos: ' . $e->getMessage()
+                'error' => __('onb.err.documents', ['detalle' => $e->getMessage()])
                     . ' @ ' . basename($e->getFile()) . ':' . $e->getLine(),
             ], 422);
         }
@@ -221,7 +266,7 @@ final class OnboardingController
         $saved = self::saveReferenceImages($siteId, $reason);
         $refs = self::loadReferenceValues($siteId);
         if ($saved <= 0 && ($refs['count'] ?? 0) <= 0) {
-            $message = $reason ?: 'No se pudo guardar ninguna referencia. Usa PNG, JPG o WebP de hasta 8 MB.';
+            $message = $reason ?: __('onb.err.references');
             Response::json(['ok' => false, 'error' => $message], 422);
         }
         Response::json([
@@ -258,8 +303,7 @@ final class OnboardingController
         if ($existing >= self::BUSINESS_PHOTOS_MAX) {
             Response::json([
                 'ok' => false,
-                'error' => 'Ya tienes ' . self::BUSINESS_PHOTOS_MAX . ' fotos, suficientes para toda la web. '
-                    . 'Podrás añadir más desde Medios cuando termines.',
+                'error' => __('onboarding.error.photos_full', ['max' => self::BUSINESS_PHOTOS_MAX]),
             ], 422);
         }
 
@@ -412,29 +456,17 @@ final class OnboardingController
         CSRF::check();
         $siteId = self::requireSiteId();
 
-        $paths = [];
-        foreach (['site_logo_path', 'site_logo_dark_path'] as $key) {
-            $rel = trim(self::loadSetting($siteId, $key));
-            if ($rel !== '') $paths[] = PP_ROOT . '/' . ltrim($rel, '/');
-        }
-        if ($paths === []) {
-            Response::json(['ok' => false, 'error' => 'Sube antes el logo y volvemos a intentarlo.'], 422);
-        }
-
-        $colors = [];
-        foreach ($paths as $path) {
-            foreach (BrandColorExtractor::fromFile($path) as $hex) {
-                if (!in_array($hex, $colors, true)) $colors[] = $hex;
-            }
-        }
+        // DESIGN-MANDA T11 — La lógica vive en BrandPaletteService; este
+        // endpoint y el de Diseño llaman a lo mismo.
+        $colors = BrandPaletteService::extractFromLogos($siteId);
         if ($colors === []) {
             Response::json([
                 'ok' => false,
-                'error' => 'No hemos sacado ningún color del logo. Añádelos a mano si tienes tu manual de marca.',
+                'error' => __('onboarding.error.no_logo_colors'),
             ], 422);
         }
 
-        Response::json(['ok' => true, 'colors' => array_slice($colors, 0, self::BRAND_PALETTE_MAX)]);
+        Response::json(['ok' => true, 'colors' => $colors]);
     }
 
     /**
@@ -452,85 +484,34 @@ final class OnboardingController
         CSRF::check();
         $siteId = self::requireSiteId();
 
-        $brand = [];
         $posted = Request::post('brand_palette', []);
-        if (is_array($posted)) {
-            foreach ($posted as $value) {
-                $hex = self::color((string) $value, '');
-                if ($hex !== '' && !in_array($hex, $brand, true)) $brand[] = $hex;
-            }
-        }
-        $brand = array_slice($brand, 0, self::BRAND_PALETTE_MAX);
+        $brand = BrandPaletteService::cleanHexList(is_array($posted) ? $posted : []);
         if ($brand === []) {
             // Sin colores de marca declarados seguimos teniendo el principal.
-            $primary = self::color((string) Request::post('primary_color_hex', ''), '');
-            if ($primary !== '') $brand[] = $primary;
+            $brand = BrandPaletteService::cleanHexList([Request::post('primary_color_hex', '')]);
         }
         if ($brand === []) {
-            Response::json(['ok' => false, 'error' => 'Añade al menos un color de marca (o extráelo del logo).'], 422);
+            Response::json(['ok' => false, 'error' => __('onboarding.error.need_brand_color')], 422);
         }
 
-        $proposals = [];
-        $model = '';
-        $error = '';
-        try {
-            $result = AIActionRunner::run(Actions::GENERATE_SITE_PALETTE, [
-                'brand_colors' => implode(', ', $brand),
-                'business_context' => self::businessContext($siteId),
-                'language' => LanguageService::promptLabelFor($siteId),
-                'design_language' => self::paletteStyleHint($siteId),
-            ], $siteId);
-            $model = (string) ($result['model'] ?? '');
-            $proposals = self::normalizePaletteProposals((array) ($result['data'] ?? []));
-        } catch (AIException $e) {
-            $error = $e->getMessage();
-        } catch (\Throwable $e) {
-            $error = $e->getMessage();
-        }
-
-        $fallback = false;
-        if ($proposals === []) {
-            $proposals = BrandPaletteService::fallbackProposals($brand);
-            $fallback = true;
-        }
-        if ($proposals === []) {
-            Response::json(['ok' => false, 'error' => $error ?: 'No hemos podido preparar paletas ahora mismo.'], 502);
+        // DESIGN-MANDA T11 — Generación, validación de contraste y caída a las
+        // recetas curadas: todo en BrandPaletteService, compartido con Diseño.
+        // Aquí solo se aporta la pista de estilo, que sí es propia del paso
+        // (sabe cuántas referencias visuales ha subido el usuario).
+        $result = BrandPaletteService::propose($siteId, $brand, self::paletteStyleHint($siteId));
+        if ($result['palettes'] === []) {
+            Response::json(['ok' => false, 'error' => $result['error'] ?: __('design.palette.error')], 502);
         }
 
         Response::json([
             'ok' => true,
-            'palettes' => $proposals,
-            'model' => $model,
-            'fallback' => $fallback,
-            'notice' => $fallback
-                ? 'La IA no ha respondido; te proponemos paletas de nuestro catálogo adaptadas a tu color.'
+            'palettes' => $result['palettes'],
+            'model' => $result['model'],
+            'fallback' => $result['fallback'],
+            'notice' => $result['fallback']
+                ? __('onboarding.palette.ai_fallback')
                 : '',
         ]);
-    }
-
-    /**
-     * @param array<string,mixed> $data respuesta cruda del modelo
-     * @return array<int,array<string,mixed>>
-     */
-    private static function normalizePaletteProposals(array $data): array
-    {
-        $list = $data['palettes'] ?? [];
-        if (!is_array($list)) return [];
-
-        $out = [];
-        foreach ($list as $item) {
-            if (!is_array($item)) continue;
-            $tokens = BrandPaletteService::enforceContrast((array) ($item['tokens'] ?? []));
-            if ($tokens === null) continue;   // irreparable: fuera
-            $out[] = [
-                'name' => mb_substr(trim((string) ($item['name'] ?? 'Paleta')), 0, 60) ?: 'Paleta',
-                'rationale' => mb_substr(trim((string) ($item['rationale'] ?? '')), 0, 240),
-                'tokens' => $tokens,
-                'source' => 'ai',
-            ];
-            if (count($out) >= 3) break;
-        }
-        return $out;
     }
 
     /**
@@ -549,24 +530,10 @@ final class OnboardingController
         $slug = trim(self::loadSetting($siteId, VisualStyleService::SETTING_KEY, ''));
         $style = $slug !== '' ? VisualStyleService::get($slug) : null;
         if (is_array($style)) {
+            // i18n-ignore: etiqueta del contexto que viaja al prompt.
             $parts[] = 'estilo visual del sitio: ' . (string) ($style['label'] ?? $slug);
         }
         return $parts === [] ? '(sin referencia)' : implode('; ', $parts);
-    }
-
-    /** Resumen corto del negocio para que la paleta no sea un ejercicio abstracto. */
-    private static function businessContext(int $siteId): string
-    {
-        $rows = Database::select(
-            'SELECT field_key, field_value FROM site_memory WHERE site_id = ? AND field_key IN (?, ?, ?)',
-            [$siteId, 'business_description', 'target_audience', 'tone_of_voice']
-        );
-        $parts = [];
-        foreach ($rows as $row) {
-            $value = trim((string) ($row['field_value'] ?? ''));
-            if ($value !== '') $parts[] = $row['field_key'] . ': ' . mb_substr($value, 0, 400);
-        }
-        return $parts === [] ? '(sin datos; usa un registro sobrio y profesional)' : implode("\n", $parts);
     }
 
     /**
@@ -614,7 +581,7 @@ final class OnboardingController
                 . ' @ ' . basename($e->getFile()) . ':' . $e->getLine());
             Response::json([
                 'ok'    => false,
-                'error' => 'No pudimos componer tu estilo: ' . $e->getMessage(),
+                'error' => __('onb.err.compose', ['detalle' => $e->getMessage()]),
                 'where' => basename($e->getFile()) . ':' . $e->getLine(),
             ], 500);
         }
@@ -714,6 +681,8 @@ final class OnboardingController
         return [];
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * FH6 — Garantiza que existe un borrador del Inicio canvas para el preview
      * del paso 5. Lo genera una sola vez (reutilizable en create-pages); con
@@ -763,6 +732,7 @@ final class OnboardingController
     }
 
     /** FH6 — HTML renderizado del Inicio canvas borrador, o '' si no hay. */
+    // i18n-ignore-end
     private static function resolveHomeCanvasPreview(int $siteId): string
     {
         $draft = json_decode(self::loadSetting($siteId, 'onboarding_home_draft', ''), true);
@@ -793,6 +763,8 @@ final class OnboardingController
         Database::execute('DELETE FROM pages WHERE id = ? AND status = "draft"', [$pageId]);
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * FH6 — Contexto anti-clonación de heros: si esta página NO es la home y
      * ya existe una home canvas en el sitio, pasamos su hero al prompt con la
@@ -823,12 +795,15 @@ final class OnboardingController
              . "Mismo lenguaje de marca (tokens, tipografías, aire), pero que al navegar se note que es OTRA página, no un clon de la portada.";
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * PANEL-CANVAS — Coherencia de sistema: lista breve de las páginas canvas
      * que ya existen en el sitio (título + tipo) para que una página nueva
      * mantenga el mismo lenguaje visual sin clonarlas. Ligero a propósito (no
      * vuelca HTML; el hero de la home ya lo aporta heroDifferentiationContext).
      */
+    // i18n-ignore-end
     private static function existingCanvasPagesContext(int $siteId): string
     {
         $rows = Database::select(
@@ -848,6 +823,7 @@ final class OnboardingController
     }
 
     /** FH6 — Nº de secciones canvas (data-pp-section) de un borrador. */
+    // i18n-ignore-end
     private static function canvasSectionCount(int $pageId): int
     {
         $canvas = \App\Services\Canvas\CanvasService::get($pageId);
@@ -922,6 +898,8 @@ final class OnboardingController
         }
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * ONB-REV T3 — Pide títulos de entradas de blog para el arranque SEO.
      * Devuelve sugerencias normalizadas {title, angle, audience}; [] si la
@@ -958,6 +936,7 @@ final class OnboardingController
     }
 
     /** F22 — Valida intent contra los slugs conocidos. */
+    // i18n-ignore-end
     private static function normalizeIntent(string $raw): string
     {
         $allowed = ['presence', 'services', 'seo', 'portfolio', 'product'];
@@ -965,6 +944,8 @@ final class OnboardingController
         return in_array($raw, $allowed, true) ? $raw : '';
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * F22.T22.2 — Devuelve la directiva concreta que se inyecta en el prompt
      * `ANALYZE_SITE_ARCHITECTURE`. Sesga el tipo, cantidad y prioridad de
@@ -1019,6 +1000,7 @@ final class OnboardingController
         };
     }
 
+    // i18n-ignore-end
     public function createPages(): void
     {
         @set_time_limit(300);
@@ -1029,7 +1011,7 @@ final class OnboardingController
         $complete = (bool) ($payload['complete'] ?? true);
         if (!empty($payload['finish_only'])) {
             self::complete($siteId, false);
-            Session::flash('success', '¡Listo! Hemos creado tus borradores. Revísalos y publica cuando quieras.');
+            Session::flash('success', __('onboarding.flash.drafts_created'));
             Response::json([
                 'ok' => true,
                 'created' => [],
@@ -1039,7 +1021,7 @@ final class OnboardingController
             ]);
         }
         if (!is_array($items) || $items === []) {
-            Response::json(['ok' => false, 'error' => 'Elige al menos una página.'], 422);
+            Response::json(['ok' => false, 'error' => __('onboarding.error.pick_a_page')], 422);
         }
 
         // D-Slice 1 (S1.8) — Trigger 2: justo antes de generar páginas,
@@ -1093,7 +1075,7 @@ final class OnboardingController
                 $created[] = self::createAiPage($siteId, $item);
             } catch (\Throwable $e) {
                 $failed[] = [
-                    'title' => (string) ($item['title'] ?? 'Página'),
+                    'title' => (string) ($item['title'] ?? Microcopy::site($siteId, 'page.untitled')),
                     'error' => $e->getMessage(),
                 ];
             }
@@ -1109,7 +1091,7 @@ final class OnboardingController
 
         if ($complete) {
             self::complete($siteId, false);
-            Session::flash('success', '¡Listo! Te hemos creado ' . count($created) . ' borradores. Revísalos y publica cuando quieras.');
+            Session::flash('success', __('onboarding.flash.drafts_created_n', ['n' => count($created)]));
         }
         Response::json([
             'ok' => true,
@@ -1137,7 +1119,7 @@ final class OnboardingController
         $post = is_array($payload['post'] ?? null) ? $payload['post'] : [];
         $title = mb_substr(trim((string) ($post['title'] ?? '')), 0, 160);
         if ($title === '') {
-            Response::json(['ok' => false, 'error' => 'Falta el título de la entrada.'], 422);
+            Response::json(['ok' => false, 'error' => __('onboarding.error.missing_post_title')], 422);
         }
 
         try {
@@ -1156,7 +1138,7 @@ final class OnboardingController
                 /* withFeaturedImage */ true
             );
             if (!$page) {
-                throw new \RuntimeException('La IA no devolvió un artículo válido.');
+                throw new \RuntimeException(__('onboarding.error.bad_article'));
             }
             Response::json([
                 'ok' => true,
@@ -1293,13 +1275,13 @@ final class OnboardingController
 
     private static function saveAI(int $siteId): void
     {
-        $mode = (string) Request::post('ai_model_choice', 'google/gemini-3-flash-preview');
+        $mode = (string) Request::post('ai_model_choice', 'google/gemini-3.7-flash');
         $advanced = $mode === 'advanced';
         $main = $advanced
             ? trim((string) Request::post('ai_model_advanced', ''))
             : $mode;
         if ($main === '' || mb_strlen($main) > 100) {
-            $main = 'google/gemini-3-flash-preview';
+            $main = 'google/gemini-3.7-flash';
         }
 
         $light = $advanced
@@ -1540,8 +1522,7 @@ final class OnboardingController
             && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
             $postMax = self::iniBytes((string) ini_get('post_max_size'));
             if ($postMax > 0 && (int) $_SERVER['CONTENT_LENGTH'] > $postMax) {
-                $reason = 'Las imágenes pesan demasiado en conjunto (límite del servidor: '
-                    . self::formatBytes($postMax) . '). Sube menos referencias o más ligeras.';
+                $reason = __('onboarding.error.refs_too_heavy', ['limite' => self::formatBytes($postMax)]);
                 return 0;
             }
         }
@@ -1566,9 +1547,10 @@ final class OnboardingController
             // El archivo superó upload_max_filesize (php.ini) o MAX_FILE_SIZE (form).
             if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
                 $iniMax = self::iniBytes((string) ini_get('upload_max_filesize'));
-                $reason = '«' . mb_substr((string) ($names[$i] ?? 'la imagen'), 0, 80)
-                    . '» supera el límite del servidor por archivo'
-                    . ($iniMax > 0 ? ' (' . self::formatBytes($iniMax) . ')' : '') . '.';
+                $reason = __('onboarding.error.ref_too_big', [
+                    'archivo' => mb_substr((string) ($names[$i] ?? ''), 0, 80),
+                    'limite'  => $iniMax > 0 ? ' (' . self::formatBytes($iniMax) . ')' : '',
+                ]);
                 error_log('[saveReferenceImages] UPLOAD_ERR_INI_SIZE site=' . $siteId
                     . ' file=' . ($names[$i] ?? '') . ' upload_max_filesize=' . ini_get('upload_max_filesize'));
                 continue;
@@ -1652,9 +1634,11 @@ final class OnboardingController
         return $bytes . ' B';
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     private static function createAiPage(int $siteId, array $item): array
     {
-        $title = mb_substr(trim((string) ($item['title'] ?? 'Nueva página')), 0, 160);
+        $title = mb_substr(trim((string) ($item['title'] ?? Microcopy::site($siteId, 'page.untitled'))), 0, 160);
         $type = (string) ($item['page_type'] ?? 'landing');
         if (!isset(PageController::PAGE_TYPES[$type])) $type = 'landing';
         $goal = trim((string) ($item['goal'] ?? $item['reason'] ?? 'Crear una página útil para este sitio.'));
@@ -1768,9 +1752,12 @@ final class OnboardingController
         return ['id' => $pageId, 'title' => $title, 'edit_url' => base_url('admin/pages/' . $pageId . '/edit')];
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * @param array<int,array{mime:string,data:string}> $referenceImages
      */
+    // i18n-ignore-end
     private static function createReferenceAiPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages): array
     {
         $sections = [];
@@ -1885,6 +1872,8 @@ final class OnboardingController
         ];
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * D-MB — Pide a la visión que describa la ESTRUCTURA real de la referencia
      * y la convierte en un plan de bloques (rol + objetivo por sección). Si la
@@ -1894,6 +1883,7 @@ final class OnboardingController
      * @param array<int,array{mime:string,data:string}> $referenceImages
      * @return array{design_language:string, plan:array<int,array{role:string,goal:string}>}
      */
+    // i18n-ignore-end
     private static function describeReferenceLayout(int $siteId, string $title, string $goal, string $context, array $referenceImages): array
     {
         if ($referenceImages === []) {
@@ -1978,6 +1968,7 @@ final class OnboardingController
      * (una foto a sangre sin foto no existe). Nunca lanza.
      * Evita repetir la misma foto en dos secciones de la misma página.
      */
+    // i18n-ignore-end
     private static function resolvePlanImages(int $siteId, array $plan): array
     {
         $available = ImageBankService::isAvailable();
@@ -2118,6 +2109,8 @@ final class OnboardingController
         }
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * Plan opinado por defecto cuando NO hay referencia (DESCRIBE da plan vacío):
      * ritmo de landing estándar (hero foto → datos → servicios → banda oscura →
@@ -2159,6 +2152,7 @@ final class OnboardingController
      *
      * @return array{id:int,title:string,edit_url:string,sections_count:int,template:string}
      */
+    // i18n-ignore-end
     public static function generateCanvasPageForPanel(int $siteId, string $title, string $type, string $goal, string $context, int $parentId = 0, array $options = []): array
     {
         ImageBankService::resetDiagnostics();
@@ -2170,11 +2164,13 @@ final class OnboardingController
         $item = ['reason' => $context !== '' ? $context : $goal];
         $result = self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages, $options);
         $result['image_warning'] = ImageBankService::lastSearchFailure() !== null
-            ? 'No se pudieron obtener algunas imágenes de Unsplash. La página se ha creado igualmente y puedes añadirlas más tarde desde el Studio.'
+            ? __('onboarding.warn.unsplash_partial')
             : null;
         return $result;
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages, array $options = []): array
     {
         $hasRefs = $referenceImages !== [];
@@ -2303,6 +2299,8 @@ final class OnboardingController
         ];
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * D-MB2 R3 — Compone la página completa en UNA llamada IA. Devuelve la
      * lista de secciones listas para insertar, o [] si la composición no es
@@ -2312,6 +2310,7 @@ final class OnboardingController
      * @param callable(int):array $blockInput input por-bloque para reintentos
      * @return array<int,array{type:string,variant:string,content:array}>
      */
+    // i18n-ignore-end
     private static function composeReferencePage(int $siteId, string $title, string $goal, string $context, string $designLanguage, array $plan, array $referenceImages, callable $blockInput): array
     {
         $outline = [];
@@ -2421,6 +2420,7 @@ final class OnboardingController
      *
      * @param array<int,array{type:string,variant:string,content:array}> $sections
      */
+    // i18n-ignore-end
     private static function lintSectionRhythm(array $sections): array
     {
         $themeOf = static function (array $section): string {
@@ -2527,6 +2527,8 @@ final class OnboardingController
         return $images;
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /** Texto de `available_images` para el prompt de un bloque. */
     private static function formatAvailableImages(array $images): string
     {
@@ -2541,7 +2543,10 @@ final class OnboardingController
         return implode("\n", $lines);
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /** Resumen legible del plan para dar a cada bloque visión del conjunto. */
+    // i18n-ignore-end
     private static function formatOutlineSummary(array $plan): string
     {
         $lines = [];
@@ -2553,7 +2558,10 @@ final class OnboardingController
         return implode("\n", $lines);
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /** @return array<int,array{role:string,goal:string}> */
+    // i18n-ignore-end
     private static function referenceCustomBlockPlan(string $pageType): array
     {
         $middle = match ($pageType) {
@@ -2588,6 +2596,9 @@ final class OnboardingController
         ];
     }
 
+    // i18n-ignore-end
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     private static function normalizeArchitecture(array $data, string $intent = '', int $siteId = 0): array
     {
         $missing = [];
@@ -2618,15 +2629,20 @@ final class OnboardingController
         ];
     }
 
+    // i18n-ignore-end
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     private static function fallbackArchitecture(string $intent = '', int $siteId = 0): array
     {
         return [
-            'summary' => 'No hemos podido analizar tu sitio en este momento. Puedes seguir con la propuesta básica o empezar desde el mapa vacío.',
+            'summary' => __('onboarding.arch.analyze_failed'),
             'health' => ['score' => 55, 'label' => 'Base preparada para empezar'],
             'missing_pages' => self::proposalPages([], $intent, $siteId),
         ];
     }
 
+    // i18n-ignore-start: lo que sigue es CARGA DE PROMPT (rol, objetivo,
+    // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     /**
      * F22.T22.2 — La propuesta base ahora depende del intent del usuario.
      * Sirve también como fallback cuando la IA falla.
@@ -2637,6 +2653,7 @@ final class OnboardingController
      * Los `goal`/`reason` siguen en castellano: son contexto para la IA y para
      * el panel, no texto público.
      */
+    // i18n-ignore-end
     private static function proposalPages(array $aiPages, string $intent = '', int $siteId = 0): array
     {
         $t = fn(string $key): string => $siteId > 0 ? Microcopy::site($siteId, $key) : Microcopy::t($key, LanguageService::DEFAULT);
@@ -2697,6 +2714,7 @@ final class OnboardingController
         return array_slice($out, 0, 10);
     }
 
+    // i18n-ignore-end
     private static function resolveParentIdForPage(int $siteId, array $item, string $type, string $title): int
     {
         $explicitId = (int) ($item['parent_id'] ?? 0);
@@ -2733,6 +2751,7 @@ final class OnboardingController
                 ?: self::findPageIdByTitle($siteId, 'Servicios');
             if ($services > 0) return $services;
         }
+        // i18n-ignore: son slugs/títulos que se COMPARAN, no texto que se pinte.
         if ($type === 'article' && !in_array($titleKey, ['blog', 'artículos', 'articulos', mb_strtolower($localBlog)], true)) {
             $blog = self::findPageIdBySlug($siteId, slugify($localBlog))
                 ?: self::findPageIdByTitle($siteId, $localBlog)
@@ -2884,7 +2903,7 @@ final class OnboardingController
     {
         $base = pathinfo($original, PATHINFO_FILENAME);
         $name = trim((string) preg_replace('/[-_](thin|extralight|ultralight|light|regular|book|medium|semibold|demibold|bold|extrabold|ultrabold|black|heavy|italic|oblique)+$/i', '', $base));
-        return $name !== '' ? $name : 'Tipografía de marca';
+        return $name !== '' ? $name : __('onboarding.type.brand_font');
     }
 
     /**
@@ -2894,17 +2913,9 @@ final class OnboardingController
      */
     private static function saveBrandPalette(int $siteId): void
     {
+        // DESIGN-MANDA T11 — Un solo escritor de `site_brand_palette`.
         $raw = Request::post('brand_palette', []);
-        if (!is_array($raw)) $raw = [];
-
-        $colors = [];
-        foreach ($raw as $value) {
-            $hex = self::color((string) $value, '');
-            if ($hex !== '' && !in_array($hex, $colors, true)) $colors[] = $hex;
-            if (count($colors) >= self::BRAND_PALETTE_MAX) break;
-        }
-
-        self::storeSetting($siteId, self::BRAND_PALETTE_KEY, json_encode($colors, JSON_UNESCAPED_SLASHES));
+        BrandPaletteService::saveBrandColors($siteId, is_array($raw) ? $raw : []);
     }
 
     /**
@@ -2945,16 +2956,7 @@ final class OnboardingController
     /** @return array<int,string> */
     public static function loadBrandPalette(int $siteId): array
     {
-        $raw = self::loadSetting($siteId, self::BRAND_PALETTE_KEY, '[]');
-        $list = json_decode($raw, true);
-        if (!is_array($list)) return [];
-
-        $colors = [];
-        foreach ($list as $value) {
-            $hex = self::color((string) $value, '');
-            if ($hex !== '' && !in_array($hex, $colors, true)) $colors[] = $hex;
-        }
-        return array_slice($colors, 0, self::BRAND_PALETTE_MAX);
+        return BrandPaletteService::brandColors($siteId);
     }
 
     private static function loadDesignValues(int $siteId): array
@@ -3090,9 +3092,9 @@ final class OnboardingController
         foreach ($rows as $row) {
             $map[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
         }
-        $main = $map['ai_model'] ?? 'google/gemini-3-flash-preview';
+        $main = $map['ai_model'] ?? 'google/gemini-3.7-flash';
         if ($main === '' || $main === 'google/gemini-3.1-flash-lite-preview' || $main === 'google/gemini-3.1-flash-lite') {
-            $main = 'google/gemini-3-flash-preview';
+            $main = 'google/gemini-3.7-flash';
         }
         $light = $map['ai_model_light'] ?? 'google/gemini-3.1-flash-lite';
         if ($light === 'google/gemini-3.1-flash-lite-preview') {
@@ -3100,7 +3102,7 @@ final class OnboardingController
         }
         return [
             'provider' => $map['ai_provider'] ?? 'openrouter',
-            'model' => $main !== '' ? $main : 'google/gemini-3-flash-preview',
+            'model' => $main !== '' ? $main : 'google/gemini-3.7-flash',
             'model_light' => $light,
             'is_recommended' => isset(self::AI_MODELS[$main]),
         ];

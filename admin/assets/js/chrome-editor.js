@@ -86,9 +86,9 @@
             return r.json().catch(function () { return {}; });
         }).then(function (data) {
             setDirty(false);
-            showToast((data && data.message) || 'Header y pie actualizados.', 'success');
+            showToast((data && data.message) || pp.t('js.chrome.saved'), 'success');
         }).catch(function () {
-            showToast('No se pudieron guardar los cambios. Inténtalo de nuevo.', 'error');
+            showToast(pp.t('js.chrome.save_failed'), 'error');
         }).then(function () { if (saveBtn) saveBtn.disabled = false; });
     }
 
@@ -152,37 +152,37 @@
         var fields;
 
         if (type === 'dropdown') {
-            var dlabel = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: 'Nombre del submenú', maxlength: '120' });
+            var dlabel = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: pp.t('js.chrome.submenu_name'), maxlength: '120' });
             dlabel.value = item.label || '';
             var childList = el('div', { class: 'pp-chrome-childlist' });
             (item.children || []).forEach(function (c) {
                 if (c && (c.type === 'page' || c.type === 'link')) childList.appendChild(itemRow(c, childList, false));
             });
-            var addPage = el('button', { type: 'button', class: 'pp-btn pp-btn--secondary pp-btn--sm', html: '+ Página' });
-            var addLink = el('button', { type: 'button', class: 'pp-btn pp-btn--secondary pp-btn--sm', html: '+ Enlace' });
+            var addPage = el('button', { type: 'button', class: 'pp-btn pp-btn--secondary pp-btn--sm', html: '+ ' + pp.t('js.onb.page') });
+            var addLink = el('button', { type: 'button', class: 'pp-btn pp-btn--secondary pp-btn--sm', html: '+ ' + pp.t('js.chrome.link') });
             addPage.addEventListener('click', function () { childList.appendChild(itemRow({ type: 'page' }, childList, false)); preview(); });
             addLink.addEventListener('click', function () { childList.appendChild(itemRow({ type: 'link' }, childList, false)); preview(); });
             fields = el('div', { class: 'pp-chrome-row__fields pp-chrome-row__fields--col' }, [
-                el('div', { class: 'pp-chrome-row__line' }, [el('span', { class: 'pp-chrome-row__tag', html: 'Submenú' }), dlabel]),
+                el('div', { class: 'pp-chrome-row__line' }, [el('span', { class: 'pp-chrome-row__tag', html: pp.t('js.chrome.submenu') }), dlabel]),
                 childList,
                 el('div', { class: 'pp-chrome-addrow' }, [addPage, addLink])
             ]);
         } else if (type === 'link') {
-            var lbl = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: 'Texto', maxlength: '120' });
+            var lbl = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: pp.t('js.chrome.text'), maxlength: '120' });
             lbl.value = item.label || '';
-            var url = el('input', { type: 'text', class: 'pp-chrome-f-url', placeholder: 'https://… o /pagina', maxlength: '300' });
+            var url = el('input', { type: 'text', class: 'pp-chrome-f-url', placeholder: pp.t('js.chrome.url_placeholder'), maxlength: '300' });
             url.value = item.url || '';
             var tgt = el('input', { type: 'checkbox', class: 'pp-chrome-f-blank' });
             tgt.checked = item.target === '_blank';
-            var tgtL = el('label', { class: 'pp-chrome-row__chk' }, [tgt, document.createTextNode(' nueva pestaña')]);
-            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: 'Enlace' }), lbl, url, tgtL]);
+            var tgtL = el('label', { class: 'pp-chrome-row__chk' }, [tgt, document.createTextNode(' ' + pp.t('js.chrome.new_tab'))]);
+            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: pp.t('js.chrome.link') }), lbl, url, tgtL]);
         } else {
-            var label = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: 'Texto (opcional)', maxlength: '120' });
+            var label = el('input', { type: 'text', class: 'pp-chrome-f-label', placeholder: pp.t('js.chrome.text_optional'), maxlength: '120' });
             label.value = item.label || '';
             var pageTgt = el('input', { type: 'checkbox', class: 'pp-chrome-f-blank' });
             pageTgt.checked = item.target === '_blank';
-            var pageTgtL = el('label', { class: 'pp-chrome-row__chk' }, [pageTgt, document.createTextNode(' nueva pestaña')]);
-            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: 'Página' }), pageSelect(item.page_id), label, pageTgtL]);
+            var pageTgtL = el('label', { class: 'pp-chrome-row__chk' }, [pageTgt, document.createTextNode(' ' + pp.t('js.chrome.new_tab'))]);
+            fields = el('div', { class: 'pp-chrome-row__fields' }, [el('span', { class: 'pp-chrome-row__tag', html: pp.t('js.onb.page') }), pageSelect(item.page_id), label, pageTgtL]);
         }
 
         row.appendChild(fields);
@@ -240,7 +240,7 @@
             sel.appendChild(o);
         });
         var other = el('option', { value: '__other__' });
-        other.textContent = 'Otro…';
+        other.textContent = pp.t('js.chrome.other');
         if (item.network && !known) other.selected = true;
         sel.appendChild(other);
 
@@ -413,7 +413,7 @@
                 }
                 node.value = dig(layer, path) || '';
                 var base = dig(cfg, path);
-                node.placeholder = base ? base : 'Se usará el texto en ' + primaryLabel();
+                node.placeholder = base ? base : pp.t('js.chrome.will_use_primary', { idioma: primaryLabel() });
             }
         });
 
@@ -438,9 +438,10 @@
                 langHint.hidden = true;
             } else {
                 langHint.hidden = false;
-                langHint.innerHTML = 'Estás editando los textos en <strong>' + langLabel(lang) + '</strong>. '
-                    + 'Lo que dejes en blanco usará el texto en ' + primaryLabel() + '. '
-                    + 'El diseño y los datos de contacto están bloqueados porque son iguales en todos los idiomas.';
+                langHint.innerHTML = pp.t('js.chrome.lang_hint.html', {
+                        idioma: '<strong>' + langLabel(lang) + '</strong>',
+                        principal: primaryLabel()
+                    });
             }
         }
         preview();
@@ -456,7 +457,7 @@
         langBar.addEventListener('click', function (ev) {
             var tab = ev.target.closest ? ev.target.closest('[data-lang]') : null;
             if (!tab) return;
-            if (dirty && !window.confirm('Tienes cambios sin guardar. Si cambias de idioma se perderán. ¿Seguir?')) {
+            if (dirty && !window.confirm(pp.t('js.chrome.unsaved_changes'))) {
                 return;
             }
             Array.prototype.forEach.call(langBar.querySelectorAll('[data-lang]'), function (b) {

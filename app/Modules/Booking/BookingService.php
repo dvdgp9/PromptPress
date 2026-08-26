@@ -37,7 +37,10 @@ final class BookingService
         $serviceId = (int) ($input['service_id'] ?? 0);
         $start     = trim((string) ($input['start'] ?? ''));
 
-        // --- Validación de datos del cliente (campos fijos v1) --------------
+        // --- Validación de datos del cliente ---------------------------------
+        // Nombre y email son fijos (sin email no hay confirmación ni enlace de
+        // cancelación); el resto sale de la definición del servicio y se valida
+        // más abajo, cuando ya se ha cargado.
         $fields = [];
         $name  = mb_substr(trim((string) ($input['name'] ?? '')), 0, 120);
         $email = mb_substr(trim((string) ($input['email'] ?? '')), 0, 190);
@@ -66,6 +69,18 @@ final class BookingService
         }
         $timezone = self::siteTimezone($siteId);
         $now = $nowUtc ?? new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        // --- Campos configurables del servicio (MODULOS M8) ------------------
+        // La comprobación que cuenta es esta, no la del navegador: el widget
+        // puede pintar lo que quiera, pero aquí se valida contra lo GUARDADO.
+        $lang  = self::bookingLanguage($siteId, $service, $input['lang'] ?? null);
+        $extra = BookingFields::validate($service, $input, $lang);
+        if ($extra['errors'] !== []) {
+            return ['ok' => false, 'error' => 'validation', 'fields' => $extra['errors']];
+        }
+        $extraJson = $extra['values'] !== []
+            ? json_encode(array_values($extra['values']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : null;
 
         // --- Rate limit por IP (mismo patrón que formularios) ---------------
         if ($ipHash !== null && self::isRateLimited($siteId, $ipHash)) {
@@ -117,18 +132,21 @@ final class BookingService
             $ins = $pdo->prepare(
                 'INSERT INTO booking_bookings
                     (site_id, service_id, starts_at_utc, ends_at_utc, status, language,
-                     customer_name, customer_email, customer_phone, notes,
+                     customer_name, customer_email, customer_phone, notes, extra_json,
                      cancel_token, ip_hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $ins->execute([
                 // Idioma con el que el cliente reservó: manda en sus emails y en
-                // su página de cancelación. Sale del SERVICIO, porque en una web
-                // multi-idioma cada idioma tiene el suyo y el visitante reservó
-                // desde la página de ese idioma.
+                // su página de cancelación. Si la reserva viene de una página de
+                // PromptPress, esa página dice en qué idioma se estaba leyendo y
+                // ese manda — quien reserva en francés espera que le escriban en
+                // francés. Si no llega (webs ajenas), el idioma del SERVICIO,
+                // porque en una web multi-idioma cada idioma tiene el suyo.
                 $siteId, $serviceId, $slot['start_utc'], $slot['end_utc'], $status,
-                self::serviceLanguage($siteId, $service),
+                $lang,
                 $name, $email, $phone !== '' ? $phone : null, $notes !== '' ? $notes : null,
+                $extraJson,
                 $token, $ipHash,
             ]);
             $id = (int) $pdo->lastInsertId();
@@ -145,7 +163,10 @@ final class BookingService
             'booking' => [
                 'id'           => $id,
                 'status'       => $status,
-                'language'     => self::serviceLanguage($siteId, $service),
+                // El MISMO idioma que se acaba de guardar en la fila: si aquí se
+                // recalculaba desde el servicio, el mensaje de "reserva recibida"
+                // volvía en castellano en una página francesa.
+                'language'     => $lang,
                 'service'      => (string) $service['name'],
                 'start'        => self::toLocalIso($slot['start_utc'], $timezone),
                 'end'          => self::toLocalIso($slot['end_utc'], $timezone),
@@ -192,6 +213,21 @@ final class BookingService
     {
         $lang = trim((string) ($service['language'] ?? ''));
         return $lang !== '' ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
+    }
+
+    /**
+     * Idioma que se guarda con la reserva: el que pide la página donde reservó
+     * el cliente si es válido, y si no el del servicio.
+     *
+     * @param array<string,mixed> $service
+     */
+    public static function bookingLanguage(int $siteId, array $service, mixed $asked = null): string
+    {
+        $asked = strtolower(trim((string) $asked));
+        if ($asked !== '' && LanguageService::isSupported($asked)) {
+            return LanguageService::normalize($asked);
+        }
+        return self::serviceLanguage($siteId, $service);
     }
 
     public static function siteTimezone(int $siteId): string

@@ -12,6 +12,30 @@ if (!function_exists('e')) {
     }
 }
 
+if (!function_exists('__')) {
+    /**
+     * ADMIN-I18N — Texto del panel en el idioma del gestor.
+     *
+     * Devuelve el texto SIN escapar, como cualquier otra variable de la vista:
+     *
+     *     <?= e(__('common.save')) ?>
+     *     <?= e(__('pages.count', ['n' => 12])) ?>
+     *
+     * Las claves acabadas en `.html` llevan marcado a propósito y se pintan sin
+     * `e()`. Cualquier otra que traiga etiquetas es un error, y el test
+     * `tests/admin_i18n.php` lo caza.
+     *
+     * Si la clave no existe devuelve la propia clave: se ve feo en pantalla —
+     * que es justo lo que se quiere— pero no rompe nada.
+     *
+     * @param array<string, string|int|float> $vars
+     */
+    function __(string $key, array $vars = []): string
+    {
+        return \App\Services\AdminI18n::t($key, $vars);
+    }
+}
+
 if (!function_exists('slugify')) {
     /**
      * Convierte un string a slug URL-friendly.
@@ -25,6 +49,7 @@ if (!function_exists('slugify')) {
      */
     function slugify(string $text): string
     {
+        // i18n-ignore-start: tabla de transliteración, no interfaz.
         static $map = [
             'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
             'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
@@ -40,6 +65,7 @@ if (!function_exists('slugify')) {
             'ð' => 'd', 'þ' => 'th', 'đ' => 'd',
             '€' => 'eur', '&' => '-y-', '@' => '-at-',
         ];
+        // i18n-ignore-end
 
         $text = trim($text);
         // Minúsculas antes de mapear: así el mapa solo lleva minúsculas y

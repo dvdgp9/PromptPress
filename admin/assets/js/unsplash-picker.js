@@ -37,13 +37,13 @@
             <div class="pp-unsplash-modal__panel" role="dialog" aria-modal="true" aria-labelledby="pp-unsplash-title">
                 <header class="pp-unsplash-modal__head">
                     <div>
-                        <span class="pp-unsplash-modal__eyebrow">Banco de imágenes</span>
+                        <span class="pp-unsplash-modal__eyebrow">' + pp.t('bank.title_js') + '</span>
                         <h3 id="pp-unsplash-title">Buscar en Unsplash</h3>
                     </div>
                     <button type="button" class="pp-unsplash-modal__close" data-close aria-label="Cerrar">×</button>
                 </header>
                 <form class="pp-unsplash-modal__form" data-search-form autocomplete="off">
-                    <input type="search" class="pp-unsplash-modal__input" data-query placeholder="Describe lo que buscas (ej. equipo trabajando, café, oficina moderna)" required minlength="2">
+                    <input type="search" class="pp-unsplash-modal__input" data-query placeholder="' + pp.t('js.up.search_placeholder') + '" required minlength="2">
                     <select class="pp-unsplash-modal__orient" data-orientation>
                         <option value="landscape">Horizontal</option>
                         <option value="portrait">Vertical</option>
@@ -53,7 +53,7 @@
                 </form>
                 <div class="pp-unsplash-modal__status" data-status aria-live="polite"></div>
                 <ul class="pp-unsplash-modal__grid" data-results></ul>
-                <p class="pp-unsplash-modal__hint">Las imágenes se descargan a tu sitio con atribución al fotógrafo, conforme a los términos de Unsplash.</p>
+                <p class="pp-unsplash-modal__hint">' + pp.t('js.up.attribution_hint') + '</p>
             </div>
         `;
         document.body.appendChild(modal);
@@ -121,12 +121,12 @@
             .then(r => r.json())
             .then(data => {
                 if (!data.ok) {
-                    status.textContent = data.error || 'Error en la búsqueda.';
+                    status.textContent = data.error || pp.t('js.bank.search_error');
                     status.className = 'pp-unsplash-modal__status is-error';
                     return;
                 }
                 if (!data.items || !data.items.length) {
-                    status.textContent = 'Sin resultados para "' + q + '". Prueba con otros términos.';
+                    status.textContent = pp.t('js.bank.no_results', { q: q });
                     status.className = 'pp-unsplash-modal__status';
                     return;
                 }
@@ -135,7 +135,7 @@
                 renderResults(data.items);
             })
             .catch(err => {
-                status.textContent = 'Error de conexión: ' + err.message;
+                status.textContent = pp.t('js.bank.connection_error', { error: err.message });
                 status.className = 'pp-unsplash-modal__status is-error';
             });
     }
@@ -150,7 +150,7 @@
                 + '<figure class="pp-unsplash-item__figure">'
                 + '<img loading="lazy" src="' + escAttr(item.preview) + '" alt="' + escAttr(item.alt || item.description) + '">'
                 + '<figcaption>'
-                +   '<span class="pp-unsplash-item__author">por <a href="' + escAttr(item.profile_url || '') + '?utm_source=promptpress&utm_medium=referral" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + escHtml(item.photographer || 'fotógrafo') + '</a></span>'
+                +   '<span class="pp-unsplash-item__author">' + pp.t('js.bank.by') + ' <a href="' + escAttr(item.profile_url || '') + '?utm_source=promptpress&utm_medium=referral" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + escHtml(item.photographer || 'fotógrafo') + '</a></span>'
                 +   '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-import="' + escAttr(item.id) + '" data-alt="' + escAttr(item.alt || item.description || '') + '">Usar esta</button>'
                 + '</figcaption>'
                 + '</figure>';
@@ -162,7 +162,7 @@
         const id = btn.getAttribute('data-import');
         const alt = btn.getAttribute('data-alt') || '';
         const csrf = getCsrf();
-        if (!csrf) { alert('Falta CSRF token. Recarga la página.'); return; }
+        if (!csrf) { alert(pp.t('js.up.csrf_missing')); return; }
 
         btn.disabled = true;
         btn.textContent = 'Importando…';

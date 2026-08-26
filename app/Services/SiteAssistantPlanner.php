@@ -13,10 +13,9 @@ use Core\Database;
  * FEAT-5 F5-T2 — Planificador del asistente central.
  *
  * Convierte una petición en texto libre (y/o el texto de un documento adjunto)
- * en un plan de cambios por página, clasificado:
- *   - aplicar   → ejecutable por el pipeline de edición canvas (F5-T4)
- *   - ambiguo   → falta información; reason contiene la pregunta a hacer
- *   - no_viable → fuera del alcance del editor de páginas; reason explica dónde/por qué
+ * en un plan operativo contrastado con AssistantCapabilityRegistry. El campo
+ * `category` explica la decisión; `status` se conserva como gate compatible con
+ * el job actual (solo `aplicar` llega al ejecutor Canvas).
  *
  * Este servicio SOLO planifica; no toca ninguna página.
  */
@@ -31,7 +30,7 @@ final class SiteAssistantPlanner
     /**
      * @return array{
      *   summary: string,
-     *   items: array<int,array{page_id:int,page_title:string,page_slug:string,section:string,instruction:string,status:string,reason:string}>,
+     *   items: array<int,array<string,mixed>>,
      *   model: string,
      *   estimated_cost: float|null,
      * }
@@ -47,14 +46,17 @@ final class SiteAssistantPlanner
             $docBlock = "\nDOCUMENTO ADJUNTO DEL USUARIO:\n---\n" . $doc . "\n---";
         }
 
+        $capabilities = AssistantCapabilityRegistry::forSite($siteId);
+
         $result = AIActionRunner::run(Actions::PLAN_SITE_CHANGES, [
             'request_text'   => $requestText,
             'site_map'       => self::renderSiteMap($pages),
+            'capability_map' => AssistantCapabilityRegistry::renderForPrompt($capabilities),
             'document_block' => $docBlock,
         ], $siteId);
 
         $data = (array) $result['data'];
-        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages);
+        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities);
 
         return [
             'summary'        => trim((string) ($data['summary'] ?? '')),
@@ -125,10 +127,12 @@ final class SiteAssistantPlanner
             }
         }
 
+        // i18n-ignore-start: mapa del sitio que viaja al prompt.
         $map = "PÁGINAS EDITABLES:\n" . ($editable !== [] ? implode("\n", $editable) : '(ninguna)');
         if ($rest !== []) {
             $map .= "\n\nPÁGINAS SIN EDITOR (no editables por el asistente):\n" . implode("\n", $rest);
         }
+        // i18n-ignore-end
         return $map;
     }
 
@@ -142,20 +146,29 @@ final class SiteAssistantPlanner
      *
      * @param array<int,mixed> $rawItems
      * @param array<int,array<string,mixed>> $pages
-     * @return array<int,array{page_id:int,page_title:string,page_slug:string,section:string,instruction:string,status:string,reason:string}>
+     * @param array<int,array<string,mixed>>|null $capabilities
+     * @return array<int,array<string,mixed>>
      */
-    private static function normalizeItems(array $rawItems, array $pages): array
+    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null): array
     {
+        $capabilities ??= AssistantCapabilityRegistry::catalogForState();
+        $capabilityMap = AssistantCapabilityRegistry::byId($capabilities);
         $items = [];
         foreach ($rawItems as $raw) {
             if (!is_array($raw)) {
                 continue;
             }
+            $categoryGiven = trim((string) ($raw['category'] ?? '')) !== '';
+            $capabilityId = trim((string) ($raw['capability_id'] ?? ''));
             $pageId      = (int) ($raw['page_id'] ?? 0);
             $section     = trim((string) ($raw['section'] ?? ''));
             $instruction = trim((string) ($raw['instruction'] ?? ''));
             $status      = strtolower(trim((string) ($raw['status'] ?? '')));
             $reason      = trim((string) ($raw['reason'] ?? ''));
+            $category    = strtolower(trim((string) ($raw['category'] ?? '')));
+            $evidence    = trim((string) ($raw['evidence'] ?? ''));
+            $nextAction  = trim((string) ($raw['next_action'] ?? ''));
+            $requiredInputs = self::normalizeStringList($raw['required_inputs'] ?? []);
 
             // Los modelos usan ocasionalmente sinónimos pese al vocabulario
             // cerrado del prompt. Normalizarlos evita convertir un "aplicable"
@@ -167,9 +180,41 @@ final class SiteAssistantPlanner
                 default => $status,
             };
 
-            if (!in_array($status, self::STATUSES, true)) {
-                $status = 'ambiguo';
-                $reason = $reason !== '' ? $reason : 'No he podido clasificar este cambio con seguridad.';
+            // Compatibilidad con planes antiguos que todavía no devolvían
+            // capability_id/category.
+            if ($capabilityId === '') {
+                $capabilityId = $pageId > 0 ? 'pages.canvas.edit' : 'custom.development';
+            }
+            if (!isset($capabilityMap[$capabilityId])) {
+                $capabilityId = 'custom.development';
+            }
+            $capability = $capabilityMap[$capabilityId]
+                ?? AssistantCapabilityRegistry::byId(AssistantCapabilityRegistry::catalogForState())['custom.development'];
+
+            if (!in_array($category, AssistantCapabilityRegistry::CATEGORIES, true)) {
+                $category = match ($status) {
+                    'aplicar' => 'automatable_now',
+                    'ambiguo' => 'needs_input',
+                    default => match ((string) $capability['mode']) {
+                        'manual' => 'manual_in_platform',
+                        'review' => 'sensitive_review',
+                        default => 'requires_development',
+                    },
+                };
+            }
+
+            // El registro manda sobre la afirmación del modelo.
+            $mode = (string) $capability['mode'];
+            if ($mode === 'manual' && $category !== 'needs_input') {
+                $category = 'manual_in_platform';
+            } elseif ($mode === 'review') {
+                $category = 'sensitive_review';
+            } elseif ($mode === 'none' || !(bool) $capability['platform_available']) {
+                $category = 'requires_development';
+                $capabilityId = 'custom.development';
+                $capability = $capabilityMap[$capabilityId] ?? $capability;
+            } elseif ($mode !== 'automatic' && $category === 'automatable_now') {
+                $category = 'manual_in_platform';
             }
 
             $page = $pages[$pageId] ?? null;
@@ -179,26 +224,52 @@ final class SiteAssistantPlanner
             // demuestra que el cambio es ejecutable. Es el caso observado en
             // producción: "Se puede aplicar directamente..." aparecía amarillo.
             if (
-                $status === 'ambiguo'
+                !$categoryGiven
+                && $category === 'needs_input'
                 && $page !== null
                 && $page['editable']
                 && $instruction !== ''
                 && !self::reasonRequiresClarification($reason)
             ) {
-                $status = 'aplicar';
+                $category = 'automatable_now';
             }
 
-            if ($status === 'aplicar') {
+            if ($category === 'automatable_now') {
                 if ($page === null) {
-                    $status = 'ambiguo';
-                    $reason = 'No he encontrado la página a la que se refiere este cambio. ¿En qué página va?';
+                    $category = 'needs_input';
+                    $reason = __('asst.plan.no_page');
                 } elseif (!$page['editable']) {
-                    $status = 'no_viable';
-                    $reason = 'La página «' . $page['title'] . '» no tiene editor canvas, así que no puedo modificarla desde aquí.';
+                    $category = 'manual_in_platform';
+                    $reason = __('asst.plan.not_canvas', ['pagina' => (string) $page['title']]);
                 } elseif ($instruction === '') {
-                    $status = 'ambiguo';
-                    $reason = 'El cambio no incluye una instrucción concreta. ¿Qué hay que hacer exactamente?';
+                    $category = 'needs_input';
+                    $reason = __('asst.plan.no_instruction');
                 }
+            }
+
+            $status = match ($category) {
+                'automatable_now' => 'aplicar',
+                'needs_input' => 'ambiguo',
+                default => 'no_viable',
+            };
+
+            if ($reason === '') {
+                $reason = match ($category) {
+                    'automatable_now' => 'Capacidad automática verificada para esta página.',
+                    'manual_in_platform' => 'La plataforma lo permite, pero el Assistant no tiene un ejecutor automático.',
+                    'needs_input' => 'Falta información necesaria para continuar con seguridad.',
+                    'sensitive_review' => 'Requiere validación humana especializada antes de aplicar cambios.',
+                    default => 'No existe una capacidad registrada para ejecutar esta funcionalidad.',
+                };
+            }
+            if ($nextAction === '') {
+                $nextAction = match ($category) {
+                    'automatable_now' => 'Revisar y confirmar el borrador propuesto.',
+                    'manual_in_platform' => 'Gestionarlo desde ' . (string) ($capability['admin_path'] ?: 'el panel correspondiente') . '.',
+                    'needs_input' => 'Aportar los datos indicados y volver a analizar.',
+                    'sensitive_review' => 'Validar el contenido con la persona responsable antes de implementarlo.',
+                    default => 'Definir y estimar una tarea de desarrollo.',
+                };
             }
 
             // Sección: solo si existe en la página; si no, cae a página completa.
@@ -214,20 +285,47 @@ final class SiteAssistantPlanner
                 'instruction' => $instruction,
                 'status'      => $status,
                 'reason'      => $reason,
+                'capability_id' => $capabilityId,
+                'category'      => $category,
+                'evidence'      => $evidence,
+                'next_action'   => $nextAction,
+                'required_inputs' => $requiredInputs,
+                'admin_path'    => (string) ($capability['admin_path'] ?? ''),
             ];
         }
         return $items;
+    }
+
+    /** @return string[] */
+    private static function normalizeStringList(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+        $out = [];
+        foreach ($value as $item) {
+            $item = trim((string) $item);
+            if ($item !== '' && !in_array($item, $out, true)) {
+                $out[] = mb_substr($item, 0, 300);
+            }
+            if (count($out) >= 12) {
+                break;
+            }
+        }
+        return $out;
     }
 
     /** Un ambiguo real debe explicar qué dato falta o formular una pregunta. */
     private static function reasonRequiresClarification(string $reason): bool
     {
         $reason = mb_strtolower(trim($reason));
+        // i18n-ignore: detecta signos de pregunta en lo que devuelve el modelo.
         if ($reason === '' || str_contains($reason, '?') || str_contains($reason, '¿')) {
             return true;
         }
         return preg_match(
-            '/\b(?:falta|faltan|necesit\w*|aclar\w*|especific\w*|indic\w* cu[aá]l|confirm\w*|elige\w*|no (?:se )?indica|sin informaci[oó]n)\b/u',
+            // i18n-ignore: patrón que lee castellano, no texto que se pinte.
+        '/\b(?:falta|faltan|necesit\w*|aclar\w*|especific\w*|indic\w* cu[aá]l|confirm\w*|elige\w*|no (?:se )?indica|sin informaci[oó]n)\b/u',
             $reason
         ) === 1;
     }

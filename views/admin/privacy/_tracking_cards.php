@@ -37,12 +37,12 @@ $hideCookiesSubmit  = $hideCookiesSubmit  ?? false;
             <div class="pp-tracking-card__info">
                 <div class="pp-tracking-card__title-row">
                     <h4><?= e($def['name']) ?></h4>
-                    <span class="pp-tracking-card__category">Categoría: <?= e($catLabel) ?></span>
+                    <span class="pp-tracking-card__category"><?= e(__('privacy.category')) ?>: <?= e($catLabel) ?></span>
                 </div>
                 <p class="pp-tracking-card__desc"><?= e($def['short_description']) ?></p>
                 <p class="pp-tracking-card__processor">
-                    Proveedor: <?= e($def['processor']) ?>
-                    <?php if ($def['transfer_outside_eea']): ?>· transferencia fuera del EEE<?php endif; ?>
+                    <?= e(__('privacy.provider')) ?>: <?= e($def['processor']) ?>
+                    <?php if ($def['transfer_outside_eea']): ?>· <?= e(__('privacy.outside_eea')) ?><?php endif; ?>
                 </p>
             </div>
         </div>

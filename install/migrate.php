@@ -204,6 +204,7 @@ function pp_summarize_statement(string $stmt): string
 // ============================================================
 // CLI runner
 // ============================================================
+// i18n-ignore-start: salida de terminal para quien instala a mano, no panel.
 if (PHP_SAPI === 'cli' && isset($argv) && realpath($argv[0]) === __FILE__) {
     $opts = getopt('', ['host:', 'port:', 'db:', 'user:', 'pass::']);
     $host = $opts['host'] ?? '127.0.0.1';
@@ -244,3 +245,4 @@ if (PHP_SAPI === 'cli' && isset($argv) && realpath($argv[0]) === __FILE__) {
     }
     echo "\nMigración completada correctamente.\n";
 }
+// i18n-ignore-end

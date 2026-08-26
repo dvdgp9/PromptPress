@@ -46,7 +46,7 @@
         if (button) {
             button.disabled = true;
             button.setAttribute('aria-busy', 'true');
-            button.innerHTML = 'Generando con IA…';
+            button.innerHTML = pp.t('js.legal.generating');
         }
         // Deshabilita el resto de botones de generación mientras dura el proceso.
         toggleOtherButtons(form, true);
@@ -63,20 +63,20 @@
                 finish();
                 return;
             }
-            setRow(panel, index, 'active', 'Escribiendo con IA…');
-            setSummary(panel, 'Página ' + (index + 1) + ' de ' + types.length + '. Puede tardar unos segundos por página.');
+            setRow(panel, index, 'active', pp.t('js.legal.writing'));
+            setSummary(panel, pp.t('js.legal.progress', { n: index + 1, total: types.length }));
             setBar(panel, index / types.length);
 
             postJson(url, { _csrf: csrf, type: types[index].key })
                 .then(function (body) {
                     var todos = Number(body.todos || 0);
-                    setRow(panel, index, 'done', todos > 0 ? 'Lista · ' + todos + ' TODO-LEGAL' : 'Lista');
+                    setRow(panel, index, 'done', todos > 0 ? pp.t('js.legal.done_todos', { n: todos }) : pp.t('js.legal.done'));
                     results.push({ ok: true, type: types[index].key, todos: todos });
                     setBar(panel, (index + 1) / types.length);
                     generateAt(index + 1);
                 })
                 .catch(function (err) {
-                    setRow(panel, index, 'error', err.message || 'No se pudo generar');
+                    setRow(panel, index, 'error', err.message || pp.t('js.legal.failed_row'));
                     results.push({ ok: false, type: types[index].key, label: types[index].label, error: err.message });
                     setBar(panel, (index + 1) / types.length);
                     generateAt(index + 1);
@@ -91,12 +91,14 @@
                 form.dataset.retryTypes = JSON.stringify(failed.map(function (r) {
                     return { key: r.type, label: r.label };
                 }));
-                release(failed.length === 1 ? 'Reintentar la que falló' : 'Reintentar las ' + failed.length + ' que fallaron');
-                setSummary(panel, 'Se generaron ' + (results.length - failed.length) + ' de ' + results.length +
-                    ' páginas. Vuelve a pulsar el botón para reintentar las que fallaron.');
+                release(failed.length === 1 ? pp.t('js.legal.retry_one') : pp.t('js.legal.retry_many', { n: failed.length }));
+                setSummary(panel, pp.t('js.legal.partial', {
+                    hechas: results.length - failed.length,
+                    total: results.length
+                }));
                 setTitle(panel, failed.length === results.length
-                    ? 'No se pudo generar ninguna página'
-                    : 'Faltan páginas por generar');
+                    ? pp.t('js.legal.none_generated')
+                    : pp.t('js.legal.pages_missing'));
                 panel.classList.add('is-error');
                 return;
             }
@@ -105,12 +107,12 @@
             var finishUrl = form.getAttribute('data-finish-url');
             var doneUrl = form.getAttribute('data-done-url') || window.location.href;
 
-            setSummary(panel, 'Listo. ' + results.length + ' páginas generadas' +
-                (totalTodos > 0 ? ' · ' + totalTodos + ' campos marcados como TODO-LEGAL para que revises.' : '.'));
+            setSummary(panel, pp.t('js.legal.finished', { total: results.length })
+                + (totalTodos > 0 ? ' · ' + pp.t('js.legal.todos', { n: totalTodos }) : ''));
             setBar(panel, 1);
 
             if (!finishUrl) {
-                if (button) button.innerHTML = 'Abriendo tus páginas…';
+                if (button) button.innerHTML = pp.t('js.legal.opening');
                 window.location.href = doneUrl;
                 return;
             }
@@ -159,12 +161,12 @@
         panel.setAttribute('data-legal-progress', '');
         panel.setAttribute('role', 'status');
         panel.setAttribute('aria-live', 'polite');
-        panel.innerHTML = '<strong data-legal-title>La IA está redactando tus páginas legales</strong>'
-            + '<small data-legal-summary>Preparando la primera página…</small>'
+        panel.innerHTML = '<strong data-legal-title>' + escapeHtml(pp.t('js.legal.title')) + '</strong>'
+            + '<small data-legal-summary>' + escapeHtml(pp.t('js.legal.preparing')) + '</small>'
             + '<div class="pp-legalgen__bar"><i data-legal-bar></i></div>'
             + types.map(function (t, i) {
                 return '<p data-legal-row="' + i + '" class="is-pending"><span></span><em>'
-                    + escapeHtml(t.label || t.key) + '</em><small>En cola</small></p>';
+                    + escapeHtml(t.label || t.key) + '</em><small>' + escapeHtml(pp.t('js.legal.queued')) + '</small></p>';
             }).join('');
         if (host === form.parentNode) {
             host.insertBefore(panel, form.nextSibling);

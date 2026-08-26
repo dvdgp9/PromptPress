@@ -52,7 +52,7 @@ final class CanvasChatService
 
         $canvas = CanvasService::get($pageId);
         if ($canvas === null) {
-            return ['ok' => false, 'error' => 'Esta página aún no tiene contenido canvas.', 'http' => 404];
+            return ['ok' => false, 'error' => __('canvas.err.no_content'), 'http' => 404];
         }
 
         $requiresImages = self::requestsImages($instruction);
@@ -88,6 +88,9 @@ final class CanvasChatService
         if ($crossPageReference !== null) {
             $effectiveInstruction .= CanvasCrossPageReference::promptBlock($crossPageReference);
         }
+        // i18n-ignore-start: en este bloque no hay interfaz, solo carga que
+        // viaja DENTRO del prompt a la IA. Traducirlo rompería la edición del
+        // canvas en silencio.
         // B2 — El elemento elegido se marca en el propio HTML (data-pp-target).
         // La descripción en prosa se mantiene como apoyo: si el camino no se
         // puede resolver, el modelo todavía sabe de qué elemento se habla.
@@ -112,6 +115,7 @@ final class CanvasChatService
             $effectiveInstruction .= "\n\nHay imágenes disponibles para esta petición. Si es una imagen de FONDO, aplícala con CSS (`background-image: url(...)` apuntando a una ruta de las imágenes disponibles) sobre la sección o el elemento, y deja \"html\":\"\" (NO reescribas el HTML, sobre todo si hay ilustraciones o SVG). Si la imagen forma parte del CONTENIDO (una foto dentro del texto), devuelve el HTML con la etiqueta <img>.";
         }
 
+        // i18n-ignore-end
         if ($sectionId !== '' && !$wantsNewSection) {
             $result = self::applySectionEdit($siteId, $page, $canvas, $sectionId, $effectiveInstruction, $markTarget ? $elementPath : '');
         } else {
@@ -132,7 +136,7 @@ final class CanvasChatService
                 error_log('[canvas chat] page=' . $pageId . ' image_request_not_applied section=' . ($sectionId !== '' ? $sectionId : 'page'));
                 return [
                     'ok' => false,
-                    'error' => 'No he podido incorporar ninguna imagen, así que no he guardado el cambio. Prueba de nuevo cuando el servicio de imágenes esté disponible.',
+                    'error' => __('canvas.err.no_images'),
                     'http' => 422,
                 ];
             }
@@ -145,12 +149,12 @@ final class CanvasChatService
             return [
                 'ok'        => false,
                 'cancelled' => true,
-                'error'     => 'Cambio cancelado. Tu página no se ha tocado.',
+                'error'     => __('canvas.err.cancelled'),
                 'http'      => 409,
             ];
         }
 
-        $scope = $sectionId !== '' ? self::sectionLabel($sectionId) : 'Toda la página';
+        $scope = $sectionId !== '' ? self::sectionLabel($sectionId) : __('canvas.whole_page');
         $summary = ($summaryPrefix !== '' ? $summaryPrefix . ' — ' : '') . $scope . ' — ' . mb_substr($instruction, 0, 90);
         $saved = CanvasService::save($pageId, $result['html'], $result['css'], $origin, $summary);
 
@@ -166,7 +170,7 @@ final class CanvasChatService
     public static function sectionLabel(string $id): string
     {
         $s = trim(str_replace(['-', '_'], ' ', $id));
-        return $s !== '' ? mb_strtoupper(mb_substr($s, 0, 1)) . mb_substr($s, 1) : 'Sección';
+        return $s !== '' ? mb_strtoupper(mb_substr($s, 0, 1)) . mb_substr($s, 1) : __('canvas.section');
     }
 
     // ==================================================================
@@ -178,6 +182,7 @@ final class CanvasChatService
     {
         $sectionHtml = CanvasService::extractSection($canvas['html'], $sectionId);
         if ($sectionHtml === null) {
+            // i18n-ignore: excepción interna.
             throw new \RuntimeException('Sección no encontrada: ' . $sectionId);
         }
         $promptHtml = $elementPath !== '' ? self::markTarget($sectionHtml, $elementPath) : $sectionHtml;
@@ -204,6 +209,7 @@ final class CanvasChatService
         } else {
             $newHtml = CanvasService::replaceSection($canvas['html'], $sectionId, $newSectionHtml);
             if ($newHtml === null) {
+                // i18n-ignore: excepción interna.
                 throw new \RuntimeException('No se pudo integrar la sección editada.');
             }
         }
@@ -262,7 +268,8 @@ final class CanvasChatService
         for ($attempt = 1; $attempt <= 2; $attempt++) {
             $payload = $input;
             if ($attempt > 1) {
-                $payload['instruction'] .= "\n\nAVISO: tu respuesta anterior no traía el sobre completo. Devuelve OBLIGATORIAMENTE los tres bloques <pp-html>…</pp-html>, <pp-css>…</pp-css> y <pp-reply>…</pp-reply>, sin markdown ni texto fuera de las etiquetas.";
+                // i18n-ignore: instrucción de reintento para el modelo, no interfaz.
+        $payload['instruction'] .= "\n\nAVISO: tu respuesta anterior no traía el sobre completo. Devuelve OBLIGATORIAMENTE los tres bloques <pp-html>…</pp-html>, <pp-css>…</pp-css> y <pp-reply>…</pp-reply>, sin markdown ni texto fuera de las etiquetas.";
             }
             $result = AIActionRunner::run($action, $payload, $siteId);
             try {
@@ -272,6 +279,8 @@ final class CanvasChatService
                 error_log('[canvas chat] envelope_retry action=' . $action . ' attempt=' . $attempt . ': ' . $e->getMessage());
             }
         }
+        // i18n-ignore: `CanvasController::friendlyAiError()` compara este texto
+        // para saber que la respuesta llegó truncada. No traducir sin cambiar allí.
         throw $lastError ?? new AIException('La edición no devolvió un sobre válido.');
     }
 
@@ -289,15 +298,18 @@ final class CanvasChatService
             if ($q === '') continue;
             $a = trim((string) ($turn['a'] ?? ''));
             $scope = trim((string) ($turn['scope'] ?? ''));
+            // i18n-ignore: resumen de la conversación que se le manda al modelo.
             $lines[] = '- Pidió: "' . mb_substr($q, 0, 200) . '"'
                 . ($scope !== '' ? ' (en "' . mb_substr($scope, 0, 60) . '")' : '')
                 . ($a !== '' ? ' → hiciste: "' . mb_substr($a, 0, 200) . '"' : '');
         }
         if ($lines === []) return '';
 
+        // i18n-ignore-start: cabecera del contexto que viaja al prompt.
         return "CONVERSACIÓN RECIENTE con este cliente sobre esta página, de lo más antiguo a lo más nuevo. Es CONTEXTO para entender a qué se refiere ahora (\"un poco más grande\", \"ese botón\", \"déjalo como antes\"), NO son peticiones pendientes: no vuelvas a aplicarlas.\n"
             . implode("\n", $lines)
             . "\n\nPETICIÓN ACTUAL (la única que debes aplicar):\n";
+        // i18n-ignore-end
     }
 
     /**
@@ -391,10 +403,12 @@ final class CanvasChatService
         $reply = $extract('pp-reply');
         if ($html === null || $css === null) {
             throw new AIException(
+                // i18n-ignore: comparado en CanvasController::friendlyAiError().
                 'La edición no contiene el sobre de texto esperado. Respuesta: ' . mb_substr($raw, 0, 300)
             );
         }
         if ($html === '' && $css === '') {
+            // i18n-ignore: excepción interna del pipeline de IA.
             throw new AIException('La edición no contiene ni HTML ni estilos.');
         }
 
@@ -416,6 +430,8 @@ final class CanvasChatService
     public static function requestsNewSection(string $instruction): bool
     {
         $t = ' ' . mb_strtolower($instruction) . ' ';
+        // i18n-ignore-start: patrones para leer lo que el usuario ESCRIBE en
+        // castellano, no texto que se pinte. Ver nota al final del fichero.
         $noun = 'secci[óo]n|secciones|franja|banda|apartado|bloque';
         // Duplicar una sección también crea una nueva (cambio estructural).
         if (preg_match('/\bduplic\w*\b[^.]{0,20}?\b(?:' . $noun . ')\b/u', $t)) {
@@ -466,23 +482,24 @@ final class CanvasChatService
     {
         $t = ' ' . mb_strtolower($instruction) . ' ';
         return preg_match('/\b(unsplash|banco de im[áa]genes|imagen de banco|de internet|en internet|stock|gratuita?s?)\b/u', $t) === 1;
+    // i18n-ignore-end
     }
 
     /** @return array{ok:bool,error:?string} */
     private static function prepareRequestedImages(int $siteId, string $pageTitle, string $instruction): array
     {
         if (!ImageBankService::isAvailable()) {
-            return ['ok' => false, 'error' => 'No se pueden añadir imágenes porque Unsplash no está configurado.'];
+            return ['ok' => false, 'error' => __('canvas.err.unsplash_off')];
         }
 
         ImageBankService::resetDiagnostics();
         $query = trim($pageTitle . ' ' . preg_replace('/\s+/', ' ', mb_substr($instruction, 0, 100)));
         $search = ImageBankService::searchDetailed($query, 6, 'landscape');
         if (!$search['ok']) {
-            return ['ok' => false, 'error' => (string) ($search['message'] ?? 'Unsplash no está disponible temporalmente.')];
+            return ['ok' => false, 'error' => (string) ($search['message'] ?? __('unsplash.err.unavailable'))];
         }
         if ($search['items'] === []) {
-            return ['ok' => false, 'error' => 'Unsplash no encontró imágenes adecuadas para esta petición. Prueba a describir el tipo de foto que necesitas.'];
+            return ['ok' => false, 'error' => __('canvas.err.no_matches')];
         }
 
         $imported = 0;
@@ -496,7 +513,7 @@ final class CanvasChatService
         }
         return $imported > 0
             ? ['ok' => true, 'error' => null]
-            : ['ok' => false, 'error' => 'Unsplash respondió, pero no se pudieron descargar las imágenes. No se ha modificado la página.'];
+            : ['ok' => false, 'error' => __('canvas.err.download_failed')];
     }
 
     private static function imageCount(string $html): int

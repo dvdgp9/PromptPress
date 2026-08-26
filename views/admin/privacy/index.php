@@ -12,38 +12,38 @@
 \Core\View::extend('admin/layout');
 
 $levelLabels = [
-    'green'  => ['Todo en orden', 'verde'],
-    'yellow' => ['Casi listo', 'amarillo'],
-    'orange' => ['Antes de publicar', 'naranja'],
-    'red'    => ['Atención', 'rojo'],
+    'green'  => [__('privacy.level.green'),  'verde'],
+    'yellow' => [__('privacy.level.yellow'), 'amarillo'],
+    'orange' => [__('privacy.level.orange'), 'naranja'],
+    'red'    => [__('privacy.level.red'),    'rojo'],
 ];
 $levelInfo = $levelLabels[$status['level']] ?? $levelLabels['yellow'];
 ?>
 
-<?php \Core\View::start('title'); ?>Privacidad<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.privacy')) ?><?php \Core\View::end(); ?>
 <?php \Core\View::start('scripts'); ?>
 <script src="<?= e(base_url('admin/assets/js/privacy-generate.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/privacy-generate.js') ?: '1' ?>"></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
     <div>
-        <h2>Privacidad</h2>
-        <p class="pp-page-header__lead">Cumple con la normativa europea sin pelearte con el legalismo. Te avisamos de lo que falte y la IA se encarga de los textos.</p>
+        <h2><?= e(__('nav.privacy')) ?></h2>
+        <p class="pp-page-header__lead"><?= e(__('privacy.intro')) ?></p>
     </div>
-    <span class="pp-status-pill pp-status-pill--<?= e($status['level']) ?>" title="Estado de cumplimiento">
+    <span class="pp-status-pill pp-status-pill--<?= e($status['level']) ?>" title="<?= e(__('privacy.compliance_status')) ?>">
         <span class="pp-status-pill__dot" aria-hidden="true"></span>
         <?= e($levelInfo[0]) ?>
     </span>
 </div>
 
-<nav class="pp-privacy-tabs" role="tablist" aria-label="Secciones de Privacidad">
+<nav class="pp-privacy-tabs" role="tablist" aria-label="<?= e(__('privacy.tabs_aria')) ?>">
     <?php
     $tabs = [
-        'summary' => ['Resumen',          'summary'],
-        'legal'   => ['Datos de tu empresa', 'legal'],
-        'pages'   => ['Páginas legales',  'pages'],
-        'cookies' => ['Cookies',          'cookies'],
-        'forms'   => ['Formularios',      'forms'],
+        'summary' => [__('seo.tab_summary'),      'summary'],
+        'legal'   => [__('privacy.tab_legal'),    'legal'],
+        'pages'   => [__('privacy.tab_pages'),    'pages'],
+        'cookies' => [__('privacy.tab_cookies'),  'cookies'],
+        'forms'   => [__('forms.title'),          'forms'],
     ];
     foreach ($tabs as $key => $info):
         $isActive = $tab === $key;

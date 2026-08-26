@@ -31,7 +31,7 @@ class LinkController
             [
                 'issues'       => $issues,
                 'byPage'       => $byPage,
-                'sectionTypes' => SectionController::SECTION_TYPES,
+                'sectionTypes' => SectionController::sectionTypesForView(),
             ]
         ));
     }

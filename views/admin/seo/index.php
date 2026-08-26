@@ -26,68 +26,68 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
 <section class="pp-seo-shell">
     <header class="pp-seo-hero">
         <div>
-            <span class="pp-seo-eyebrow">Visibilidad orgánica</span>
-            <h2>SEO del sitio</h2>
-            <p>Revisa URLs rotas, redirecciones y señales básicas de indexación sin salir del panel.</p>
+            <span class="pp-seo-eyebrow"><?= e(__('seo.eyebrow')) ?></span>
+            <h2><?= e(__('seo.title')) ?></h2>
+            <p><?= e(__('seo.intro')) ?></p>
         </div>
-        <div class="pp-seo-hero__status" aria-label="Estado SEO">
+        <div class="pp-seo-hero__status" aria-label="<?= e(__('seo.status_aria')) ?>">
             <span><?= (int) $kpis['open404'] ?></span>
-            <small>404 abiertos</small>
+            <small><?= e(__('seo.open_404')) ?></small>
         </div>
     </header>
 
-    <nav class="pp-seo-tabs" aria-label="Secciones SEO">
-        <a class="pp-seo-tab<?= $isTab('summary') ?>" href="<?= e($tabUrl('summary')) ?>">Resumen</a>
+    <nav class="pp-seo-tabs" aria-label="<?= e(__('seo.tabs_aria')) ?>">
+        <a class="pp-seo-tab<?= $isTab('summary') ?>" href="<?= e($tabUrl('summary')) ?>"><?= e(__('seo.tab_summary')) ?></a>
         <a class="pp-seo-tab<?= $isTab('404') ?>" href="<?= e($tabUrl('404')) ?>">404</a>
-        <a class="pp-seo-tab<?= $isTab('redirects') ?>" href="<?= e($tabUrl('redirects')) ?>">Redirecciones</a>
-        <a class="pp-seo-tab<?= $isTab('links') ?>" href="<?= e($tabUrl('links')) ?>">Enlaces internos</a>
-        <a class="pp-seo-tab<?= $isTab('advanced') ?>" href="<?= e($tabUrl('advanced')) ?>">Avanzado</a>
+        <a class="pp-seo-tab<?= $isTab('redirects') ?>" href="<?= e($tabUrl('redirects')) ?>"><?= e(__('seo.tab_redirects')) ?></a>
+        <a class="pp-seo-tab<?= $isTab('links') ?>" href="<?= e($tabUrl('links')) ?>"><?= e(__('links.title')) ?></a>
+        <a class="pp-seo-tab<?= $isTab('advanced') ?>" href="<?= e($tabUrl('advanced')) ?>"><?= e(__('seo.tab_advanced')) ?></a>
     </nav>
 
     <?php if ($tab === 'summary'): ?>
         <div class="pp-seo-kpis">
             <article class="pp-seo-kpi pp-seo-kpi--wide">
-                <span>404 abiertos</span>
+                <span><?= e(__('seo.open_404')) ?></span>
                 <strong><?= (int) $kpis['open404'] ?></strong>
-                <p>URLs visitadas que ahora no tienen página ni redirección.</p>
-                <a href="<?= e($tabUrl('404')) ?>">Revisar 404</a>
+                <p><?= e(__('seo.card_404_help')) ?></p>
+                <a href="<?= e($tabUrl('404')) ?>"><?= e(__('seo.review_404')) ?></a>
             </article>
             <article class="pp-seo-kpi">
-                <span>Redirecciones activas</span>
+                <span><?= e(__('seo.active_redirects')) ?></span>
                 <strong><?= (int) $kpis['activeRedirects'] ?></strong>
-                <p>Reglas que preservan tráfico al mover URLs.</p>
-                <a href="<?= e($tabUrl('redirects')) ?>">Gestionar</a>
+                <p><?= e(__('seo.redirects_help')) ?></p>
+                <a href="<?= e($tabUrl('redirects')) ?>"><?= e(__('seo.manage')) ?></a>
             </article>
             <article class="pp-seo-kpi">
-                <span>Enlaces a revisar</span>
+                <span><?= e(__('seo.links_to_check')) ?></span>
                 <strong><?= (int) $kpis['linkIssues'] ?></strong>
-                <p>Botones o enlaces internos que no llevan a una página publicada.</p>
-                <a href="<?= e($tabUrl('links')) ?>">Ver enlaces</a>
+                <p><?= e(__('seo.links_help')) ?></p>
+                <a href="<?= e($tabUrl('links')) ?>"><?= e(__('seo.see_links')) ?></a>
             </article>
             <article class="pp-seo-kpi">
-                <span>Metas a mejorar</span>
+                <span><?= e(__('seo.metas_to_improve')) ?></span>
                 <strong><?= (int) $kpis['metaIssues'] ?></strong>
-                <p>El panel avisa; la edición se hace en el editor correspondiente.</p>
+                <p><?= e(__('seo.metas_help')) ?></p>
             </article>
             <article class="pp-seo-kpi">
-                <span>Sitemap y robots</span>
+                <span><?= e(__('seo.sitemap_robots')) ?></span>
                 <strong><?= (int) ($indexation['published_pages'] ?? 0) ?></strong>
-                <p>Páginas publicadas incluidas en el sitemap público.</p>
+                <p><?= e(__('seo.sitemap_help')) ?></p>
                 <a href="<?= e((string) ($indexation['sitemap_url'] ?? base_url('sitemap.xml'))) ?>" target="_blank" rel="noopener">Abrir sitemap</a>
             </article>
             <article class="pp-seo-kpi">
-                <span>Auditoría avanzada</span>
+                <span><?= e(__('seo.advanced_audit')) ?></span>
                 <strong><?= (int) $kpis['technicalIssues'] ?></strong>
-                <p>Señales técnicas para revisar solo si sabes qué estás tocando.</p>
-                <a href="<?= e($tabUrl('advanced')) ?>">Ver avanzado</a>
+                <p><?= e(__('seo.advanced_help')) ?></p>
+                <a href="<?= e($tabUrl('advanced')) ?>"><?= e(__('seo.see_advanced')) ?></a>
             </article>
         </div>
 
         <section class="pp-seo-panel">
             <div class="pp-seo-panel__head">
                 <div>
-                    <h3>Indexación pública</h3>
-                    <p>PromptPress genera automáticamente los archivos que los buscadores revisan para descubrir el sitio.</p>
+                    <h3><?= e(__('seo.public_indexation')) ?></h3>
+                    <p><?= e(__('seo.indexation_help')) ?></p>
                 </div>
             </div>
             <div class="pp-seo-indexation">
@@ -105,14 +105,14 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
         <section class="pp-seo-panel">
             <div class="pp-seo-panel__head">
                 <div>
-                    <h3>Metadatos pendientes</h3>
-                    <p>No se editan aquí para evitar duplicar el Studio. Abre el editor correcto y ajusta la página en contexto.</p>
+                    <h3><?= e(__('seo.pending_metas')) ?></h3>
+                    <p><?= e(__('seo.pending_metas_help')) ?></p>
                 </div>
             </div>
             <?php if (empty($metaIssues)): ?>
                 <div class="pp-seo-empty">
-                    <strong>Las páginas publicadas tienen metadatos razonables.</strong>
-                    <span>No hay títulos o descripciones urgentes que revisar.</span>
+                    <strong><?= e(__('seo.metas_ok')) ?></strong>
+                    <span><?= e(__('seo.metas_ok_hint')) ?></span>
                 </div>
             <?php else: ?>
                 <div class="pp-seo-meta-list">
@@ -123,7 +123,7 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
                                 <code>/<?= e((string) $m['slug']) ?></code>
                                 <span><?= e(implode(' · ', $m['notes'])) ?></span>
                             </div>
-                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e((string) $m['edit_url']) ?>">Abrir editor</a>
+                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e((string) $m['edit_url']) ?>"><?= e(__('seo.open_editor')) ?></a>
                         </article>
                     <?php endforeach; ?>
                 </div>
@@ -137,39 +137,39 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <div class="pp-seo-panel__head">
                     <div>
-                        <h3>Nueva redirección</h3>
-                        <p>Usa rutas internas. Ejemplo: de <code>/servicio-antiguo</code> a <code>/servicios</code>.</p>
+                        <h3><?= e(__('seo.new_redirect')) ?></h3>
+                        <p><?= __('seo.new_redirect_help.html') ?></p>
                     </div>
                 </div>
                 <label>URL antigua
-                    <input class="pp-input" name="source_path" placeholder="/url-antigua" required>
-                    <small>Debe ser una ruta que ya no quieres mostrar.</small>
+                    <input class="pp-input" name="source_path" placeholder="<?= e(__('seo.old_url')) ?>" required>
+                    <small><?= e(__('seo.old_url_help')) ?></small>
                 </label>
-                <label>Enviar a
-                    <input class="pp-input" name="target_path" placeholder="/url-nueva">
-                    <small>Para 410 puedes dejarlo vacío.</small>
+                <label><?= e(__('seo.send_to')) ?>
+                    <input class="pp-input" name="target_path" placeholder="<?= e(__('seo.new_url')) ?>">
+                    <small><?= e(__('seo.410_help')) ?></small>
                 </label>
                 <label>Tipo
                     <select class="pp-input" name="status_code">
-                        <option value="301">301 permanente</option>
-                        <option value="302">302 temporal</option>
-                        <option value="410">410 contenido retirado</option>
+                        <option value="301">301 <?= e(__('seo.permanent')) ?></option>
+                        <option value="302">302 <?= e(__('seo.temporary')) ?></option>
+                        <option value="410">410 <?= e(__('seo.gone')) ?></option>
                     </select>
                 </label>
-                <button class="pp-btn pp-btn--primary" type="submit">Guardar redirección</button>
+                <button class="pp-btn pp-btn--primary" type="submit"><?= e(__('seo.save_redirect')) ?></button>
             </form>
 
             <section class="pp-seo-panel">
                 <div class="pp-seo-panel__head">
                     <div>
-                        <h3>Redirecciones</h3>
-                        <p>Las automáticas se crean cuando cambias el slug de una página publicada.</p>
+                        <h3><?= e(__('seo.tab_redirects')) ?></h3>
+                        <p><?= e(__('seo.auto_redirects_help')) ?></p>
                     </div>
                 </div>
                 <?php if (empty($redirects)): ?>
                     <div class="pp-seo-empty">
-                        <strong>No hay redirecciones todavía.</strong>
-                        <span>Cuando cambies una URL publicada, PromptPress guardará una 301 automáticamente.</span>
+                        <strong><?= e(__('seo.no_redirects')) ?></strong>
+                        <span><?= e(__('seo.no_redirects_hint')) ?></span>
                     </div>
                 <?php else: ?>
                     <div class="pp-seo-table">
@@ -177,20 +177,20 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
                             <div class="pp-seo-row">
                                 <div>
                                     <code><?= e((string) $r['source_path']) ?></code>
-                                    <span><?= e($statusLabel((int) $r['status_code'])) ?><?= (int) $r['auto_created'] === 1 ? ' · automática' : '' ?></span>
+                                    <span><?= e($statusLabel((int) $r['status_code'])) ?><?= (int) $r['auto_created'] === 1 ? ' · ' . e(__('seo.automatic')) : '' ?></span>
                                 </div>
                                 <div>
-                                    <code><?= e((string) ($r['target_path'] ?? 'Sin destino')) ?></code>
-                                    <span><?= (int) $r['hit_count'] ?> visitas<?= !empty($r['last_hit_at']) ? ' · ' . e($fmtDate((string) $r['last_hit_at'])) : '' ?></span>
+                                    <code><?= e((string) ($r['target_path'] ?? __('seo.no_target'))) ?></code>
+                                    <span><?= e(__('seo.n_visits', ['n' => (int) $r['hit_count']])) ?><?= !empty($r['last_hit_at']) ? ' · ' . e($fmtDate((string) $r['last_hit_at'])) : '' ?></span>
                                 </div>
                                 <form method="POST" action="<?= e(base_url('admin/seo/redirects/' . (int) $r['id'])) ?>" class="pp-seo-row__actions">
                                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                                     <?php if ((int) $r['is_active'] === 1): ?>
-                                        <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="deactivate">Pausar</button>
+                                        <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="deactivate"><?= e(__('seo.pause')) ?></button>
                                     <?php else: ?>
-                                        <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="activate">Activar</button>
+                                        <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="activate"><?= e(__('modules.enable')) ?></button>
                                     <?php endif; ?>
-                                    <button class="pp-btn pp-btn--ghost pp-btn--sm" name="action" value="delete">Eliminar</button>
+                                    <button class="pp-btn pp-btn--ghost pp-btn--sm" name="action" value="delete"><?= e(__('common.delete')) ?></button>
                                 </form>
                             </div>
                         <?php endforeach; ?>
@@ -204,19 +204,19 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
         <section class="pp-seo-panel">
             <div class="pp-seo-panel__head">
                 <div>
-                    <h3>Monitor 404</h3>
-                    <p>URLs que alguien ha intentado visitar y que no existen. Convierte las importantes en redirecciones.</p>
+                    <h3><?= e(__('seo.monitor_404')) ?></h3>
+                    <p><?= e(__('seo.monitor_404_help')) ?></p>
                 </div>
                 <div class="pp-seo-filter">
-                    <a class="<?= $notFoundStatus === 'open' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=open')) ?>">Abiertos</a>
-                    <a class="<?= $notFoundStatus === 'resolved' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=resolved')) ?>">Resueltos</a>
-                    <a class="<?= $notFoundStatus === 'ignored' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=ignored')) ?>">Ignorados</a>
+                    <a class="<?= $notFoundStatus === 'open' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=open')) ?>"><?= e(__('seo.open')) ?></a>
+                    <a class="<?= $notFoundStatus === 'resolved' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=resolved')) ?>"><?= e(__('seo.resolved')) ?></a>
+                    <a class="<?= $notFoundStatus === 'ignored' ? 'is-active' : '' ?>" href="<?= e(base_url('admin/seo?tab=404&status=ignored')) ?>"><?= e(__('seo.ignored')) ?></a>
                 </div>
             </div>
             <?php if (empty($notFound)): ?>
                 <div class="pp-seo-empty">
-                    <strong>No hay 404 en esta vista.</strong>
-                    <span>Cuando una URL pública falle, aparecerá aquí si no es un asset o ruta interna.</span>
+                    <strong><?= e(__('seo.no_404')) ?></strong>
+                    <span><?= e(__('seo.no_404_hint')) ?></span>
                 </div>
             <?php else: ?>
                 <div class="pp-seo-404-list">
@@ -224,23 +224,23 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
                         <article class="pp-seo-404">
                             <div class="pp-seo-404__main">
                                 <code><?= e((string) $n['requested_path']) ?></code>
-                                <span><?= (int) $n['hit_count'] ?> visitas · Última: <?= e($fmtDate((string) $n['last_seen_at'])) ?></span>
-                                <?php if (!empty($n['referrer'])): ?><small>Origen: <?= e((string) $n['referrer']) ?></small><?php endif; ?>
+                                <span><?= e(__('seo.n_visits', ['n' => (int) $n['hit_count']])) ?> · <?= e(__('seo.last')) ?>: <?= e($fmtDate((string) $n['last_seen_at'])) ?></span>
+                                <?php if (!empty($n['referrer'])): ?><small><?= e(__('inbox.origin')) ?>: <?= e((string) $n['referrer']) ?></small><?php endif; ?>
                             </div>
                             <form method="POST" action="<?= e(base_url('admin/seo/redirects')) ?>" class="pp-seo-404__redirect">
                                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                                 <input type="hidden" name="source_path" value="<?= e((string) $n['requested_path']) ?>">
                                 <input type="hidden" name="from_404_id" value="<?= (int) $n['id'] ?>">
                                 <input type="hidden" name="status_code" value="301">
-                                <label>Enviar a
-                                    <input class="pp-input" name="target_path" placeholder="/destino">
+                                <label><?= e(__('seo.send_to')) ?>
+                                    <input class="pp-input" name="target_path" placeholder="<?= e(__('seo.destination')) ?>">
                                 </label>
-                                <button class="pp-btn pp-btn--primary pp-btn--sm">Crear 301</button>
+                                <button class="pp-btn pp-btn--primary pp-btn--sm"><?= e(__('seo.create_301')) ?></button>
                             </form>
                             <form method="POST" action="<?= e(base_url('admin/seo/404/' . (int) $n['id'])) ?>" class="pp-seo-row__actions">
                                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                                <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="resolved">Marcar resuelto</button>
-                                <button class="pp-btn pp-btn--ghost pp-btn--sm" name="action" value="ignore">Ignorar</button>
+                                <button class="pp-btn pp-btn--secondary pp-btn--sm" name="action" value="resolved"><?= e(__('seo.mark_resolved')) ?></button>
+                                <button class="pp-btn pp-btn--ghost pp-btn--sm" name="action" value="ignore"><?= e(__('seo.ignore')) ?></button>
                             </form>
                         </article>
                     <?php endforeach; ?>
@@ -253,21 +253,21 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
         <section class="pp-seo-panel">
             <div class="pp-seo-panel__head">
                 <div>
-                    <h3>Enlaces internos</h3>
-                    <p>Revisión de botones y enlaces dentro del contenido. Sustituye al panel antiguo de Enlaces.</p>
+                    <h3><?= e(__('links.title')) ?></h3>
+                    <p><?= e(__('seo.links_panel_help')) ?></p>
                 </div>
             </div>
             <?php if (empty($linkIssues)): ?>
                 <div class="pp-seo-empty">
-                    <strong>Todos los enlaces internos apuntan a páginas publicadas.</strong>
-                    <span>No hay botones rotos en el contenido estructurado.</span>
+                    <strong><?= e(__('seo.links_ok')) ?></strong>
+                    <span><?= e(__('seo.links_ok_hint')) ?></span>
                 </div>
             <?php else: ?>
                 <?php foreach ($linksByPage as $pageId => $group): ?>
                     <div class="pp-seo-link-group">
                         <div class="pp-seo-link-group__head">
                             <h4><?= e((string) $group['title']) ?></h4>
-                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/pages/' . (int) $pageId . '/edit')) ?>">Editar página</a>
+                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/pages/' . (int) $pageId . '/edit')) ?>"><?= e(__('links.edit_page')) ?></a>
                         </div>
                         <?php foreach ($group['issues'] as $issue): ?>
                             <div class="pp-seo-link-issue">
@@ -286,18 +286,18 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
         <section class="pp-seo-panel pp-seo-advanced-panel">
             <div class="pp-seo-panel__head">
                 <div>
-                    <h3>Auditoría técnica avanzada</h3>
-                    <p>Esta zona es para revisión técnica. Si no tienes claro qué significa un aviso, es mejor no cambiar nada y pedir ayuda.</p>
+                    <h3><?= e(__('seo.tech_audit')) ?></h3>
+                    <p><?= e(__('seo.tech_audit_help')) ?></p>
                 </div>
             </div>
             <div class="pp-seo-advanced-note">
-                <strong>Zona avanzada</strong>
-                <span>Estos avisos no significan siempre que haya un problema visible. Sirven para detectar señales que pueden afectar a indexación, accesibilidad o enlaces compartidos.</span>
+                <strong><?= e(__('seo.advanced_zone')) ?></strong>
+                <span><?= e(__('seo.advanced_zone_help')) ?></span>
             </div>
             <?php if (empty($technicalIssues)): ?>
                 <div class="pp-seo-empty">
-                    <strong>No hay avisos técnicos relevantes.</strong>
-                    <span>Las páginas publicadas tienen una estructura básica correcta para esta revisión.</span>
+                    <strong><?= e(__('seo.no_tech_issues')) ?></strong>
+                    <span><?= e(__('seo.no_tech_issues_hint')) ?></span>
                 </div>
             <?php else: ?>
                 <div class="pp-seo-technical-list">
@@ -319,7 +319,7 @@ $statusLabel = static fn(int $code): string => $code === 410 ? '410 retirado' : 
                                 <p><?= e((string) $issue['detail']) ?></p>
                                 <code>/<?= e((string) $issue['slug']) ?></code>
                             </div>
-                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e($editUrl) ?>">Abrir editor</a>
+                            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e($editUrl) ?>"><?= e(__('seo.open_editor')) ?></a>
                         </article>
                     <?php endforeach; ?>
                 </div>

@@ -20,6 +20,9 @@
 /storage/documents/*
 !/storage/documents/.htaccess
 !/storage/documents/.gitkeep
+/storage/resources/*
+!/storage/resources/.htaccess
+!/storage/resources/.gitkeep
 /storage/cache/*
 !/storage/cache/.htaccess
 !/storage/cache/.gitkeep

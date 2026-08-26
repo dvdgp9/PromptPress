@@ -20,9 +20,9 @@ $statusBadge = match ($doc['status']) {
     default      => 'pp-badge--muted',
 };
 $statusLabel = match ($doc['status']) {
-    'ready'      => 'Listo',
-    'processing' => 'Procesando',
-    'error'      => 'Error',
+    'ready'      => __('documents.status.ready'),
+    'processing' => __('documents.status.processing'),
+    'error'      => __('status.error'),
     default      => $doc['status'],
 };
 $textLength = mb_strlen((string) $doc['extracted_text']);
@@ -36,11 +36,11 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
 
 <div class="pp-page-header">
     <div class="pp-page-header__back">
-        <a href="<?= e(base_url('admin/documents')) ?>" class="pp-btn pp-btn--secondary pp-btn--sm">← Volver</a>
+        <a href="<?= e(base_url('admin/documents')) ?>" class="pp-btn pp-btn--secondary pp-btn--sm">← <?= e(__('common.back')) ?></a>
     </div>
     <h2>
         <span id="pp-doc-title-display"><?= e($doc['title']) ?></span>
-        <button type="button" class="pp-btn pp-btn--sm pp-btn--ghost" id="pp-edit-title-btn" title="Editar título">✏️</button>
+        <button type="button" class="pp-btn pp-btn--sm pp-btn--ghost" id="pp-edit-title-btn" title="<?= e(__('documents.edit_title')) ?>">✏️</button>
     </h2>
 </div>
 
@@ -53,36 +53,36 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
       class="pp-doc-rename-form" id="pp-rename-form" hidden>
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
     <input type="text" name="title" value="<?= e($doc['title']) ?>" maxlength="255" required>
-    <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm">Guardar</button>
-    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-cancel-rename">Cancelar</button>
+    <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm"><?= e(__('common.save')) ?></button>
+    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-cancel-rename"><?= e(__('common.cancel')) ?></button>
 </form>
 
 <div class="pp-doc-detail">
     <!-- Sidebar metadata -->
     <aside class="pp-doc-detail__sidebar">
         <div class="pp-doc-meta-card">
-            <h4>Información</h4>
+            <h4><?= e(__('documents.info')) ?></h4>
             <dl>
-                <dt>Archivo</dt>
+                <dt><?= e(__('documents.file')) ?></dt>
                 <dd class="pp-doc-filename"><?= e($doc['original_filename']) ?></dd>
 
-                <dt>Tipo</dt>
+                <dt><?= e(__('table.type')) ?></dt>
                 <dd><code><?= e(strtoupper($doc['file_type'])) ?></code></dd>
 
-                <dt>Tamaño</dt>
+                <dt><?= e(__('documents.size')) ?></dt>
                 <dd><?= e(fmtSize($sizeBytes)) ?></dd>
 
-                <dt>Estado</dt>
+                <dt><?= e(__('table.status')) ?></dt>
                 <dd><span class="pp-badge <?= $statusBadge ?>"><?= e($statusLabel) ?></span></dd>
 
-                <dt>Texto extraído</dt>
-                <dd><?= number_format($textLength, 0, ',', '.') ?> caracteres</dd>
+                <dt><?= e(__('documents.extracted_text')) ?></dt>
+                <dd><?= e(__('documents.characters', ['n' => number_format($textLength, 0, ',', '.')])) ?></dd>
 
-                <dt>Subido</dt>
+                <dt><?= e(__('documents.uploaded_at')) ?></dt>
                 <dd><?= e(substr((string) $doc['created_at'], 0, 16)) ?></dd>
 
                 <?php if (!empty($doc['uploaded_by_username'])): ?>
-                <dt>Por</dt>
+                <dt><?= e(__('documents.by')) ?></dt>
                 <dd><?= e($doc['uploaded_by_username']) ?></dd>
                 <?php endif; ?>
             </dl>
@@ -93,13 +93,13 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
             <form method="POST" action="<?= e(base_url('admin/documents/' . $doc['id'] . '/retry')) ?>">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--block">
-                    🔄 Reintentar extracción
+                    🔄 <?= e(__('documents.retry')) ?>
                 </button>
             </form>
             <?php endif; ?>
 
             <button type="button" class="pp-btn pp-btn--danger pp-btn--block" id="pp-delete-btn">
-                🗑 Eliminar documento
+                🗑 <?= e(__('documents.delete')) ?>
             </button>
         </div>
     </aside>
@@ -109,8 +109,8 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
         <?php if (!empty($doc['summary'])): ?>
         <section class="pp-doc-summary-card">
             <div class="pp-doc-card-header">
-                <h4>Resumen</h4>
-                <span class="pp-doc-card-hint">Heurístico — la IA generará uno mejor cuando esté configurada (T6.3).</span>
+                <h4><?= e(__('documents.summary')) ?></h4>
+                <span class="pp-doc-card-hint"><?= e(__('documents.summary_hint')) ?></span>
             </div>
             <p><?= e($doc['summary']) ?></p>
         </section>
@@ -118,20 +118,20 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
 
         <section class="pp-doc-text-card">
             <div class="pp-doc-card-header">
-                <h4>Texto extraído</h4>
+                <h4><?= e(__('documents.extracted_text')) ?></h4>
                 <div class="pp-doc-text-tools">
-                    <input type="search" id="pp-doc-search" placeholder="Buscar en el texto…"
+                    <input type="search" id="pp-doc-search" placeholder="<?= e(__('documents.search_placeholder')) ?>"
                            <?= $textLength === 0 ? 'disabled' : '' ?>>
                     <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-doc-copy-btn"
                             <?= $textLength === 0 ? 'disabled' : '' ?>>
-                        📋 Copiar
+                        📋 <?= e(__('documents.copy')) ?>
                     </button>
                 </div>
             </div>
 
             <?php if ($doc['status'] === 'error'): ?>
             <div class="pp-alert pp-alert--error">
-                La extracción falló para este documento. Usa "Reintentar" o revisa los logs del servidor.
+                <?= e(__('documents.extraction_failed')) ?>
             </div>
             <?php endif; ?>
 
@@ -142,7 +142,7 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
             </div>
             <?php else: ?>
             <div class="pp-empty pp-empty--inline">
-                <div class="pp-empty__text">No hay texto extraído.</div>
+                <div class="pp-empty__text"><?= e(__('documents.no_text')) ?></div>
             </div>
             <?php endif; ?>
         </section>
@@ -154,19 +154,19 @@ $textLength = mb_strlen((string) $doc['extracted_text']);
     <div class="pp-modal__backdrop" data-close-modal></div>
     <div class="pp-modal__dialog" role="dialog" aria-labelledby="pp-delete-title">
         <header class="pp-modal__header">
-            <h3 id="pp-delete-title">Eliminar documento</h3>
-            <button type="button" class="pp-modal__close" data-close-modal aria-label="Cerrar">×</button>
+            <h3 id="pp-delete-title"><?= e(__('documents.delete')) ?></h3>
+            <button type="button" class="pp-modal__close" data-close-modal aria-label="<?= e(__('common.close')) ?>">×</button>
         </header>
         <div class="pp-modal__body">
-            <p>¿Seguro que quieres eliminar <strong><?= e($doc['title']) ?></strong>?</p>
-            <p class="pp-muted">Se borrará el archivo físico y el texto extraído. Esta acción no se puede deshacer.</p>
+            <p><?= __('documents.confirm_delete', ['titulo' => '<strong>' . e($doc['title']) . '</strong>']) ?></p>
+            <p class="pp-muted"><?= e(__('documents.delete_warning')) ?></p>
         </div>
         <footer class="pp-modal__footer">
-            <button type="button" class="pp-btn pp-btn--secondary" data-close-modal>Cancelar</button>
+            <button type="button" class="pp-btn pp-btn--secondary" data-close-modal><?= e(__('common.cancel')) ?></button>
             <form method="POST" action="<?= e(base_url('admin/documents/' . $doc['id'] . '/delete')) ?>"
                   style="display:inline;">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                <button type="submit" class="pp-btn pp-btn--danger">Sí, eliminar</button>
+                <button type="submit" class="pp-btn pp-btn--danger"><?= e(__('common.yes_delete')) ?></button>
             </form>
         </footer>
     </div>

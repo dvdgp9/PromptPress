@@ -10,12 +10,12 @@
  *   $stepIdx  int (índice 0-based del paso actual)
  */
 ?><!doctype html>
-<html lang="es">
+<html lang="<?= e(\App\Services\AdminI18n::htmlLang()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title><?= e($title) ?> — Instalador PromptPress</title>
+    <title><?= e($title) ?> — <?= e(__('inst.app_title')) ?></title>
     <link rel="stylesheet" href="<?= e(base_url('install/assets/install.css')) ?>?v=<?= e(PP_VERSION) ?>">
 </head>
 <body class="pp-install">
@@ -25,10 +25,17 @@
         <strong>PromptPress</strong>
         <span class="pp-install__version">v<?= e(PP_VERSION) ?></span>
     </div>
-    <div class="pp-install__subtitle">Asistente de instalación</div>
+    <div class="pp-install__subtitle"><?= e(__('inst.subtitle')) ?></div>
+    <div class="pp-install__lang">
+        <?php foreach (\App\Services\AdminI18n::LOCALES as $loc): ?>
+            <a href="<?= e(InstallerApp::stepUrl($stepKey) . '&lang=' . $loc) ?>"
+               class="pp-install__lang-link<?= $loc === InstallerApp::language() ? ' is-current' : '' ?>"
+               hreflang="<?= e($loc) ?>"><?= e(strtoupper($loc)) ?></a>
+        <?php endforeach; ?>
+    </div>
 </header>
 
-<nav class="pp-steps" aria-label="Pasos de la instalación">
+<nav class="pp-steps" aria-label="<?= e(__('inst.steps_aria')) ?>">
     <ol>
         <?php $i = 0; foreach ($steps as $key => $label): ?>
             <li class="pp-steps__item <?php
@@ -50,7 +57,7 @@
 </main>
 
 <footer class="pp-install__footer">
-    <small>PromptPress &copy; <?= date('Y') ?> · Instalación segura</small>
+    <small>PromptPress &copy; <?= date('Y') ?> · <?= e(__('inst.footer')) ?></small>
 </footer>
 
 </body>

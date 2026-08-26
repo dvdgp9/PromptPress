@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controllers\Admin;
 
+use App\Services\FormI18n;
 use App\Services\FormStore;
 use App\Services\FormTemplates;
+use App\Services\FormTranslator;
 use App\Services\FormPlacementStore;
+use App\Services\LanguageService;
 use Core\Auth;
 use Core\CSRF;
 use Core\Database;
@@ -34,7 +37,7 @@ class FormsController
             [
                 'forms'     => FormStore::all($siteId),
                 'usage'     => $this->usageMap($siteId),
-                'templates' => FormTemplates::catalog(),
+                'templates' => FormTemplates::catalogForView(),
                 'notice'    => Session::flash('notice'),
                 'error'     => Session::flash('error'),
                 'csrf'      => CSRF::token(),
@@ -50,7 +53,7 @@ class FormsController
         $id = FormTemplates::exists($template)
             ? FormStore::createFromTemplate($siteId, $template)
             : FormStore::create($siteId);
-        Session::flash('notice', 'Formulario «' . FormTemplates::label($template) . '» creado. Ajústalo a tu gusto.');
+        Session::flash('notice', __('forms.created', ['plantilla' => FormTemplates::label($template)]));
         Response::redirect(base_url('admin/formularios/' . $id));
     }
 
@@ -60,7 +63,7 @@ class FormsController
         $id = (int) ($params['id'] ?? 0);
         $form = FormStore::find($siteId, $id);
         if ($form === null) {
-            Session::flash('error', 'Formulario no encontrado.');
+            Session::flash('error', __('forms.error.not_found'));
             Response::redirect(base_url('admin/formularios'));
         }
         $this->renderEditor($siteId, $id, $form, []);
@@ -73,7 +76,7 @@ class FormsController
         $id = (int) ($params['id'] ?? 0);
         $existing = FormStore::find($siteId, $id);
         if ($existing === null) {
-            Session::flash('error', 'Formulario no encontrado.');
+            Session::flash('error', __('forms.error.not_found'));
             Response::redirect(base_url('admin/formularios'));
         }
 
@@ -81,6 +84,12 @@ class FormsController
         // El tipo no se edita en el form; se preserva el de la plantilla original
         // (lo necesitan dedup y los eventos de conversión).
         $content['form_type'] = (string) ($existing['form_type'] ?? 'contact');
+        // FORMS-LANG T6 — el editor solo edita el idioma base: idioma y
+        // traducciones no viajan en el POST y se perderían al guardar.
+        $content['language'] = FormI18n::baseLanguage($existing);
+        if (is_array($existing['i18n'] ?? null) && $existing['i18n'] !== []) {
+            $content['i18n'] = $existing['i18n'];
+        }
         $errors = $this->validate($content);
         if ($errors !== []) {
             $this->renderEditor($siteId, $id, array_merge($content, ['id' => $id]), $errors);
@@ -88,7 +97,7 @@ class FormsController
         }
 
         FormStore::update($siteId, $id, $content);
-        Session::flash('notice', 'Formulario guardado.');
+        Session::flash('notice', __('forms.flash.saved'));
         Response::redirect(base_url('admin/formularios/' . $id));
     }
 
@@ -98,11 +107,64 @@ class FormsController
         $siteId = $this->requireSiteId();
         $id = (int) ($params['id'] ?? 0);
         if (FormStore::delete($siteId, $id)) {
-            Session::flash('notice', 'Formulario eliminado.');
+            Session::flash('notice', __('forms.flash.deleted'));
         } else {
-            Session::flash('error', 'No se pudo eliminar el formulario. Revisa que la migración de borrado seguro esté aplicada.');
+            Session::flash('error', __('forms.error.delete_failed'));
         }
         Response::redirect(base_url('admin/formularios'));
+    }
+
+    /**
+     * FORMS-LANG T5/T8 — POST /admin/formularios/{id}/translate
+     *
+     * Dos comportamientos, según el idioma pedido:
+     *  - el idioma PRINCIPAL del sitio y el formulario está en otro → se
+     *    reescribe la base (el caso de la web francesa con formularios
+     *    castellanos heredados);
+     *  - cualquier otro idioma activo → se guarda como traducción, sin tocar
+     *    la base ni la bandeja de entrada.
+     */
+    public function translate(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        $id = (int) ($params['id'] ?? 0);
+        $form = FormStore::find($siteId, $id);
+        if ($form === null) {
+            Session::flash('error', __('forms.error.not_found'));
+            Response::redirect(base_url('admin/formularios'));
+        }
+
+        $target = LanguageService::normalize((string) Request::post('lang', ''));
+        if (!in_array($target, LanguageService::activeFor($siteId), true)) {
+            Session::flash('error', __('forms.error.lang_inactive'));
+            Response::redirect(base_url('admin/formularios/' . $id));
+        }
+
+        $base = FormI18n::baseLanguage($form);
+        $primary = LanguageService::primaryFor($siteId);
+        $rewriteBase = $target === $primary && $target !== $base;
+
+        if ($target === $base) {
+            Session::flash('notice', __('forms.already_in', ['idioma' => LanguageService::label($target)]));
+            Response::redirect(base_url('admin/formularios/' . $id));
+        }
+
+        unset($form['id']);
+        $result = $rewriteBase
+            ? FormTranslator::toBase($siteId, $form, $target)
+            : FormTranslator::toLanguage($siteId, $form, $target);
+
+        if (!$result['ok']) {
+            Session::flash('error', (string) ($result['message'] ?? __('forms.error.translate_failed')));
+            Response::redirect(base_url('admin/formularios/' . $id));
+        }
+
+        FormStore::update($siteId, $id, $result['content']);
+        Session::flash('notice', $rewriteBase
+            ? __('forms.translated_base', ['idioma' => LanguageService::label($target)])
+            : __('forms.translated_added', ['idioma' => LanguageService::label($target)]));
+        Response::redirect(base_url('admin/formularios/' . $id));
     }
 
     // ======================================================================
@@ -167,14 +229,14 @@ class FormsController
     {
         $errors = [];
         if ((string) $c['heading'] === '') {
-            $errors[] = 'El título del formulario es obligatorio.';
+            $errors[] = __('forms.error.title_required');
         }
         if (!is_array($c['fields']) || count($c['fields']) === 0) {
-            $errors[] = 'Añade al menos un campo al formulario.';
+            $errors[] = __('forms.error.need_field');
         }
         foreach ((array) $c['fields'] as $f) {
             if (($f['field_type'] ?? '') === 'select' && empty($f['options'])) {
-                $errors[] = 'Los campos de tipo Selector necesitan al menos una opción.';
+                $errors[] = __('forms.error.select_needs_option');
                 break;
             }
         }
@@ -188,7 +250,7 @@ class FormsController
             }
         }
         if ((string) $c['notify_email'] !== '' && !filter_var($c['notify_email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'El email de aviso no es válido.';
+            $errors[] = __('forms.error.bad_notice_email');
         }
         if ((string) $c['autoresponder_enabled'] === '1') {
             $hasEmailField = false;
@@ -196,7 +258,7 @@ class FormsController
                 if (($f['field_type'] ?? '') === 'email') { $hasEmailField = true; break; }
             }
             if (!$hasEmailField) {
-                $errors[] = 'Para enviar autorrespuesta, el formulario necesita un campo de tipo Email (a dónde responder).';
+                $errors[] = __('forms.error.autoresponder_needs_email');
             }
         }
         return $errors;
@@ -270,6 +332,12 @@ class FormsController
                 'form_id'   => $id,
                 'form'      => $form,
                 'errors'    => $errors,
+                // FORMS-LANG T8 — estado de idiomas del formulario.
+                'baseLang'     => FormI18n::baseLanguage($form),
+                'primaryLang'  => LanguageService::primaryFor($siteId),
+                'siteLangs'    => LanguageService::activeFor($siteId),
+                'translated'   => FormI18n::translatedLanguages($form),
+                'langLabels'   => LanguageService::LANGUAGES,
                 'notice'    => Session::flash('notice'),
                 'csrf'      => CSRF::token(),
             ]
@@ -280,7 +348,7 @@ class FormsController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

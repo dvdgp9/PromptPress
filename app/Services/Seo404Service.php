@@ -67,7 +67,7 @@ final class Seo404Service
     public static function mark(int $siteId, int $id, string $status, ?int $redirectId = null): void
     {
         if (!in_array($status, ['open', 'ignored', 'resolved'], true)) {
-            throw new \InvalidArgumentException('Estado de 404 no válido.');
+            throw new \InvalidArgumentException(__('seo.err.404_status'));
         }
         Database::execute(
             'UPDATE seo_404_logs SET status = ?, redirect_id = ? WHERE id = ? AND site_id = ?',

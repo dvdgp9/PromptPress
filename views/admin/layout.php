@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="<?= e(\App\Services\AdminI18n::htmlLang()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e(\Core\View::section('title', 'Panel')) ?> — PromptPress</title>
+    <title><?= e(\Core\View::section('title', __('layout.title_fallback'))) ?> — PromptPress</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..900&family=Geist+Mono:wght@400..700&display=swap">
@@ -18,7 +18,7 @@
         <div class="pp-sidebar__brand">
             <a href="<?= e(base_url('admin/')) ?>">
                 <?php if (!empty($siteLogoUrl)): ?>
-                    <span class="pp-sidebar__logo pp-sidebar__logo--image"><img src="<?= e($siteLogoUrl) ?>" alt="<?= e($siteName ?? 'Sitio') ?>"></span>
+                    <span class="pp-sidebar__logo pp-sidebar__logo--image"><img src="<?= e($siteLogoUrl) ?>" alt="<?= e($siteName ?? __('layout.site_alt')) ?>"></span>
                 <?php else: ?>
                     <span class="pp-sidebar__logo">P</span>
                 <?php endif; ?>
@@ -30,39 +30,44 @@
             <?php
             $currentPath = \Core\Request::path();
             $navItems = [
-                ['url' => 'admin/',           'icon' => 'dashboard', 'label' => 'Escritorio',     'match' => '/admin'],
-                ['url' => 'admin/assistant',  'icon' => 'ai',        'label' => 'Asistente',      'match' => '/admin/assistant'],
-                ['url' => 'admin/pages',      'icon' => 'pages',     'label' => 'Páginas',        'match' => '/admin/pages'],
-                ['url' => 'admin/posts',      'icon' => 'posts',     'label' => 'Entradas',       'match' => '/admin/posts'],
-                ['url' => 'admin/media',      'icon' => 'media',     'label' => 'Medios',         'match' => '/admin/media'],
-                ['url' => 'admin/formularios','icon' => 'forms',     'label' => 'Formularios',    'match' => '/admin/formularios'],
-                ['url' => 'admin/forms',      'icon' => 'messages',  'label' => 'Mensajes',       'match' => '/admin/forms'],
-                ['url' => 'admin/memory',     'icon' => 'memory',    'label' => 'Conocimiento',   'match' => '/admin/memory'],
-                ['url' => 'admin/documents',  'icon' => 'documents', 'label' => 'Documentos',     'match' => '/admin/documents'],
-                ['url' => 'admin/design',     'icon' => 'design',    'label' => 'Diseño',         'match' => '/admin/design'],
-                ['url' => 'admin/chrome',     'icon' => 'chrome',    'label' => 'Header y pie',   'match' => '/admin/chrome'],
-                ['url' => 'admin/seo',        'icon' => 'seo',       'label' => 'SEO',            'match' => '/admin/seo'],
-                ['url' => 'admin/marketing',  'icon' => 'marketing', 'label' => 'Marketing',      'match' => '/admin/marketing'],
-                ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => 'IA',             'match' => '/admin/ai'],
-                ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => 'Privacidad',     'match' => '/admin/privacy'],
-                ['url' => 'admin/modules',    'icon' => 'settings',  'label' => 'Módulos',        'match' => '/admin/modules'],
-                ['url' => 'admin/settings',   'icon' => 'settings',  'label' => 'Ajustes',        'match' => '/admin/settings'],
+                ['url' => 'admin/',           'icon' => 'dashboard', 'label' => __('nav.dashboard'),     'match' => '/admin'],
+                ['url' => 'admin/assistant',  'icon' => 'ai',        'label' => __('nav.assistant'),      'match' => '/admin/assistant'],
+                ['url' => 'admin/pages',      'icon' => 'pages',     'label' => __('nav.pages'),        'match' => '/admin/pages'],
+                ['url' => 'admin/posts',      'icon' => 'posts',     'label' => __('nav.posts'),       'match' => '/admin/posts'],
+                ['url' => 'admin/media',      'icon' => 'media',     'label' => __('nav.media'),         'match' => '/admin/media'],
+                ['url' => 'admin/formularios','icon' => 'forms',     'label' => __('nav.forms'),    'match' => '/admin/formularios'],
+                ['url' => 'admin/forms',      'icon' => 'messages',  'label' => __('nav.messages'),       'match' => '/admin/forms'],
+                ['url' => 'admin/memory',     'icon' => 'memory',    'label' => __('nav.knowledge'),   'match' => '/admin/memory'],
+                ['url' => 'admin/documents',  'icon' => 'documents', 'label' => __('nav.documents'),     'match' => '/admin/documents'],
+                ['url' => 'admin/design',     'icon' => 'design',    'label' => __('nav.design'),         'match' => '/admin/design'],
+                ['url' => 'admin/chrome',     'icon' => 'chrome',    'label' => __('nav.chrome'),   'match' => '/admin/chrome'],
+                ['url' => 'admin/seo',        'icon' => 'seo',       'label' => __('nav.seo'),            'match' => '/admin/seo'],
+                ['url' => 'admin/marketing',  'icon' => 'marketing', 'label' => __('nav.marketing'),      'match' => '/admin/marketing'],
+                ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => __('nav.ai'),             'match' => '/admin/ai'],
+                ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => __('nav.privacy'),     'match' => '/admin/privacy'],
+                ['url' => 'admin/modules',    'icon' => 'settings',  'label' => __('nav.modules'),        'match' => '/admin/modules'],
+                ['url' => 'admin/settings',   'icon' => 'settings',  'label' => __('nav.settings'),        'match' => '/admin/settings'],
             ];
             // FEAT-3 — entradas de módulos activables (solo si están activos).
             $navSiteId = \Core\Auth::siteId();
+            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'resources')) {
+                array_splice($navItems, 13, 0, [
+                    ['url' => 'admin/resources', 'icon' => 'resources', 'label' => __('nav.resources'), 'match' => '/admin/resources'],
+                ]);
+            }
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'commerce')) {
                 array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/commerce', 'icon' => 'commerce', 'label' => 'Tienda', 'match' => '/admin/commerce'],
+                    ['url' => 'admin/commerce', 'icon' => 'commerce', 'label' => __('nav.shop'), 'match' => '/admin/commerce'],
                 ]);
             }
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'booking')) {
                 array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/booking', 'icon' => 'booking', 'label' => 'Reservas', 'match' => '/admin/booking'],
+                    ['url' => 'admin/booking', 'icon' => 'booking', 'label' => __('nav.bookings'), 'match' => '/admin/booking'],
                 ]);
             }
             if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'analytics')) {
                 array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/analytics', 'icon' => 'analytics', 'label' => 'Analítica', 'match' => '/admin/analytics'],
+                    ['url' => 'admin/analytics', 'icon' => 'analytics', 'label' => __('nav.analytics'), 'match' => '/admin/analytics'],
                 ]);
             }
             foreach ($navItems as $item):
@@ -92,13 +97,13 @@
 
         <!-- Topbar -->
         <header class="pp-topbar">
-            <button class="pp-topbar__toggle" id="pp-sidebar-toggle" type="button" aria-label="Menú">
+            <button class="pp-topbar__toggle" id="pp-sidebar-toggle" type="button" aria-label="<?= e(__('common.menu')) ?>">
                 <span class="pp-hamburger"></span>
             </button>
 
             <div class="pp-topbar__actions">
                 <?php if (isset($siteName)): ?>
-                <a href="<?= e(base_url('/')) ?>" class="pp-topbar__site" target="_blank" title="Ver sitio">
+                <a href="<?= e(base_url('/')) ?>" class="pp-topbar__site" target="_blank" title="<?= e(__('common.view_site')) ?>">
                     <?= e($siteName) ?>
                     <span class="pp-icon--external"></span>
                 </a>
@@ -109,7 +114,7 @@
                     <span class="pp-topbar__username"><?= e($userName ?? 'Admin') ?></span>
                     <form method="POST" action="<?= e(base_url('admin/logout')) ?>" class="pp-logout-form">
                         <input type="hidden" name="_csrf" value="<?= e(\Core\CSRF::token()) ?>">
-                        <button type="submit" class="pp-topbar__logout" title="Cerrar sesión">Salir</button>
+                        <button type="submit" class="pp-topbar__logout" title="<?= e(__('common.logout_title')) ?>"><?= e(__('common.logout')) ?></button>
                     </form>
                 </div>
                 <?php endif; ?>
@@ -141,6 +146,14 @@
     <!-- Overlay para mobile -->
     <div class="pp-overlay" id="pp-overlay"></div>
 
+    <?php /* ADMIN-I18N — Solo viajan al navegador las claves `js.`: mandar las
+             ~2.000 cadenas del panel en cada carga sería tirar ancho de banda.
+             Va ANTES de admin.js porque `pp.t()` lo lee al arrancar. */ ?>
+    <script>window.PP_I18N = <?= json_encode(
+        \App\Services\AdminI18n::jsCatalog(),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    ) ?>;</script>
+    <script src="<?= e(base_url('admin/assets/js/pp-i18n.js')) ?>"></script>
     <script src="<?= e(base_url('admin/assets/js/admin.js')) ?>"></script>
     <?= \Core\View::section('scripts', '') ?>
 </body>

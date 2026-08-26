@@ -60,7 +60,8 @@ final class StripeWebhookController
                 self::markPaid($siteId, $session);
                 break;
             case 'checkout.session.async_payment_failed':
-                logger('Stripe: pago diferido fallido para el pedido '
+                // i18n-ignore: línea de log.
+            logger('Stripe: pago diferido fallido para el pedido '
                     . (string) ($session['metadata']['order_number'] ?? '?'), 'WARNING');
                 break;
             default:

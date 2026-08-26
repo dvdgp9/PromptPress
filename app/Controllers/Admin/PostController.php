@@ -105,7 +105,7 @@ class PostController
 
         $title = trim((string) Request::post('title', ''));
         if ($title === '') {
-            Session::flash('error', 'Necesitamos un título para empezar.');
+            Session::flash('error', __('post_ctrl.need_title'));
             Response::redirect(base_url('admin/posts/new'));
         }
         $excerpt = trim((string) Request::post('excerpt', ''));
@@ -147,7 +147,7 @@ class PostController
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            Session::flash('error', 'No se pudo crear la entrada: ' . $e->getMessage());
+            Session::flash('error', __('post.err.create', ['detalle' => $e->getMessage()]));
             Response::redirect(base_url('admin/posts/new'));
         }
 
@@ -160,7 +160,7 @@ class PostController
             'site_id' => $siteId, 'slug' => $slug, 'page_type' => 'article',
         ]);
 
-        Session::flash('success', 'Entrada creada. Empieza a escribir cuando quieras.');
+        Session::flash('success', __('post_ctrl.created'));
         Response::redirect(base_url('admin/posts/' . $pageId . '/edit'));
     }
 
@@ -188,7 +188,7 @@ class PostController
         $details  = trim((string) Request::post('details', ''));
 
         if ($topic === '') {
-            Response::json(['ok' => false, 'error' => 'Cuéntanos sobre qué quieres escribir.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.need_topic')], 422);
         }
         if (!in_array($length, ['corto', 'medio', 'largo'], true)) $length = 'medio';
 
@@ -209,7 +209,7 @@ class PostController
                 'http_status' => $e->getHttpStatus(),
             ], $e->getHttpStatus() >= 400 && $e->getHttpStatus() < 600 ? $e->getHttpStatus() : 422);
         } catch (\Throwable $e) {
-            Response::json(['ok' => false, 'error' => 'Error generando el artículo: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.generate_error', ['error' => $e->getMessage()])], 500);
         }
 
         $data = (array) ($result['data'] ?? []);
@@ -218,7 +218,7 @@ class PostController
         $blocks  = self::sanitizeBlocks(is_array($data['blocks'] ?? null) ? $data['blocks'] : []);
 
         if (empty($blocks)) {
-            Response::json(['ok' => false, 'error' => 'La IA no devolvió bloques aplicables. Inténtalo de nuevo con más contexto.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.no_blocks')], 422);
         }
 
         // Slug único basado en el título devuelto por la IA
@@ -256,7 +256,7 @@ class PostController
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            Response::json(['ok' => false, 'error' => 'Error guardando el artículo: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.save_error', ['error' => $e->getMessage()])], 500);
         }
 
         // Reading time + meta inicial
@@ -292,7 +292,7 @@ class PostController
             'site_id' => $siteId, 'slug' => $slug, 'page_type' => 'article',
         ]);
 
-        Session::flash('success', 'Entrada generada con IA. Revisa el resultado antes de publicar.');
+        Session::flash('success', __('post_ctrl.generated'));
         Response::json([
             'ok'            => true,
             'page_id'       => $pageId,
@@ -330,7 +330,7 @@ class PostController
     ): ?array {
         PostMetaService::ensureSchema();
 
-        $title   = trim((string) ($payload['title'] ?? '')) ?: 'Entrada sin título';
+        $title   = trim((string) ($payload['title'] ?? '')) ?: __('post_ctrl.untitled');
         $excerpt = trim((string) ($payload['excerpt'] ?? ''));
         $blocks  = self::sanitizeBlocks(is_array($payload['blocks'] ?? null) ? $payload['blocks'] : []);
         if (empty($blocks)) return null;
@@ -422,6 +422,7 @@ class PostController
 
         $existingCount = count($posts);
         if ($existingCount === 0) {
+            // i18n-ignore: contexto que viaja a la IA.
             $existingList = '(El blog está vacío. Propón entradas pilares fundamentales del tema del negocio.)';
         } else {
             $lines = [];
@@ -436,6 +437,7 @@ class PostController
         // FH11 — enfoque/tema opcional para acotar las ideas.
         $focus = trim((string) Request::post('focus', ''));
         $focusLine = $focus !== ''
+            // i18n-ignore: instrucción para el modelo.
             ? "Enfócate especialmente en este tema o ángulo: \"" . mb_substr($focus, 0, 240) . "\".\n\n"
             : '';
 
@@ -443,7 +445,7 @@ class PostController
         // parseables (→ 422 transitorio). Reintentamos una vez antes de fallar.
         $suggestions = [];
         $result = null;
-        $lastError = 'La IA no devolvió propuestas. Inténtalo de nuevo.';
+        $lastError = __('post_ctrl.no_proposals');
         $lastStatus = 422;
         for ($attempt = 1; $attempt <= 2 && empty($suggestions); $attempt++) {
             try {
@@ -522,7 +524,7 @@ class PostController
             $uploaded = self::normalizeUploadedFiles($_FILES['documents'] ?? null);
             if (!empty($uploaded)) {
                 if (count($uploaded) > 5) {
-                    Response::json(['ok' => false, 'error' => 'Puedes subir un máximo de 5 documentos de referencia.'], 422);
+                    Response::json(['ok' => false, 'error' => __('post_ctrl.max_docs')], 422);
                 }
                 foreach ($uploaded as $file) {
                     $referenceDocs[] = self::storeUploadedReferenceDocument($siteId, $file);
@@ -534,7 +536,7 @@ class PostController
 
         if (empty($referenceDocs)) {
             if ($documentId <= 0) {
-                Response::json(['ok' => false, 'error' => 'Sube al menos un documento de referencia.'], 422);
+                Response::json(['ok' => false, 'error' => __('post_ctrl.need_doc')], 422);
             }
 
             $doc = Database::selectOne(
@@ -542,14 +544,14 @@ class PostController
                 [$documentId, $siteId]
             );
             if (!$doc) {
-                Response::json(['ok' => false, 'error' => 'Documento no encontrado.'], 404);
+                Response::json(['ok' => false, 'error' => __('post_ctrl.doc_not_found')], 404);
             }
             if ($doc['status'] !== 'ready') {
-                Response::json(['ok' => false, 'error' => 'El documento aún se está procesando o tuvo un error en la extracción. Vuelve a /admin/documents para revisarlo.'], 422);
+                Response::json(['ok' => false, 'error' => __('post_ctrl.doc_not_ready')], 422);
             }
             $text = trim((string) ($doc['extracted_text'] ?? ''));
             if ($text === '') {
-                Response::json(['ok' => false, 'error' => 'El documento no tiene texto extraído utilizable.'], 422);
+                Response::json(['ok' => false, 'error' => __('post_ctrl.doc_no_text')], 422);
             }
             $referenceDocs[] = [
                 'id'    => (int) $doc['id'],
@@ -566,7 +568,8 @@ class PostController
         try {
             $result = AIActionRunner::run(Actions::GENERATE_ARTICLE_FROM_DOCUMENT, [
                 'document_text' => $extracted,
-                'angle'         => $angle !== '' ? $angle : '(sin ángulo específico — destila los puntos clave del documento)',
+                // i18n-ignore: valor que viaja a la IA.
+            'angle'         => $angle !== '' ? $angle : '(sin ángulo específico — destila los puntos clave del documento)',
                 'audience'      => $audience !== '' ? $audience : 'lector general',
                 'tone'          => $tone !== '' ? $tone : 'profesional y cercano',
                 'length_label'  => $length,
@@ -578,16 +581,16 @@ class PostController
                 'http_status' => $e->getHttpStatus(),
             ], $e->getHttpStatus() >= 400 && $e->getHttpStatus() < 600 ? $e->getHttpStatus() : 422);
         } catch (\Throwable $e) {
-            Response::json(['ok' => false, 'error' => 'Error generando el artículo: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.generate_error', ['error' => $e->getMessage()])], 500);
         }
 
         $data = (array) ($result['data'] ?? []);
-        $title   = trim((string) ($data['title'] ?? '')) ?: mb_substr((string) ($sourceTitles[0] ?? 'Artículo desde documento'), 0, 160);
+        $title   = trim((string) ($data['title'] ?? '')) ?: mb_substr((string) ($sourceTitles[0] ?? __('post_ctrl.article_from_doc')), 0, 160);
         $excerpt = trim((string) ($data['excerpt'] ?? ''));
         $blocks  = self::sanitizeBlocks(is_array($data['blocks'] ?? null) ? $data['blocks'] : []);
 
         if (empty($blocks)) {
-            Response::json(['ok' => false, 'error' => 'La IA no devolvió bloques aplicables. El documento puede ser muy breve.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.no_blocks_short_doc')], 422);
         }
 
         $slug = PageController::uniqueSlug($siteId, slugify($title));
@@ -624,7 +627,7 @@ class PostController
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            Response::json(['ok' => false, 'error' => 'Error guardando el artículo: ' . $e->getMessage()], 500);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.save_error', ['error' => $e->getMessage()])], 500);
         }
 
         $text = self::plainTextFromBlocks($blocks);
@@ -657,7 +660,7 @@ class PostController
             'site_id' => $siteId, 'slug' => $slug, 'page_type' => 'article',
         ]);
 
-        Session::flash('success', 'Entrada generada desde documentos de referencia. Revisa el resultado antes de publicar.');
+        Session::flash('success', __('post_ctrl.generated_from_docs'));
         Response::json([
             'ok'            => true,
             'page_id'       => $pageId,
@@ -716,18 +719,18 @@ class PostController
 
         $type = self::detectReferenceType($file);
         if ($type === null) {
-            throw new \RuntimeException('Tipo de archivo no soportado. Sube PDF, DOCX o TXT.');
+            throw new \RuntimeException(__('documents.error.bad_type'));
         }
 
         $dir = DocumentController::documentsDir($siteId);
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-            throw new \RuntimeException('No se pudo crear la carpeta de documentos.');
+            throw new \RuntimeException(__('documents.error.no_folder'));
         }
 
         $name = bin2hex(random_bytes(16)) . '.' . $type;
         $dest = $dir . '/' . $name;
         if (!move_uploaded_file((string) $file['tmp_name'], $dest)) {
-            throw new \RuntimeException('No se pudo guardar el archivo subido.');
+            throw new \RuntimeException(__('documents.error.save_failed'));
         }
 
         $rel = 'storage/documents/' . $siteId . '/' . $name;
@@ -744,7 +747,7 @@ class PostController
         try {
             $text = TextExtractor::extract($dest, $type);
             if (trim($text) === '') {
-                throw new \RuntimeException('No hemos encontrado texto legible en el documento.');
+                throw new \RuntimeException(__('post_ctrl.no_readable_text'));
             }
             $summary = DocumentSummarizer::summarize($text);
             Database::execute(
@@ -768,22 +771,22 @@ class PostController
                 break;
             case UPLOAD_ERR_INI_SIZE:
             case UPLOAD_ERR_FORM_SIZE:
-                return $name . ': el archivo excede el tamaño máximo permitido.';
+                return $name . ': ' . __('post_ctrl.file_too_big');
             case UPLOAD_ERR_PARTIAL:
-                return $name . ': la subida se interrumpió. Inténtalo de nuevo.';
+                return $name . ': ' . __('post_ctrl.file_interrupted');
             case UPLOAD_ERR_NO_FILE:
-                return $name . ': no se recibió el archivo.';
+                return $name . ': ' . __('post_ctrl.file_missing');
             default:
-                return $name . ': error al subir el archivo.';
+                return $name . ': ' . __('media.err.upload');
         }
         if ((int) ($file['size'] ?? 0) <= 0) {
-            return $name . ': el archivo está vacío.';
+            return $name . ': ' . __('post_ctrl.file_empty');
         }
         if ((int) ($file['size'] ?? 0) > DocumentController::MAX_SIZE) {
             return $name . ': supera los ' . (DocumentController::MAX_SIZE / 1024 / 1024) . ' MB permitidos.';
         }
         if (!is_uploaded_file((string) ($file['tmp_name'] ?? ''))) {
-            return $name . ': archivo subido no válido.';
+            return $name . ': ' . __('post_ctrl.file_invalid');
         }
         if (self::detectReferenceType($file) === null) {
             return $name . ': tipo no soportado. Sube PDF, DOCX o TXT.';
@@ -836,7 +839,7 @@ class PostController
 
         $combined = trim(implode("\n\n", $parts));
         if ($combined === '') {
-            Response::json(['ok' => false, 'error' => 'Los documentos no tienen texto extraído utilizable.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.docs_no_text')], 422);
         }
         return $combined;
     }
@@ -893,7 +896,7 @@ class PostController
         $raw = (string) Request::post('blocks', '');
         $blocks = $raw !== '' ? json_decode($raw, true) : [];
         if (!is_array($blocks)) {
-            Response::json(['ok' => false, 'error' => 'Formato de bloques inválido.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.bad_blocks')], 422);
         }
 
         $blocks = self::sanitizeBlocks($blocks);
@@ -1037,7 +1040,7 @@ class PostController
 
         $next = (string) Request::post('status', '');
         if (!in_array($next, ['draft', 'published'], true)) {
-            Response::json(['ok' => false, 'error' => 'Estado inválido.'], 422);
+            Response::json(['ok' => false, 'error' => __('page_ctrl.bad_status2')], 422);
         }
 
         $publishedAt = $page['published_at'];
@@ -1080,7 +1083,7 @@ class PostController
         $seoExcludeSitemap = Request::post('seo_exclude_sitemap', '') === '1' ? 1 : 0;
         $canonicalUrl = SeoIndexingService::normalizeCanonical((string) Request::post('canonical_url', ''));
         if (trim((string) Request::post('canonical_url', '')) !== '' && $canonicalUrl === null) {
-            Response::json(['ok' => false, 'error' => 'La canonical debe empezar por http:// o https://.'], 422);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.bad_canonical')], 422);
         }
 
         PostMetaService::save($pageId, $meta);
@@ -1125,7 +1128,7 @@ class PostController
         $page = self::findArticleOrFail($pageId, $siteId);
 
         if (!ImageBankService::isAvailable()) {
-            Response::json(['ok' => false, 'error' => 'Banco de imágenes no configurado. Revisa la Access Key en config/config.php.'], 503);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.bank_off')], 503);
         }
 
         // Recolectar contexto para componer la query
@@ -1150,7 +1153,7 @@ class PostController
         $attempt = max(0, (int) Request::post('attempt', 0));
         $media = ImageBankService::pickFeaturedForPost($siteId, Auth::id(), $title, $excerpt, $bodyText, 'landscape', $attempt);
         if (!$media) {
-            Response::json(['ok' => false, 'error' => 'No hemos encontrado una imagen relevante. Prueba con la búsqueda manual.'], 404);
+            Response::json(['ok' => false, 'error' => __('post_ctrl.no_image_found')], 404);
         }
 
         // Actualizar post_meta con la nueva featured image (y su alt).
@@ -1263,7 +1266,7 @@ class PostController
             [$pageId, $siteId]
         );
         if (!$row) {
-            Session::flash('error', 'Página no encontrada.');
+            Session::flash('error', __('post_ctrl.page_not_found'));
             Response::redirect(base_url('admin/posts'));
         }
         return $row;

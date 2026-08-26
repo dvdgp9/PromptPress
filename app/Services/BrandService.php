@@ -58,10 +58,21 @@ final class BrandService
      * va el logo, no por su color: "logo oscuro" es ambiguo (¿de tinta oscura o
      * para fondo oscuro?) y ahí es donde el cliente se equivoca al subirlo.
      */
+    /**
+     * Variantes de logo. `label` es una CLAVE de traducción (se resuelve con
+     * `variantLabel()`): la constante se evalúa antes de saber el idioma del
+     * gestor, así que no puede llevar el texto ya hecho.
+     */
     public const LOGO_VARIANTS = [
-        'light' => ['setting' => 'site_logo_path',      'label' => 'Para fondos claros'],
-        'dark'  => ['setting' => 'site_logo_dark_path', 'label' => 'Para fondos oscuros'],
+        'light' => ['setting' => 'site_logo_path',      'label' => 'brand.logo_light'],
+        'dark'  => ['setting' => 'site_logo_dark_path', 'label' => 'brand.logo_dark'],
     ];
+
+    /** Etiqueta traducida de una variante de logo. */
+    public static function variantLabel(string $variant): string
+    {
+        return __(self::LOGO_VARIANTS[$variant]['label'] ?? 'brand.logo_light');
+    }
 
     public static function data(int $siteId): array
     {
@@ -133,8 +144,10 @@ final class BrandService
 
         if ($lines === []) return '';
 
+        // i18n-ignore: cabecera del bloque de logos que viaja al prompt.
         return "LOGOS DE LA MARCA (rutas reales, no inventes otras):\n"
             . implode("\n", $lines) . "\n"
+            // i18n-ignore-start: instrucciones de logo para el modelo.
             . "- Insértalos con `<img src=\"…\" alt=\"" . str_replace('"', '', (string) $data['name']) . "\">`.\n"
             . "- Elige SIEMPRE la variante que contraste con el fondo de esa sección. Si solo hay una, úsala solo donde se lea bien.\n"
             . "- No pongas el logo en la cabecera ni en el pie: la plataforma ya los pinta.";

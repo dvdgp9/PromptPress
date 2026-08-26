@@ -13,23 +13,21 @@ $level = $status['level'] ?? 'green';
                 <path d="M9 12l2 2 4-4"/>
             </svg>
             <div>
-                <h3>Todo en orden</h3>
-                <p>Tu sitio cumple con lo básico de la normativa europea. Si añades servicios de analítica o publicidad más adelante, te avisaremos por aquí.</p>
+                <h3><?= e(__('privacy.level.green')) ?></h3>
+                <p><?= e(__('privacy.all_ok_help')) ?></p>
             </div>
         </div>
     <?php else: ?>
         <div class="pp-privacy-summary__card pp-privacy-summary__card--<?= e($level) ?>">
             <div>
                 <h3>
-                    <?php if ($level === 'red'): ?>
-                        Atención: hay algo que arreglar
-                    <?php elseif ($level === 'orange'): ?>
-                        Te falta un par de cosas antes de estar tranquilo
-                    <?php else: ?>
-                        Casi listo
-                    <?php endif; ?>
+                    <?= e(match ($level) {
+                        'red'    => __('privacy.head_red'),
+                        'orange' => __('privacy.head_orange'),
+                        default  => __('privacy.level.yellow'),
+                    }) ?>
                 </h3>
-                <p>Resuelve estos puntos cuando puedas. La mayoría se arreglan en pocos minutos.</p>
+                <p><?= e(__('privacy.gaps_help')) ?></p>
             </div>
         </div>
 
@@ -49,14 +47,14 @@ $level = $status['level'] ?? 'green';
     <?php endif; ?>
 
     <div class="pp-privacy-summary__hint">
-        <strong>¿Por qué importa esto?</strong>
-        <p>La normativa europea (RGPD y la ley española LSSI) exige que cualquier web publique unos textos legales mínimos y, si usa cookies de analítica o publicidad, pida permiso antes de cargarlas. PromptPress te ayuda generando los textos a partir de tus datos y gestionando el banner por ti.</p>
+        <strong><?= e(__('privacy.why')) ?></strong>
+        <p><?= e(__('privacy.why_help')) ?></p>
     </div>
 
     <div class="pp-privacy-summary__wizard-cta">
         <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/privacy/wizard')) ?>">
-            Reabrir asistente guiado
+            <?= e(__('privacy.reopen_wizard')) ?>
         </a>
-        <small>Útil si quieres regenerar las páginas legales o repasar los datos paso a paso.</small>
+        <small><?= e(__('privacy.wizard_hint')) ?></small>
     </div>
 </div>

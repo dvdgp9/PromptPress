@@ -102,7 +102,8 @@ final class Router
         if ($methodAllowed) {
             http_response_code(405);
             header('Content-Type: text/html; charset=UTF-8');
-            echo '<h1>405 — Método no permitido</h1>';
+            // i18n-ignore: página de error HTTP, la puede ver cualquiera.
+        echo '<h1>405 — Método no permitido</h1>';
             return;
         }
         Response::notFound();

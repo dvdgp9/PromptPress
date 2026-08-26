@@ -18,6 +18,8 @@ use App\Services\LanguageService;
  */
 final class CustomBlockGenerator
 {
+    // i18n-ignore-start: reintentos e instrucciones dirigidas al modelo.
+
     /**
      * @param array<string,mixed> $input
      * @return array<string,mixed>
@@ -182,4 +184,5 @@ final class CustomBlockGenerator
         }
         return implode("\n", $lines);
     }
+    // i18n-ignore-end
 }

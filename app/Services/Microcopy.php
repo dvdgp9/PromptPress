@@ -42,7 +42,7 @@ final class Microcopy
     public const MODULE_LANGUAGES = ['es', 'en', 'ca', 'gl', 'fr', 'pt'];
 
     /** Prefijos de clave que se consideran "de módulo". */
-    private const MODULE_PREFIXES = ['shop.', 'booking.', 'mail.'];
+    private const MODULE_PREFIXES = ['shop.', 'booking.', 'resources.', 'mail.'];
 
     /**
      * key => [código de idioma => texto]. El castellano es la fuente y el
@@ -153,6 +153,285 @@ final class Microcopy
             'eu' => 'Bidalketa bat baino gehiago jaso ditugu jarraian. Itxaron minutu batzuk berriro saiatu aurretik.',
             'fr' => 'Nous avons reçu plusieurs envois à la suite. Patientez quelques minutes avant de réessayer.',
             'pt' => 'Recebemos vários envios seguidos. Aguarde alguns minutos antes de tentar de novo.',
+        ],
+
+        // FORMS-LANG T2 — textos que estaban incrustados en el renderizador.
+        'form.select_placeholder' => [
+            'es' => 'Selecciona una opción', 'en' => 'Select an option',
+            'ca' => 'Selecciona una opció', 'gl' => 'Escolle unha opción',
+            'eu' => 'Hautatu aukera bat', 'fr' => 'Sélectionnez une option',
+            'pt' => 'Selecione uma opção',
+        ],
+        'form.file_button' => [
+            'es' => 'Seleccionar archivo', 'en' => 'Choose file',
+            'ca' => 'Selecciona un fitxer', 'gl' => 'Escoller ficheiro',
+            'eu' => 'Hautatu fitxategia', 'fr' => 'Choisir un fichier',
+            'pt' => 'Selecionar ficheiro',
+        ],
+        'form.file_empty' => [
+            'es' => 'Ningún archivo seleccionado', 'en' => 'No file selected',
+            'ca' => 'Cap fitxer seleccionat', 'gl' => 'Ningún ficheiro seleccionado',
+            'eu' => 'Ez da fitxategirik hautatu', 'fr' => 'Aucun fichier sélectionné',
+            'pt' => 'Nenhum ficheiro selecionado',
+        ],
+        'form.file_help' => [
+            'es' => 'Formatos permitidos: {formats}. Máximo {max} MB.',
+            'en' => 'Allowed formats: {formats}. Maximum {max} MB.',
+            'ca' => 'Formats permesos: {formats}. Màxim {max} MB.',
+            'gl' => 'Formatos permitidos: {formats}. Máximo {max} MB.',
+            'eu' => 'Onartutako formatuak: {formats}. Gehienez {max} MB.',
+            'fr' => 'Formats acceptés : {formats}. Maximum {max} Mo.',
+            'pt' => 'Formatos permitidos: {formats}. Máximo {max} MB.',
+        ],
+        'form.marketing_consent' => [
+            'es' => 'Acepto recibir comunicaciones comerciales y novedades por email. Puedo darme de baja en cualquier momento.',
+            'en' => 'I agree to receive commercial communications and news by email. I can unsubscribe at any time.',
+            'ca' => 'Accepto rebre comunicacions comercials i novetats per correu electrònic. Puc donar-me de baixa en qualsevol moment.',
+            'gl' => 'Acepto recibir comunicacións comerciais e novidades por correo electrónico. Podo darme de baixa en calquera momento.',
+            'eu' => 'Onartzen dut merkataritza-komunikazioak eta berriak posta elektronikoz jasotzea. Noiznahi baja eman dezaket.',
+            'fr' => 'J\'accepte de recevoir des communications commerciales et des actualités par e-mail. Je peux me désabonner à tout moment.',
+            'pt' => 'Aceito receber comunicações comerciais e novidades por email. Posso cancelar a subscrição a qualquer momento.',
+        ],
+
+        // Nota de privacidad bajo el formulario (E-GDPR G5). Tiene efectos
+        // legales: traducciones revisadas, nunca generadas al vuelo.
+        'form.privacy_basis_consent' => [
+            'es' => 'tras tu consentimiento explícito',
+            'en' => 'on the basis of your explicit consent',
+            'ca' => 'després del teu consentiment explícit',
+            'gl' => 'tras o teu consentimento explícito',
+            'eu' => 'zure baimen esplizituaren ondoren',
+            'fr' => 'sur la base de votre consentement explicite',
+            'pt' => 'com base no seu consentimento explícito',
+        ],
+        'form.privacy_basis_contract' => [
+            'es' => 'para gestionar tu solicitud o servicio contratado',
+            'en' => 'to handle your request or the service you have contracted',
+            'ca' => 'per gestionar la teva sol·licitud o servei contractat',
+            'gl' => 'para xestionar a túa solicitude ou servizo contratado',
+            'eu' => 'zure eskaera edo kontratatutako zerbitzua kudeatzeko',
+            'fr' => 'afin de traiter votre demande ou le service souscrit',
+            'pt' => 'para gerir o seu pedido ou serviço contratado',
+        ],
+        'form.privacy_basis_legitimate' => [
+            'es' => 'en base a nuestro interés legítimo de atender consultas',
+            'en' => 'on the basis of our legitimate interest in answering enquiries',
+            'ca' => 'sobre la base del nostre interès legítim d\'atendre consultes',
+            'gl' => 'con base no noso interese lexítimo de atender consultas',
+            'eu' => 'kontsultei erantzuteko dugun interes legitimoan oinarrituta',
+            'fr' => 'sur la base de notre intérêt légitime à répondre aux demandes',
+            'pt' => 'com base no nosso interesse legítimo em responder a consultas',
+        ],
+        'form.privacy_text' => [
+            'es' => 'Tus datos se tratarán {basis}.', 'en' => 'Your data will be processed {basis}.',
+            'ca' => 'Les teves dades es tractaran {basis}.', 'gl' => 'Os teus datos trataranse {basis}.',
+            'eu' => 'Zure datuak {basis} tratatuko dira.', 'fr' => 'Vos données seront traitées {basis}.',
+            'pt' => 'Os seus dados serão tratados {basis}.',
+        ],
+        'form.privacy_text_retention' => [
+            'es' => 'Tus datos se tratarán {basis} y se conservarán durante {retention}.',
+            'en' => 'Your data will be processed {basis} and kept for {retention}.',
+            'ca' => 'Les teves dades es tractaran {basis} i es conservaran durant {retention}.',
+            'gl' => 'Os teus datos trataranse {basis} e conservaranse durante {retention}.',
+            'eu' => 'Zure datuak {basis} tratatuko dira eta {retention} gordeko dira.',
+            'fr' => 'Vos données seront traitées {basis} et conservées pendant {retention}.',
+            'pt' => 'Os seus dados serão tratados {basis} e conservados durante {retention}.',
+        ],
+        'form.privacy_link' => [
+            'es' => 'Más información en nuestra política de privacidad',
+            'en' => 'More information in our privacy policy',
+            'ca' => 'Més informació a la nostra política de privacitat',
+            'gl' => 'Máis información na nosa política de privacidade',
+            'eu' => 'Informazio gehiago gure pribatutasun-politikan',
+            'fr' => 'Plus d\'informations dans notre politique de confidentialité',
+            'pt' => 'Mais informação na nossa política de privacidade',
+        ],
+        'form.retention_default' => [
+            'es' => '12 meses tras la última comunicación',
+            'en' => '12 months after the last communication',
+            'ca' => '12 mesos després de l\'última comunicació',
+            'gl' => '12 meses tras a última comunicación',
+            'eu' => 'azken komunikaziotik 12 hilabetera arte',
+            'fr' => '12 mois après le dernier échange',
+            'pt' => '12 meses após a última comunicação',
+        ],
+
+        'form.not_found' => [
+            'es' => 'Formulario no encontrado.', 'en' => 'Form not found.',
+            'ca' => 'Formulari no trobat.', 'gl' => 'Formulario non atopado.',
+            'eu' => 'Ez da inprimakia aurkitu.', 'fr' => 'Formulaire introuvable.',
+            'pt' => 'Formulário não encontrado.',
+        ],
+        'form.expired_page' => [
+            'es' => 'La página llevaba demasiado tiempo abierta. Recárgala e inténtalo de nuevo.',
+            'en' => 'The page had been open for too long. Please reload it and try again.',
+            'ca' => 'La pàgina feia massa temps que era oberta. Torna-la a carregar i prova-ho de nou.',
+            'gl' => 'A páxina levaba demasiado tempo aberta. Recárgaa e téntao de novo.',
+            'eu' => 'Orria denbora luzeegian egon da irekita. Kargatu berriro eta saiatu berriz.',
+            'fr' => 'La page est restée ouverte trop longtemps. Rechargez-la et réessayez.',
+            'pt' => 'A página esteve aberta demasiado tempo. Recarregue-a e tente novamente.',
+        ],
+        'form.check_fields' => [
+            'es' => 'Revisa estos campos: {fields}.', 'en' => 'Please check these fields: {fields}.',
+            'ca' => 'Revisa aquests camps: {fields}.', 'gl' => 'Revisa estes campos: {fields}.',
+            'eu' => 'Berrikusi eremu hauek: {fields}.', 'fr' => 'Vérifiez ces champs : {fields}.',
+            'pt' => 'Verifique estes campos: {fields}.',
+        ],
+        'form.retention_job' => [
+            'es' => '12 meses tras el cierre del proceso de selección',
+            'en' => '12 months after the selection process closes',
+            'ca' => '12 mesos després del tancament del procés de selecció',
+            'gl' => '12 meses tras o peche do proceso de selección',
+            'eu' => 'hautaketa-prozesua itxi eta 12 hilabetera arte',
+            'fr' => '12 mois après la clôture du processus de recrutement',
+            'pt' => '12 meses após o encerramento do processo de seleção',
+        ],
+
+        // FORMS-LANG T3/T4 — textos de las PLANTILLAS de formulario. A
+        // diferencia del resto del diccionario, esto no se resuelve al pintar:
+        // se copia a la BD al crear el formulario, en el idioma principal del
+        // sitio, y a partir de ahí lo manda el usuario. Los `name` de los
+        // campos NO están aquí a propósito: son la clave de los datos
+        // guardados y de las variables del autorespondedor, y no se traducen.
+        'form.tpl.field.name' => [
+            'es' => 'Nombre', 'en' => 'Name', 'ca' => 'Nom', 'gl' => 'Nome',
+            'eu' => 'Izena', 'fr' => 'Nom', 'pt' => 'Nome',
+        ],
+        'form.tpl.field.email' => [
+            'es' => 'Email', 'en' => 'Email', 'ca' => 'Correu electrònic', 'gl' => 'Correo electrónico',
+            'eu' => 'Helbide elektronikoa', 'fr' => 'E-mail', 'pt' => 'Email',
+        ],
+        'form.tpl.field.message' => [
+            'es' => 'Mensaje', 'en' => 'Message', 'ca' => 'Missatge', 'gl' => 'Mensaxe',
+            'eu' => 'Mezua', 'fr' => 'Message', 'pt' => 'Mensagem',
+        ],
+        'form.tpl.field.phone' => [
+            'es' => 'Teléfono', 'en' => 'Phone', 'ca' => 'Telèfon', 'gl' => 'Teléfono',
+            'eu' => 'Telefonoa', 'fr' => 'Téléphone', 'pt' => 'Telefone',
+        ],
+        'form.tpl.field.need' => [
+            'es' => '¿Qué necesitas?', 'en' => 'What do you need?', 'ca' => 'Què necessites?',
+            'gl' => 'Que necesitas?', 'eu' => 'Zer behar duzu?', 'fr' => 'De quoi avez-vous besoin ?',
+            'pt' => 'Do que precisa?',
+        ],
+        'form.tpl.field.date' => [
+            'es' => 'Fecha preferida', 'en' => 'Preferred date', 'ca' => 'Data preferida',
+            'gl' => 'Data preferida', 'eu' => 'Nahiago duzun data', 'fr' => 'Date souhaitée',
+            'pt' => 'Data preferida',
+        ],
+        'form.tpl.field.cv' => [
+            'es' => 'CV', 'en' => 'CV', 'ca' => 'CV', 'gl' => 'CV',
+            'eu' => 'CVa', 'fr' => 'CV', 'pt' => 'CV',
+        ],
+
+        'form.tpl.contact.heading' => [
+            'es' => 'Contacta con nosotros', 'en' => 'Get in touch', 'ca' => 'Contacta amb nosaltres',
+            'gl' => 'Contacta connosco', 'eu' => 'Jar zaitez gurekin harremanetan',
+            'fr' => 'Contactez-nous', 'pt' => 'Fale connosco',
+        ],
+        'form.tpl.contact.success' => [
+            'es' => 'Gracias, te contactaremos pronto.', 'en' => 'Thanks, we will get back to you soon.',
+            'ca' => 'Gràcies, et contactarem aviat.', 'gl' => 'Grazas, contactarémoste pronto.',
+            'eu' => 'Eskerrik asko, laster jarriko gara zurekin harremanetan.',
+            'fr' => 'Merci, nous vous recontacterons rapidement.',
+            'pt' => 'Obrigado, entraremos em contacto em breve.',
+        ],
+        'form.tpl.newsletter.heading' => [
+            'es' => 'Suscríbete a nuestra newsletter', 'en' => 'Subscribe to our newsletter',
+            'ca' => 'Subscriu-te a la nostra newsletter', 'gl' => 'Subscríbete á nosa newsletter',
+            'eu' => 'Harpidetu gure newsletterrera', 'fr' => 'Abonnez-vous à notre newsletter',
+            'pt' => 'Subscreva a nossa newsletter',
+        ],
+        'form.tpl.newsletter.success' => [
+            'es' => '¡Listo! Revisa tu correo para confirmar la suscripción.',
+            'en' => 'All set! Check your inbox to confirm the subscription.',
+            'ca' => 'Fet! Revisa el teu correu per confirmar la subscripció.',
+            'gl' => 'Listo! Revisa o teu correo para confirmar a subscrición.',
+            'eu' => 'Eginda! Begiratu zure posta harpidetza berresteko.',
+            'fr' => 'C\'est fait ! Consultez votre boîte mail pour confirmer l\'abonnement.',
+            'pt' => 'Pronto! Verifique o seu email para confirmar a subscrição.',
+        ],
+        'form.tpl.newsletter.submit' => [
+            'es' => 'Suscribirme', 'en' => 'Subscribe', 'ca' => 'Subscriure\'m',
+            'gl' => 'Subscribirme', 'eu' => 'Harpidetu', 'fr' => 'S\'abonner',
+            'pt' => 'Subscrever',
+        ],
+        'form.tpl.quote.heading' => [
+            'es' => 'Pide tu presupuesto', 'en' => 'Request your quote', 'ca' => 'Demana el teu pressupost',
+            'gl' => 'Pide o teu orzamento', 'eu' => 'Eskatu zure aurrekontua',
+            'fr' => 'Demandez votre devis', 'pt' => 'Peça o seu orçamento',
+        ],
+        'form.tpl.quote.success' => [
+            'es' => 'Gracias, prepararemos tu presupuesto y te lo enviaremos pronto.',
+            'en' => 'Thanks, we will prepare your quote and send it to you shortly.',
+            'ca' => 'Gràcies, prepararem el teu pressupost i te l\'enviarem aviat.',
+            'gl' => 'Grazas, prepararemos o teu orzamento e enviarémolo pronto.',
+            'eu' => 'Eskerrik asko, zure aurrekontua prestatu eta laster bidaliko dizugu.',
+            'fr' => 'Merci, nous préparons votre devis et vous l\'envoyons rapidement.',
+            'pt' => 'Obrigado, vamos preparar o seu orçamento e enviá-lo em breve.',
+        ],
+        'form.tpl.quote.submit' => [
+            'es' => 'Solicitar presupuesto', 'en' => 'Request quote', 'ca' => 'Sol·licitar pressupost',
+            'gl' => 'Solicitar orzamento', 'eu' => 'Aurrekontua eskatu', 'fr' => 'Demander un devis',
+            'pt' => 'Pedir orçamento',
+        ],
+        'form.tpl.booking.heading' => [
+            'es' => 'Reserva tu cita', 'en' => 'Book your appointment', 'ca' => 'Reserva la teva cita',
+            'gl' => 'Reserva a túa cita', 'eu' => 'Erreserbatu zure hitzordua',
+            'fr' => 'Réservez votre rendez-vous', 'pt' => 'Marque a sua consulta',
+        ],
+        'form.tpl.booking.success' => [
+            'es' => 'Hemos recibido tu solicitud de reserva. Te confirmaremos en breve.',
+            'en' => 'We have received your booking request. We will confirm shortly.',
+            'ca' => 'Hem rebut la teva sol·licitud de reserva. T\'ho confirmarem aviat.',
+            'gl' => 'Recibimos a túa solicitude de reserva. Confirmarémoscho en breve.',
+            'eu' => 'Zure erreserba-eskaera jaso dugu. Laster berretsiko dizugu.',
+            'fr' => 'Nous avons bien reçu votre demande de réservation. Nous vous confirmerons sous peu.',
+            'pt' => 'Recebemos o seu pedido de marcação. Confirmaremos em breve.',
+        ],
+        'form.tpl.booking.submit' => [
+            'es' => 'Reservar', 'en' => 'Book', 'ca' => 'Reservar', 'gl' => 'Reservar',
+            'eu' => 'Erreserbatu', 'fr' => 'Réserver', 'pt' => 'Reservar',
+        ],
+        'form.tpl.job.heading' => [
+            'es' => 'Trabaja con nosotros', 'en' => 'Work with us', 'ca' => 'Treballa amb nosaltres',
+            'gl' => 'Traballa connosco', 'eu' => 'Egin lan gurekin', 'fr' => 'Travaillez avec nous',
+            'pt' => 'Trabalhe connosco',
+        ],
+        'form.tpl.job.success' => [
+            'es' => 'Gracias por tu interés. Revisaremos tu candidatura.',
+            'en' => 'Thanks for your interest. We will review your application.',
+            'ca' => 'Gràcies pel teu interès. Revisarem la teva candidatura.',
+            'gl' => 'Grazas polo teu interese. Revisaremos a túa candidatura.',
+            'eu' => 'Eskerrik asko zure interesagatik. Zure hautagaitza aztertuko dugu.',
+            'fr' => 'Merci de votre intérêt. Nous étudierons votre candidature.',
+            'pt' => 'Obrigado pelo seu interesse. Vamos analisar a sua candidatura.',
+        ],
+        'form.tpl.job.submit' => [
+            'es' => 'Enviar candidatura', 'en' => 'Send application', 'ca' => 'Enviar candidatura',
+            'gl' => 'Enviar candidatura', 'eu' => 'Bidali hautagaitza', 'fr' => 'Envoyer ma candidature',
+            'pt' => 'Enviar candidatura',
+        ],
+        'form.tpl.default_heading' => [
+            'es' => 'Formulario', 'en' => 'Form', 'ca' => 'Formulari', 'gl' => 'Formulario',
+            'eu' => 'Inprimakia', 'fr' => 'Formulaire', 'pt' => 'Formulário',
+        ],
+        'form.tpl.autoresponder_subject' => [
+            'es' => 'Hemos recibido tu mensaje', 'en' => 'We have received your message',
+            'ca' => 'Hem rebut el teu missatge', 'gl' => 'Recibimos a túa mensaxe',
+            'eu' => 'Zure mezua jaso dugu', 'fr' => 'Nous avons bien reçu votre message',
+            'pt' => 'Recebemos a sua mensagem',
+        ],
+        // OJO: se lee con `template()`, no con `t()`. Las variables van con
+        // llaves DOBLES (`{{nombre}}`) y `t()` las dejaría a medias.
+        'form.tpl.autoresponder_body' => [
+            'es' => "Hola {{nombre}}:\n\nGracias por escribirnos. Hemos recibido tu mensaje y te responderemos lo antes posible.\n\nUn saludo,\n{{sitio}}",
+            'en' => "Hi {{nombre}},\n\nThanks for writing to us. We have received your message and will reply as soon as possible.\n\nBest regards,\n{{sitio}}",
+            'ca' => "Hola {{nombre}}:\n\nGràcies per escriure'ns. Hem rebut el teu missatge i et respondrem al més aviat possible.\n\nSalutacions,\n{{sitio}}",
+            'gl' => "Ola {{nombre}}:\n\nGrazas por escribirnos. Recibimos a túa mensaxe e responderémosche o antes posible.\n\nUn saúdo,\n{{sitio}}",
+            'eu' => "Kaixo {{nombre}}:\n\nEskerrik asko idazteagatik. Zure mezua jaso dugu eta ahalik eta lasterren erantzungo dizugu.\n\nAgur bero bat,\n{{sitio}}",
+            'fr' => "Bonjour {{nombre}},\n\nMerci de nous avoir écrit. Nous avons bien reçu votre message et vous répondrons dans les meilleurs délais.\n\nCordialement,\n{{sitio}}",
+            'pt' => "Olá {{nombre}}:\n\nObrigado por nos escrever. Recebemos a sua mensagem e responderemos o mais depressa possível.\n\nCom os melhores cumprimentos,\n{{sitio}}",
         ],
 
         // --- Banner de cookies ----------------------------------------------
@@ -275,6 +554,14 @@ final class Microcopy
             'gl' => 'Inicio', 'eu' => 'Hasiera', 'fr' => 'Accueil',
             'pt' => 'Início',
         ],
+        // Título de emergencia cuando la IA no devuelve uno: es contenido del
+        // SITIO (lo lee el visitante), así que va aquí y no en el catálogo del
+        // panel — el idioma que manda es el de la web, no el del gestor.
+        'page.untitled' => [
+            'es' => 'Página sin título', 'en' => 'Untitled page', 'ca' => 'Pàgina sense títol',
+            'gl' => 'Páxina sen título', 'eu' => 'Izenbururik gabeko orria', 'fr' => 'Page sans titre',
+            'pt' => 'Página sem título',
+        ],
         'page.services' => [
             'es' => 'Servicios', 'en' => 'Services', 'ca' => 'Serveis',
             'gl' => 'Servizos', 'eu' => 'Zerbitzuak', 'fr' => 'Services',
@@ -309,6 +596,152 @@ final class Microcopy
             'es' => 'Precios', 'en' => 'Pricing', 'ca' => 'Preus',
             'gl' => 'Prezos', 'eu' => 'Prezioak', 'fr' => 'Tarifs',
             'pt' => 'Preços',
+        ],
+
+        // Plantillas manuales de Studio. Aunque se insertan desde el gestor,
+        // pasan a ser contenido público y por eso siguen el idioma de página.
+        'studio_block.text.label' => [
+            'es' => 'Texto', 'en' => 'Text', 'ca' => 'Text', 'gl' => 'Texto',
+            'eu' => 'Testua', 'fr' => 'Texte', 'pt' => 'Texto',
+        ],
+        'studio_block.text.eyebrow' => [
+            'es' => 'Destacado', 'en' => 'Featured', 'ca' => 'Destacat', 'gl' => 'Destacado',
+            'eu' => 'Nabarmendua', 'fr' => 'À retenir', 'pt' => 'Destaque',
+        ],
+        'studio_block.text.title' => [
+            'es' => 'Una idea para recordar', 'en' => 'An idea worth remembering',
+            'ca' => 'Una idea per recordar', 'gl' => 'Unha idea para lembrar',
+            'eu' => 'Gogoratzeko ideia bat', 'fr' => 'Une idée à retenir',
+            'pt' => 'Uma ideia para recordar',
+        ],
+        'studio_block.text.body' => [
+            'es' => 'Explica aquí el mensaje principal con palabras claras y cercanas.',
+            'en' => 'Explain the main message here in clear, approachable words.',
+            'ca' => 'Explica aquí el missatge principal amb paraules clares i properes.',
+            'gl' => 'Explica aquí a mensaxe principal con palabras claras e próximas.',
+            'eu' => 'Azaldu hemen mezu nagusia hitz argi eta hurbilekin.',
+            'fr' => 'Expliquez ici le message principal avec des mots clairs et accessibles.',
+            'pt' => 'Explique aqui a mensagem principal com palavras claras e próximas.',
+        ],
+        'studio_block.text_image.label' => [
+            'es' => 'Texto e imagen', 'en' => 'Text and image', 'ca' => 'Text i imatge',
+            'gl' => 'Texto e imaxe', 'eu' => 'Testua eta irudia', 'fr' => 'Texte et image',
+            'pt' => 'Texto e imagem',
+        ],
+        'studio_block.text_image.eyebrow' => [
+            'es' => 'En detalle', 'en' => 'In detail', 'ca' => 'En detall', 'gl' => 'En detalle',
+            'eu' => 'Xehetasunez', 'fr' => 'En détail', 'pt' => 'Em detalhe',
+        ],
+        'studio_block.text_image.title' => [
+            'es' => 'Cuenta tu historia con una imagen', 'en' => 'Tell your story with an image',
+            'ca' => 'Explica la teva història amb una imatge', 'gl' => 'Conta a túa historia cunha imaxe',
+            'eu' => 'Kontatu zure istorioa irudi batekin', 'fr' => 'Racontez votre histoire avec une image',
+            'pt' => 'Conte a sua história com uma imagem',
+        ],
+        'studio_block.text_image.body' => [
+            'es' => 'Combina un texto breve con una imagen que ayude a entenderlo de un vistazo.',
+            'en' => 'Pair a short text with an image that makes it easy to understand at a glance.',
+            'ca' => 'Combina un text breu amb una imatge que ajudi a entendre’l d’un cop d’ull.',
+            'gl' => 'Combina un texto breve cunha imaxe que axude a entendelo dunha ollada.',
+            'eu' => 'Lotu testu labur bat begiratu batean ulertzen laguntzen duen irudi batekin.',
+            'fr' => 'Associez un texte court à une image qui permet de le comprendre en un coup d’œil.',
+            'pt' => 'Combine um texto breve com uma imagem que ajude a compreendê-lo de imediato.',
+        ],
+        'studio_block.text_image.alt' => [
+            'es' => 'Imagen relacionada con este contenido', 'en' => 'A visual related to this content',
+            'ca' => 'Imatge relacionada amb aquest contingut', 'gl' => 'Imaxe relacionada con este contido',
+            'eu' => 'Eduki honekin lotutako irudia', 'fr' => 'Image liée à ce contenu',
+            'pt' => 'Imagem relacionada com este conteúdo',
+        ],
+        'studio_block.cta.label' => [
+            'es' => 'Llamada a la acción', 'en' => 'Call to action', 'ca' => 'Crida a l’acció',
+            'gl' => 'Chamada á acción', 'eu' => 'Ekintzarako deia', 'fr' => 'Appel à l’action',
+            'pt' => 'Chamada para ação',
+        ],
+        'studio_block.cta.title' => [
+            'es' => 'Da el siguiente paso', 'en' => 'Take the next step', 'ca' => 'Fes el pas següent',
+            'gl' => 'Da o seguinte paso', 'eu' => 'Eman hurrengo pausoa',
+            'fr' => 'Passez à l’étape suivante', 'pt' => 'Dê o próximo passo',
+        ],
+        'studio_block.cta.body' => [
+            'es' => 'Ayuda a tus visitantes a saber qué pueden hacer ahora.',
+            'en' => 'Help your visitors understand what they can do next.',
+            'ca' => 'Ajuda els visitants a saber què poden fer ara.',
+            'gl' => 'Axuda as visitas a saber que poden facer agora.',
+            'eu' => 'Lagundu bisitariei orain zer egin dezaketen ulertzen.',
+            'fr' => 'Aidez vos visiteurs à comprendre ce qu’ils peuvent faire maintenant.',
+            'pt' => 'Ajude os visitantes a perceber o que podem fazer agora.',
+        ],
+        'studio_block.cta.button' => [
+            'es' => 'Descubrir más', 'en' => 'Learn more', 'ca' => 'Descobrir-ne més',
+            'gl' => 'Saber máis', 'eu' => 'Gehiago jakin', 'fr' => 'En savoir plus',
+            'pt' => 'Saber mais',
+        ],
+
+        // ===================================================================
+        // Módulo Recursos — catálogo y ficha públicos
+        // ===================================================================
+        'resources.title' => [
+            'es' => 'Recursos', 'en' => 'Resources', 'ca' => 'Recursos', 'gl' => 'Recursos',
+            'eu' => 'Baliabideak', 'fr' => 'Ressources', 'pt' => 'Recursos',
+        ],
+        'resources.eyebrow' => [
+            'es' => 'Biblioteca', 'en' => 'Library', 'ca' => 'Biblioteca', 'gl' => 'Biblioteca',
+            'eu' => 'Liburutegia', 'fr' => 'Bibliothèque', 'pt' => 'Biblioteca',
+        ],
+        'resources.intro' => [
+            'es' => 'Guías y ebooks para consultar a tu ritmo.', 'en' => 'Guides and ebooks to explore at your own pace.',
+            'ca' => 'Guies i ebooks per consultar al teu ritme.', 'gl' => 'Guías e ebooks para consultar ao teu ritmo.',
+            'eu' => 'Zure erritmoan kontsultatzeko gidak eta ebookak.', 'fr' => 'Guides et ebooks à consulter à votre rythme.',
+            'pt' => 'Guias e ebooks para consultar ao seu ritmo.',
+        ],
+        'resources.empty' => [
+            'es' => 'Aún no hay recursos disponibles.', 'en' => 'There are no resources available yet.',
+            'ca' => 'Encara no hi ha recursos disponibles.', 'gl' => 'Aínda non hai recursos dispoñibles.',
+            'eu' => 'Oraindik ez dago baliabiderik eskuragarri.', 'fr' => "Aucune ressource n’est encore disponible.",
+            'pt' => 'Ainda não há recursos disponíveis.',
+        ],
+        'resources.view' => [
+            'es' => 'Ver recurso', 'en' => 'View resource', 'ca' => 'Veure recurs', 'gl' => 'Ver recurso',
+            'eu' => 'Ikusi baliabidea', 'fr' => 'Voir la ressource', 'pt' => 'Ver recurso',
+        ],
+        'resources.back' => [
+            'es' => 'Volver a recursos', 'en' => 'Back to resources', 'ca' => 'Tornar als recursos',
+            'gl' => 'Volver aos recursos', 'eu' => 'Itzuli baliabideetara', 'fr' => 'Retour aux ressources',
+            'pt' => 'Voltar aos recursos',
+        ],
+        'resources.download' => [
+            'es' => 'Descargar ahora', 'en' => 'Download now', 'ca' => 'Descarregar ara', 'gl' => 'Descargar agora',
+            'eu' => 'Deskargatu orain', 'fr' => 'Télécharger', 'pt' => 'Descarregar agora',
+        ],
+        'resources.form_required' => [
+            'es' => 'Completa el formulario para acceder a la descarga.',
+            'en' => 'Complete the form to access the download.',
+            'ca' => 'Completa el formulari per accedir a la descàrrega.',
+            'gl' => 'Completa o formulario para acceder á descarga.',
+            'eu' => 'Bete formularioa deskarga eskuratzeko.',
+            'fr' => 'Remplissez le formulaire pour accéder au téléchargement.',
+            'pt' => 'Preencha o formulário para aceder à descarga.',
+        ],
+        'resources.download_ready' => [
+            'es' => 'Descargar de nuevo', 'en' => 'Download again', 'ca' => 'Tornar a descarregar',
+            'gl' => 'Descargar de novo', 'eu' => 'Deskargatu berriro', 'fr' => 'Télécharger à nouveau',
+            'pt' => 'Descarregar novamente',
+        ],
+        'resources.unavailable' => [
+            'es' => 'Este recurso no está disponible temporalmente.',
+            'en' => 'This resource is temporarily unavailable.',
+            'ca' => 'Aquest recurs no està disponible temporalment.',
+            'gl' => 'Este recurso non está dispoñible temporalmente.',
+            'eu' => 'Baliabide hau ez dago erabilgarri aldi baterako.',
+            'fr' => 'Cette ressource est temporairement indisponible.',
+            'pt' => 'Este recurso está temporariamente indisponível.',
+        ],
+        'resources.file' => [
+            'es' => 'Archivo {format} · {size}', 'en' => '{format} file · {size}',
+            'ca' => 'Fitxer {format} · {size}', 'gl' => 'Arquivo {format} · {size}',
+            'eu' => '{format} fitxategia · {size}', 'fr' => 'Fichier {format} · {size}',
+            'pt' => 'Ficheiro {format} · {size}',
         ],
 
         // ===================================================================
@@ -667,6 +1100,55 @@ final class Microcopy
             'es' => 'Reservar {time}', 'en' => 'Book {time}', 'ca' => 'Reserva {time}',
             'gl' => 'Reservar {time}', 'fr' => 'Réserver à {time}', 'pt' => 'Reservar {time}',
         ],
+        // MODULOS M8 — campos configurables del formulario de reserva. Los
+        // errores llevan el nombre del campo porque el gestor puede haberle
+        // puesto cualquier etiqueta ("Matrícula", "Nº de personas"…).
+        'booking.err_field_required' => [
+            'es' => '{campo} es obligatorio.', 'en' => '{campo} is required.',
+            'ca' => '{campo} és obligatori.', 'gl' => '{campo} é obrigatorio.',
+            'fr' => '{campo} est obligatoire.', 'pt' => '{campo} é obrigatório.',
+        ],
+        'booking.err_field_number' => [
+            'es' => '{campo} tiene que ser un número.', 'en' => '{campo} must be a number.',
+            'ca' => '{campo} ha de ser un número.', 'gl' => '{campo} ten que ser un número.',
+            'fr' => '{campo} doit être un nombre.', 'pt' => '{campo} tem de ser um número.',
+        ],
+        'booking.err_field_date' => [
+            'es' => '{campo} tiene que ser una fecha válida.', 'en' => '{campo} must be a valid date.',
+            'ca' => '{campo} ha de ser una data vàlida.', 'gl' => '{campo} ten que ser unha data válida.',
+            'fr' => '{campo} doit être une date valide.', 'pt' => '{campo} tem de ser uma data válida.',
+        ],
+        'booking.err_field_email' => [
+            'es' => '{campo} tiene que ser un email válido.', 'en' => '{campo} must be a valid email.',
+            'ca' => '{campo} ha de ser un correu vàlid.', 'gl' => '{campo} ten que ser un email válido.',
+            'fr' => '{campo} doit être un e-mail valide.', 'pt' => '{campo} tem de ser um email válido.',
+        ],
+        'booking.err_field_option' => [
+            'es' => 'Elige una opción válida en {campo}.', 'en' => 'Choose a valid option in {campo}.',
+            'ca' => 'Tria una opció vàlida a {campo}.', 'gl' => 'Escolle unha opción válida en {campo}.',
+            'fr' => 'Choisissez une option valide dans {campo}.', 'pt' => 'Escolha uma opção válida em {campo}.',
+        ],
+        'booking.yes' => [
+            'es' => 'Sí', 'en' => 'Yes', 'ca' => 'Sí', 'gl' => 'Si', 'fr' => 'Oui', 'pt' => 'Sim',
+        ],
+        'booking.no' => [
+            'es' => 'No', 'en' => 'No', 'ca' => 'No', 'gl' => 'Non', 'fr' => 'Non', 'pt' => 'Não',
+        ],
+        'booking.optional' => [
+            'es' => '(opcional)', 'en' => '(optional)', 'ca' => '(opcional)',
+            'gl' => '(opcional)', 'fr' => '(facultatif)', 'pt' => '(opcional)',
+        ],
+        // Los nombres pelados de teléfono y notas. `booking.ph_*` los lleva con
+        // "(opcional)" pegado, y desde M8 el gestor puede hacerlos obligatorios:
+        // la etiqueta se compone según cómo estén configurados.
+        'booking.field_phone' => [
+            'es' => 'Teléfono', 'en' => 'Phone', 'ca' => 'Telèfon',
+            'gl' => 'Teléfono', 'fr' => 'Téléphone', 'pt' => 'Telefone',
+        ],
+        'booking.field_notes' => [
+            'es' => 'Notas', 'en' => 'Notes', 'ca' => 'Notes',
+            'gl' => 'Notas', 'fr' => 'Notes', 'pt' => 'Notas',
+        ],
         'booking.sent_title' => [
             'es' => '¡Reserva enviada!', 'en' => 'Booking sent!', 'ca' => 'Reserva enviada!',
             'gl' => 'Reserva enviada!', 'fr' => 'Réservation envoyée !', 'pt' => 'Reserva enviada!',
@@ -720,6 +1202,17 @@ final class Microcopy
         'booking.local_time' => [
             'es' => 'Horario local: {tz}', 'en' => 'Local time: {tz}', 'ca' => 'Horari local: {tz}',
             'gl' => 'Horario local: {tz}', 'fr' => 'Heure locale : {tz}', 'pt' => 'Hora local: {tz}',
+        ],
+        // MODULOS M2 — alternativa del calendario embebido en la propia web
+        // cuando el visitante navega sin JavaScript. No la sirve la API: se
+        // pinta en el servidor dentro del <noscript>.
+        'booking.noscript' => [
+            'es' => 'Para reservar desde esta página necesitas activar JavaScript en tu navegador.',
+            'en' => 'To book from this page you need to enable JavaScript in your browser.',
+            'ca' => 'Per reservar des d\'aquesta pàgina necessites activar JavaScript al navegador.',
+            'gl' => 'Para reservar desde esta páxina precisas activar JavaScript no teu navegador.',
+            'fr' => 'Pour réserver depuis cette page, vous devez activer JavaScript dans votre navigateur.',
+            'pt' => 'Para reservar nesta página precisa de ativar o JavaScript no seu navegador.',
         ],
 
         // --- API pública: validación y confirmaciones ---

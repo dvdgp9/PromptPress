@@ -12,7 +12,7 @@
     if (!root) return;
 
     var pageId  = root.dataset.pageId;
-    var pageTitle = root.dataset.pageTitle || 'Página';
+    var pageTitle = root.dataset.pageTitle || pp.t('js.onb.page');
     var pageGoal = root.dataset.pageGoal || '';
     var csrf    = root.dataset.csrf;
     var baseUrl = root.dataset.baseUrl.replace(/\/$/, '');
@@ -94,9 +94,9 @@
             return ''
                 + '<article class="pp-layout-variation-card">'
                 + '  <header class="pp-layout-variation-card__head">'
-                + '    <strong>' + escapeHtml(v.label || ('Variación ' + (idx + 1))) + '</strong>'
+                + '    <strong>' + escapeHtml(v.label || pp.t('js.se.variation_n', { n: idx + 1 })) + '</strong>'
                 + '  </header>'
-                + '  <iframe class="pp-layout-variation-card__preview" title="Vista previa de ' + escapeHtml(v.label || ('variación ' + (idx + 1))) + '" loading="lazy"></iframe>'
+                + '  <iframe class="pp-layout-variation-card__preview" title="' + escapeHtml(pp.t('js.se.preview_of', { nombre: v.label || pp.t('js.se.variation_n', { n: idx + 1 }) })) + '" loading="lazy"></iframe>'
                 + rationale
                 + '  <div class="pp-layout-variation-card__actions">'
                 + '    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-preview-layout-variation="' + idx + '">Ver preview</button>'
@@ -133,7 +133,7 @@
     function openVariationPreview(variation) {
         var html = variation.preview_html || '';
         if (!html) {
-            toast('Esta variación no tiene HTML de vista previa.', 'error');
+            toast(pp.t('js.se.no_preview_html'), 'error');
             return;
         }
         var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -141,7 +141,7 @@
         var win = window.open(previewUrl, '_blank');
         if (!win) {
             URL.revokeObjectURL(previewUrl);
-            toast('El navegador bloqueó la vista previa emergente.', 'error');
+            toast(pp.t('js.se.popup_blocked'), 'error');
             return;
         }
         setTimeout(function () {
@@ -161,7 +161,7 @@
         })
         .catch(function (err) {
             statusEl.className = 'pp-layout-variations__status pp-err';
-            statusEl.textContent = 'No se pudo aplicar la variación: ' + err.message;
+            statusEl.textContent = pp.t('js.se.variation_failed', { error: err.message });
             btn.disabled = false;
             btn.textContent = original;
         });
@@ -170,7 +170,7 @@
     function requestLayoutVariations() {
         var layout = gatherCurrentLayoutData();
         if (!layout.length) {
-            toast('Añade al menos una sección antes de pedir variaciones.', 'error');
+            toast(pp.t('js.se.need_section'), 'error');
             return;
         }
         renderVariationsLoading();
@@ -190,7 +190,7 @@
             layoutVariationsPanel.hidden = false;
             var status = layoutVariationsPanel.querySelector('.pp-layout-variations__status');
             status.className = 'pp-layout-variations__status pp-err';
-            status.textContent = 'No se pudieron generar variaciones: ' + err.message;
+            status.textContent = pp.t('js.sec.variants_error', { detalle: err.message });
         })
         .finally(function () {
             if (layoutVariationsBtn) {
@@ -224,7 +224,7 @@
         return fetch(targetUrl, options).catch(function (err) {
             if (err && err.name === 'AbortError') {
                 var seconds = Math.round((timeoutMs || 0) / 1000);
-                var timeoutErr = new Error('La llamada ha superado el límite de ' + seconds + ' segundos. No se ha aplicado ningún cambio.');
+                var timeoutErr = new Error(pp.t('js.se.timeout', { n: seconds }));
                 timeoutErr.isTimeout = true;
                 throw timeoutErr;
             }
@@ -293,8 +293,8 @@
     }
     function labelFallback(type) {
         var fallbacks = {
-            hero: 'Hero', text_image: 'Texto + Imagen', benefits: 'Beneficios',
-            faq: 'FAQ', cta: 'Llamada a la acción', form: 'Formulario', generic: 'Genérica'
+            hero: 'Hero', text_image: pp.t('js.studio.type_text_image'), benefits: pp.t('js.studio.type_benefits'),
+            faq: 'FAQ', cta: pp.t('js.se.type_cta'), form: pp.t('js.studio.form'), generic: pp.t('js.se.type_generic')
         };
         return fallbacks[type] || type;
     }
@@ -378,6 +378,7 @@
         form:          '<rect x="3" y="4" width="18" height="3.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="10" width="18" height="3.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="16" width="9" height="3.5" rx="1.5"/>',
         posts_listing: '<rect x="3" y="4" width="6" height="6" rx="1"/><rect x="10.5" y="5" width="10.5" height="1.8" rx=".9"/><rect x="10.5" y="8.2" width="8" height="1.8" rx=".9"/><rect x="3" y="13" width="6" height="6" rx="1"/><rect x="10.5" y="14" width="10.5" height="1.8" rx=".9"/><rect x="10.5" y="17.2" width="8" height="1.8" rx=".9"/>',
         article_body:  '<rect x="3" y="5" width="18" height="2" rx="1"/><rect x="3" y="9" width="18" height="2" rx="1"/><rect x="3" y="13" width="18" height="2" rx="1"/><rect x="3" y="17" width="12" height="2" rx="1"/>',
+        booking:       '<rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="5" width="18" height="4" rx="2"/><rect x="6.5" y="2.5" width="1.8" height="4" rx=".9"/><rect x="15.7" y="2.5" width="1.8" height="4" rx=".9"/><rect x="6.5" y="12" width="3" height="3" rx=".7"/><rect x="11" y="12" width="3" height="3" rx=".7"/><rect x="6.5" y="16.5" width="3" height="3" rx=".7"/>',
         generic:       '<rect x="4" y="4" width="16" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
     };
 
@@ -395,9 +396,9 @@
         var st = statusMeta(s.status);
         var titleHtml = title
             ? '<span class="pp-section-card__title">' + escapeHtml(truncate(title, 90)) + '</span>'
-            : '<span class="pp-section-card__title pp-section-card__title--empty">Sin contenido todavía</span>';
+            : '<span class="pp-section-card__title pp-section-card__title--empty">' + pp.t('js.se.no_content') + '</span>';
         return ''
-            + '<span class="pp-drag-handle" title="Arrastra para reordenar" aria-hidden="true">'
+            + '<span class="pp-drag-handle" title="' + pp.t('js.se.drag_reorder') + '" aria-hidden="true">'
             +   '<svg width="14" height="14" viewBox="0 0 16 16"><g fill="currentColor">'
             +     '<circle cx="6" cy="3" r="1.2"/><circle cx="10" cy="3" r="1.2"/>'
             +     '<circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/>'
@@ -413,20 +414,20 @@
             + '<span class="pp-section-card__status-pill pp-section-card__status-pill--' + st.key + '">'
             +   escapeHtml(st.label)
             + '</span>'
-            + '<button type="button" class="pp-section-card__toggle" aria-expanded="false" aria-label="Expandir sección">'
+            + '<button type="button" class="pp-section-card__toggle" aria-expanded="false" aria-label="' + pp.t('js.se.expand') + '">'
             +   '<svg class="pp-section-card__chevron" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">'
             +     '<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
             +   '</svg>'
             + '</button>'
             + '<div class="pp-section-card__menu">'
-            +   '<button type="button" class="pp-section-card__menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">'
+            +   '<button type="button" class="pp-section-card__menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="' + pp.t('js.map.more_actions') + '">'
             +     '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><g fill="currentColor">'
             +       '<circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/>'
             +     '</g></svg>'
             +   '</button>'
             +   '<div class="pp-section-card__menu-list" role="menu" hidden>'
             +     '<button type="button" role="menuitem" class="pp-section-card__menu-item pp-section-card__delete">'
-            +       'Eliminar sección'
+            +       pp.t('js.se.delete_section')
             +     '</button>'
             +   '</div>'
             + '</div>';
@@ -459,7 +460,7 @@
             var toggle = header.querySelector('.pp-section-card__toggle');
             if (toggle) {
                 toggle.setAttribute('aria-expanded', 'true');
-                toggle.setAttribute('aria-label', 'Plegar sección');
+                toggle.setAttribute('aria-label', pp.t('js.se.collapse'));
             }
             card.classList.add('is-expanded');
         }
@@ -688,29 +689,29 @@
         select.appendChild(optNone);
 
         var grp = document.createElement('optgroup');
-        grp.label = 'Tus páginas';
+        grp.label = pp.t('js.se.your_pages');
         pages.forEach(function (p) {
             var o = document.createElement('option');
             o.value = 'page:' + p.path;
-            o.textContent = p.title + ' (' + p.path + ')' + (p.status !== 'published' ? ' · Borrador' : '');
+            o.textContent = p.title + ' (' + p.path + ')' + (p.status !== 'published' ? ' · ' + pp.t('js.post_new.draft') : '');
             grp.appendChild(o);
         });
         if (pages.length) select.appendChild(grp);
 
         var optExt = document.createElement('option');
         optExt.value = '__external__';
-        optExt.textContent = 'Enlace externo / personalizado…';
+        optExt.textContent = pp.t('js.se.external_link');
         select.appendChild(optExt);
 
         var optNew = document.createElement('option');
         optNew.value = '__create__';
-        optNew.textContent = '+ Crear página nueva…';
+        optNew.textContent = pp.t('js.se.create_page');
         select.appendChild(optNew);
 
         var ext = document.createElement('input');
         ext.type = 'text';
         ext.className = 'pp-linkfield__external';
-        ext.placeholder = 'https://ejemplo.com  o  /mi-pagina';
+        ext.placeholder = pp.t('js.se.url_placeholder');
         ext.hidden = true;
 
         var hint = document.createElement('small');
@@ -735,12 +736,12 @@
             if (page) {
                 select.value = 'page:' + v;
                 ext.hidden = true;
-                if (page.status !== 'published') setHint('Esta página está en borrador: publícala para que el botón funcione en tu web.', 'warn');
+                if (page.status !== 'published') setHint(pp.t('js.se.page_is_draft'), 'warn');
                 else setHint('');
             } else {
                 select.value = '__external__';
                 ext.hidden = false; ext.value = v;
-                setHint('Enlace personalizado. Asegúrate de que la dirección es correcta.', '');
+                setHint(pp.t('js.se.custom_link'), '');
             }
         }
 
@@ -751,14 +752,14 @@
                 ext.hidden = false;
                 ext.value = (hidden.value && !findPageByPath(hidden.value)) ? hidden.value : '';
                 hidden.value = ext.value; ext.focus();
-                setHint('Enlace personalizado. Asegúrate de que la dirección es correcta.', '');
+                setHint(pp.t('js.se.custom_link'), '');
             } else if (val === '__create__') {
                 createPageInline();
             } else if (val.indexOf('page:') === 0) {
                 var path = val.slice(5);
                 hidden.value = path; ext.hidden = true;
                 var page = findPageByPath(path);
-                if (page && page.status !== 'published') setHint('Esta página está en borrador: publícala para que el botón funcione en tu web.', 'warn');
+                if (page && page.status !== 'published') setHint(pp.t('js.se.page_is_draft'), 'warn');
                 else setHint('');
             }
         });
@@ -766,7 +767,7 @@
         ext.addEventListener('input', function () { hidden.value = ext.value.trim(); });
 
         function createPageInline() {
-            var title = window.prompt('Nombre de la nueva página (ej. «Servicios»):');
+            var title = window.prompt(pp.t('js.se.new_page_prompt'));
             if (!title) { syncFromValue(); return; }
             postForm('/admin/pages/quick', { title: title })
                 .then(function (resp) {
@@ -774,7 +775,7 @@
                     if (!Array.isArray(window.PP_PAGES)) window.PP_PAGES = pages;
                     if (pages.indexOf(p) === -1) pages.push(p);
                     var og = select.querySelector('optgroup');
-                    if (!og) { og = document.createElement('optgroup'); og.label = 'Tus páginas'; select.insertBefore(og, optExt); }
+                    if (!og) { og = document.createElement('optgroup'); og.label = pp.t('js.se.your_pages'); select.insertBefore(og, optExt); }
                     var o = document.createElement('option');
                     o.value = 'page:' + p.path;
                     o.textContent = p.title + ' (' + p.path + ') · Borrador';
@@ -782,11 +783,11 @@
                     hidden.value = p.path;
                     select.value = 'page:' + p.path;
                     ext.hidden = true;
-                    setHint('Página «' + p.title + '» creada en borrador. Recuerda publicarla para que el enlace funcione.', 'warn');
+                    setHint(pp.t('js.se.page_created', { titulo: p.title }), 'warn');
                     hidden.dispatchEvent(new Event('input', { bubbles: true }));
                 })
                 .catch(function (err) {
-                    setHint('No se pudo crear la página: ' + (err.message || 'error'), 'err');
+                    setHint(pp.t('js.se.create_page_failed', { error: err.message || 'error' }), 'err');
                     syncFromValue();
                 });
         }
@@ -800,14 +801,14 @@
         wrap.className = 'pp-field-ai-tools';
         wrap.innerHTML = ''
             + '<div class="pp-field-ai-tools__row">'
-            + '  <select class="pp-field-ai-goal" aria-label="Objetivo de reescritura">'
-            + '    <option value="Hazlo más claro y específico, manteniendo el significado.">Más claro</option>'
-            + '    <option value="Hazlo más breve, directo y fácil de escanear.">Más corto</option>'
-            + '    <option value="Hazlo más persuasivo y orientado a conversión, sin exagerar.">Más persuasivo</option>'
-            + '    <option value="Hazlo más cercano y natural, sin perder profesionalidad.">Más cercano</option>'
-            + '    <option value="Hazlo más profesional, concreto y sobrio.">Más profesional</option>'
+            + '  <select class="pp-field-ai-goal" aria-label="' + pp.t('js.se.rewrite_goal') + '">'
+            + '    <option value="Hazlo más claro y específico, manteniendo el significado.">' + pp.t('js.se.clearer') + '</option>'
+            + '    <option value="Hazlo más breve, directo y fácil de escanear.">' + pp.t('js.se.shorter') + '</option>'
+            + '    <option value="Hazlo más persuasivo y orientado a conversión, sin exagerar.">' + pp.t('js.se.persuasive') + '</option>'
+            + '    <option value="Hazlo más cercano y natural, sin perder profesionalidad.">' + pp.t('js.se.warmer') + '</option>'
+            + '    <option value="Hazlo más profesional, concreto y sobrio.">' + pp.t('js.se.professional') + '</option>'
             + '  </select>'
-            + '  <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-field-ai-rewrite">Reescribir</button>'
+            + '  <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-field-ai-rewrite">' + pp.t('ai_action.rewrite_js') + '</button>'
             + '</div>'
             + '<div class="pp-field-ai-status" aria-live="polite"></div>';
 
@@ -830,18 +831,20 @@
 
         var card = input.closest('.pp-section-card');
         var type = card && card._sectionState ? card._sectionState.type : '';
-        var fieldLabel = fieldDef.label || fieldDef.key || 'campo';
+        var fieldLabel = fieldDef.label || fieldDef.key || 'campo'; // i18n-ignore: viaja a la IA
         var rewriteGoal = goal
             + '\nCampo: ' + fieldLabel
+            // i18n-ignore-start: contexto que viaja a la IA
             + '\nPágina: ' + pageTitle
             + (type ? '\nTipo de sección: ' + typeLabel(type) : '')
             + '\nNo añadas HTML ni markdown. Devuelve solo el texto final para ese campo.';
+            // i18n-ignore-end
 
         btn.disabled = true;
         btn.setAttribute('aria-busy', 'true');
-        btn.textContent = 'Reescribiendo...';
+        btn.textContent = pp.t('js.se.rewriting');
         status.className = 'pp-field-ai-status is-loading';
-        status.innerHTML = '<span></span><span></span><em>Reescribiendo sin guardar todavía.</em>';
+        status.innerHTML = '<span></span><span></span><em>' + pp.t('js.se.rewriting_hint') + '</em>';
 
         postForm('/admin/ai/actions/run', {
             action: 'rewrite_text',
@@ -855,12 +858,12 @@
             input.dispatchEvent(new Event('input', { bubbles: true }));
             if (card) card._aiDraftApplied = true;
             status.className = 'pp-field-ai-status pp-ok';
-            status.innerHTML = 'Texto reescrito. Revisa y guarda la sección.'
+            status.innerHTML = pp.t('js.se.rewritten')
                 + '<span class="pp-field-ai-meta">' + escapeHtml(aiMeta(resp)) + '</span>';
         })
         .catch(function (err) {
             status.className = 'pp-field-ai-status pp-err';
-            status.textContent = 'No se pudo reescribir: ' + err.message;
+            status.textContent = pp.t('js.sec.rewrite_error', { detalle: err.message });
         })
         .finally(function () {
             btn.disabled = false;
@@ -998,7 +1001,7 @@
         var addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'pp-btn pp-btn--secondary pp-btn--sm pp-repeater__add';
-        addBtn.textContent = '+ Añadir ' + (f.itemLabel || 'elemento').toLowerCase();
+        addBtn.textContent = '+ ' + pp.t('js.se.add_item', { item: (f.itemLabel || pp.t('js.cv.element')).toLowerCase() });
         addBtn.addEventListener('click', function () { addItem({}, { startExpanded: true }); });
         wrap.appendChild(addBtn);
 
@@ -1135,7 +1138,7 @@
         tabsNav.setAttribute('role', 'tablist');
         tabsNav.innerHTML = ''
             + tabBtnHtml('content',  'Contenido')
-            + tabBtnHtml('design',   'Diseño')
+            + tabBtnHtml('design',   pp.t('nav.design_js'))
             + tabBtnHtml('ai',       'IA')
             + tabBtnHtml('advanced', 'Avanzado');
         leftCol.appendChild(tabsNav);
@@ -1157,7 +1160,7 @@
             +     '<button type="button" class="pp-device-toggle__btn" data-device="tablet" role="radio" aria-checked="false" title="Tablet">'
             +       '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="18" r="0.7" fill="currentColor"/></svg>'
             +     '</button>'
-            +     '<button type="button" class="pp-device-toggle__btn" data-device="mobile" role="radio" aria-checked="false" title="Móvil">'
+            +     '<button type="button" class="pp-device-toggle__btn" data-device="mobile" role="radio" aria-checked="false" title="' + pp.t('chrome.mobile_js') + '">'
             +       '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="18" r="0.7" fill="currentColor"/></svg>'
             +     '</button>'
             +   '</div>'
@@ -1165,7 +1168,7 @@
             + '</div>'
             + '<div class="pp-section-card__preview-stage is-device-desktop">'
             +   '<div class="pp-section-card__preview-frame">'
-            +     '<iframe class="pp-section-card__preview-iframe" title="Vista previa de la sección" sandbox="allow-same-origin"></iframe>'
+            +     '<iframe class="pp-section-card__preview-iframe" title="' + pp.t('js.se.section_preview') + '" sandbox="allow-same-origin"></iframe>'
             +   '</div>'
             + '</div>';
         split.appendChild(previewAside);
@@ -1189,9 +1192,9 @@
         var variantRow = document.createElement('div');
         variantRow.className = 'pp-form-group pp-variant-picker';
         variantRow.innerHTML = ''
-            + '<label class="pp-variant-picker__label">Estilo de sección</label>'
-            + '<div class="pp-variant-picker__chips" role="radiogroup" aria-label="Estilo de sección"></div>'
-            + '<small class="pp-variant-picker__hint">Cada estilo cambia el diseño visual sin tocar el contenido.</small>';
+            + '<label class="pp-variant-picker__label">' + pp.t('js.se.section_style') + '</label>'
+            + '<div class="pp-variant-picker__chips" role="radiogroup" aria-label="' + pp.t('js.se.section_style') + '"></div>'
+            + '<small class="pp-variant-picker__hint">' + pp.t('js.se.style_hint') + '</small>';
         designPanel.appendChild(variantRow);
         panels.appendChild(designPanel);
         var variantChips = variantRow.querySelector('.pp-variant-picker__chips');
@@ -1216,30 +1219,30 @@
         var metaRow = document.createElement('div');
         metaRow.className = 'pp-form-row';
         metaRow.innerHTML = ''
-            + '<div class="pp-form-group"><label>Tipo de sección</label>'
+            + '<div class="pp-form-group"><label>' + pp.t('page_form.section_type_js') + '</label>'
             + '  <select class="pp-section-meta" data-meta="section_type">' + typeOptions(section.section_type) + '</select>'
-            + '  <small>Cambiarlo regenera el formulario y resetea la variante.</small>'
+            + '  <small>' + pp.t('js.se.type_change_hint') + '</small>'
             + '</div>'
-            + '<div class="pp-form-group"><label>Estado</label>'
+            + '<div class="pp-form-group"><label>' + pp.t('table.status_js') + '</label>'
             + '  <select class="pp-section-meta" data-meta="status">'
-            + '    <option value="editable"' + (section.status === 'editable' ? ' selected' : '') + '>Editable</option>'
-            + '    <option value="locked"' + (section.status === 'locked' ? ' selected' : '') + '>Bloqueada</option>'
+            + '    <option value="editable"' + (section.status === 'editable' ? ' selected' : '') + '>' + pp.t('js.se.editable') + '</option>'
+            + '    <option value="locked"' + (section.status === 'locked' ? ' selected' : '') + '>' + pp.t('js.se.locked') + '</option>'
             + '  </select>'
-            + '  <small>Bloqueada se marca con el pill ámbar en la cabecera.</small>'
+            + '  <small>' + pp.t('js.se.locked_hint') + '</small>'
             + '</div>';
         advPanel.appendChild(metaRow);
 
         var advBar = document.createElement('div');
         advBar.className = 'pp-json-toggle-bar';
-        advBar.innerHTML = '<label><input type="checkbox" class="pp-json-toggle"> Editar contenido como JSON</label>'
-            + '<small>Útil para depurar o pegar estructura completa de la sección.</small>';
+        advBar.innerHTML = '<label><input type="checkbox" class="pp-json-toggle"> ' + pp.t('js.se.edit_json') + '</label>'
+            + '<small>' + pp.t('js.se.json_hint') + '</small>';
         advPanel.appendChild(advBar);
 
         var styleGroup = document.createElement('div');
         styleGroup.className = 'pp-form-group';
-        styleGroup.innerHTML = '<label>Estilo (JSON, opcional)</label>'
+        styleGroup.innerHTML = '<label>' + pp.t('js.se.style_json') + '</label>'
             + '<textarea class="pp-section-style pp-json-editor" rows="3" placeholder=\'{"background_color": "#...", "text_align": "center"}\'></textarea>'
-            + '<small>Overrides puntuales de estilo. La variante elegida en "Diseño" se guarda aquí automáticamente.</small>';
+            + '<small>' + pp.t('js.se.style_json_hint') + '</small>';
         advPanel.appendChild(styleGroup);
         panels.appendChild(advPanel);
 
@@ -1254,12 +1257,12 @@
         actions.className = 'pp-form-actions pp-section-actions';
         actions.innerHTML = ''
             + '<span class="pp-section-actions__dirty" hidden>'
-            +   '<span class="pp-section-actions__dot" aria-hidden="true"></span> Cambios sin guardar'
+            +   '<span class="pp-section-actions__dot" aria-hidden="true"></span> ' + pp.t('js.sec.unsaved')
             + '</span>'
             + '<span class="pp-section-card__status" aria-live="polite"></span>'
             + '<button type="button" class="pp-btn pp-btn--secondary pp-section-card__versions">Historial</button>'
             + '<button type="button" class="pp-btn pp-btn--secondary pp-section-card__cancel">Cerrar</button>'
-            + '<button type="button" class="pp-btn pp-btn--primary pp-section-card__save">Guardar sección</button>';
+            + '<button type="button" class="pp-btn pp-btn--primary pp-section-card__save">' + pp.t('js.se.save_section') + '</button>';
         body.appendChild(actions);
 
         // ----- Render inicial -----
@@ -1667,7 +1670,7 @@
             group.className = 'pp-form-group';
             group.innerHTML = '<label>Contenido (JSON)</label>'
                 + '<textarea class="pp-section-content-json pp-json-editor" rows="12"></textarea>'
-                + '<small>' + (schema ? 'Modo avanzado activo. Desmarca la casilla para volver al formulario.' : 'Este tipo no tiene formulario tipado.') + '</small>';
+                + '<small>' + (schema ? pp.t('js.sec.advanced_on') : pp.t('js.sec.no_typed_form')) + '</small>';
             wrap.appendChild(group);
             var ta = group.querySelector('textarea');
             try {
@@ -1706,7 +1709,7 @@
         var types = Object.keys(SCHEMAS);
         if (types.indexOf('generic') === -1) types.push('generic');
         // Respetar orden lógico
-        var preferred = ['hero', 'text_image', 'benefits', 'faq', 'cta', 'form', 'custom_block', 'generic'];
+        var preferred = ['hero', 'text_image', 'benefits', 'faq', 'cta', 'form', 'booking', 'custom_block', 'generic'];
         var ordered = preferred.filter(function (t) { return types.indexOf(t) !== -1; });
         types.forEach(function (t) {
             if (ordered.indexOf(t) === -1) ordered.push(t);
@@ -1735,14 +1738,14 @@
             card.classList.add('is-expanded');
             if (btn) {
                 btn.setAttribute('aria-expanded', 'true');
-                btn.setAttribute('aria-label', 'Plegar sección');
+                btn.setAttribute('aria-label', pp.t('js.se.collapse'));
             }
         } else {
             body.setAttribute('hidden', '');
             card.classList.remove('is-expanded');
             if (btn) {
                 btn.setAttribute('aria-expanded', 'false');
-                btn.setAttribute('aria-label', 'Expandir sección');
+                btn.setAttribute('aria-label', pp.t('js.se.expand'));
             }
         }
     }
@@ -1769,13 +1772,13 @@
             + '<div class="pp-section-ai-panel__head">'
             + '  <div>'
             + '    <strong>Asistente IA</strong>'
-            + '    <span>Genera contenido estructurado para esta sección. Podrás revisarlo antes de guardar.</span>'
+            + '    <span>' + pp.t('js.se.ai_help') + '</span>'
             + '  </div>'
             + '  <button type="button" class="pp-btn pp-btn--primary pp-section-ai-run">Generar con IA</button>'
             + '</div>'
             + '<div class="pp-section-ai-panel__body">'
-            + '  <label>Instrucción para la IA</label>'
-            + '  <textarea class="pp-section-ai-prompt" rows="3" placeholder="Ej: orienta el texto a pequeñas tiendas que venden online, tono directo y cercano."></textarea>'
+            + '  <label>' + pp.t('js.se.ai_instruction') + '</label>'
+            + '  <textarea class="pp-section-ai-prompt" rows="3" placeholder="' + pp.t('js.se.ai_placeholder') + '"></textarea>'
             + '  <div class="pp-section-ai-status" aria-live="polite"></div>'
             + '</div>';
 
@@ -1813,8 +1816,8 @@
     function renderSectionTimeout(status, retryFn) {
         status.className = 'pp-section-ai-status pp-err pp-section-ai-status--retry';
         status.innerHTML = ''
-            + '<strong>La IA está tardando más de lo esperado.</strong>'
-            + '<span>No se ha aplicado ningún cambio en esta sección.</span>'
+            + '<strong>' + pp.t('js.se.ai_slow') + '</strong>'
+            + '<span>' + pp.t('js.se.no_change_applied') + '</span>'
             + '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm">Reintentar</button>';
         var retry = status.querySelector('button');
         retry.addEventListener('click', retryFn);
@@ -1828,13 +1831,13 @@
         var schema = SCHEMAS[type];
         if (!schema) {
             status.className = 'pp-section-ai-status pp-err';
-            status.textContent = 'Este tipo de sección no tiene schema IA.';
+            status.textContent = pp.t('js.se.no_schema');
             return;
         }
 
         setButtonBusy(btn, true, 'Generando');
         status.className = 'pp-section-ai-status is-loading';
-        status.innerHTML = '<span></span><span></span><span></span><em>Generando borrador. Nada se guarda hasta que pulses Guardar sección.</em>';
+        status.innerHTML = '<span></span><span></span><span></span><em>' + pp.t('js.se.generating') + '</em>';
         showSectionSkeleton(contentWrap);
 
         var input = {
@@ -1842,6 +1845,7 @@
             page_title: pageTitle,
             section_id: card.dataset.sectionId,
             current_content: currentContent,
+            // i18n-ignore: instrucción por defecto que viaja a la IA.
             extra_context: (promptText || '').trim() || 'Genera una versión clara, concreta y útil para esta sección.',
         };
 
@@ -1858,12 +1862,12 @@
             schedulePreview(card, 0);
             markDirty(card);
             status.className = 'pp-section-ai-status pp-ok';
-            status.innerHTML = 'Borrador generado. Revisa los campos y pulsa <strong>Guardar sección</strong>.'
+            status.innerHTML = pp.t('js.se.draft_ready.html')
                 + '<span class="pp-section-ai-meta">' + escapeHtml(aiMeta(resp)) + '</span>';
             if (resp.warnings && resp.warnings.length) {
                 status.innerHTML += '<ul>' + resp.warnings.map(function (w) { return '<li>' + escapeHtml(w) + '</li>'; }).join('') + '</ul>';
             }
-            toast('Borrador de sección generado. Revisa y guarda.', 'success');
+            toast(pp.t('js.se.draft_toast'), 'success');
         })
         .catch(function (err) {
             hideSectionSkeleton(contentWrap);
@@ -1871,12 +1875,12 @@
                 renderSectionTimeout(status, function () {
                     runSectionAI(card, contentWrap, promptText, btn, status);
                 });
-                toast('La generación tardó demasiado. Puedes reintentar.', 'error');
+                toast(pp.t('js.se.gen_timeout'), 'error');
                 return;
             }
             status.className = 'pp-section-ai-status pp-err';
-            status.textContent = 'No se pudo generar: ' + err.message;
-            toast('No se pudo generar la sección.', 'error');
+            status.textContent = pp.t('js.sec.generate_error', { detalle: err.message });
+            toast(pp.t('js.se.gen_failed'), 'error');
         })
         .finally(function () {
             setButtonBusy(btn, false, 'Generar con IA');
@@ -1902,7 +1906,7 @@
         if (styleStr !== '') {
             try { JSON.parse(styleStr); }
             catch (e) {
-                statusEl.textContent = 'Estilo: JSON inválido';
+                statusEl.textContent = pp.t('js.se.bad_json');
                 statusEl.className = 'pp-section-card__status pp-err';
                 return;
             }
@@ -1944,7 +1948,7 @@
             markClean(card);
             if (saveBtn) {
                 saveBtn.disabled = false;
-                saveBtn.textContent = saveBtn.dataset.prevText || 'Guardar sección';
+                saveBtn.textContent = saveBtn.dataset.prevText || pp.t('js.se.save_section');
             }
             setTimeout(function () {
                 statusEl.textContent = '';
@@ -1956,13 +1960,13 @@
             statusEl.className = 'pp-section-card__status pp-err';
             if (saveBtn) {
                 saveBtn.disabled = false;
-                saveBtn.textContent = saveBtn.dataset.prevText || 'Guardar sección';
+                saveBtn.textContent = saveBtn.dataset.prevText || pp.t('js.se.save_section');
             }
         });
     }
 
     function deleteSection(card) {
-        if (!confirm('¿Eliminar esta sección? No se puede deshacer.')) return;
+        if (!confirm(pp.t('js.se.confirm_delete'))) return;
         var id = card.dataset.sectionId;
         postForm('/admin/sections/' + id + '/delete', {})
             .then(function () {
@@ -1972,7 +1976,7 @@
                     card.remove();
                     refreshEmptyState();
                     refreshAllOrders();
-                    toast('Sección eliminada');
+                    toast(pp.t('js.se.section_deleted'));
                 }, 200);
             })
             .catch(function (err) { toast('Error: ' + err.message, 'error'); });
@@ -1997,7 +2001,7 @@
             + '<div class="pp-modal__backdrop" data-close-versions-modal></div>'
             + '<div class="pp-modal__dialog pp-versions-modal__dialog" role="dialog" aria-labelledby="pp-versions-title">'
             + '  <header class="pp-modal__header">'
-            + '    <h3 id="pp-versions-title">Historial de sección</h3>'
+            + '    <h3 id="pp-versions-title">' + pp.t('js.se.section_history') + '</h3>'
             + '    <button type="button" class="pp-modal__close" data-close-versions-modal aria-label="Cerrar">×</button>'
             + '  </header>'
             + '  <div class="pp-modal__body">'
@@ -2043,7 +2047,7 @@
                 renderVersions(body.versions || []);
             })
             .catch(function (err) {
-                versionsStatus.textContent = 'No se pudo cargar el historial: ' + err.message;
+                versionsStatus.textContent = pp.t('js.sec.history_error', { detalle: err.message });
                 versionsList.innerHTML = '';
             });
     }
@@ -2057,7 +2061,7 @@
 
     function renderVersions(items) {
         if (!items.length) {
-            versionsStatus.textContent = 'Aún no hay snapshots para esta sección.';
+            versionsStatus.textContent = pp.t('js.se.no_snapshots');
             versionsList.innerHTML = '';
             return;
         }
@@ -2075,11 +2079,11 @@
     }
 
     function restoreVersion(card, versionId) {
-        if (!confirm('¿Restaurar esta versión? Se guardará un snapshot del estado actual antes de restaurar.')) return;
+        if (!confirm(pp.t('js.se.confirm_restore'))) return;
         versionsStatus.textContent = 'Restaurando…';
         postForm('/admin/sections/' + card.dataset.sectionId + '/versions/' + versionId + '/restore', {})
             .then(function () {
-                toast('Versión restaurada');
+                toast(pp.t('js.cv.version_restored'));
                 window.location.reload();
             })
             .catch(function (err) {
@@ -2103,40 +2107,40 @@
             + '<div class="pp-modal__backdrop" data-close-media-modal></div>'
             + '<div class="pp-modal__dialog pp-media-modal__dialog" role="dialog" aria-labelledby="pp-media-picker-title">'
             + '  <header class="pp-modal__header">'
-            + '    <h3 id="pp-media-picker-title">Seleccionar imagen</h3>'
-            + '    <button type="button" class="pp-modal__close" data-close-media-modal aria-label="Cerrar">×</button>'
+            + '    <h3 id="pp-media-picker-title">' + pp.t('js.se.pick_image') + '</h3>'
+            + '    <button type="button" class="pp-modal__close" data-close-media-modal aria-label="' + pp.t('js.common.close') + '">×</button>'
             + '  </header>'
             + '  <nav class="pp-media-picker-tabs" role="tablist">'
-            + '    <button type="button" class="pp-media-picker-tab is-active" data-media-tab="library" role="tab" aria-selected="true">Mi galería</button>'
-            + '    <button type="button" class="pp-media-picker-tab" data-media-tab="stock" role="tab" aria-selected="false">Imágenes de relleno</button>'
+            + '    <button type="button" class="pp-media-picker-tab is-active" data-media-tab="library" role="tab" aria-selected="true">' + pp.t('js.se.my_gallery') + '</button>'
+            + '    <button type="button" class="pp-media-picker-tab" data-media-tab="stock" role="tab" aria-selected="false">' + pp.t('js.se.stock_images') + '</button>'
             + '  </nav>'
             + '  <div class="pp-modal__body">'
             + '    <div class="pp-media-picker-toolbar" data-media-pane="library">'
-            + '      <input type="search" class="pp-media-picker-search" placeholder="Buscar por nombre o alt">'
+            + '      <input type="search" class="pp-media-picker-search" placeholder="' + pp.t('js.se.search_by_name') + '">'
             + '      <button type="button" class="pp-btn pp-btn--primary pp-btn--sm pp-media-upload-btn">'
-            + '        <span aria-hidden="true">↑</span> Subir imagen'
+            + '        <span aria-hidden="true">↑</span> ' + pp.t('cv.upload_image_js')
             + '      </button>'
             + '      <input type="file" class="pp-media-upload-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden>'
             + '    </div>'
             + '    <div class="pp-media-dropzone" data-media-pane="library" hidden>'
             + '      <div class="pp-media-dropzone__inner">'
-            + '        <strong>Arrastra una imagen aquí</strong>'
-            + '        <span>o pulsa <em>Subir imagen</em>. JPG, PNG, WebP o GIF · máx. 10 MB.</span>'
+            + '        <strong>' + pp.t('js.se.drop_image') + '</strong>'
+            + '        <span>' + pp.t('js.se.drop_hint.html') + '</span>'
             + '      </div>'
             + '    </div>'
             + '    <div class="pp-media-picker-toolbar" data-media-pane="stock" hidden>'
             + '      <select class="pp-media-stock-theme">'
-            + '        <option value="business">Negocio / corporativo</option>'
-            + '        <option value="health">Salud / clínica</option>'
-            + '        <option value="tech">Tecnología</option>'
-            + '        <option value="food">Comida / restaurante</option>'
-            + '        <option value="service">Servicios profesionales</option>'
-            + '        <option value="lifestyle">Personas / lifestyle</option>'
-            + '        <option value="nature">Naturaleza / abstracto</option>'
+            + '        <option value="business">' + pp.t('js.se.stock.business') + '</option>'
+            + '        <option value="health">' + pp.t('js.se.stock.health') + '</option>'
+            + '        <option value="tech">' + pp.t('js.se.stock.tech') + '</option>'
+            + '        <option value="food">' + pp.t('js.se.stock.food') + '</option>'
+            + '        <option value="service">' + pp.t('js.se.stock.service') + '</option>'
+            + '        <option value="lifestyle">' + pp.t('js.se.stock.lifestyle') + '</option>'
+            + '        <option value="nature">' + pp.t('js.se.stock.nature') + '</option>'
             + '        <option value="random">Aleatorio</option>'
             + '      </select>'
             + '      <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-media-stock-shuffle">Otras</button>'
-            + '      <span class="pp-media-stock-hint">Placeholders profesionales — perfectos para previsualizar antes de subir tus fotos.</span>'
+            + '      <span class="pp-media-stock-hint">' + pp.t('js.sec.stock_hint') + '</span>'
             + '    </div>'
             + '    <div class="pp-media-picker-status" aria-live="polite"></div>'
             + '    <div class="pp-media-picker-grid"></div>'
@@ -2307,7 +2311,7 @@
     function renderStockGrid(theme, offset) {
         ensureMediaModal();
         var seeds = stockSeeds(theme, offset, 12);
-        mediaStatus.textContent = '12 imágenes de relleno · Pulsa "Otras" para ver más';
+        mediaStatus.textContent = pp.t('js.se.stock_status');
         mediaGrid.innerHTML = seeds.map(function (seed) {
             var thumb = 'https://picsum.photos/seed/' + encodeURIComponent(seed) + '/400/300';
             var full  = 'https://picsum.photos/seed/' + encodeURIComponent(seed) + '/1600/1000';
@@ -2358,7 +2362,7 @@
 
     function loadMedia(query) {
         ensureMediaModal();
-        mediaStatus.textContent = 'Cargando imágenes…';
+        mediaStatus.textContent = pp.t('js.se.loading_images');
         mediaGrid.innerHTML = '';
         var endpoint = '/admin/media/library';
         if (query) endpoint += '?q=' + encodeURIComponent(query);
@@ -2374,7 +2378,7 @@
                 renderMediaItems(body.items || []);
             })
             .catch(function (err) {
-                mediaStatus.textContent = 'No se pudo cargar la biblioteca: ' + err.message;
+                mediaStatus.textContent = pp.t('js.sec.library_error', { detalle: err.message });
                 mediaGrid.innerHTML = '';
             });
     }
@@ -2382,13 +2386,13 @@
     function renderMediaItems(items) {
         var dz = mediaModal && mediaModal.querySelector('.pp-media-dropzone');
         if (!items.length) {
-            mediaStatus.textContent = 'Tu galería está vacía.';
+            mediaStatus.textContent = pp.t('js.se.gallery_empty');
             mediaGrid.innerHTML = '';
             if (dz && mediaActiveTab === 'library') dz.hidden = false;
             return;
         }
         if (dz) dz.hidden = true;
-        mediaStatus.textContent = items.length + (items.length === 1 ? ' imagen disponible' : ' imágenes disponibles');
+        mediaStatus.textContent = pp.t(items.length === 1 ? 'js.se.n_images_one' : 'js.se.n_images_other', { n: items.length });
         mediaGrid.innerHTML = items.map(function (item) {
             var dims = item.width && item.height ? item.width + '×' + item.height : '—';
             var size = Math.max(1, Math.round((item.file_size || 0) / 1024)) + ' KB';
@@ -2427,9 +2431,9 @@
             createBtn.disabled = true;
             createBtn.textContent = 'Creando…';
             postForm('/admin/pages/' + pageId + '/sections', { section_type: type })
-                .then(function (resp) { closeModal(); appendSection(resp.section); toast('Sección creada'); })
+                .then(function (resp) { closeModal(); appendSection(resp.section); toast(pp.t('js.se.section_created')); })
                 .catch(function (err) { toast('Error: ' + err.message, 'error'); })
-                .finally(function () { createBtn.disabled = false; createBtn.textContent = 'Crear sección'; });
+                .finally(function () { createBtn.disabled = false; createBtn.textContent = pp.t('page_form.create_section_js'); });
         });
     }
 

@@ -8,6 +8,9 @@ final class VisualStyleService
 {
     public const SETTING_KEY = 'site_visual_style_slug';
 
+    // i18n-ignore-start: castellano de referencia. El `label` llega a los
+    // prompts de IA (OnboardingController lo mete en «estilo visual del
+    // sitio: …»); lo que se PINTA sale traducido de `cardsForSite()`.
     public static function all(): array
     {
         return [
@@ -85,6 +88,8 @@ final class VisualStyleService
             ],
         ];
     }
+    // i18n-ignore-end
+
     public static function get(string $slug): ?array
     {
         $styles = self::all();
@@ -134,8 +139,8 @@ final class VisualStyleService
             $tpl = (string) ($style['template_slug'] ?? 'home-default');
             $cards[] = [
                 'slug' => $slug,
-                'label' => (string) $style['label'],
-                'description' => (string) $style['description'],
+                'label' => __('visual_style.' . $slug . '.label'),
+                'description' => __('visual_style.' . $slug . '.description'),
                 'heading_font' => (string) $style['heading'],
                 'body_font' => (string) $style['body'],
                 'template_slug' => $tpl,
@@ -437,6 +442,9 @@ CSS;
 {$class} .pp-section--hero--poster-stack .pp-hero__subheading{color:color-mix(in srgb,var(--pp-bg) 78%,transparent)}
 CSS;
         } elseif ($mode === 'editorial-xl') {
+            // i18n-ignore: adorno de la web PÚBLICA, no del panel: su idioma es
+            // el del sitio. Su sitio natural es Microcopy si algún día se traduce.
+            $chapterWord = 'Capítulo';
             $css .= <<<CSS
 /* ============================================================
    EDITORIAL XL — Magazine-grade typography + intentional drama.
@@ -454,7 +462,7 @@ CSS;
 {$class} .pp-section{padding:clamp(72px, 9vw, 140px) 0;position:relative;counter-increment:pp-section}
 {$class} .pp-section + .pp-section{padding-top:clamp(72px, 9vw, 140px)}
 {$class} .pp-section::before{
-    content:counter(pp-section,decimal-leading-zero) " / Capítulo";
+    content:counter(pp-section,decimal-leading-zero) " / {$chapterWord}";
     position:absolute;top:32px;left:clamp(20px, 5vw, 64px);
     font-family:var(--pp-font-body);font-weight:500;font-size:.7rem;letter-spacing:.24em;
     color:color-mix(in srgb,var(--pp-text) 50%,transparent);text-transform:uppercase;

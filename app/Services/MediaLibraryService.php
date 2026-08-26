@@ -63,6 +63,7 @@ final class MediaLibraryService
      * Bloque de texto para los prompts. Separa explícitamente las fotos propias
      * del banco para que el modelo sepa cuál debe preferir.
      */
+    // i18n-ignore-start: bloque de imágenes que viaja DENTRO del prompt.
     public static function forAi(int $siteId, int $limit = 14): string
     {
         $rows = self::images($siteId, $limit);
@@ -113,6 +114,7 @@ final class MediaLibraryService
         if ($h >= $w * 1.15) return 'vertical';
         return 'cuadrada';
     }
+    // i18n-ignore-end
 
     /**
      * Elige la foto PROPIA que mejor encaja con un brief ("aula con
@@ -158,6 +160,7 @@ final class MediaLibraryService
     public static function keywords(string $text): array
     {
         $t = mb_strtolower(trim($text));
+        // i18n-ignore: tabla de transliteración, no interfaz.
         $t = strtr($t, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
         $t = (string) preg_replace('/[^a-z0-9\s]+/', ' ', $t);
         $stop = ['para', 'con', 'una', 'unos', 'unas', 'del', 'las', 'los', 'que', 'por', 'sin', 'sobre', 'foto', 'fotos', 'imagen', 'imagenes', 'jpg', 'png', 'webp', 'img', 'dsc', 'photo'];
@@ -216,7 +219,8 @@ final class MediaLibraryService
             try {
                 self::describeNow($mediaId, $siteId);
             } catch (\Throwable $e) {
-                error_log('[MediaLibrary] descripción fallida media=' . $mediaId . ': ' . $e->getMessage());
+                // i18n-ignore: línea de log.
+            error_log('[MediaLibrary] descripción fallida media=' . $mediaId . ': ' . $e->getMessage());
             }
         });
     }

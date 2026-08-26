@@ -25,27 +25,28 @@ $fmtDate  = function ($d) {
     $ts = strtotime($d);
     return $ts ? date('d/m/Y H:i', $ts) : $d;
 };
+// Las CLAVES son valores de base de datos y no se traducen nunca; solo su etiqueta.
 $pageTypeLabels = [
-    'home' => 'Inicio', 'service' => 'Servicio', 'product' => 'Producto',
-    'landing' => 'Landing', 'article' => 'Artículo', 'contact' => 'Contacto',
+    'home' => __('page_type.home'), 'service' => __('page_type.service'), 'product' => __('page_type.product'),
+    'landing' => __('page_type.landing'), 'article' => __('page_type.article'), 'contact' => __('page_type.contact'),
 ];
 $actionLabels = [
-    'generate_structure' => 'Generar estructura',
-    'generate_section'   => 'Generar sección',
-    'rewrite'            => 'Reescribir',
-    'improve_seo'        => 'Mejorar SEO',
-    'summarize'          => 'Resumir',
-    'test'               => 'Test conexión',
+    'generate_structure' => __('ai_action.generate_structure'),
+    'generate_section'   => __('ai_action.generate_section'),
+    'rewrite'            => __('ai_action.rewrite'),
+    'improve_seo'        => __('ai_action.improve_seo'),
+    'summarize'          => __('ai_action.summarize'),
+    'test'               => __('ai_action.test'),
 ];
 ?>
 
-<?php \Core\View::start('title'); ?>Escritorio<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.dashboard')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-dashboard">
 
     <div class="pp-dashboard__welcome">
-        <h2>Hola, <?= e($userName) ?> 👋</h2>
-        <p>Resumen de <strong><?= e($siteName) ?></strong>.</p>
+        <h2><?= e(__('dashboard.greeting', ['nombre' => $userName])) ?> 👋</h2>
+        <p><?= e(__('dashboard.summary_of')) ?> <strong><?= e($siteName) ?></strong>.</p>
     </div>
 
     <?php
@@ -55,16 +56,16 @@ $actionLabels = [
         $level = $compliance['level'];
         $wizardPending = !($wizardCompleted ?? true);
         if ($wizardPending) {
-            $title = 'Configura tu privacidad en 4 pasos';
-            $ctaLabel = 'Completar asistente';
+            $title = __('dashboard.compliance.wizard_title');
+            $ctaLabel = __('dashboard.compliance.wizard_cta');
             $ctaUrl   = base_url('admin/privacy/wizard');
         } else {
             $title = match ($level) {
-                'red'    => 'Atención · hay algo que arreglar en privacidad',
-                'orange' => 'Antes de publicar, completa tu privacidad',
-                default  => 'Casi listo · revisa estos puntos de privacidad',
+                'red'    => __('dashboard.compliance.title_red'),
+                'orange' => __('dashboard.compliance.title_orange'),
+                default  => __('dashboard.compliance.title_yellow'),
             };
-            $ctaLabel = 'Ir a Privacidad';
+            $ctaLabel = __('dashboard.compliance.cta');
             $ctaUrl   = base_url('admin/privacy');
         }
         $topGaps = array_slice($compliance['gaps'], 0, 2);
@@ -80,7 +81,9 @@ $actionLabels = [
             </div>
             <div class="pp-compliance-widget__title">
                 <strong><?= e($title) ?></strong>
-                <span><?= count($compliance['gaps']) ?> punto<?= count($compliance['gaps']) === 1 ? '' : 's' ?> que revisar para cumplir la normativa europea.</span>
+                <?php // Plural explícito: hay idiomas donde no basta con añadir una 's'.
+                $gapCount = count($compliance['gaps']); ?>
+                <span><?= e(__($gapCount === 1 ? 'dashboard.compliance.points_one' : 'dashboard.compliance.points_other', ['n' => $gapCount])) ?></span>
             </div>
             <a class="pp-btn pp-btn--primary pp-btn--sm" href="<?= e($ctaUrl) ?>"><?= e($ctaLabel) ?></a>
         </div>
@@ -98,57 +101,57 @@ $actionLabels = [
     <!-- Stats: agrupadas por divider, no card-boxing. Métrica IA destacada. -->
     <section class="pp-stats">
         <a href="<?= e(base_url('admin/ai-usage')) ?>" class="pp-stat pp-stat--primary">
-            <span class="pp-stat__label">Llamadas IA</span>
+            <span class="pp-stat__label"><?= e(__('dashboard.stat.ai_calls')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countAILogs) ?></span>
             <?php if ($countAILogs > 0): ?>
             <span class="pp-stat__sub">
                 <?= $fmtNum($aiTokensInput + $aiTokensOutput) ?> tokens · <?= $fmtCost($aiCostTotal) ?>
             </span>
             <?php else: ?>
-            <span class="pp-stat__sub">Sin actividad todavía</span>
+            <span class="pp-stat__sub"><?= e(__('dashboard.stat.no_activity')) ?></span>
             <?php endif; ?>
         </a>
 
         <a href="<?= e(base_url('admin/pages')) ?>" class="pp-stat">
-            <span class="pp-stat__label">Páginas</span>
+            <span class="pp-stat__label"><?= e(__('nav.pages')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countPages) ?></span>
             <?php if ($countPages > 0): ?>
             <span class="pp-stat__sub">
-                <?= $fmtNum($countPublished) ?> publicadas · <?= $fmtNum($countDrafts) ?> borradores
+                <?= e(__('dashboard.stat.pages_sub', ['publicadas' => $fmtNum($countPublished), 'borradores' => $fmtNum($countDrafts)])) ?>
             </span>
             <?php endif; ?>
         </a>
 
         <a href="<?= e(base_url('admin/media')) ?>" class="pp-stat">
-            <span class="pp-stat__label">Medios</span>
+            <span class="pp-stat__label"><?= e(__('nav.media')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countMedia) ?></span>
         </a>
 
         <a href="<?= e(base_url('admin/documents')) ?>" class="pp-stat">
-            <span class="pp-stat__label">Documentos</span>
+            <span class="pp-stat__label"><?= e(__('nav.documents')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countDocuments) ?></span>
         </a>
     </section>
 
     <!-- Quick actions -->
     <div class="pp-dashboard__section">
-        <h3>Acciones rápidas</h3>
+        <h3><?= e(__('dashboard.quick_actions')) ?></h3>
         <div class="pp-quick-actions">
             <a href="<?= e(base_url('admin/pages/create')) ?>" class="pp-quick-action">
                 <span class="pp-icon--pages"></span>
-                <span>Crear página</span>
+                <span><?= e(__('dashboard.quick.create_page')) ?></span>
             </a>
             <a href="<?= e(base_url('admin/memory')) ?>" class="pp-quick-action">
                 <span class="pp-icon--memory"></span>
-                <span>Definir conocimiento</span>
+                <span><?= e(__('dashboard.quick.define_knowledge')) ?></span>
             </a>
             <a href="<?= e(base_url('admin/design')) ?>" class="pp-quick-action">
                 <span class="pp-icon--design"></span>
-                <span>Configurar diseño</span>
+                <span><?= e(__('dashboard.quick.configure_design')) ?></span>
             </a>
             <a href="<?= e(base_url('admin/settings')) ?>" class="pp-quick-action">
                 <span class="pp-icon--settings"></span>
-                <span>Ajustes</span>
+                <span><?= e(__('nav.settings')) ?></span>
             </a>
         </div>
     </div>
@@ -158,18 +161,18 @@ $actionLabels = [
         <!-- Recent pages -->
         <div class="pp-dashboard__section">
             <div class="pp-section-header">
-                <h3>Páginas recientes</h3>
+                <h3><?= e(__('dashboard.recent_pages')) ?></h3>
                 <?php if (!empty($recentPages)): ?>
-                <a href="<?= e(base_url('admin/pages')) ?>" class="pp-link">Ver todas →</a>
+                <a href="<?= e(base_url('admin/pages')) ?>" class="pp-link"><?= e(__('dashboard.see_all')) ?> →</a>
                 <?php endif; ?>
             </div>
 
             <?php if (empty($recentPages)): ?>
             <div class="pp-empty pp-empty--inline">
-                <div class="pp-empty__title">Aún no hay páginas</div>
-                <div class="pp-empty__text">Crea tu primera página para empezar.</div>
+                <div class="pp-empty__title"><?= e(__('dashboard.empty_pages.title')) ?></div>
+                <div class="pp-empty__text"><?= e(__('dashboard.empty_pages.text')) ?></div>
                 <a href="<?= e(base_url('admin/pages/create')) ?>" class="pp-btn pp-btn--primary">
-                    Crear página
+                    <?= e(__('dashboard.quick.create_page')) ?>
                 </a>
             </div>
             <?php else: ?>
@@ -177,10 +180,10 @@ $actionLabels = [
                 <table class="pp-table">
                     <thead>
                         <tr>
-                            <th>Título</th>
-                            <th>Tipo</th>
-                            <th>Estado</th>
-                            <th>Actualizada</th>
+                            <th><?= e(__('table.title')) ?></th>
+                            <th><?= e(__('table.type')) ?></th>
+                            <th><?= e(__('table.status')) ?></th>
+                            <th><?= e(__('table.updated')) ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -194,9 +197,9 @@ $actionLabels = [
                             <td><?= e($pageTypeLabels[$p['page_type']] ?? $p['page_type']) ?></td>
                             <td>
                                 <?php if ($p['status'] === 'published'): ?>
-                                <span class="pp-badge pp-badge--success">Publicada</span>
+                                <span class="pp-badge pp-badge--success"><?= e(__('status.published')) ?></span>
                                 <?php else: ?>
-                                <span class="pp-badge pp-badge--muted">Borrador</span>
+                                <span class="pp-badge pp-badge--muted"><?= e(__('status.draft')) ?></span>
                                 <?php endif; ?>
                             </td>
                             <td><?= e($fmtDate($p['updated_at'])) ?></td>
@@ -211,26 +214,26 @@ $actionLabels = [
         <!-- Recent AI calls -->
         <div class="pp-dashboard__section">
             <div class="pp-section-header">
-                <h3>Actividad IA reciente</h3>
+                <h3><?= e(__('dashboard.recent_ai')) ?></h3>
                 <?php if (!empty($recentAILogs)): ?>
-                <a href="<?= e(base_url('admin/ai-usage')) ?>" class="pp-link">Ver todo →</a>
+                <a href="<?= e(base_url('admin/ai-usage')) ?>" class="pp-link"><?= e(__('dashboard.see_all')) ?> →</a>
                 <?php endif; ?>
             </div>
 
             <?php if (empty($recentAILogs)): ?>
             <div class="pp-empty pp-empty--inline">
-                <div class="pp-empty__title">Sin actividad IA todavía</div>
-                <div class="pp-empty__text">Cuando uses la IA para generar contenido, verás el historial aquí.</div>
+                <div class="pp-empty__title"><?= e(__('dashboard.empty_ai.title')) ?></div>
+                <div class="pp-empty__text"><?= e(__('dashboard.empty_ai.text')) ?></div>
             </div>
             <?php else: ?>
             <div class="pp-table-wrap">
                 <table class="pp-table">
                     <thead>
                         <tr>
-                            <th>Acción</th>
-                            <th>Modelo</th>
+                            <th><?= e(__('table.action')) ?></th>
+                            <th><?= e(__('table.model')) ?></th>
                             <th>Tokens</th>
-                            <th>Fecha</th>
+                            <th><?= e(__('table.date')) ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -239,7 +242,7 @@ $actionLabels = [
                             <td>
                                 <?= e($actionLabels[$log['action_type']] ?? $log['action_type']) ?>
                                 <?php if ($log['status'] === 'error'): ?>
-                                <span class="pp-badge pp-badge--danger">Error</span>
+                                <span class="pp-badge pp-badge--danger"><?= e(__('status.error')) ?></span>
                                 <?php endif; ?>
                             </td>
                             <td><small><?= e($log['model']) ?></small></td>

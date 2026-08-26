@@ -340,6 +340,26 @@
         var notice = formNotice(form, data.message || (ok
           ? 'Gracias, hemos recibido tu mensaje.'
           : 'No se pudo enviar el formulario. Revisa los campos e inténtalo de nuevo.'), ok);
+        if (ok && data.download_url) {
+          try {
+            var downloadUrl = new URL(data.download_url, window.location.href);
+            if (downloadUrl.origin === window.location.origin) {
+              var link = document.createElement('a');
+              link.className = 'pp-form__download';
+              link.href = downloadUrl.href;
+              link.textContent = data.download_label || 'Descargar archivo';
+              notice.appendChild(document.createElement('br'));
+              notice.appendChild(link);
+              var frame = document.createElement('iframe');
+              frame.hidden = true;
+              frame.title = '';
+              frame.src = downloadUrl.href;
+              document.body.appendChild(frame);
+              window.setTimeout(function () { frame.remove(); }, 60000);
+              form.hidden = true;
+            }
+          } catch (ignore) {}
+        }
         notice.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
         if (ok) {
           form.reset();

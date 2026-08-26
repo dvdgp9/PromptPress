@@ -41,9 +41,11 @@ final class SmtpTransport implements MailTransportInterface
     public function send(MailMessage $message): void
     {
         if ($this->host === '') {
+            // i18n-ignore: excepción interna; el controlador la traduce al pintar.
             throw new MailException('Falta el servidor de correo (host SMTP).');
         }
         if ($this->fromEmail === '') {
+            // i18n-ignore: excepción interna; el controlador la traduce antes de pintar.
             throw new MailException('Falta la dirección de remitente.');
         }
 
@@ -105,14 +107,14 @@ final class SmtpTransport implements MailTransportInterface
     {
         $low = strtolower($raw);
         if (str_contains($low, 'could not authenticate') || str_contains($low, 'authentication')) {
-            return 'El usuario o la contraseña del correo no son correctos. Si usas Gmail/Outlook con verificación en dos pasos, necesitas una "contraseña de aplicación".';
+            return __('smtp.err.auth');
         }
         if (str_contains($low, 'connect') || str_contains($low, 'timed out') || str_contains($low, 'timeout')) {
-            return 'No se pudo conectar con el servidor de correo. Revisa el servidor y el puerto; algunos hostings bloquean el 465 (prueba 587) o al revés.';
+            return __('smtp.err.connect');
         }
         if (str_contains($low, 'tls') || str_contains($low, 'ssl') || str_contains($low, 'certificate')) {
-            return 'Problema con el cifrado de la conexión. Prueba a cambiar entre TLS (587) y SSL (465).';
+            return __('smtp.err.tls');
         }
-        return 'No se pudo enviar el correo: ' . $raw;
+        return __('smtp.err.generic', ['detalle' => $raw]);
     }
 }

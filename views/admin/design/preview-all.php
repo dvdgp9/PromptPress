@@ -11,20 +11,19 @@
 
 <div class="pp-page-header">
     <div>
-        <h2>Preview de todas las variantes</h2>
+        <h2><?= e(__('design_dev.preview_all')) ?></h2>
         <p class="pp-page-intro" style="margin-top:4px;">
-            Cada miniatura es el render real del <code>SectionRenderer</code> con el skin compuesto actual del sitio y contenido placeholder.
-            Útil para detectar regresiones visuales tras tocar el catálogo o `DesignSystem`.
+            <?= __('design_dev.preview_all_help.html') ?>
         </p>
     </div>
-    <a href="<?= e(base_url('admin/design')) ?>" class="pp-btn pp-btn--secondary">← Volver a Diseño</a>
+    <a href="<?= e(base_url('admin/design')) ?>" class="pp-btn pp-btn--secondary">← <?= e(__('design_dev.back_to_design')) ?></a>
 </div>
 
 <?php foreach ($catalog as $type => $variants): ?>
 <section class="pp-preview-type">
     <header class="pp-preview-type__head">
         <h3><?= e($type) ?></h3>
-        <span class="pp-preview-type__count"><?= count($variants) ?> variantes</span>
+        <span class="pp-preview-type__count"><?= e(__('design_dev.n_variants', ['n' => count($variants)])) ?></span>
     </header>
     <div class="pp-preview-grid">
         <?php foreach ($variants as $variant => $meta):

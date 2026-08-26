@@ -33,15 +33,15 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
 
 <header class="pp-posts-header">
     <div class="pp-posts-header__intro">
-        <span class="pp-posts-header__eyebrow">Contenido editorial</span>
-        <h2 class="pp-posts-header__title">Entradas</h2>
-        <p class="pp-posts-header__desc">Tu blog: artículos, novedades y contenido que ayuda al SEO. Cada entrada es una página tipo artículo con metadatos propios.</p>
+        <span class="pp-posts-header__eyebrow"><?= e(__('settings.editorial')) ?></span>
+        <h2 class="pp-posts-header__title"><?= e(__('nav.posts')) ?></h2>
+        <p class="pp-posts-header__desc"><?= e(__('posts.intro')) ?></p>
     </div>
     <div class="pp-posts-header__actions">
         <?php if ($countAll > 0): ?>
-            <button type="button" class="pp-btn pp-btn--secondary" data-suggest-related>✨ Proponer ideas</button>
+            <button type="button" class="pp-btn pp-btn--secondary" data-suggest-related>✨ <?= e(__('posts.suggest_ideas')) ?></button>
         <?php endif; ?>
-        <a href="<?= e(base_url('admin/posts/new')) ?>" class="pp-btn pp-btn--primary">Nueva entrada</a>
+        <a href="<?= e(base_url('admin/posts/new')) ?>" class="pp-btn pp-btn--primary"><?= e(__('posts.new')) ?></a>
     </div>
 </header>
 
@@ -61,17 +61,17 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
                 <path d="M156 36l16 4"/>
             </svg>
         </div>
-        <h3 class="pp-posts-empty__title">Aún no tienes entradas</h3>
-        <p class="pp-posts-empty__desc">Las entradas son el motor de SEO orgánico: la IA puede generarlas a partir de una idea, de un documento subido o de tus propias entradas anteriores.</p>
+        <h3 class="pp-posts-empty__title"><?= e(__('posts.empty_title')) ?></h3>
+        <p class="pp-posts-empty__desc"><?= e(__('posts.empty_text')) ?></p>
         <div class="pp-posts-empty__cta">
-            <a href="<?= e(base_url('admin/posts/new')) ?>" class="pp-btn pp-btn--primary">Crear la primera entrada</a>
+            <a href="<?= e(base_url('admin/posts/new')) ?>" class="pp-btn pp-btn--primary"><?= e(__('posts.create_first')) ?></a>
         </div>
     </section>
 <?php else: ?>
     <nav class="pp-posts-tabs" role="tablist">
-        <a href="<?= e(base_url('admin/posts')) ?>"               class="pp-posts-tab<?= $filter === '' ? ' is-active' : '' ?>">Todas <span><?= (int) $countAll ?></span></a>
-        <a href="<?= e(base_url('admin/posts?status=published')) ?>" class="pp-posts-tab<?= $filter === 'published' ? ' is-active' : '' ?>">Publicadas <span><?= (int) $countPublished ?></span></a>
-        <a href="<?= e(base_url('admin/posts?status=draft')) ?>"     class="pp-posts-tab<?= $filter === 'draft' ? ' is-active' : '' ?>">Borradores <span><?= (int) $countDraft ?></span></a>
+        <a href="<?= e(base_url('admin/posts')) ?>"               class="pp-posts-tab<?= $filter === '' ? ' is-active' : '' ?>"><?= e(__('posts.tab_all')) ?> <span><?= (int) $countAll ?></span></a>
+        <a href="<?= e(base_url('admin/posts?status=published')) ?>" class="pp-posts-tab<?= $filter === 'published' ? ' is-active' : '' ?>"><?= e(__('status.published')) ?> <span><?= (int) $countPublished ?></span></a>
+        <a href="<?= e(base_url('admin/posts?status=draft')) ?>"     class="pp-posts-tab<?= $filter === 'draft' ? ' is-active' : '' ?>"><?= e(__('pages.drafts')) ?> <span><?= (int) $countDraft ?></span></a>
     </nav>
 
     <ul class="pp-posts-list">
@@ -88,7 +88,7 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
             $published = $p['published_at'] ?? null;
             $updated   = $p['updated_at'] ?? null;
             $dateDisplay = $published ?: $updated;
-            $dateLabel = $published ? 'Publicada' : 'Actualizada';
+            $dateLabel = $published ? __('status.published') : __('table.updated');
             $previewUrl = '/' . ltrim($slug, '/');
         ?>
         <li class="pp-post-row">
@@ -105,7 +105,7 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
             <div class="pp-post-row__body">
                 <div class="pp-post-row__head">
                     <a class="pp-post-row__title" href="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>"><?= e($title) ?></a>
-                    <span class="pp-post-status pp-post-status--<?= e($status) ?>"><?= $status === 'published' ? 'Publicada' : 'Borrador' ?></span>
+                    <span class="pp-post-status pp-post-status--<?= e($status) ?>"><?= e($status === 'published' ? __('status.published') : __('status.draft')) ?></span>
                 </div>
                 <?php if ($excerpt !== ''): ?>
                     <p class="pp-post-row__excerpt"><?= e($excerpt) ?></p>
@@ -113,18 +113,18 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
                 <p class="pp-post-row__meta">
                     <span><?= e($dateLabel) ?>: <strong><?= e($fmtDate($dateDisplay)) ?></strong></span>
                     <?php if ($author !== ''): ?><span>· <?= e($author) ?></span><?php endif; ?>
-                    <?php if ($reading > 0): ?><span>· <?= (int) $reading ?> min lectura</span><?php endif; ?>
+                    <?php if ($reading > 0): ?><span>· <?= e(__('posts.reading_min', ['n' => (int) $reading])) ?></span><?php endif; ?>
                 </p>
             </div>
 
             <div class="pp-post-row__actions">
                 <?php if ($status === 'published'): ?>
-                    <a class="pp-post-row__action" href="<?= e(base_url($previewUrl)) ?>" target="_blank" rel="noopener" title="Ver en el sitio">↗</a>
+                    <a class="pp-post-row__action" href="<?= e(base_url($previewUrl)) ?>" target="_blank" rel="noopener" title="<?= e(__('posts.view_on_site')) ?>">↗</a>
                 <?php endif; ?>
-                <a class="pp-post-row__action" href="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>" title="Editar">Editar</a>
-                <form method="POST" action="<?= e(base_url('admin/posts/' . $id . '/delete')) ?>" onsubmit="return confirm('¿Eliminar &quot;<?= e(addslashes($title)) ?>&quot;? Esta acción no se puede deshacer.');">
+                <a class="pp-post-row__action" href="<?= e(base_url('admin/pages/' . $id . '/edit')) ?>" title="<?= e(__('common.edit')) ?>"><?= e(__('common.edit')) ?></a>
+                <form method="POST" action="<?= e(base_url('admin/posts/' . $id . '/delete')) ?>" onsubmit="return confirm(<?= e(json_encode(__('posts.confirm_delete', ['titulo' => $title]), JSON_UNESCAPED_UNICODE)) ?>);">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                    <button type="submit" class="pp-post-row__action pp-post-row__action--danger" title="Eliminar">Borrar</button>
+                    <button type="submit" class="pp-post-row__action pp-post-row__action--danger" title="<?= e(__('common.delete')) ?>"><?= e(__('common.delete_short')) ?></button>
                 </form>
             </div>
         </li>
@@ -138,11 +138,11 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
     <div class="pp-suggest-modal__panel" role="dialog" aria-modal="true" aria-labelledby="pp-suggest-title">
         <header class="pp-suggest-modal__head">
             <div>
-                <span class="pp-posts-header__eyebrow">Brainstorming</span>
-                <h3 id="pp-suggest-title">Ideas para entradas nuevas</h3>
-                <p class="pp-suggest-modal__sub">La IA mira tus entradas y propone temas que las complementan.</p>
+                <span class="pp-posts-header__eyebrow"><?= e(__('posts.brainstorming')) ?></span>
+                <h3 id="pp-suggest-title"><?= e(__('posts.ideas_title')) ?></h3>
+                <p class="pp-suggest-modal__sub"><?= e(__('posts.ideas_help')) ?></p>
             </div>
-            <button type="button" class="pp-suggest-modal__close" data-close aria-label="Cerrar">×</button>
+            <button type="button" class="pp-suggest-modal__close" data-close aria-label="<?= e(__('common.close')) ?>">×</button>
         </header>
 
         <div class="pp-suggest-modal__body">
@@ -151,8 +151,8 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
         </div>
 
         <footer class="pp-suggest-modal__foot">
-            <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-refresh>🔁 Otras ideas</button>
-            <button type="button" class="pp-btn pp-btn--secondary" data-close>Cerrar</button>
+            <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-refresh>🔁 <?= e(__('posts.other_ideas')) ?></button>
+            <button type="button" class="pp-btn pp-btn--secondary" data-close><?= e(__('common.close')) ?></button>
         </footer>
     </div>
 </div>
@@ -185,7 +185,7 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
 
     function fetchSuggestions() {
         list.innerHTML = '';
-        status.textContent = 'La IA está mirando tu blog y pensando ideas… (10-30s)';
+        status.textContent = pp.t('js.posts.thinking');
         status.className = 'pp-suggest-modal__status is-loading';
         refresh.disabled = true;
         const fd = new FormData();
@@ -196,17 +196,17 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
             .then(data => {
                 refresh.disabled = false;
                 if (!data.ok) {
-                    status.textContent = 'Error: ' + (data.error || 'No hay sugerencias');
+                    status.textContent = pp.t('js.bank.error', { error: data.error || pp.t('js.posts.no_suggestions') });
                     status.className = 'pp-suggest-modal__status is-error';
                     return;
                 }
-                status.textContent = data.suggestions.length + ' propuestas';
+                status.textContent = pp.t('js.posts.n_proposals', { n: data.suggestions.length });
                 status.className = 'pp-suggest-modal__status';
                 render(data.suggestions);
             })
             .catch(err => {
                 refresh.disabled = false;
-                status.textContent = 'Error: ' + err.message;
+                status.textContent = pp.t('js.bank.error', { error: err.message });
                 status.className = 'pp-suggest-modal__status is-error';
             });
     }
@@ -221,11 +221,11 @@ $fmtDate = static function (?string $dt, bool $relative = true): string {
                 + '<strong class="pp-suggest-item__title">' + escHtml(it.title) + '</strong>'
                 + (it.angle ? '<p class="pp-suggest-item__angle">' + escHtml(it.angle) + '</p>' : '')
                 + '<div class="pp-suggest-item__meta">'
-                +   (it.audience ? '<span><b>Para:</b> ' + escHtml(it.audience) + '</span>' : '')
-                +   (it.why_now ? '<span class="pp-suggest-item__why"><b>Por qué:</b> ' + escHtml(it.why_now) + '</span>' : '')
+                +   (it.audience ? '<span><b>' + pp.t('js.posts.for') + ':</b> ' + escHtml(it.audience) + '</span>' : '')
+                +   (it.why_now ? '<span class="pp-suggest-item__why"><b>' + pp.t('js.posts.why') + ':</b> ' + escHtml(it.why_now) + '</span>' : '')
                 + '</div>'
                 + '</div>'
-                + '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-pick="' + idx + '">Crear esta →</button>';
+                + '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-pick="' + idx + '">' + pp.t('js.posts.create_this') + ' →</button>';
             list.appendChild(li);
             li.querySelector('[data-pick]').addEventListener('click', () => createFromSuggestion(it, li));
         });

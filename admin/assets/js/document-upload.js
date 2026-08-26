@@ -54,13 +54,13 @@
     function onFileSelected(file) {
         // Validación local
         if (file.size > MAX_SIZE) {
-            alertInline('El archivo supera los ' + formatSize(MAX_SIZE) + '.');
+            alertInline(pp.t('js.doc.too_big', { max: formatSize(MAX_SIZE) }));
             resetSelection();
             return;
         }
         var ext = (file.name.split('.').pop() || '').toLowerCase();
         if (['pdf', 'docx', 'txt'].indexOf(ext) === -1) {
-            alertInline('Formato no soportado. Sube PDF, DOCX o TXT.');
+            alertInline(pp.t('js.doc.bad_format'));
             resetSelection();
             return;
         }
@@ -125,34 +125,34 @@
             if (ev.lengthComputable) {
                 var pct = Math.round((ev.loaded / ev.total) * 100);
                 progressFill.style.width = pct + '%';
-                progressLabel.textContent = 'Subiendo ' + pct + '%…';
+                progressLabel.textContent = pp.t('js.doc.uploading', { pct: pct });
             }
         });
         xhr.upload.addEventListener('load', function () {
             progressFill.style.width = '100%';
-            progressLabel.textContent = 'Procesando texto del documento…';
+            progressLabel.textContent = pp.t('js.doc.processing');
         });
         xhr.onload = function () {
             // El server redirige a /admin/documents con flash. XHR sigue el redirect por defecto.
             if (xhr.status === 200 || xhr.status === 302) {
                 window.location = form.action.replace('/upload', '');
             } else if (xhr.status === 403) {
-                alertInline('Sesión expirada. Recarga la página.');
+                alertInline(pp.t('js.doc.session_expired'));
                 hideProgress();
             } else {
-                alertInline('Error subiendo el archivo (HTTP ' + xhr.status + ').');
+                alertInline(pp.t('js.doc.upload_error', { code: xhr.status }));
                 hideProgress();
             }
         };
         xhr.onerror = function () {
-            alertInline('No se pudo contactar con el servidor.');
+            alertInline(pp.t('js.doc.no_server'));
             hideProgress();
         };
 
         progress.hidden = false;
         progressFill.style.width = '0%';
-        progressLabel.textContent = 'Subiendo 0%…';
-        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Subiendo…'; }
+        progressLabel.textContent = pp.t('js.doc.uploading', { pct: 0 });
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = pp.t('js.doc.uploading_short'); }
         dropzone.classList.add('is-uploading');
 
         xhr.send(fd);
@@ -161,6 +161,6 @@
     function hideProgress() {
         progress.hidden = true;
         dropzone.classList.remove('is-uploading');
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Subir y procesar'; }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = pp.t('js.doc.upload_process'); }
     }
 })();

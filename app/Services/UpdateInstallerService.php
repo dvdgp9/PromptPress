@@ -27,7 +27,7 @@ final class UpdateInstallerService
         $status = UpdateService::status($siteId);
         $downloadUrl = trim((string) ($status['download_url'] ?? ''));
         if ($downloadUrl === '') {
-            throw new RuntimeException('No hay paquete de actualización disponible. Ejecuta "Comprobar ahora".');
+            throw new RuntimeException(__('upd.err.no_package'));
         }
         $expectedChecksum = trim((string) ($status['checksum_sha256'] ?? ''));
         $signature = trim((string) ($status['signature'] ?? ''));
@@ -159,11 +159,11 @@ final class UpdateInstallerService
         self::ensureDirs();
 
         if (preg_match('/^update_[0-9]{8}_[0-9]{6}_[A-Za-z0-9._-]+\.zip$/', $backupName) !== 1) {
-            throw new RuntimeException('Nombre de copia no válido.');
+            throw new RuntimeException(__('upd.err.bad_backup_name'));
         }
         $path = PP_STORAGE . '/updates/backups/' . $backupName;
         if (!is_file($path)) {
-            throw new RuntimeException('Esa copia de seguridad ya no está en el servidor.');
+            throw new RuntimeException(__('upd.err.backup_gone'));
         }
 
         // Antes de restaurar, una copia del estado ACTUAL: si la copia elegida
@@ -195,21 +195,21 @@ final class UpdateInstallerService
     private static function validateUploadedPackage(mixed $file): ?string
     {
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-            return 'Selecciona el archivo ZIP de la actualización.';
+            return __('upd.err.pick_zip');
         }
         if ((int) ($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_INI_SIZE) {
-            return 'El ZIP supera el tamaño máximo que admite este servidor (revisa upload_max_filesize).';
+            return __('upd.err.zip_too_big_ini');
         }
         if ((int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-            return 'La subida no se completó. Vuelve a intentarlo.';
+            return __('upd.err.upload_incomplete');
         }
         $size = (int) ($file['size'] ?? 0);
-        if ($size <= 0) return 'El archivo está vacío.';
+        if ($size <= 0) return __('font.err.empty_file');
         if ($size > self::MAX_PACKAGE_BYTES) {
-            return 'El paquete supera los ' . (int) (self::MAX_PACKAGE_BYTES / 1024 / 1024) . ' MB.';
+            return __('upd.err.package_too_big', ['mb' => (string) (int) (self::MAX_PACKAGE_BYTES / 1024 / 1024)]);
         }
         $tmp = (string) ($file['tmp_name'] ?? '');
-        if ($tmp === '' || !is_file($tmp)) return 'El archivo recibido no es válido.';
+        if ($tmp === '' || !is_file($tmp)) return __('font.err.bad_file');
 
         // Cabecera real de ZIP: "PK\x03\x04".
         $fh = @fopen($tmp, 'rb');
@@ -233,7 +233,8 @@ final class UpdateInstallerService
         }
         if ($missing !== []) {
             throw new RuntimeException(
-                'El ZIP no parece un paquete de PromptPress: falta ' . implode(', ', $missing)
+                // i18n-ignore: detalle técnico del instalador de updates.
+            'El ZIP no parece un paquete de PromptPress: falta ' . implode(', ', $missing)
                 . '. No se ha tocado nada.'
             );
         }
@@ -260,10 +261,10 @@ final class UpdateInstallerService
     private static function ensureRequirements(): void
     {
         if (!class_exists('ZipArchive')) {
-            throw new RuntimeException('La extensión ZIP no está disponible en PHP.');
+            throw new RuntimeException(__('upd.err.no_zip_ext'));
         }
         if (!in_array('sha256', hash_algos(), true)) {
-            throw new RuntimeException('SHA-256 no está disponible en este runtime.');
+            throw new RuntimeException(__('upd.err.no_sha256'));
         }
     }
 
@@ -276,7 +277,8 @@ final class UpdateInstallerService
             PP_STORAGE . '/updates/extracted',
         ] as $dir) {
             if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
-                throw new RuntimeException('No se pudo crear el directorio de updates: ' . $dir);
+                // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('No se pudo crear el directorio de updates: ' . $dir);
             }
         }
     }
@@ -285,7 +287,7 @@ final class UpdateInstallerService
     {
         $zip = new \ZipArchive();
         if ($zip->open($targetZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('No se pudo crear el backup previo a la actualización.');
+            throw new RuntimeException(__('upd.err.backup_failed'));
         }
 
         $exclude = [
@@ -351,7 +353,7 @@ final class UpdateInstallerService
             self::deleteDir($targetDir);
         }
         if (!@mkdir($targetDir, 0775, true) && !is_dir($targetDir)) {
-            throw new RuntimeException('No se pudo preparar directorio temporal para extracción.');
+            throw new RuntimeException(__('upd.err.tmp_dir'));
         }
 
         $zip = new \ZipArchive();
@@ -360,7 +362,7 @@ final class UpdateInstallerService
         }
         if (!$zip->extractTo($targetDir)) {
             $zip->close();
-            throw new RuntimeException('No se pudo extraer el ZIP de actualización.');
+            throw new RuntimeException(__('upd.err.extract'));
         }
         $zip->close();
     }
@@ -379,7 +381,7 @@ final class UpdateInstallerService
         if ($expectedChecksum !== '') {
             $normalizedExpected = strtolower(preg_replace('/[^a-f0-9]/i', '', $expectedChecksum) ?? '');
             if ($normalizedExpected !== $actualChecksum) {
-                throw new RuntimeException('Checksum SHA-256 inválido: el paquete no coincide con el esperado.');
+                throw new RuntimeException(__('upd.err.checksum'));
             }
         }
 
@@ -388,17 +390,19 @@ final class UpdateInstallerService
         if ($signature !== '') {
             $alg = $signatureAlg !== '' ? strtolower($signatureAlg) : 'hmac-sha256';
             if ($alg !== 'hmac-sha256') {
-                throw new RuntimeException('Algoritmo de firma no soportado: ' . $alg);
+                // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('Algoritmo de firma no soportado: ' . $alg);
             }
             $key = trim((string) config('updates.signature_key', ''));
             if ($key === '') {
-                throw new RuntimeException('Falta `updates.signature_key` para validar firma del paquete.');
+                // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('Falta `updates.signature_key` para validar firma del paquete.');
             }
 
             $expectedSig = strtolower(trim($signature));
             $actualSig = strtolower(hash_hmac('sha256', $actualChecksum, $key));
             if (!hash_equals($expectedSig, $actualSig)) {
-                throw new RuntimeException('Firma del paquete inválida.');
+                throw new RuntimeException(__('upd.err.signature'));
             }
         }
     }
@@ -410,6 +414,7 @@ final class UpdateInstallerService
             '/config/config.php',
             '/storage/uploads',
             '/storage/documents',
+            '/storage/resources',
             '/storage/logs',
             '/storage/cache',
             '/storage/updates',
@@ -433,17 +438,20 @@ final class UpdateInstallerService
             $dest = PP_ROOT . $rel;
             if ($item->isDir()) {
                 if (!is_dir($dest) && !@mkdir($dest, 0775, true) && !is_dir($dest)) {
-                    throw new RuntimeException('No se pudo crear directorio destino: ' . $rel);
+                    // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('No se pudo crear directorio destino: ' . $rel);
                 }
                 continue;
             }
 
             $parent = dirname($dest);
             if (!is_dir($parent) && !@mkdir($parent, 0775, true) && !is_dir($parent)) {
-                throw new RuntimeException('No se pudo crear directorio padre: ' . $parent);
+                // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('No se pudo crear directorio padre: ' . $parent);
             }
             if (!@copy($abs, $dest)) {
-                throw new RuntimeException('No se pudo copiar archivo: ' . $rel);
+                // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('No se pudo copiar archivo: ' . $rel);
             }
         }
     }
@@ -461,7 +469,7 @@ final class UpdateInstallerService
         $result = $migrator->run();
         if (!empty($result['errors'])) {
             $first = $result['errors'][0];
-            throw new RuntimeException('Migración fallida tras update: ' . $first['name'] . ' — ' . $first['error']);
+            throw new RuntimeException(__('upd.err.migration', ['nombre' => (string) $first['name'], 'detalle' => (string) $first['error']]));
         }
     }
 

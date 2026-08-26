@@ -2692,3 +2692,3431 @@ regenerar.
   texto). El usuario lee la etiqueta, no el mapeo.
 - **Antes de temer una regresión, medirla.** Remapear `--pp-secondary` daba
   miedo hasta contar sus usos reales: cero.
+
+---
+
+# [FORMS-LANG] Los formularios se quedan en castellano — PLAN (10/08/2026, Planner)
+
+## Background and Motivation (FORMS-LANG)
+
+El usuario tiene una web en producción **en francés** y los formularios salen
+**en castellano**: encabezado, etiquetas de los campos, botón de enviar, nota de
+privacidad y mensajes. Pide dos cosas, en este orden:
+
+1. Que un formulario nuevo nazca en el **idioma principal del sitio**.
+2. Que en una web **multi-idioma** el formulario se **traduzca** con la página.
+
+## Key Challenges and Analysis (FORMS-LANG)
+
+Diagnóstico leyendo el código (no son hipótesis: son los sitios exactos donde se
+pierde el idioma).
+
+**1. El catálogo de plantillas está escrito en castellano, literal.**
+`app/Services/FormTemplates.php` guarda `heading`, `submit_text`,
+`success_message`, las etiquetas de campo ("Nombre", "Email", "Mensaje"),
+`retention_period` y el autorespondedor en castellano fijo. Ese texto se
+**persiste en la BD** al crear el formulario (`FormStore::createFromTemplate`),
+así que no es un problema de render: nace en castellano y se queda. Vale tanto
+para el botón "crear formulario" del panel como para la materialización
+automática de `{{form:contact}}` que hace la IA al generar una página.
+
+**2. El renderizador público tiene castellano incrustado.**
+En `SectionRenderer::renderForm()` / `renderFormPrivacyNotice()`:
+"Selecciona una opción", "Seleccionar archivo", "Ningún archivo seleccionado",
+el checkbox de marketing ("Acepto recibir comunicaciones comerciales…"), y toda
+la nota de privacidad RGPD ("Tus datos se tratarán en base a nuestro interés
+legítimo…", "Más información en nuestra política de privacidad"). También
+`FormSubmissionService::fileHelpForField()` ("Formatos permitidos… Máximo N MB").
+Nada de esto pasa por `Microcopy`, que sí cubre `form.submit`, `form.success`,
+`form.error`, `form.rate_limited` en los 7 idiomas.
+
+**3. En páginas canvas se pierde el idioma de render.**
+`Public\PageController::render()` hace bien `SectionRenderer::setSiteContext($siteId, $lang)`
+con el idioma de la PÁGINA, pero después `CanvasService::renderPublic()` vuelve a
+llamar a `setSiteContext($siteId)` **sin idioma** (y `expandPlaceholders()` otra
+vez), lo que resetea el idioma al del SITIO. En una web bilingüe con páginas
+canvas, hasta el poco microcopy que ya está traducido sale en el idioma
+equivocado. Es un bug de una línea con efecto en todo lo que renderice el canvas.
+
+**4. Un formulario es una entidad de sitio, no de página: la traducción no lo toca.**
+Los formularios viven como secciones `form` de una página contenedora oculta
+(`FormStore`, slug `__forms`) y las páginas los referencian con `{{form:12}}`.
+El prompt de traducción (`Actions.php:610`) ordena **copiar los placeholders
+exactos**, y hace bien. Consecuencia: la página francesa traducida enseña el
+MISMO formulario castellano. `PageTranslator` nunca ve ese contenido.
+
+**5. El panel de formularios no conoce el idioma.** `views/admin/forms/*` no
+tiene ninguna noción de idioma, y `FormStore::all()` lista todo junto.
+
+### La decisión de fondo: ¿cómo es un formulario multi-idioma?
+
+- **Opción A — un formulario por idioma** (variantes hermanas, al estilo del
+  `translation_group` de páginas). El editor actual no cambia. Pero **parte la
+  bandeja de entrada en dos**, duplica configuración sensible (email de aviso,
+  autorespondedor, base legal, retención) y esa duplicación se desincroniza sola.
+- **Opción B — un formulario, textos por idioma** (recomendada). Se añade un
+  bloque `i18n` dentro del JSON del formulario: `{"fr": {"heading":…, "submit_text":…,
+  "fields": {"nombre": {"label":…, "placeholder":…}}}}`. Al pintar, se resuelve
+  con el idioma de la página; si falta ese idioma, cae al texto base. Ventajas:
+  **una sola bandeja de leads**, un solo sitio para el RGPD, el `{{form:12}}` de
+  la página traducida sigue funcionando sin tocar nada, y el `name` de los campos
+  (la clave de los datos guardados) no cambia nunca.
+- **Opción C — solo idioma principal**, sin traducción por página. Arregla el
+  caso del usuario hoy (web francesa monolingüe) y deja el multi-idioma fuera.
+
+**Recomendación: B**, y hacer la fase 1 (idioma principal) antes que la 2.
+
+### Segunda decisión: ¿diccionario o IA para traducir los textos?
+
+- Las **5 plantillas** del catálogo son un conjunto cerrado y pequeño (unos 30
+  textos). Traducirlas con un **diccionario** al estilo `Microcopy` es
+  determinista, gratis, instantáneo y **testeable** (`tests/site_language.php` ya
+  falla si queda un hueco). Es lo correcto para lo que nace de plantilla.
+- Lo que el usuario haya **escrito a mano** (campos propios, encabezado
+  personalizado) no lo cubre ningún diccionario: ahí sí hace falta **IA**, en una
+  acción explícita "traducir este formulario a X".
+
+**Recomendación: diccionario para plantillas + microcopy, IA solo para traducir
+formularios ya existentes/personalizados.**
+
+## Riesgos y qué NO hay que romper
+
+- **Los `name` de los campos son la clave de los datos.** `nombre`, `email`,
+  `mensaje` identifican columnas en las submissions guardadas y las variables del
+  autorespondedor (`{{nombre}}`). Se traduce la **etiqueta**, nunca el `name`:
+  si se traduce el `name`, las bandejas viejas dejan de casar y el autorespondedor
+  se queda con huecos.
+- **Los formularios ya creados en prod no se arreglan solos.** El texto está
+  guardado. Cambiar plantillas solo afecta a los nuevos → hace falta una acción
+  de retrocompatibilidad ("traducir este formulario") para la web francesa que ya
+  existe. Esto es exactamente el caso del usuario.
+- **La nota de privacidad tiene efectos legales.** Traducirla con diccionario
+  revisado, no con IA suelta.
+- **No tocar el email de aviso al dueño del sitio.** Ese va al administrador, no
+  al visitante; su idioma es otra discusión.
+
+## High-level Task Breakdown (FORMS-LANG)
+
+### Fase 1 — Que el formulario nazca en el idioma del sitio
+
+- **T1. Idioma de render en canvas.** `CanvasService::renderPublic()` y
+  `expandPlaceholders()` reciben y propagan el idioma en vez de resetearlo.
+  *Criterio:* página canvas en `fr` con un formulario → el botón sale "Envoyer"
+  sin tocar nada más. Test que renderice la misma página en `es` y `fr` y compare.
+
+- **T2. Microcopy para lo que hoy está incrustado.** Nuevas claves en 7 idiomas:
+  `form.select_placeholder`, `form.file_button`, `form.file_empty`,
+  `form.file_help` (con `{formats}` y `{max}`), `form.marketing_consent`,
+  `form.privacy_basis_*` (consent/contract/legitimate_interest),
+  `form.privacy_retention`, `form.privacy_link`. `SectionRenderer` y
+  `FormSubmissionService::fileHelpForField()` pasan a usarlas.
+  *Criterio:* `tests/site_language.php` en verde (falla si falta un idioma) y
+  cero literales castellanos en el HTML de un formulario renderizado en `fr`.
+
+- **T3. Plantillas traducidas.** `FormTemplates` deja de devolver castellano fijo:
+  el catálogo pasa a resolverse por idioma (diccionario propio o claves de
+  Microcopy `form.tpl.*`), con los `name` de campo intactos. `createFromTemplate`
+  y la materialización de `{{form:TIPO}}` reciben el idioma principal del sitio.
+  *Criterio:* en un sitio `fr`, crear el formulario de contacto guarda
+  "Contactez-nous" / "Envoyer" / "Nom", y el `name` sigue siendo `nombre`.
+  `tests/form_templates.php` ampliado a dos idiomas.
+
+- **T4. Autorespondedor por idioma.** `autoresponder_subject` / `_body` por
+  defecto en el idioma del sitio (claves `mail.*` de Microcopy ya existen como
+  familia). *Criterio:* formulario creado en `fr` con cuerpo en francés y
+  `{{nombre}}`/`{{sitio}}` intactos.
+
+- **T5. Arreglar lo que ya existe en prod.** Acción en el editor de formularios:
+  **"Traducir este formulario al idioma del sitio"** (IA, revisando antes de
+  guardar). Traduce labels, placeholders, heading, botón y mensajes; nunca los
+  `name`. *Criterio:* el formulario castellano de la web francesa del usuario
+  queda en francés en una pulsación, con los leads antiguos intactos.
+
+### Fase 2 — Multi-idioma (solo si se elige la opción B)
+
+- **T6. Modelo `i18n` dentro del formulario** + resolución en render por idioma
+  de página, con caída al texto base. *Criterio:* `/contact` (fr) y `/contacto`
+  (es) comparten `{{form:12}}` y cada una lo pinta en su idioma.
+- **T7. Traducir el formulario al traducir la página.** Cuando `PageTranslator`
+  traduce una página que contiene `{{form:N}}`, se rellena el bloque `i18n` de
+  ese formulario en el idioma destino si falta. *Criterio:* traducir la home al
+  francés deja el formulario listo en francés sin pasos extra.
+- **T8. UI del editor:** pestañas de idioma en el formulario, aviso de "sin
+  traducir" y botón de traducir por idioma. *Criterio:* se ve de un vistazo qué
+  idiomas están cubiertos.
+- **T9. Documentación + tests de regresión** (una bandeja, un `name`, un RGPD).
+
+## Project Status Board (FORMS-LANG)
+
+- [ ] Decisión del usuario: modelo multi-idioma (A / B / C)
+- [ ] Decisión del usuario: alcance ahora (solo Fase 1 / Fase 1+2)
+- [ ] T1 idioma de render en canvas
+- [ ] T2 microcopy de lo incrustado
+- [ ] T3 plantillas por idioma
+- [ ] T4 autorespondedor por idioma
+- [ ] T5 traducir formularios ya existentes
+- [ ] T6-T9 (fase 2, condicionada a la decisión)
+
+## Executor's Feedback or Assistance Requests (FORMS-LANG)
+
+Pendiente: nada hasta que el usuario cierre las dos decisiones de arriba.
+
+## Decisiones cerradas (10/08/2026, usuario)
+
+1. **Modelo: opción B** — un solo formulario con sus textos por idioma. Una
+   bandeja de leads, un RGPD, `{{form:N}}` intacto en la página traducida.
+2. **Alcance: Fase 1 + Fase 2 completas** (T1-T9). Orden de ejecución sin
+   cambios: T1→T5 primero, porque son las que desbloquean la web francesa que ya
+   está en producción, y T6→T9 después sobre esa base.
+
+Invariantes que la implementación NO puede romper (recordatorio para el Executor):
+los `name` de los campos nunca se traducen; el email de aviso al dueño se queda
+como está; la nota de privacidad se traduce con diccionario revisado, no con IA.
+
+## Current Status / Progress Tracking (FORMS-LANG · 10/08/2026, Executor)
+
+Fase 1 y Fase 2 implementadas y verificadas. Estado del board:
+
+- [x] T1 idioma de render en canvas — `CanvasService::renderPublic()` y
+      `expandPlaceholders()` reciben idioma; si no se pasa, se deduce de la fila
+      de `pages`. `Public\PageController` lo pasa explícito.
+- [x] T2 microcopy de lo incrustado — 15 claves nuevas × 7 idiomas (select, file,
+      consentimiento de marketing, nota de privacidad completa, retenciones,
+      errores del envío). Hidden `_lang` en el formulario para que el POST sepa
+      desde qué idioma se envió.
+- [x] T3 plantillas por idioma — `FormTemplates::catalog($lang)`; el formulario
+      nace en `LanguageService::primaryFor($siteId)`. Los `name` intactos.
+- [x] T4 autorespondedor por idioma — asunto y cuerpo del catálogo traducidos;
+      el cuerpo se lee con `Microcopy::template()` para no perder `{{nombre}}`.
+- [x] T5 traducir formularios existentes — acción `TRANSLATE_FORM` +
+      `FormTranslator` + `POST /admin/formularios/{id}/translate`.
+- [x] T6 modelo i18n — `FormI18n` (bloque `i18n` dentro del JSON, campos
+      indexados por `name`, caída al texto base).
+- [x] T7 traducir el formulario al traducir la página — enganchado en
+      `TranslationWriter::createCanvas()`, best-effort.
+- [x] T8 UI del editor — tarjeta "Idiomas" con estado por idioma y botón de
+      traducir; aviso destacado si la base no coincide con el idioma principal.
+- [x] T9 tests — `tests/forms_language.php`, 37 comprobaciones.
+
+### Verificación
+
+- `tests/forms_language.php`: 37/37. Suites relacionadas en verde
+  (form_templates, form_inline_insert, form_intent_materialization,
+  site_language, site_microcopy, site_language_urls, page_translation,
+  page_translation_write, translation_jobs, canvas_runtime,
+  blog_canvas_regression, mail_microcopy, botguard_submit).
+- **Camino real con IA en dev**: activado `fr` en el sitio 1, traducido el
+  formulario 469 desde el panel. La IA devolvió labels traducidas, claves de
+  campo intactas y `{{nombre}}`/`{{sitio}}` conservados.
+- **Público real**: `/fr/contact-…` sirvió `Contactez-nous` / `Envoyer` / `Nom`
+  y la nota RGPD en francés, con `_lang=fr`; `/inicio-canvas-12` (es) siguió en
+  castellano — el MISMO formulario 469, una sola bandeja.
+- **Envío real**: POST a `/forms/469` con `_lang=fr` respondió
+  «Merci, nous vous contacterons bientôt.»; con `_lang=es`, en castellano.
+- Estado de dev restaurado: `fr` desactivado, `i18n` del formulario 469
+  borrado, página de prueba eliminada, cero submissions creadas.
+
+### Lo que NO cubre
+
+- Los formularios **por sección** de páginas clásicas ya se traducían con la
+  página (`TRANSLATE_PAGE_SECTIONS`): no se han tocado.
+- El email de **aviso al dueño** sigue en castellano, como se decidió.
+- Un `retention_period` escrito a mano por el usuario no se traduce: es una
+  declaración legal suya.
+
+### Lessons (FORMS-LANG)
+
+- **Hay texto que no se traduce al pintar porque se copió al crear.** Las
+  plantillas escribían castellano en la BD; ningún arreglo en el renderizador
+  podía llegar a él. De ahí que hiciera falta, además, una acción para los
+  formularios que ya existen.
+- **Un `setSiteContext($siteId)` sin idioma pisa el idioma de la página.** El
+  controlador público lo hacía bien y el canvas lo deshacía una línea después.
+- **El editor reconstruye el content entero desde el POST**: cualquier clave
+  nueva que no viaje en el formulario (`language`, `i18n`) se pierde al guardar
+  si no se arrastra a mano desde lo que había.
+
+## [LEGAL-SLUG] URLs de las páginas legales en el idioma del sitio (10/08/2026, Executor)
+
+**Problema:** los textos legales ya se generaban en el idioma del sitio, pero el
+slug estaba fijo en castellano (`/privacidad`, `/aviso-legal`…). Una web francesa
+quedaba con textos franceses en URLs castellanas.
+
+**Arreglo:** mapa `LegalPageGenerator::SLUGS` (4 tipos × 7 idiomas) y
+`slugFor($siteId, $type)`, que sigue al idioma PRINCIPAL del sitio.
+
+**Lo delicado no era traducir el slug, era no romper lo publicado.** Una página
+legal ya creada tiene su URL en el pie de todas las páginas, en la nota de
+privacidad de los formularios y, con suerte, en Google. Por eso:
+
+- `findExistingPage()` resuelve en dos pasos: por el id de `manifest.legal_pages`
+  (con `page_type='legal'`, para no machacar una página reconvertida en otra
+  cosa) y, si no, por CUALQUIERA de los slugs conocidos del tipo (todos los
+  idiomas + el castellano histórico).
+- `upsertLegalPage()` conserva el slug de la página existente; solo las que
+  nacen ahora estrenan el del idioma, pasando por `uniqueSlug()`.
+- `PrivacyController::loadLegalPagesState()` usa esa misma resolución: buscar
+  solo por el slug castellano habría hecho "desaparecer" del panel las páginas
+  de una web en otro idioma, y el botón de generar habría creado un duplicado.
+- `typesFor()` devuelve el slug REAL (el de la página si existe), así el panel
+  enseña la URL que verá el visitante. Lee el manifest una sola vez para los
+  cuatro tipos.
+
+**Verificación:** `tests/legal_page_slugs.php` (16 comprobaciones) + generación
+REAL con IA en dev con el sitio en francés: creó "Mentions Légales" en
+`/mentions-legales` con `language=fr` y el texto en francés. Estado de dev
+restaurado (idioma, página aparcada y manifest).
+
+---
+
+# [ADMIN-I18N] El panel de control en el idioma del cliente — PLAN (10/08/2026, Planner)
+
+## Background and Motivation (ADMIN-I18N)
+
+La web pública ya sabe hablar siete idiomas: `LanguageService` manda, `Microcopy`
+cubre los textos del frontend que no escribe nadie, las páginas se traducen y las
+legales nacen con slug del idioma. Pero **el panel sigue siendo castellano puro**:
+el onboarding, el menú lateral, los botones, los avisos, los errores de validación
+y los textos de los editores JS.
+
+Eso significa que un cliente francés o portugués puede tener una web perfecta en su
+idioma, y para mantenerla tiene que pelearse con un panel en un idioma que no habla.
+El onboarding es lo peor: es la primerísima pantalla que ve, antes de tener nada.
+
+Decisión del usuario (10/08/2026), tomada antes de escribir este plan:
+
+1. **Idioma del panel = idioma principal del sitio, con override por usuario.**
+   Por defecto el panel habla el idioma de la web; cada usuario puede fijar el suyo
+   en su perfil (columna nueva `users.language`, `NULL` = heredar del sitio).
+2. **Idiomas del panel: `es`, `en`, `fr`, `pt`.** Los "de país". `ca`, `gl` y `eu`
+   quedan fuera de esta entrega (esos gestores leen castellano) pero la maquinaria
+   tiene que admitirlos sin tocar código: añadir un idioma = añadir un fichero.
+3. **Por fases.** Primero la maquinaria + onboarding + navegación (lo que ve un
+   cliente nuevo). El resto del panel después, sección a sección.
+
+## Key Challenges and Analysis (ADMIN-I18N)
+
+### El volumen, medido (no estimado a ojo)
+
+| Superficie | Ficheros | Líneas | Cadenas traducibles (aprox.) |
+|---|---|---|---|
+| `views/admin/**` | 56 | 11.359 | ~1.635 nodos de texto + 154 literales PHP |
+| `app/Controllers/Admin/**` | 26 | 15.087 | ~475 literales acentuados (flashes, errores, etiquetas) |
+| `admin/assets/js/**` | 20 | 11.416 | ~384 literales acentuados |
+| `install/**` | — | — | fuera de esta entrega (ver Fase 5) |
+
+Total realista: **~2.000–2.500 cadenas**. A mano es inviable; con IA es una tarde de
+proceso por idioma. Lo caro no es traducir, es **extraer**: tocar 100 ficheros
+cambiando literales por claves sin romper nada.
+
+### Lo que NO se puede traducir (el riesgo de verdad)
+
+De los ~475 literales acentuados de los controladores, una parte **no son interfaz:
+son prompts para la IA**. `app/Services/AI/Actions.php` y compañía llevan
+instrucciones al modelo escritas en castellano. Si el extractor las trata como UI y
+las traduce, se rompe la generación de contenido, y se rompe en silencio.
+
+Regla dura para el Executor: **se migra solo lo que se pinta en pantalla**. Todo lo
+que viaja a un proveedor de IA, a la base de datos como valor, a un `name=` de
+formulario o a una clave de array se queda tal cual. Ante la duda: no migrar.
+
+Tampoco se tocan: `Microcopy` (es del frontend público, otro dominio), los mailers
+al cliente final (ya usan el idioma del pedido), ni los valores almacenados —
+solo sus etiquetas.
+
+### Cómo conviven "idioma de la web" e "idioma del panel"
+
+Ya hay dos conceptos: `sites.language`/`site_languages` (principal + adicionales) y,
+ahora, el idioma en el que se le habla al gestor. Resolución en cascada, una sola
+función:
+
+```
+users.language (si no es NULL y está entre los idiomas del panel)
+  → LanguageService::primaryFor($siteId)   (si está entre los del panel)
+  → 'es'
+```
+
+Un sitio en catalán da panel en castellano hasta que exista `ca` en el catálogo: es
+degradación correcta, no un error.
+
+### Decisiones técnicas
+
+- **Catálogos PHP planos**, `lang/admin/{es,en,fr,pt}.php`, `'clave' => 'texto'`.
+  Sin gettext (no hay extensión garantizada en el hosting), sin JSON (los ficheros
+  PHP se cachean en opcache y no hay que parsear nada).
+- **Claves con namespace por sección**: `onboarding.step2.title`, `nav.pages`,
+  `pages.flash.saved`. Legibles en el código, ordenables en el catálogo.
+- **Castellano es la fuente y el último fallback.** Si falta una clave en `fr`, sale
+  el castellano y el test lo canta. Nunca se pinta la clave cruda al usuario.
+- **Helper global `__('clave', ['n' => 3])`**, interpolación con `{n}`. Devuelve
+  texto **sin escapar**: en las vistas se escribe `<?= e(__('...')) ?>`. Para textos
+  con HTML intencionado, clave con sufijo `.html` y sin `e()`. Esta regla es lo que
+  evita convertir una traducción en un XSS.
+- **JS**: el layout inyecta `window.PP_I18N` con las claves del prefijo `js.` del
+  idioma activo, y `admin.js` expone `pp.t(clave, vars)`. Un único punto de entrada
+  para los 20 ficheros.
+- **`<html lang="es">` del layout pasa a ser el idioma del panel.**
+
+### Cómo se traduce, y cómo no se pudre
+
+- `scripts/i18n_translate.php`: lee `lang/admin/es.php`, detecta claves que faltan
+  en `en/fr/pt` y las traduce por lotes con el proveedor de IA ya integrado,
+  pasándole un **glosario de producto** (Escritorio, Entradas, Canvas, Diseño…)
+  para que un término no salga de tres maneras distintas. Solo añade lo que falta:
+  nunca pisa una traducción ya revisada.
+- `tests/admin_i18n.php` (se escribe **antes** de migrar nada, TDD): falla si hay
+  claves de `es` sin traducir, si hay claves huérfanas en otros idiomas, o si los
+  placeholders `{x}` no coinciden entre idiomas.
+- `scripts/i18n_lint.php`: sobre una **lista de ficheros ya migrados**, detecta
+  literales acentuados nuevos que se hayan colado. Es lo que impide que la próxima
+  feature vuelva a meter castellano a pelo en una vista ya traducida.
+
+### Riesgos y qué no hay que romper
+
+- **Prompts de IA traducidos por error** → generación rota en silencio. Mitigación:
+  regla dura arriba + revisión explícita de cada literal que salga de `Services/AI`.
+- **Longitud del texto**: francés y portugués son ~20 % más largos que el castellano.
+  El sidebar y los botones hay que mirarlos en `fr` antes de dar por buena una fase.
+- **Flashes en sesión**: se traducen al generarlos, no al pintarlos. El idioma no
+  cambia entre el POST y el redirect, así que es correcto y más simple.
+- **Onboarding**: mientras se hace el alta puede que el sitio aún no tenga idioma
+  fijado. Hasta el paso donde se elige, el panel usa `Accept-Language` del navegador
+  filtrado por los idiomas soportados, y a partir de ahí el del sitio.
+- **Estados mixtos**: entre fases habrá pantallas traducidas y pantallas en
+  castellano. Es feo pero es aceptable y reversible; el orden de fases pone lo
+  traducido donde más se ve.
+
+## High-level Task Breakdown (ADMIN-I18N)
+
+### Fase 0 — Maquinaria (sin traducir nada todavía)
+
+- **T0.1 · Test primero.** `tests/admin_i18n.php` con las tres comprobaciones
+  (huecos, huérfanas, placeholders) sobre catálogos que aún no existen.
+  *Criterio: el test corre y falla por la razón correcta.*
+- **T0.2 · `App\Services\AdminI18n`** + `lang/admin/{es,en,fr,pt}.php` vacíos.
+  Métodos: `locale()`, `t($key, $vars)`, `jsCatalog()`, `LOCALES`.
+  *Criterio: `AdminI18n::t('x.y')` devuelve `'x.y'` sin reventar y el test pasa en verde con catálogos vacíos.*
+- **T0.3 · Helper global `__()`** en `core/Helpers.php` (comprobando que no choca
+  con nada) + resolución de idioma en el arranque del admin.
+  *Criterio: una cadena piloto en el layout cambia al cambiar el idioma del sitio.*
+- **T0.4 · `users.language`** (migración + `install/schema.sql`, que ya se sabe que
+  divergen) + selector en el perfil/Ajustes.
+  *Criterio: un usuario con `language='en'` ve la cadena piloto en inglés aunque el sitio sea `fr`; con `NULL` la ve en `fr`.*
+- **T0.5 · Puente JS**: `window.PP_I18N` en el layout + `pp.t()` en `admin.js`.
+  *Criterio: una cadena piloto en `admin.js` cambia de idioma.*
+- **T0.6 · `scripts/i18n_translate.php` + glosario.**
+  *Criterio: con 5 claves piloto en `es`, genera `en/fr/pt` correctas y no pisa una traducción editada a mano.*
+
+### Fase 1 — Lo que ve un cliente nuevo
+
+- **T1.1 · Layout y navegación** (`views/admin/layout.php`: menú, cabecera, avatar).
+- **T1.2 · Onboarding completo**: `views/admin/onboarding/*` (751 líneas),
+  `OnboardingController.php` y `admin/assets/js/onboarding.js`.
+- **T1.3 · Escritorio** (`views/admin/dashboard.php` + `DashboardController`).
+- **T1.4 · Ajustes** (`views/admin/settings/*` + `SettingsController`,
+  `SettingsAIController`, `MailSettingsController`).
+- **T1.5 · Login y errores de sesión** (`views/admin/auth/*`, `AuthController`).
+- *Criterio de fase: un alta completa de principio a fin en francés, sin una sola
+  palabra en castellano, revisada a pantalla; `i18n_lint` limpio sobre esos ficheros.*
+
+### Fase 2 — Contenido del día a día
+Páginas, Entradas, Medios, Formularios, Mensajes, Conocimiento, Documentos
+(vistas + controladores + `pages-form.js`, `pages-map.js`, `post-editor.js`,
+`document-*.js`).
+
+### Fase 3 — Editores
+Canvas Studio, Page Studio, Sections Editor, Diseño, Header y pie
+(los JS gordos: `canvas-studio.js`, `page-studio.js`, `sections-editor.js`,
+`design-system.js`, `chrome-editor.js`, `color-picker.js`).
+
+### Fase 4 — El resto
+SEO, Marketing, Privacidad (+ wizard), IA/uso, Módulos, Analítica, Asistente,
+Tienda y Reservas.
+
+### Fase 5 — Instalador (decidir al llegar)
+`install/**` corre antes de que exista sitio ni usuario: el idioma saldría de un
+selector en el primer paso o de `Accept-Language`. Es un plan aparte; no bloquea nada.
+
+## Project Status Board (ADMIN-I18N)
+
+- [x] T0.1 Test `tests/admin_i18n.php`
+- [x] T0.2 Servicio `AdminI18n` + catálogos
+- [x] T0.3 Helper `__()` + resolución de idioma
+- [x] T0.4 `users.language` + selector de perfil
+- [x] T0.5 Puente JS (`PP_I18N` / `pp.t`)
+- [x] T0.6 Script de traducción con IA + glosario
+- [x] T1.1 Layout y navegación
+- [x] T1.2 Onboarding (vista + controlador + JS)
+- [x] T1.3 Escritorio
+- [x] T1.4 Ajustes (General; IA y Correo pendientes → ver más abajo)
+- [x] T1.5 Login
+- [x] Extra no planeado: `scripts/i18n_lint.php` (el vigilante de la Fase 0 que no llegué a escribir entonces)
+- [x] T1.6 Ajustes · IA y Ajustes · Correo (lo que quedó fuera de la Fase 1)
+- [x] T2.1 Conocimiento (`memory`) — incluye las etiquetas del paso 1 del onboarding
+- [x] T2.2 Documentos (vistas + controlador + 2 JS)
+- [x] T2.3 Medios y banco de imágenes (vistas + controlador + `MediaService`)
+- [x] T2.4 Formularios: listado, editor y bandeja de Mensajes (+ controladores, `FormTemplates`)
+- [x] T2.5 Páginas: mapa del sitio y editor clásico
+- [x] T2.6 Entradas: listado, editor y estudio de creación
+- [x] T2.7 `PageController` (avisos e interfaz; los prompts se quedan)
+- [x] T2.8 `PostController` + `pages/studio.php` + los 5 JS de la fase
+- [x] Fase 3 — Canvas Studio (vista + 1.400 líneas de JS), editor de secciones
+      (2.550 líneas de JS), Diseño (+ preview-all y showcase-anchors), Header y
+      pie, y los cuatro JS auxiliares (color-picker, design-system,
+      unsplash-picker, chrome-editor)
+- [x] Fase 3b — `CanvasController`, `SectionController`, `DesignController`,
+      `ChromeController` y `SectionSchemas` (250 claves generadas por script)
+- [x] Fase 4a — Módulos, Enlaces internos, Asistente (+ su JS), Marketing, SEO
+- [x] Fase 4b — Analítica (+ su JS), IA (uso, explorador de prompts, test),
+      Privacidad (índice, resumen y páginas legales)
+- [x] Fase 4c — Privacidad completa (las 7 vistas + los 4 pasos del wizard +
+      `TrackingCatalog` con 39 claves generadas), Tienda: listado y editor
+- [x] Fase 4d — Tienda: `orders`, `order`, `payments`; Reservas (3 vistas +
+      `BookingAdminController`); controladores de Fase 4 (Privacy,
+      PrivacyWizard, Marketing, Seo, Assistant, AITest, Modules,
+      `CommerceAdminController`), avisos al admin de los dos mailers,
+      `LegalPageGenerator::typesFor()`, `HelloController` y los tres JS que
+      quedaban (privacy-generate, color-picker, commerce-product-editor)
+- [x] Fase 5 — Instalador: `InstallerApp`, layout (con selector de idioma
+      propio), los 5 pasos y `AIProviderTester`
+
+### Lessons (ADMIN-I18N Fase 3)
+
+- **`pgrep -f "<patrón>"` se encuentra a sí mismo.** Nueve shells de espera
+  (`until ! pgrep -f "scripts/i18n_translate.php"; do sleep; done`) se quedaron
+  colgados para siempre: el patrón aparece en la propia línea de comandos del
+  shell que espera, así que cada uno se detectaba a sí mismo. El traductor había
+  terminado hacía rato. Para esperar a un proceso: usar el mecanismo de tareas en
+  segundo plano del entorno, o el truco del corchete (`pgrep -f "[i]18n_..."`).
+
+## Current Status / Progress Tracking (ADMIN-I18N · 10/08/2026, Executor)
+
+**Fase 0 COMPLETA.** La maquinaria está montada y verificada de punta a punta.
+El panel sigue en castellano salvo cuatro cadenas piloto de la topbar: es lo
+esperado, la traducción de pantallas es Fase 1.
+
+**Qué se ha construido**
+
+| Pieza | Fichero |
+|---|---|
+| Test (escrito primero) | `tests/admin_i18n.php` — 40 comprobaciones |
+| Servicio | `app/Services/AdminI18n.php` |
+| Catálogos | `lang/admin/{es,en,fr,pt}.php` (15 claves piloto) |
+| Helper global | `__()` en `core/Helpers.php` |
+| Columna + selector | `database/migrations/2026_08_10_admin_language.sql`, `install/schema.sql`, `SettingsController::panelLanguage()`, ruta `POST /admin/settings/panel-language` |
+| Puente JS | `window.PP_I18N` en `views/admin/layout.php` + `pp.t()` en `admin/assets/js/admin.js` |
+| Traducción con IA | `scripts/i18n_translate.php` + acción `Actions::TRANSLATE_ADMIN_UI` |
+
+**Verificación (medida, no deducida)**
+
+- `php tests/admin_i18n.php` → 40/40 en verde.
+- Sin regresiones: `site_language`, `site_languages_model`, `forms_language`,
+  `site_language_chrome_i18n`, `legal_page_slugs`, `canvas_settings`,
+  `onboarding_step2`, `page_from_ref_prompt` → todos OK.
+- Servidor real (`:8788`), sesión admin: sitio en `es` → `<html lang="es">` y
+  «Salir». Sitio cambiado a `fr` → `<html lang="fr">`, «Déconnexion» y el
+  `PP_I18N` del navegador en francés. Preferencia de usuario a `en` desde el
+  selector real → `<html lang="en">` y «Log out» **con la web todavía en
+  francés**: la cascada usuario → sitio funciona.
+- En el navegador, `window.pp.t('js.saving')` devolvió `"Saving…"`.
+- Traducción con IA REAL: 15 claves × 3 idiomas, 45/45 aceptadas, 0 descartadas
+  por placeholders.
+- Corrección a mano en `en` (`Logout` → `Log out`) y nueva pasada del script:
+  **no la pisó**. Es la garantía de que revisar traducciones no es trabajo
+  perdido.
+- Estado de dev restaurado: `sites.language='es'`, `site_languages` principal
+  `es`, `users.language=NULL`.
+
+### Lessons (ADMIN-I18N Fase 0)
+
+- **`PromptBuilder::expandTemplate()` se come cualquier `{palabra}` de una
+  instrucción de IA.** Escribir `{n}` o `{nombre}` como ejemplo en el prompt los
+  deja vacíos antes de llegar al modelo. Los ejemplos de variable se pasan como
+  tokens desde `AIActionRunner` (`{var_token}`), igual que ya se hacía con
+  `{{nombre}}` en `DESIGN_FORM`. Verificado montando el prompt de verdad.
+- La sustitución es de UNA pasada, así que el JSON de entrada puede llevar
+  `{n}` dentro sin que se lo coman. Solo hay riesgo en la instrucción.
+- `users.language` es `NULL` por defecto, no `'es'`. Con `'es'` por defecto,
+  cambiar el idioma de la web no cambiaría nunca el del panel.
+- `pp.t()` va en su propia IIFE y la PRIMERA de `admin.js`: el bloque siguiente
+  hace `return` temprano si no encuentra el sidebar, y las pantallas standalone
+  (Canvas Studio) también necesitan traducir.
+
+## Current Status / Progress Tracking (ADMIN-I18N Fase 1 · 10/08/2026, Executor)
+
+**Fase 1 COMPLETA.** Un alta entera en francés, de la pantalla de acceso al
+último paso del onboarding, sin una palabra en castellano.
+
+**Catálogo:** 501 claves × 4 idiomas.
+
+**Qué se ha migrado**
+
+- Layout y menú lateral (20 entradas), `<html lang>`, título de pestaña.
+- Login (vista + `AuthController`).
+- Escritorio completo (vista + widget de cumplimiento con plural explícito).
+- Ajustes · General: vista entera, `SettingsController` (flashes, errores de
+  validación, zonas horarias, estilos de entrada).
+- Onboarding: los 5 pasos de la vista, `OnboardingController` (solo lo que se
+  pinta) y `admin/assets/js/onboarding.js` entero (~110 cadenas).
+- Herramienta nueva no planeada para Fase 1: **`scripts/i18n_lint.php`**, que es
+  el vigilante que la Fase 0 dejó a deber.
+
+**Verificación**
+
+- `tests/admin_i18n.php` en verde; `scripts/i18n_lint.php` sin nada pendiente.
+- 21 tests relacionados (idioma, formularios, canvas, onboarding, microcopy,
+  SEO, traducción) → **0 fallos**.
+- Servidor real con el sitio en francés: login, menú, escritorio y los 5 pasos
+  del onboarding revisados a pantalla. `pp.t()` resolviendo en francés en el
+  navegador (90 claves `js.`, 5,4 KB por carga).
+- Estado de dev restaurado y comprobado: sitio `es`, un solo idioma activo,
+  `users.language` a NULL, sin páginas ni formularios residuales.
+
+### Lessons (ADMIN-I18N Fase 1)
+
+- **El linter no lo ve todo, y hay que decirlo:** detecta castellano por acentos
+  y signos de apertura. «Las imprescindibles vienen marcadas» no tiene ninguno y
+  se coló hasta que la vi en una captura. La verificación visual no es opcional.
+- **Trampa seria encontrada en `onboarding.js`:** el código comparaba la
+  ETIQUETA visible (`priority === 'Imprescindible'`) para decidir qué páginas van
+  premarcadas. Traducirla habría dejado todas las casillas vacías sin que fallara
+  ningún test. Se separó en `isEssentialPage()`, que mira los datos
+  (`page_type`, `priority`). Buscar este patrón en cada fase: comparar texto
+  visible es una bomba de relojería para el i18n.
+- **Constantes de PHP no pueden llevar texto traducido**: se evalúan antes de
+  saber el idioma. El patrón que ha quedado es guardar la CLAVE en la constante
+  y resolverla en un método (`typographyForView()`, `BrandService::variantLabel()`,
+  `timezoneOptions()`).
+- **Cambiar una constante compartida rompe fases futuras**: al convertir
+  `BrandService::LOGO_VARIANTS['label']` en clave, la pantalla de Diseño (Fase 3)
+  habría enseñado `brand.logo_light` en crudo. Arreglado en el momento. Antes de
+  tocar una constante compartida: `grep` de todos sus usos.
+- **El expandidor de prompts tiene su propio marcador**: las regiones de
+  `OnboardingController` que construyen prompts van entre `i18n-ignore-start` e
+  `i18n-ignore-end`. Son ~100 líneas de castellano que NO se traducen jamás.
+- **Los lotes de traducción se truncan**: 40 cadenas por llamada iban bien en
+  inglés y se cortaban a media clave en francés (es más largo). Bajado a 25 y
+  `max_tokens` a 16000. Si un lote falla, el script no pierde nada: la siguiente
+  pasada solo pide lo que falta.
+- **Verificar en navegador ESCRIBE en la base de datos**: pasar por el paso 5 del
+  onboarding creó una página `Accueil` y un formulario en francés reales, que
+  luego hicieron fallar tres tests. No era código roto, era residuo mío. Tras
+  verificar en el navegador, revisar `pages`, `page_sections` y `site_languages`.
+
+## Current Status / Progress Tracking (ADMIN-I18N Fase 2 · 10/08/2026, Executor)
+
+**Fase 2 COMPLETA** (más lo que quedaba de la 1). Catálogo: **1.539 claves × 4 idiomas**.
+
+**Superficie cubierta hasta aquí:** onboarding, login, escritorio, navegación,
+Ajustes (General + IA + Correo), Conocimiento, Documentos, Medios, banco de
+imágenes, Formularios (listado, editor, bandeja), Páginas (mapa, editor clásico,
+Page Studio) y Entradas (listado, editor, estudio de creación) — con sus
+controladores y sus nueve ficheros JS.
+
+**Verificación:** `scripts/i18n_lint.php` sin nada pendiente y **23 tests
+relacionados en verde, 0 regresiones**.
+
+### Lessons (ADMIN-I18N Fase 2)
+
+- **El patrón "una constante, dos consumidores" se repite en todo el proyecto**:
+  `MemoryController::FIELDS`, `FormTemplates::catalog()`, `AI_MODELS`,
+  `MODEL_PRESETS`, `TYPOGRAPHY`, `TIMEZONES`, `BrandService::LOGO_VARIANTS`.
+  Todas alimentan a la vez una pantalla y un prompt (o un valor de BD). La
+  solución que ha quedado como estándar: la constante guarda la CLAVE o el
+  castellano de la IA, y un método `…ForView()` devuelve la copia traducida.
+  Nunca traducir la constante en su sitio.
+- **`i18n-ignore-start` / `i18n-ignore-end`** por método es lo que hace manejable
+  un controlador como `PageController` (3.400 líneas, 12 métodos que construyen
+  prompts). Sin eso el informe del linter era ilegible.
+- **Contenido generado ≠ interfaz.** `PageController` tiene textos por defecto
+  ('Da el siguiente paso', 'Qué ofrecemos', 'Tu nombre') que acaban DENTRO de la
+  página del cliente. No son del panel: deberían salir de `Microcopy` en el
+  idioma de la WEB. Se han dejado como estaban y está anotado abajo.
+- Cuidado con los `sprintf` al migrar: varios mensajes usaban `%s` posicional y
+  hubo que pasarlos a `{variable}` con nombre para que el traductor pueda
+  reordenar.
+
+## Current Status / Progress Tracking (ADMIN-I18N Fases 4d y 5 · 11/08/2026, Executor)
+
+Cerradas las dos fases que quedaban. El panel ya no tiene castellano fijo en
+ninguna pantalla: `php scripts/i18n_lint.php` sale limpio con los 100+ ficheros
+migrados en su lista.
+
+**Fase 4d.** Tienda (`orders`, `order`, `payments`) y Reservas (`index`,
+`bookings`, `edit`) más sus controladores. Y once controladores/servicios que
+seguían escupiendo mensajes fijos: `PrivacyController`, `PrivacyWizardController`,
+`MarketingController`, `SeoController`, `AssistantController`, `AITestController`,
+`ModulesController`, `CommerceAdminController`, `BookingAdminController`,
+`AIProviderTester` y `LegalPageGenerator`.
+
+Tres decisiones que conviene tener presentes:
+
+1. **Los avisos al admin de los mailers** (`BookingMailer`, `CommerceMailer`)
+   estaban fijos en castellano con un comentario que decía «el panel es
+   castellano». Ya no lo es, así que ahora salen en el idioma del panel. Ojo al
+   detalle: esos correos se envían dentro de la petición de un VISITANTE, sin
+   sesión de admin, así que `AdminI18n` resuelve por el idioma principal del
+   sitio. Es lo correcto —quien gestiona una web francesa querrá el aviso en
+   francés— pero no es lo mismo que la preferencia personal del usuario.
+2. **`LegalPageGenerator::TYPES`**: se traduce `label` (lo lee el gestor) y NO
+   `title` (es el título de la página que ve el visitante).
+3. **`BookingAdminController::WEEKDAYS`** pasa a guardar claves; los nombres de
+   los días se resuelven en `weekdayLabels()` al pintar.
+
+**Fase 5 — instalador.** El caso raro: corre antes de que exista sitio o
+usuario, así que no hay de dónde deducir el idioma. Solución: selector propio
+(ES/EN/FR/PT) en la cabecera del instalador, que guarda la elección en sesión;
+si no se toca, manda el `Accept-Language` del navegador. El idioma elegido en el
+instalador se propone además como idioma principal del sitio en el paso 3.
+
+Dos regiones marcadas `i18n-ignore` a propósito: la pantalla de pánico de
+`install/index.php` (salta antes de que exista catálogo, incluso si falla el
+boot) y el runner CLI de `install/migrate.php` (salida de terminal).
+
+## Current Status / Progress Tracking (ADMIN-I18N Fase 6 · 11/08/2026, Executor)
+
+**El linter tenía un agujero y por eso di por cerrada una fase que no lo estaba.**
+`scripts/i18n_lint.php` funcionaba con una lista BLANCA (`MIGRATED`): solo miraba
+los ficheros que yo iba apuntando al cerrar cada fase. Una capa entera —los
+servicios que devuelven mensajes al panel desde debajo de los controladores—
+nunca llegó a esa lista, así que el informe salía «nada pendiente» con castellano
+fijo dentro. Lo encontré barriendo a mano, no con la herramienta.
+
+**Arreglo de fondo:** la lista pasa a ser de EXCLUSIONES (`NOT_UI`), y son tres,
+cada una con motivo: `app/Services/AI/` (prompts), `Microcopy.php` (catálogo del
+idioma del SITIO) y `views/public/`. Todo lo demás se vigila. Ahora lo que se
+olvida salta en vez de esconderse.
+
+**Lo que faltaba y ya está migrado:** `DesignSystem` (49 claves: etiquetas y
+ayudas de todos los tokens), `VisualStyleService`, `CustomFontService`,
+`ImageBankService`, `PageTranslator`, `TranslationJobs`, `TranslationWriter`,
+`FormTranslator`, `UpdateService`, `UpdateInstallerService`, `SiteAssistantJobs`,
+`SiteAssistantPlanner`, `SeoRedirectService`, `Seo404Service`,
+`SeoTechnicalAuditService`, `CanvasChatService`, `GapDetector`, `SmtpTransport`,
+`MailService`, `VersionService`, `FormStore` y `FormSubmissionService`.
+
+**Dos decisiones nuevas del mismo tipo que las de la Fase 4d:**
+
+1. El **aviso por email de un formulario** lo recibe quien gestiona el sitio, así
+   que pasa al idioma del panel, igual que los de Reservas y Tienda.
+2. El **motivo de fallo de la autorrespuesta** (`autoresponder_error`) se genera
+   en la petición del visitante pero se LEE en la bandeja de Mensajes: va en el
+   idioma del panel y queda congelado en la fila.
+
+**Lo que NO se traduce, ahora explícito en el código** (regiones `i18n-ignore`
+con el motivo escrito, para que la próxima persona no tenga que deducirlo):
+prompts y patrones que leen castellano, excepciones internas, tablas de
+transliteración, endónimos de idioma, y todo lo que ve el VISITANTE —contenido
+demo de plantillas, banner de cookies, páginas de error, vuelta de Stripe—, que
+es idioma del SITIO y su sitio natural es `Microcopy`.
+
+**Caso aparte, decidido y anotado:** los avisos de `CustomBlockSanitizer`
+(«data-ppb-icon solo es válido en \<span\>») son diagnóstico técnico sobre el
+markup que devolvió el modelo y solo salen en el explorador de prompts. Quedan en
+castellano con la nota puesta. Si quieres que se traduzcan, es media hora.
+
+**Segundo punto ciego, del mismo linter:** detectaba castellano SOLO por acentos
+y `¿¡`. «Cambios sin guardar», «No se pudo cargar el historial» o «Ruta en el
+sitio» no llevan ninguno, así que frases enteras del panel eran invisibles —otras
+65, repartidas entre 8 ficheros JS, 8 vistas y una docena de controladores.
+`looksSpanish()` añade una segunda pasada: exige DOS palabras funcionales del
+castellano dentro de una misma cadena. Da pocos falsos positivos y los que daba
+(dos cadenas distintas con código en medio: `'.pp-cb'); if (el) …`) se descartan
+mirando si el fragmento lleva código dentro. De paso, el marcador `i18n-ignore`
+ahora también vale en un comentario HTML `<!-- -->`, que es como se comenta en
+las vistas.
+
+**Trampa que costó un rato:** un comentario que decía «de aquí a `i18n-ignore-end`»
+cerraba la región en su propia línea, porque el linter busca el marcador por
+`str_contains`. No nombrar los marcadores dentro del texto de un marcador.
+
+## Executor's Feedback or Assistance Requests (ADMIN-I18N)
+
+**Bug preexistente encontrado en Fase 2 (NO tocado, decide tú):** los textos por
+defecto que `PageController` mete en las páginas generadas —encabezados como
+«Qué ofrecemos» o «Da el siguiente paso», y los campos del formulario
+automático— están fijos en castellano. En una web francesa, si la IA falla y se
+usa el fallback, el visitante ve castellano. Es el mismo problema que resolvió
+FORMS-LANG para los formularios, y su sitio natural es `Microcopy` (idioma de la
+web), no el catálogo del panel. Lo dejo señalado en vez de traducirlo al idioma
+del gestor, que sería peor.
+
+**Decisión de registro — CERRADA (11/08/2026):** el francés trata de «vous» en
+todo el panel. El usuario lo dio por bueno, así que se queda. El portugués tutea.
+
+**Pendiente explícito de la Fase 1, que NO he tocado:** las pestañas *Ajustes ·
+IA* (`views/admin/settings/ai.php`, 282 líneas) y *Ajustes · Correo*
+(`mail.php`, 320 líneas) con sus controladores. El plan decía «Ajustes» sin
+distinguir; he cerrado General, que es la que toca el cliente nuevo, y esas dos
+son configuración técnica que se ve una vez. Se pueden hacer al empezar la Fase 2
+en un rato.
+
+**Nada bloqueante.** Dos cosas que el Planner debería saber antes de la Fase 1:
+
+1. **Coste de la traducción con IA**: 15 cadenas × 3 idiomas fue una llamada por
+   idioma. Las ~2.000 cadenas del panel completo serán unos 50 lotes × 3 = 150
+   llamadas. Barato, pero conviene ejecutarlo por fases y no de golpe.
+2. **Bug ajeno detectado de paso** (NO tocado, fuera de alcance): en
+   `views/admin/settings/index.php` los formularios de añadir/quitar idioma
+   adicional están anidados dentro del formulario grande de Ajustes. El parser
+   HTML descarta los `<form>` anidados, así que esos botones podrían estar
+   enviando al formulario de fuera. El selector nuevo del panel se puso
+   deliberadamente FUERA del formulario grande para no heredar el problema.
+
+---
+
+## Lessons (LOGO-PREVIEW)
+
+- **Diseño → previsualización de logos desbordada.** `.pp-logo-slot__preview` era
+  `display:grid;place-items:center` con `height:110px` y la `img` con
+  `max-width/max-height:100%`. En grid el `max-height:100%` de la imagen no se
+  resolvía contra el área de la celda, así que los logos grandes se salían de la
+  caja y tapaban el selector de archivo y los botones. Arreglo en
+  `admin/assets/css/admin.css` (~11047): contenedor a `display:flex` centrado,
+  `height:120px`, `overflow:hidden`, y la `img` con `width/height:auto` +
+  `max-width/max-height:100%` (así encaja sin ampliar logos pequeños).
+  Verificado en navegador: imagen 163×94 dentro de una caja 250×120.
+- Mismo patrón corregido de paso en el paso 2 del onboarding
+  (`.pp-onboarding-logo-field>span`, grid → flex); allí el `overflow:hidden` ya
+  evitaba el desborde pero podía recortar el logo en vez de contenerlo.
+
+---
+
+# [DESIGN-MANDA] Que la pestaña Diseño mande de verdad — PLAN (11/08/2026, Planner)
+
+## Background and Motivation (DESIGN-MANDA)
+
+El usuario pregunta para qué sirve la paleta de "Diseño" y si "Estilo del sitio"
+hace algo, dado que todas las páginas se generan ya con Canvas. La investigación
+sobre el código y sobre el sitio de dev (site_id=1) devuelve dos respuestas
+incómodas:
+
+1. **La paleta SÍ es el mecanismo real de color de todo el sitio** — el prompt de
+   Canvas prohíbe inventar hex y obliga a usar `var(--pp-primary)` y compañía
+   (`Actions.php:828`), así que cambiar la paleta recolorea todas las páginas
+   canvas ya generadas sin regenerar nada. **Pero el formulario de Diseño no es
+   quien la fija:** `DesignSystem::renderHead()` aplica encima el skin inferido
+   (`sites.skin_json`) y la paleta del onboarding (`site_palette_custom`), que
+   pisan lo que el usuario acaba de guardar.
+2. **"Estilo del sitio" está muerto en cualquier sitio con skin** — `renderHead`
+   solo emite su CSS si `$skin === null` (`DesignSystem.php:466`).
+
+Verificado en el sitio de dev (que tiene skin y NO tiene paleta a medida):
+
+| Token | Lo que dice el formulario (BD) | Lo que sirve la web |
+|---|---|---|
+| `colors.text` | `#1c1917` | `#1f2937` (skin) |
+| `colors.primary_dark` | `#ea580c` | `#9f3f11` (skin) |
+| `typography.scale_ratio` | `1.125` | `1.250` (skin) |
+| `buttons.radius` | `8` | `10` (skin) |
+| `spacing.radius_card` | `8` | `14` (skin) |
+
+Y la home imprime `<body class="pp-visual-style pp-visual-style--signal-clean">`
+pero NO contiene `<style id="pp-visual-style-css">`: la clase es decorativa.
+
+El problema de producto es de confianza: el panel enseña una previsualización en
+vivo construida con los tokens crudos, así que el cliente ve cambiar el color en
+el panel y no ve cambiar su web. Es peor que si el campo no existiera.
+
+## Key Challenges and Analysis (DESIGN-MANDA)
+
+**C1. Hay tres motores de estilo compitiendo y ninguno gana siempre.**
+Cadena actual en `renderHead()`: defaults → `design_system` (formulario) → skin
+inferido → paleta del onboarding → tipografías de marca → CSS del estilo visual
+(solo si no hay skin). El formulario está en el ESCALÓN MÁS BAJO, justo al revés
+del principio que el propio código ya declara dos veces: *"lo que el usuario
+decide gana a lo que nosotros deducimos"*.
+
+**C2. El alcance real es mayor que "los colores".** El skin pisa 8 colores, 4
+tokens de tipografía (familia titulares, familia texto, escala, peso negrita),
+`buttons.radius`, `buttons.shadow` y `spacing.radius_card`. Es la mayor parte de
+lo editable del panel. Lo que sí llega hoy: secundario (que no lo usa nada),
+éxito, peligro, tamaños base, line-height, paddings y `container_max`.
+
+**C3. No hay que inventar un mecanismo nuevo para los colores.** La paleta a
+medida (`site_palette_custom`) YA está por encima del skin, y el onboarding ya
+hace el patrón correcto: guarda la paleta Y la vuelca a los tokens del design
+system, comentado como *"un único camino de escritura"*
+(`OnboardingController::saveCustomPalette`). Diseño debe hacer exactamente lo
+mismo al guardar colores. Para lo NO-color (tipografías, radios, sombra) no
+existe equivalente: ahí sí hace falta una capa nueva de overrides manuales.
+
+**C4. La previsualización miente y hay que arreglarla en el mismo movimiento.**
+`DesignController::render()` pasa `tokens => DesignSystem::load()` y
+`cssVars => toCssVars(load())`, ambos crudos. Igual `CanvasController:52`
+(`brandVars`). Si no unificamos, arreglaremos el render público y el panel
+seguirá contando otra cosa.
+
+**C5. Quitar "Estilo del sitio" tiene una consecuencia real y acotada.** Hoy no
+emite nada en sitios con skin (todos los que pasan por onboarding), pero SÍ
+emite en sitios sin skin. Y `DesignController::reset()` pone `skin_json = NULL`,
+así que un sitio "restablecido" hoy cae en el modo estilo-visual. Al quitarlo,
+esos sitios pierden el tratamiento de heroes/secciones de bloques
+(`baseVisualCss`) y se quedan con el CSS base. Es aceptable —y coherente con que
+todo se hace en Canvas— pero hay que decirlo y comprobarlo, no descubrirlo
+después.
+
+**C6. Contraste: decisión cerrada = guardar tal cual y avisar.** Ya existe
+`BrandPaletteService::contrastIssues()`, que devuelve la lista de pares que
+fallan. Ojo: sus mensajes están en castellano hardcodeado y el panel está
+traducido (ADMIN-I18N) → hay que devolver claves/datos, no frases hechas.
+
+**C7. Las tipografías de marca (brandbook) siguen mandando sobre el select.** Es
+intencionado y no se toca, pero entonces el panel TIENE que decirlo en el campo,
+o reproduciremos el mismo problema de confianza con otro nombre.
+
+## Decisiones cerradas (11/08/2026, usuario)
+
+1. **"Estilo del sitio": se quita del panel.** No es un editor de paleta (su
+   color sale de `paletteForSite`), así que quitarlo no resta ninguna palanca:
+   la pestaña Colores pasa a ser el editor real.
+2. **Contraste: guardar el color tal cual y avisar** en el panel indicando qué
+   par falla. Es decisión del usuario, no nuestra.
+3. **"Regenerar con IA" respeta lo editado a mano.** La IA recompone el skin,
+   pero los campos que el usuario tocó explícitamente se mantienen.
+
+## Riesgos y qué NO hay que romper
+
+- **No cambiar el aspecto de ningún sitio ya publicado sin querer.** T1 es un
+  refactor a coste cero: la home debe servir EXACTAMENTE las mismas variables
+  antes y después. Es el control de que la extracción está bien hecha.
+- **`design.css` y la caché.** Cualquier cambio de tokens exige
+  `CacheService::flush($siteId)` (ya lo hace `update()`); los overrides nuevos y
+  el borrado del estilo visual también.
+- **Sitios sin skin** (instalaciones nuevas, sitios restablecidos): son los
+  únicos que ven un cambio visual real al quitar el estilo visual (C5).
+- **Instalaciones nuevas divergentes**: recordar `[[install-migration-divergence]]`
+  — si se añade una clave de settings nueva, no hace falta migración de esquema
+  (settings es clave/valor), pero conviene comprobar que un sitio recién
+  instalado sin skin ni paleta sigue pintando bien.
+- **No tocar los prompts de IA** en toda esta tarea: el contrato de Canvas con
+  `var(--pp-*)` es justo lo que hace que esto funcione.
+
+## High-level Task Breakdown (DESIGN-MANDA)
+
+**T1 — `DesignSystem::effective()`: una sola cadena de precedencia.**
+Extraer de `renderHead()` la composición de tokens a un método público
+`effective(int $siteId): array` y que `renderHead()` lo use. Sin cambios de
+comportamiento todavía.
+*Criterio de éxito:* `curl` de la home antes y después produce el MISMO bloque
+`:root{...}` (diff vacío).
+
+**T2 — El panel enseña lo efectivo, no lo crudo.**
+`DesignController::render()` y `CanvasController::studio()` (`brandVars`) pasan a
+`effective()`. El formulario se rellena con lo que la web sirve de verdad.
+*Criterio de éxito:* en el sitio de dev, la pestaña Colores muestra `#1f2937` en
+Texto (no `#1c1917`) y Tipografía muestra escala `1.250` (no `1.125`).
+
+**T3 — Guardar colores manda: write-through a `site_palette_custom`.**
+En `DesignController::update()`, tras validar, volcar los 8 colores a la paleta
+(`primary→accent`, `primary_dark→accent_dark`, `accent→accent_2`, `bg`,
+`surface`, `text`, `text_muted→muted`, `border→line`) con
+`BrandPaletteService::save()` (sin `enforceContrast`), y recoger
+`contrastIssues()` para el aviso. Mismo "único camino de escritura" que el
+onboarding.
+*Criterio de éxito:* poner Texto a `#101010` y guardar → la home sirve
+`--pp-text:#101010`; y el paso 2 del onboarding muestra esa misma paleta.
+
+**T4 — Overrides manuales para lo NO-color.**
+Clave de settings nueva `design_manual_tokens` (JSON `{categoria:{clave:valor}}`)
+con lo que el usuario cambió respecto a la línea base heredada. Se aplica en
+`effective()` DESPUÉS del skin y de la paleta, y ANTES de las tipografías de
+marca (C7). Si el usuario devuelve un campo a su valor heredado, el override se
+borra (idempotente).
+*Criterio de éxito:* poner escala `1.125` en el panel → la home sirve
+`--pp-font-scale:1.125` aunque el skin diga `1.250`. Y radio de botón, sombra y
+radio de tarjeta igual.
+
+**T5 — Aviso de contraste + aviso de tipografía de marca en el panel.**
+Mensajes traducidos (claves en `lang/admin/*.php`, los 4 idiomas), no las frases
+hardcodeadas de `contrastIssues()`. En los selects de tipografía, nota cuando una
+familia del brandbook manda sobre el campo.
+*Criterio de éxito:* guardar texto `#cccccc` sobre fondo blanco → se guarda y
+aparece el aviso nombrando el par que falla; con una fuente de marca asignada a
+titulares, el campo lo indica.
+
+**T6 — `reset()` y `regenerate()` coherentes.**
+`reset()` borra también `design_manual_tokens` y `site_palette_custom` (vuelta
+real a defaults). `regenerate()` NO los toca (decisión 3).
+*Criterio de éxito:* editar a mano → Regenerar con IA → la home sigue sirviendo
+lo editado a mano; Restablecer → la home vuelve a los defaults.
+
+**T7 — Quitar "Estilo del sitio" del panel.**
+Fuera la sección plegable de `views/admin/design/index.php` y el guardado de
+`visual_style` en `update()`. `renderHead()` deja de emitir
+`<style id="pp-visual-style-css">` y el `<link>` de sus Google Fonts. Se mantiene
+`VisualStyleService::bodyClass()` y el servicio (compatibilidad con lo ya
+publicado y con `[class*="pp-visual-style--"]` de `renderCssVars`).
+*Criterio de éxito:* la home no trae ese `<style>` ni ese `<link>`; el diff de
+variables `:root` es vacío respecto a antes (en sitio con skin). Comprobar
+aparte, y dejar anotado, cómo queda un sitio SIN skin (C5).
+
+**T8 — Test de regresión `tests/design_precedence.php`.**
+Al estilo de `tests/article_template.php`: monta un sitio de prueba con skin +
+paleta + overrides y verifica el orden de precedencia campo a campo, incluido que
+un override borrado vuelve a heredar.
+*Criterio de éxito:* `php tests/design_precedence.php` → todo PASS.
+
+**T9 — Documentación.** Lessons en el scratchpad + actualizar la memoria del
+proyecto con la cadena de precedencia definitiva.
+
+## Project Status Board (DESIGN-MANDA)
+
+- [x] T1 — `DesignSystem::effective()` (refactor sin cambio de comportamiento)
+- [x] T2 — El panel y el Studio leen lo efectivo
+- [x] T3 — Guardar colores escribe `site_palette_custom`
+- [x] T4 — Overrides manuales para tipografía, radios y sombra
+- [x] T5 — Avisos de contraste y de tipografía de marca (4 idiomas)
+- [x] T6 — `reset()` y `regenerate()` coherentes
+- [x] T7 — Quitar "Estilo del sitio" del panel
+- [x] T8 — `tests/design_precedence.php`
+- [x] T9 — Lessons + memoria
+
+## Executor's Feedback or Assistance Requests (DESIGN-MANDA)
+
+(vacío — pendiente de arrancar T1)
+
+## Decisiones cerradas — ampliación (11/08/2026, usuario + Planner)
+
+**4. Unificar: Diseño es el único sitio donde se edita la identidad visual.** El
+plan original hacía que los 11 campos de color MANDARAN, pero dejaba el editor
+bueno (colores de marca, extraer del logo, propuestas de la IA con contraste
+comprobado) encerrado en el paso 2 del onboarding, un flujo de un solo uso. Se
+sube a Diseño y el onboarding pasa a consumir lo mismo.
+
+**Modelo elegido: los campos son la verdad, la IA y el logo son ayudantes.** No
+se sustituyen los 11 selectores por tarjetas de paleta; se les añade encima una
+fila de colores de marca + dos botones ("Extraer del logo", "Generar paleta")
+que RELLENAN esos campos. Un solo modelo mental, nada de dos editores del mismo
+dato, y encaja con el write-through de T3 sin inventar otro camino de escritura.
+
+Estado de partida verificado:
+- **Tipografías propias: ya resuelto en un 90%.** `DesignSystem::fontOptions()`
+  ya devuelve curadas + `custom:{slug}` y el select las pinta con su propia
+  letra; la tarjeta de subida y roles está en la misma pantalla. Solo falta que
+  el rol no pise el select en silencio (ya en T5) y traducir el "(tuya)"
+  hardcodeado de `CustomFontService::fontOptions():155`.
+- **Paleta: nada de esto está en Diseño.** `site_brand_palette` y los endpoints
+  `/admin/onboarding/extract-logo-colors` y `/admin/onboarding/generate-palette`
+  viven solo en `OnboardingController` (`routes.php:141-142`).
+
+## High-level Task Breakdown — ampliación (DESIGN-MANDA)
+
+**T10 — Subir el editor de paleta a Diseño.**
+En la pestaña Colores, encima de los campos: fila de colores de marca
+(`site_brand_palette`, editable, con "+" y "×") + botones "Extraer del logo" y
+"Generar paleta con IA". Elegir una propuesta RELLENA los 11 campos del
+formulario (no guarda por su cuenta): el usuario sigue viendo lo que va a
+guardar y puede retocar antes.
+*Criterio de éxito:* desde Diseño, sin pasar por el onboarding, se puede extraer
+del logo, generar propuestas y aplicar una; los campos cambian; al guardar, la
+home sirve esos colores.
+
+**T11 — Un solo camino: mover los endpoints y que el onboarding los consuma.**
+`extract-logo-colors` y `generate-palette` pasan a `/admin/design/*`
+(`DesignController`), y el paso 2 del onboarding apunta a las rutas nuevas
+reutilizando el mismo JS. Si el componente no se puede compartir entero sin
+enredar, el mínimo irrenunciable es compartir ENDPOINTS y servicio; la
+duplicación admisible es de plantilla, nunca de lógica.
+*Criterio de éxito:* `grep` de la lógica de generación de paleta aparece en UN
+solo controlador; el paso 2 del onboarding sigue funcionando igual que antes
+(generar, elegir, guardar).
+
+**T12 — Traducir el "(tuya)" de las tipografías propias.**
+Clave en `lang/admin/*.php` (4 idiomas) en vez del literal castellano.
+*Criterio de éxito:* con el panel en inglés, el select no dice "(tuya)".
+
+## Project Status Board — ampliación (DESIGN-MANDA)
+
+- [x] T10 — Editor de paleta (marca + logo + IA) dentro de la pestaña Colores
+- [x] T11 — Endpoints de paleta en Diseño; el onboarding los consume
+- [x] T12 — "(tuya)" traducido en las 4 lenguas
+
+**Orden sugerido:** T1 → T2 → T3 → T4 → T6 → T5 → T7 → T10 → T11 → T12 → T8 → T9.
+Primero que el panel MANDE y diga la verdad (T1-T6), luego limpieza (T7), luego
+la unificación (T10-T12), y el test de regresión al final, cuando la cadena de
+precedencia ya no se vaya a mover.
+
+## Current Status / Progress Tracking (DESIGN-MANDA T1 · 11/08/2026, Executor)
+
+**T1 completada — `DesignSystem::effective()`, refactor a coste cero.**
+
+Cambios:
+- `DesignSystem::effective(int $siteId): array` — la cadena de precedencia
+  entera (defaults → design_system → skin → paleta a medida → tipografías de
+  marca) en UN solo sitio, documentada.
+- `renderHead()` la consume. Sigue leyendo el skin aparte porque lo necesita
+  como booleano (decide si emite el `<style>` en línea y si aplica la dirección
+  visual), no solo por sus tokens.
+- `loadSkin()` memorizada por sitio (`$skinMemo`) para que las dos llamadas por
+  página no sean dos consultas. `forgetSkin()` se llama donde el skin se
+  reescribe: `PersonalityInference::persist()`, el nudge de personalidad y
+  `DesignController::reset()`.
+- **Hallazgo no previsto en el plan:** la ruta `/design.css` (`routes.php:47`)
+  era un CUARTO camino de composición — aplicaba paleta y tipografías pero se
+  saltaba el skin. Invisible en la web (el `<style>` en línea la pisa por ser
+  posterior), pero servía valores distintos a quien mirase la hoja. Unificada a
+  `effective()`.
+
+Verificación:
+- Diff de la home antes/después: solo cambian el token CSRF y la marca antispam
+  (valores por petición). Las variables `--pp-*` servidas son **idénticas**
+  (diff vacío sobre las 29 variables ordenadas).
+- `design.css` SÍ cambia, y era el objetivo: converge con el `<style>` en línea.
+  Comparadas las 29 variables de ambos: **cero discrepancias** (antes diferían
+  en 6: primary_dark, accent, text, font-scale, btn-radius, radius-card).
+- `/`, `/inicio-canvas`, `/inicio-dmb2`, `/privacidad`, `/design.css` → HTTP 200.
+- `php -l` limpio en los 4 archivos tocados.
+- Contraste efectivo vs crudo en site 1: text `#1f2937` vs `#1c1917`, escala
+  `1.250` vs `1.125`, radio botón `10` vs `8`. Es exactamente el desajuste que
+  T2 va a dejar de esconder en el panel.
+
+**Pendiente de confirmación del Planner para seguir con T2.**
+
+## Current Status / Progress Tracking (DESIGN-MANDA T2-T6, T8 · 11/08/2026, Executor)
+
+**Hechas: T2, T3, T4, T6, T8 y la mitad de T5 (avisos de contraste).**
+
+- **T2** — `DesignController::index()` y `CanvasController::studio()` (`brandVars`)
+  leen `effective()`. Verificado en el navegador: el formulario ahora enseña
+  `#1f2937` / `1.250` / `10`, que es lo que sirve la web; antes enseñaba
+  `#1c1917` / `1.125` / `8`.
+- **T3** — `DesignController::syncPaletteFromColors()` vuelca los 8 colores a
+  `site_palette_custom` al guardar. SIN `enforceContrast()`: en el onboarding la
+  paleta la propone la IA y corregirla tiene sentido; aquí el hex lo ha elegido
+  una persona.
+- **T4** — Overrides manuales en `design_manual_tokens` para typography, buttons
+  y spacing. Piezas nuevas en `DesignSystem`: `inherited()` (la cadena sin lo
+  manual), `baseline()` (heredado + tipografías de marca, la vara de medir) y
+  `diffManualTokens()`. Dos detalles que costaron pensar y están cubiertos por
+  test: la línea base incluye las tipografías de marca (si no, cada guardado
+  inventaría un override fantasma en el campo que manda el brandbook), y la
+  comparación es laxa (`"10"` del formulario vs `10` del token no es un cambio).
+- **T5 (parcial)** — `BrandPaletteService::contrastReport()` devuelve DATOS
+  (`pair`/`value`/`min`) en vez de las frases castellanas de `contrastIssues()`,
+  que se queda intacta porque su salida va al log y a la IA. 7 claves nuevas en
+  los 4 idiomas y un flash `warning` nuevo en la vista. **Pendiente de T5:** la
+  nota en los selects de tipografía cuando una familia del brandbook manda.
+- **T6** — `reset()` borra también `design_manual_tokens` y la paleta a medida.
+  `regenerate()` no los toca, según la decisión 3.
+- **T8** — `tests/design_precedence.php`, 12 comprobaciones, todas PASS. Hace
+  copia de seguridad de las dos claves de settings que toca y las restaura en un
+  `finally`.
+
+Verificación de extremo a extremo (formulario real, no solo servicios):
+- Cambiar texto a `#101010` y escala a `1.125` en el panel → la home sirve
+  `--pp-text:#101010` y `--pp-font-scale:1.125`. **Ese era el bug de origen.**
+- `design_manual_tokens` quedó en `{"typography":{"scale_ratio":"1.125"}}`: solo
+  el campo tocado, sin overrides fantasma en los otros 20 campos del formulario.
+- Guardar texto `#cccccc` sobre fondo blanco → se guarda Y avisa: *"Colores
+  guardados, pero hay contraste bajo: texto sobre el fondo (1.6:1 < 4.5:1)…"*.
+- Sitio de dev restaurado a su estado original; test repetido después: TODO OK.
+
+**Nota de paso:** el aviso destapó que `line` (#e5e7eb sobre blanco, 1.2:1) ya
+incumplía el mínimo ANTES de todo esto. No lo toco: es un valor por defecto
+heredado y arreglarlo es decisión de diseño, no de esta tarea.
+
+**Siguiente:** T7 (quitar "Estilo del sitio"), luego T10-T12 (unificación) y
+cerrar T5.
+
+## Current Status / Progress Tracking (DESIGN-MANDA T7, T10-T12, T5 · 11/08/2026, Executor)
+
+**Cerradas todas las tareas del plan (T1-T12).**
+
+- **T7** — "Estilo del sitio" fuera del panel: sección plegable y su script
+  eliminados de la vista, `visual_style` ya no se persiste, `renderHead()` deja
+  de emitir el `<style>` y el `<link>` de fuentes de la dirección visual.
+  `VisualStyleService::bodyClass()` se mantiene (lo ya publicado lo lleva) y los
+  parámetros de `renderHead()` siguen en la firma porque muchas llamadas los
+  pasan; ahora se ignoran.
+- **T10** — Editor de paleta dentro de la pestaña Colores: colores de marca
+  editables, "Extraer del logo" y "Generar paleta". Las propuestas RELLENAN los
+  campos (no guardan): el usuario ve y retoca antes de guardar.
+- **T11** — La lógica bajó a `BrandPaletteService` (`brandColors`,
+  `saveBrandColors`, `cleanHexList`, `extractFromLogos`, `propose`,
+  `normalizeProposals`, `businessContext`). Los dos controladores solo hacen
+  HTTP. Borrados de `OnboardingController` los helpers ya duplicados; sus
+  constantes quedan como alias de las del servicio.
+- **T5 (cerrada)** — Nota en los campos de tipografía cuando una familia de
+  marca manda sobre el select, con el nombre de la familia y cómo soltarla.
+- **T12** — El "(tuya)" del select ya no es un literal castellano.
+
+Verificación:
+- Panel: editor presente, sin errores de consola, sin desbordamiento
+  horizontal; el bloque "Estilo del sitio" ya no existe.
+- Flujo real con IA: "Extraer del logo" → `#222429`; "Generar paleta" → 3
+  propuestas (`google/gemini-3.1-flash-lite-preview`); aplicar una cambió los
+  campos de `#ea580c/#ffffff/#1f2937` a `#3b82f6/#222429/#f4f4f5` y avisó
+  "Paleta aplicada. Revisa y guarda.".
+- Onboarding paso 2 (forzado con `?step=2`): extracción y generación siguen
+  funcionando ya sobre el servicio compartido. La extracción respondió "esos
+  colores ya estaban en la lista" porque los había guardado Diseño: la prueba
+  de que el almacén es común.
+- `grep` de la lógica de propuestas: aparece en UN solo archivo.
+- `tests/design_precedence.php`: TODO OK. Rutas públicas 200. Variables `--pp-*`
+  servidas idénticas a la línea base de T1.
+- Sitio de dev limpio: borradas las claves de prueba.
+
+## Lessons (DESIGN-MANDA)
+
+- **La cadena de precedencia del design system vive en `DesignSystem::effective()`
+  y en ningún otro sitio.** Orden: defaults → `design_system` → skin inferido
+  (`sites.skin_json`) → paleta a medida (`site_palette_custom`) → overrides
+  manuales (`design_manual_tokens`) → tipografías de marca. Si hay que tocar
+  quién gana, se toca ahí. `load()` sigue devolviendo lo CRUDO a propósito.
+- **Un panel que enseña valores crudos mientras la web pinta valores compuestos
+  es peor que un panel sin ese campo.** El síntoma es siempre el mismo: "cambio
+  el color y no pasa nada". Antes de añadir una capa que pise tokens, mirar qué
+  enseña el formulario.
+- **Para calcular un override, la línea base tiene que ser exactamente lo que el
+  formulario mostró.** Si la línea base se queda corta (p. ej. sin las
+  tipografías de marca), cada guardado inventa overrides fantasma en campos que
+  el usuario ni tocó. Y la comparación debe ser laxa: el formulario devuelve
+  `"10"` donde el token guarda `10`.
+- **Al mover un editor de un flujo a otro, mover la LÓGICA, no la plantilla.**
+  Aquí bajó a `BrandPaletteService` y los dos controladores quedaron en HTTP.
+  Duplicar la plantilla es tolerable; duplicar la generación de paleta habría
+  sido crear el mismo bug en dos sitios.
+- **`/design.css` es un consumidor más de los tokens y se olvida.** Componía la
+  cadena a medias (sin skin). Cualquier cambio en la precedencia tiene que pasar
+  por ahí; ahora usa `effective()` y no se puede desincronizar.
+
+---
+
+## Background and Motivation (MODULOS)
+
+Arranca el trabajo sobre los módulos adicionales. Primer paso pedido por el
+usuario: retirar el "Módulo de prueba" (`hello`). Nació en FEAT-3 F0.1 para
+validar el sistema de módulos (tarjeta on/off + dos rutas que dan 404 al
+apagarlo). Ese sistema ya lo ejercitan los tres módulos reales
+(Analytics, Booking, Commerce), así que la tarjeta solo confunde a quien abre
+"Módulos" en un sitio en producción.
+
+## Project Status Board (MODULOS)
+
+- [x] M0 — Borrar el módulo de prueba `hello` de código, catálogo, traducciones y tests.
+
+## Current Status / Progress Tracking (MODULOS M0 · 12/08/2026, Executor)
+
+Hecho:
+- Borrado `app/Modules/Hello/` (controller + routes).
+- `ModuleRegistry::MODULES`: fuera la entrada `hello`. El catálogo queda en 3.
+  Actualizado el ejemplo del docblock (usaba `Hello\HelloController` para
+  explicar el autoloader; ahora `Analytics\AnalyticsController`).
+- Traducciones: fuera `hello.active`, `hello.body.html`, `module.hello.label` y
+  `module.hello.description` en `lang/admin/{es,en,fr,pt}.php`.
+- `tests/modules_registry.php`: la cobaya del flag pasa a ser `booking`
+  (activar/desactivar no toca datos y se restaura el valor original). Añadido un
+  check de que `hello` ya NO está en el catálogo.
+- Migración `database/migrations/2026_08_12_drop_hello_module.sql`: barre el flag
+  `module_hello_enabled` de `settings`. Sin la entrada en el catálogo
+  `isEnabled()` ya devolvía false, pero la fila quedaría como basura.
+
+Verificado:
+- `php tests/modules_registry.php` → ALL PASS (14 checks).
+- `php scripts/i18n_lint.php` → "OK — nada pendiente", sin claves usadas y no
+  definidas, sin castellano a pelo.
+- Panel en el navegador (`/admin/modules`): tres tarjetas (Analítica propia,
+  Reservas y calendarios, PromptCommerce), ninguna de prueba.
+- Rutas del módulo borrado: `/admin/modules/hello` → 404 y
+  `/_module/hello/ping` → 404.
+- Migración aplicada en el sitio dev: en `settings` solo quedan
+  `module_analytics_enabled`, `module_booking_enabled`, `module_commerce_enabled`.
+
+## Project Status Board (MODULOS) — ampliación
+
+- [x] M1 — Repaso de la interfaz del módulo Reservas: arreglar controles sin CSS
+      y comprobar el flujo completo antes de que el usuario pruebe.
+
+## Current Status / Progress Tracking (MODULOS M1 · 12/08/2026, Executor)
+
+Arreglado (todo en `admin/assets/css/admin.css` salvo el último punto):
+
+1. **Campo de alta rápida sin estilo** — `.pp-booking-new__form input[type="text"]`
+   solo tenía `flex:1`. No vive dentro de un `.pp-form-group`, así que no
+   heredaba nada: salía con el aspecto nativo del navegador (borde inset gris,
+   Arial 13px, sin padding) al lado de un botón con estilo. Ahora lleva el mismo
+   borde, radio, padding, tipografía y foco que el resto. Lo comparte la Tienda
+   (alta rápida de producto), así que se arregla en los dos sitios.
+2. **Tarjeta "Reservas desde otras webs" descuadrada** — `.pp-card` base es
+   `display:flex; align-items:center` (nació para las tarjetas de métricas del
+   escritorio), y esta tarjeta tiene título + texto + formulario: los tres
+   salían en fila, uno al lado del otro. Añadido `display:block` + márgenes,
+   igual que ya hacían `.pp-stripe-card` y `.pp-order-block`.
+3. **El formulario de alta se encogía al contenido** dentro de esa tarjeta flex
+   (hueco de ~140px para el nombre del servicio): `flex:1` en el form y
+   `max-width:460px` en el input.
+4. **Horas y fechas del editor sin estilo** — el bloque base de inputs no
+   incluye `time` ni `date` en su lista de tipos, y estos además están fuera de
+   `.pp-form-group`. Estilados `.pp-booking-range input[type=time]` y los
+   `date`/`time` de las excepciones. Las filas que añade el JS heredan igual.
+5. **Selects del filtro de "Reservas recibidas" sin estilo** — mismo caso.
+   Los comparte Pedidos de la tienda.
+6. **La píldora de estado sin color no parecía una píldora** —
+   `.pp-status-pill` nacía con fondo y borde transparentes, así que "Pendiente"
+   salía como texto en negrita al lado de un "Confirmada" verde. Ahora el
+   estado neutro es gris. Afecta a los cinco sitios que la usan a pelo
+   (Pendiente, Inactivo, Borrador, Sin configurar, Próximamente) y en todos era
+   la misma intención.
+7. **El aviso al confirmar/cancelar mentía** (esto no es CSS):
+   `BookingAdminController::bookingStatus` decía siempre "Hemos avisado al
+   cliente por email", incluso en un sitio sin SMTP donde el email se marca
+   `skipped` y nadie recibe nada. `BookingMailer::sendStatusChange()` y
+   `deliverToCustomer()` ahora devuelven el resultado ('sent' | 'skipped' |
+   'failed') y el panel elige el texto: nuevas claves
+   `bk.ok.{confirmed,cancelled}_{no_mail,mail_failed}` en los 4 idiomas.
+
+Verificado (sitio dev, navegador):
+- `/admin/booking`: campo de alta con estilo, tarjeta de integración apilada.
+- `/admin/booking/services/3`: horas con estilo; añadir franja y excepción por
+  JS genera los `name` correctos (`hours[1][1000][start]`, `exceptions[...]`) y
+  las filas nuevas heredan el estilo.
+- `/admin/booking/reservas`: selects con estilo, "Pendiente" gris vs
+  "Confirmada" verde. Confirmar una reserva avisó "No hemos avisado al cliente:
+  este sitio todavía no tiene email configurado" (correcto: dev sin SMTP).
+- Sin regresiones donde se reutilizan esas clases: Tienda, Pedidos, Métodos de
+  pago ("Sin configurar" ahora es una píldora gris), Módulos.
+- **Flujo externo completo**: web de prueba servida en `http://localhost:8797`
+  (origen ya en la allowlist) con el snippet del panel → el widget pinta días y
+  huecos, y una reserva enviada desde ahí llegó al panel. CORS correcto
+  (`Access-Control-Allow-Origin` al origen concreto). API con clave: `services`
+  y `availability` 200; link de cancelación del email (`/_booking/cancel/{id}?token=`)
+  pinta bien y confirma antes de cancelar.
+- Tests: `booking_services`, `booking_availability`, `booking_api`,
+  `booking_emails`, `booking_microcopy`, `modules_registry` → todos PASS.
+  `scripts/i18n_lint.php` → "OK — nada pendiente".
+- Datos de prueba borrados: `booking_bookings` vuelve a 0 filas.
+
+## Executor's Feedback or Assistance Requests (MODULOS)
+
+No arreglado a propósito (decidir antes de tocar):
+
+- **La tienda tiene el MISMO bug del aviso**: `order.ok.status_changed` promete
+  "Hemos avisado al cliente por email" sin mirar si salió
+  (`CommerceAdminController` ~línea 271). Se arregla igual que Reservas, pero es
+  otro módulo.
+- **La API pública devuelve `origin_not_allowed` tanto si el origen no está en
+  la lista como si la clave es incorrecta.** Depurar un embed ajeno a ciegas es
+  incómodo (me pasó al revisar). Separar los dos errores es fácil, pero es
+  tocar el contrato de una API pública: ¿lo separamos?
+- **Un día sin franjas no dice nada** en el editor de horario: la fila queda
+  vacía y "+ Añadir franja" se va al borde derecho, lejos de las horas. Se lee
+  "no hay nada configurado" pero no "cerrado". Un texto "Cerrado" y el botón
+  junto a las franjas mejoraría la lectura.
+- **No hay forma de poner el calendario en una página del propio sitio**: el
+  widget solo existe como snippet para webs externas (no hay bloque/sección de
+  reservas ni acción del asistente). Si el módulo va a crecer, este es el hueco
+  gordo.
+
+## Background and Motivation (MODULOS M2)
+
+El módulo Reservas solo sabía vivir FUERA: el calendario existía como snippet
+`<script>` con clave de API para pegar en webs ajenas. Para ponerlo en una
+página de la propia web había que copiar HTML a mano — imposible para el
+público objetivo de PromptPress. Encargo del usuario: que se pueda poner el
+calendario en las páginas de la web, "cuidando cómo hacerlo" porque quien lo va
+a usar no es técnico y tiene que poder añadirlo y controlarlo fácilmente. Junto
+con eso, arreglar los bugs detectados en la revisión previa (M1).
+
+## Key Challenges and Analysis (MODULOS M2)
+
+- **Hay DOS clases de página y las dos tienen que servir.** Las canvas (HTML
+  libre + chat) y las estructuradas (secciones). El precedente exacto ya estaba
+  en el repo: la tienda se embebe con la sección `form`/el placeholder
+  `{{products:featured}}` + una pista al prompt (`modulesHint`). Se ha copiado
+  ese patrón en vez de inventar uno nuevo.
+- **Nadie debe ver un id.** El selector de servicio se rellena con los servicios
+  REALES del sitio (nombre + duración). Y el valor por defecto es "automático":
+  la sección recién añadida ya funciona sin configurar nada.
+- **Reutilizar el widget, no reescribirlo.** El JS del calendario ya estaba
+  probado contra la API pública. Se le ha añadido un segundo modo de montaje
+  (contenedores `[data-pp-booking]`) conservando el clásico (`data-service` en
+  el `<script>`), así que los embeds que ya existan en webs ajenas siguen igual.
+- **En el propio sitio no hace falta clave**: mismo origen, el guard CORS lo deja
+  pasar sin API key ni lista de orígenes. El gestor no ve nunca un snippet.
+- **Lo que no se puede pintar, no se pinta.** Módulo apagado, sin servicios
+  activos o servicio elegido desactivado → la sección devuelve cadena vacía y el
+  placeholder deja un comentario HTML. Nunca un calendario roto en la web.
+
+## Project Status Board (MODULOS) — ampliación
+
+- [x] M2 — Calendario de reservas en las páginas del propio sitio (sección +
+      placeholder canvas + pista al asistente).
+- [x] M3 — Los cuatro bugs pendientes de la revisión M1.
+
+## Current Status / Progress Tracking (MODULOS M2-M3 · 12/08/2026, Executor)
+
+### El calendario en tus páginas (M2)
+
+Piezas nuevas:
+- `app/Modules/Booking/BookingEmbedRenderer.php` — única fuente del embed:
+  `embeddableServices()` (activos del sitio), `resolveServiceId()` (vacío = el
+  primero activo; id desactivado o ajeno = null) y `render()` (contenedor +
+  widget). Un servicio elegido y luego desactivado hace DESAPARECER el
+  calendario, no cambiarlo por otro sin avisar.
+- `public/js/pp-booking-widget.js` — refactor a `mount(root, …)`: modo A (el
+  `<script>` lleva `data-service`, webs externas, compatible con lo ya pegado
+  fuera) y modo B (contenedores `[data-pp-booking]`, la propia web). Varios
+  calendarios en una misma página no se pisan (estado por montaje) y el
+  atributo `-ready` evita montar dos veces. Los colores pasan a salir de las
+  variables del design system con los valores antiguos como respaldo: en tu web
+  el calendario usa TU paleta; en una web ajena queda igual que siempre.
+- Sección `booking` ("Calendario de reservas"): schema en `SectionSchemas`,
+  `SectionRenderer::renderBooking()`, dos variantes (calendario solo / con
+  título y texto), icono en `sections-editor.js`, CSS público en `DesignSystem`.
+- Placeholder `{{booking:N}}` / `{{booking:auto}}` / `{{booking:auto|days=7}}`
+  en `CanvasService`, y `modulesHint()` ampliado: por eso "pon un calendario
+  para pedir cita" en el chat del studio ahora inserta el bloque real.
+- Bloque "En tu propia web" en el panel de Reservas, ANTES del snippet externo:
+  los dos caminos (añadir la sección / pedírselo al asistente) contados en dos
+  líneas, sin código a la vista.
+
+Decisiones que conviene no perder:
+- El catálogo de tipos se recorta por sitio: `SectionSchemas::allForSite()` y
+  `SectionController::sectionTypesForView($siteId)` esconden `booking` con el
+  módulo apagado, y los prompts de estructura de página usan la lista recortada
+  (antes la IA podía proponer un tipo que se pintaría vacío). `all()` sigue
+  siendo el catálogo completo a propósito: describe los schemas al modelo y no
+  debe depender de la BD.
+- El contenedor del calendario NO va vacío: adelanta nombre, duración y
+  "Cargando disponibilidad…". Se ve mientras carga y, sobre todo, en la
+  previsualización del editor, cuyo iframe es `sandbox="allow-same-origin"` y no
+  ejecuta scripts. Sin eso, el gestor añadía un calendario y su vista previa
+  decía "necesitas activar JavaScript", que parece un error.
+- Esa previsualización además ya no emite `<script>` (se quitan en
+  `variantPreview`): no se podían ejecutar y ensuciaban la consola del panel con
+  "Blocked script execution".
+
+### Bugs arreglados (M3)
+
+1. **La tienda prometía un email que no salía** — mismo arreglo que Reservas:
+   `CommerceMailer::sendStatusChange()` devuelve 'sent'|'skipped'|'failed' y el
+   panel elige el texto (`order.ok.status_changed_{no_mail,mail_failed}`).
+2. **La API pública confundía dos errores distintos** — `origin_not_allowed` se
+   devolvía tanto por origen no permitido como por clave incorrecta. Ahora la
+   clave mala responde `invalid_api_key`. No filtra nada: la lista de orígenes
+   no es secreta y el atacante ya controla su origen.
+3. **Un día sin franjas no decía nada** — aviso "Cerrado" (servidor + JS al
+   añadir/quitar) y "+ Añadir franja" pegado a las horas en vez de volando en el
+   borde derecho.
+4. **15 etiquetas del panel pintaban la clave en crudo** — `AdminI18n::jsCatalog()`
+   solo exportaba el prefijo `js.` y se ignoraba el sufijo `_js`, que existe
+   justo para eso. Se veía "nav.design_js" en el editor de secciones y afectaba
+   también al editor de header/pie, al studio y al banco de imágenes.
+5. **De propina**: `normalizeEditedSectionHtml()` solo revertía `form` y `posts`,
+   así que un embed de `products` se BORRABA al editar la sección en vivo. Ahora
+   revierte los cuatro tipos (hay test).
+
+Verificado:
+- Tests: nuevo `tests/booking_embed.php` (42 checks: catálogo, resolución del
+  servicio, HTML del embed, la sección y sus variantes, el placeholder y su ida
+  y vuelta, el catálogo filtrado por módulo y TODO el comportamiento con el
+  módulo apagado) → ALL PASS. Sin regresiones en booking_*, commerce_*,
+  canvas_*, modules_registry, design_precedence, admin_i18n, site_language*.
+  `tests/admin_i18n.php` actualizado: comprobaba que al JS solo viajaran claves
+  `js.`, que era justo el bug 4.
+- `scripts/i18n_lint.php` → "OK — nada pendiente" (nuevas claves en es/en/fr/pt).
+- Navegador, camino "sección": añadida desde el desplegable en una página real,
+  el selector ofrece el servicio por su nombre, la vista previa enseña el avance
+  del calendario, y en la web pública se pinta el calendario con la paleta del
+  sitio. **Reserva completada desde la propia web, sin clave de API**, y llegó
+  al panel.
+- Navegador, camino "canvas": `{{booking:auto}}` guardado en una página canvas
+  publicada → el calendario real se pinta (el placeholder sobrevive al
+  sanitizado porque se expande en render, después de sanear). Página restaurada
+  a su contenido original.
+- API: origen no permitido → `origin_not_allowed`; clave mala → `invalid_api_key`;
+  clave buena → 200; preflight sin clave → 204.
+- Editor de horario: "Cerrado" en los seis días sin franjas y sincronizado al
+  añadir/quitar una franja.
+- Consola limpia en la web pública. Datos de prueba borrados (0 reservas, 0
+  secciones booking, página canvas restaurada).
+
+## Executor's Feedback or Assistance Requests (MODULOS M2)
+
+- El widget sigue teniendo un ancho fijo de 420px (`max-width` en su CSS). En la
+  variante "con título y texto" queda bien; en "calendario solo" se ve centrado
+  y algo pequeño en pantallas grandes. Si se quiere un calendario "a lo ancho"
+  (semana completa en rejilla) es otro diseño, no un ajuste.
+- No hay forma de poner DOS servicios en la misma página con un selector para
+  que el visitante elija; se pueden poner dos secciones, una por servicio. Si
+  hace falta el selector, decidirlo antes de que alguien monte la página a mano.
+
+## Current Status / Progress Tracking (MODULOS M4 · 12/08/2026, Executor)
+
+El usuario avisó de lo que yo había dado por hecho: **en su sitio TODAS las
+páginas menos las entradas son canvas**. Al comprobarlo en serio (no solo el
+render, sino el flujo de trabajo real en el Studio) salieron cuatro cosas.
+
+1. **Faltaba el botón.** El Studio ya tenía "AÑADIR A LA PÁGINA → + Formulario"
+   en la barra lateral: ESE es el gesto que conoce el gestor en canvas, no el
+   chat. Añadido **"+ Calendario"** al lado, con menú de servicios por su nombre
+   ("Automático" + cada servicio con duración y precio). Nuevo endpoint
+   `POST /admin/canvas/{id}/insert-booking` (`CanvasController::insertBooking`),
+   calcado de `insertForm`: inserta `{{booking:N}}` en su propia sección después
+   de la parte seleccionada (o al final), versiona y lo cuenta en el chat. Si el
+   gestor no elige servicio se guarda `{{booking:auto}}`, que sigue funcionando
+   si mañana cambia cuál es el primer servicio activo. Sin el módulo activo el
+   botón no se pinta.
+2. **BUG GORDO pre-existente: el Studio entero corría con `pp` sin definir.**
+   `canvas-studio.js` llama a `pp.t()` 94 veces, pero el Studio es una vista
+   standalone que NO carga `admin.js` (donde vivía `pp.t`) ni `window.PP_I18N`:
+   cada llamada lanzaba `ReferenceError: pp is not defined` y cortaba el script
+   a media función. Por eso mi primer intento de insertar no hacía nada. Arreglo:
+   `pp.t` sale de `admin.js` a `admin/assets/js/pp-i18n.js`, y lo cargan tanto
+   `admin/layout` como el Studio (que ahora también emite `PP_I18N`). El
+   comentario que había en `admin.js` decía que servía "también a las pantallas
+   standalone como el Canvas Studio" — la intención estaba, el cableado no.
+3. **`data-pp-label` se escribía y nadie lo leía.** `insertForm` lo ponía desde
+   FORMS-R y `listSections()` seguía derivando el nombre del id, así que la parte
+   insertada aparecía como "Booking 3 cf4f44f6" (y los formularios, como
+   "Form 12 ab12cd34"). Ahora manda `data-pp-label` en el servidor
+   (`listSections`) y en el overlay del iframe (etiqueta al pasar el ratón,
+   selección y lista lateral, que ahora recibe `{id,label}`). Se lee
+   "Calendario: test".
+4. **La caché de páginas no se invalidaba al tocar un servicio.** El embed lleva
+   escritos el nombre y la duración del servicio, y las páginas se cachean como
+   HTML: renombrar un servicio dejaba el nombre viejo, y desactivarlo dejaba un
+   calendario que luego decía "no disponible" en vez de desaparecer. `ServiceStore`
+   ahora hace flush igual que `ProductStore` con {{products:featured}}.
+
+Verificado:
+- Studio de una página canvas real: "+ Calendario" → menú con "Automático" y
+  "test · 60 min" → insertado al final, la conversación lo cuenta, aparece como
+  parte 8 "Calendario: test" y **el calendario funciona en vivo dentro del
+  iframe del Studio** (2 días, 4 huecos). Página restaurada a su contenido
+  original.
+- Consola del Studio limpia (antes: dos `ReferenceError` por carga).
+- Panel normal tras partir el i18n en dos ficheros: `pp.t` existe, 600 claves,
+  `pp.t('nav.design_js')` → "Diseño", sin errores de consola.
+- `tests/booking_embed.php` ampliado con el nombre visible de la parte (con y
+  sin `data-pp-label`) → ALL PASS. Suite completa (21 ficheros de test, incluido
+  todo canvas_*) sin un solo FAIL. `i18n_lint` limpio.
+
+## Lessons (MODULOS)
+
+- **Antes de dar por bueno un flujo, hay que recorrerlo en la pantalla donde vive
+  el usuario, no solo comprobar que el render sale bien.** El calendario se
+  pintaba perfecto en la web pública y en el editor de secciones; lo que faltaba
+  era el botón para ponerlo, y el Studio estaba lanzando excepciones desde antes.
+- **Una vista standalone paga aparte todo lo que el layout da gratis** (i18n del
+  navegador, aquí). Si se añade una pantalla sin `admin/layout`, hay que revisar
+  qué scripts del layout necesita su JS.
+- **Un atributo que se escribe y nadie lee es un bug esperando.** `data-pp-label`
+  llevaba desde FORMS-R puesto en el HTML y sin usar.
+- **Todo bloque que incruste datos del sitio en HTML cacheado obliga a invalidar
+  la caché cuando esos datos cambian.** `ProductStore` ya lo hacía; `ServiceStore`
+  no, y el calendario acababa de convertirse en el segundo caso.
+
+## Current Status / Progress Tracking (MODULOS M5 · 12/08/2026, Executor)
+
+Petición del usuario: sin ningún servicio creado no tiene sentido enseñar cómo
+meter las reservas en la web; y esa parte pesaba demasiado en la pantalla cuando
+lo importante del apartado es GESTIONAR servicios y reservas.
+
+Reordenada `/admin/booking`:
+- **Sin servicios**: la pantalla es un solo paso. Tarjeta con "Crea tu primer
+  servicio reservable", el campo del nombre y una línea de qué es un servicio
+  (`bk.lead_empty` cambia el lead de la cabecera). NO se pinta nada de publicar,
+  ni el botón "Reservas recibidas" (no puede haber ninguna).
+- **Con servicios**: el alta rápida se mete DENTRO de la tarjeta del listado
+  (una caja menos, la tabla manda), y las dos formas de publicar se juntan en un
+  ÚNICO `<details>` plegado al final ("Poner el calendario en una web"), con el
+  patrón `pp-seo-advanced` que ya usa el panel para lo secundario. Dentro:
+  primero tu web (dos líneas, sin código) y luego las webs ajenas con clave y
+  snippet.
+- **Integración de la gestión**: las reservas pendientes se ven ya en esta
+  pantalla — el botón "Reservas recibidas" lleva el número y se pone en primario
+  cuando hay algo que confirmar. `pendingCount()` se extrajo a un método privado
+  y lo comparten `index()` y `bookings()`.
+
+El mismo criterio, aplicado a los otros dos sitios donde se ofrecía el
+calendario (esto es la parte de "integrar todo un poco más"):
+- El tipo de sección "Calendario de reservas" desaparece del editor si el módulo
+  está activo pero NO hay servicios activos (antes aparecía con un texto de
+  ayuda diciendo que fueras a crearlos: una vía muerta).
+- El botón "+ Calendario" del Studio tampoco se pinta sin servicios (antes salía
+  con un menú que solo decía "créalos en Reservas").
+- `modulesHint` ya lo hacía: sin servicios no anuncia el placeholder a la IA.
+  Ahora los tres coinciden.
+
+Verificado:
+- Sin servicios (ocultando temporalmente el del sitio dev y restaurándolo con su
+  MISMO id y su horario): pantalla de un solo paso, sin publicar y sin botón de
+  recibidas; Studio sin "+ Calendario"; catálogo de secciones sin el tipo.
+- Con servicio: listado dominando la pantalla, publicar plegado en una línea, y
+  al desplegarlo los dos bloques en orden. Studio con "+ Calendario" de vuelta.
+- Con una reserva pendiente: el botón pasa a primario y dice "Reservas
+  recibidas · 1"; la columna "Reservas próximas" del listado marca 1.
+- `tests/booking_embed.php` cubre ahora el caso "módulo activo sin servicios"
+  desactivando TODOS los servicios del sitio y restaurándolos (comprueba además
+  que quedan como estaban) → ALL PASS. Suite y `i18n_lint` sin fallos.
+- Servicio del sitio dev intacto (id 3, activo, horario del lunes) y 0 reservas.
+
+## Lessons (MODULOS) — ampliación
+
+- **Una pantalla de gestión no puede pesar lo mismo en lo que se hace a diario y
+  en lo que se configura una vez.** Aquí: servicios y reservas al frente,
+  publicar plegado. El patrón para lo secundario ya existía (`pp-seo-advanced`).
+- **Si una acción no se puede completar, no se ofrece.** Un botón que al abrirse
+  solo dice "primero crea otra cosa" es peor que no estar: el estado vacío de la
+  pantalla dueña del dato ya lo explica. Y el criterio tiene que ser el MISMO en
+  todos los sitios donde se ofrece (aquí eran tres, y solo uno lo cumplía).
+- **Una caché estática por proceso en un servicio de catálogo miente en los
+  tests** (y en cualquier flujo que cree el dato y vuelva a leerlo en la misma
+  petición). Si lo que ahorra son dos consultas indexadas, no vale la pena.
+
+## Current Status / Progress Tracking (MODULOS M6 · 12/08/2026, Executor)
+
+Petición: el horario semanal era incómodo. Para "lunes a viernes de 8 a 16"
+había que repetir el mismo gesto cinco veces, día a día.
+
+Añadido un **horario rápido** encima de la rejilla de la semana
+(`views/admin/booking/edit.php` + `booking-service-editor.js` + CSS):
+- Fila de días como chips (Lu Ma Mi Ju Vi Sá Do) que se marcan y desmarcan, con
+  dos atajos: **Lunes a viernes** y **Todos los días**.
+- Hora de inicio y de fin, y **Aplicar a los días marcados**.
+- Aplicar SUSTITUYE las franjas de esos días (es lo que se espera al decir "L-V
+  de 8 a 16"), pero si alguno ya tenía horario se pregunta antes: un horario a
+  medio configurar puede ser un rato de trabajo.
+- Después se puede retocar cualquier día por separado y añadir más franjas
+  (mañana y tarde) donde haga falta: la rejilla de siempre no cambia.
+
+Detalles que importan:
+- Los campos del horario rápido NO llevan `name`: no se envían. Lo único que se
+  guarda son las franjas de la rejilla, que es lo que el atajo rellena. Así el
+  backend no se ha tocado (`ServiceStore::update` y su validación siguen igual).
+- Las etiquetas de los chips salen de los días ya traducidos (`mb_substr` de 2
+  letras): funciona en los cuatro idiomas sin una lista nueva.
+- Los avisos van al lado del botón (no en `alert`): "Marca primero los días",
+  "La hora de inicio debe ser anterior a la de fin", y al aplicar "Horario
+  aplicado a 5 días. Recuerda guardar."
+- El texto de sustituir tiene singular y plural (`js.bk.quick_overwrite_one/many`).
+
+Verificado en navegador:
+- Caso del usuario: "Lunes a viernes" + 08:00–16:00 + Aplicar → las cinco filas
+  quedan con la franja, sábado y domingo siguen "Cerrado". Preguntó antes de
+  pisar el lunes, que ya tenía horario.
+- Caso mixto: sábado 10:00–13:00 puesto a mano después del atajo. Guardado real
+  → `booking_hours` tiene L-V 08–16 y sábado 10–13, y la API de disponibilidad
+  devuelve 8 huecos de lunes a viernes y 3 el sábado.
+- Errores: sin días, sin horas y horas invertidas avisan y no tocan nada.
+- Sin errores de consola. Horario del servicio del sitio dev restaurado a como
+  estaba (solo lunes 10:00–14:00).
+- Tests de booking, módulos, i18n y diseño sin fallos; `i18n_lint` limpio.
+
+## Current Status / Progress Tracking (MODULOS M7 · 12/08/2026, Executor)
+
+Tres avisos del usuario tras usar el Studio en un sitio en francés.
+
+### 1. El calendario hablaba castellano en una web francesa
+
+Dos causas encadenadas, las dos arregladas:
+
+- **`booking_services.language` tiene DEFAULT 'es' y nadie lo fijaba al crear**,
+  así que en una web francesa TODOS los servicios nacían en castellano. Y ese
+  idioma no es solo cosmético: se copia a cada reserva
+  (`booking_bookings.language`) y de ahí salen los EMAILS al cliente y su página
+  de cancelación. `ServiceStore::create()` ahora lo fija con el idioma del sitio,
+  y la migración `2026_08_12_booking_service_language.sql` alinea los que ya
+  existen (se puede: el idioma del servicio no se elige en el panel, no hay
+  campo, así que cualquier valor distinto es el defecto de la columna).
+- **El widget preguntaba a la API sin decir en qué idioma se le está leyendo.**
+  Ahora el embed emite `data-lang` con el idioma de la PÁGINA
+  (`SectionRenderer::$lang` en la sección, `$pageLang` en el placeholder canvas),
+  el widget lo manda como `?lang=`, y la API lo antepone al idioma del servicio.
+  Precedencia: `?lang=` (página) → idioma del servicio (webs ajenas, que no
+  pueden mandarlo) → idioma del sitio.
+- Cierre del bucle: al reservar, el widget manda también `lang`, la reserva se
+  guarda con ese idioma (`BookingService::bookingLanguage()`) y el mensaje de
+  respuesta vuelve en él. Antes el mensaje se recalculaba desde el servicio y
+  volvía en castellano en una página francesa.
+
+### 2. El chip del chat del Studio mostraba "cv.ask_change"
+
+`canvas-studio.js` pinta el chip con `pp.t('cv.ask_change')`, pero esa clave no
+lleva prefijo `js.` ni sufijo `_js`, así que no viaja al navegador y `pp.t()`
+devuelve la clave. Se veía bien al cargar (lo pinta el servidor) y se rompía en
+cuanto algo repintaba el chip. Renombrada a `cv.ask_change_js` en los 4 idiomas,
+la vista y el JS — que es justo para lo que existe el sufijo. Repasadas TODAS las
+llamadas `pp.t()` del panel: era la única clave fuera de convención.
+
+### 3. La IA anunciaba "Durée 15 minutes" al lado de un calendario de 60
+
+`modulesHint()` le daba al modelo el id y el nombre del servicio, pero no la
+duración ni el precio, así que escribía el texto de alrededor a ojo. Ahora la
+pista lleva la ficha real de cada servicio (`3 = "test" (60 min, 30 €)`) y le
+dice explícitamente que el calendario YA muestra esos datos, que si los menciona
+use exactamente esos, y que NUNCA invente duración, precio, horarios ni plazas.
+
+Verificado:
+- API: `?lang=fr` manda sobre el idioma del servicio; un `lang` basura se ignora
+  sin romper.
+- Navegador, página francesa real con el calendario: días ("lun. 17/8"), huecos
+  ("4 créneaux"), formulario ("Votre nom *", "Réserver à 10:00") y confirmación
+  ("Réservation reçue…") en francés, con el servicio guardado en castellano.
+  La reserva quedó guardada con `language='fr'`.
+- Studio: el chip dice "Pídeme un cambio" al cargar, al minimizar y al reabrir.
+- Migración probada poniendo el sitio en francés: el servicio pasó a `fr`; sitio
+  y servicio restaurados a `es` después.
+- Tests nuevos en `booking_api.php` (precedencia de `lang`, idioma guardado en la
+  reserva y mensaje de vuelta) y en `booking_embed.php` (data-lang del embed,
+  fallback con idioma no soportado, y que un servicio nace con el idioma del
+  sitio). 17 ficheros de test sin fallos; `i18n_lint` limpio.
+- Datos de prueba borrados (0 reservas).
+
+## Lessons (MODULOS) — ampliación
+
+- **Un DEFAULT de columna es una decisión de producto escondida.** `language
+  DEFAULT 'es'` convirtió todas las webs francesas en webs con servicios
+  españoles, y el síntoma visible (el calendario) era el menos grave: lo gordo
+  eran los emails al cliente.
+- **Si un dato tiene un dueño más específico, ese manda.** El idioma de la
+  PÁGINA sabe más que el del servicio sobre en qué idioma se está leyendo; el
+  del servicio sigue valiendo donde no hay página (webs ajenas).
+- **Al darle a la IA un bloque real (calendario, productos), hay que darle
+  también sus DATOS.** Si no, rellena el texto de alrededor a ojo y contradice
+  al bloque que el propio sistema pinta al lado.
+
+## Background and Motivation (MODULOS M8)
+
+Petición: que los campos que se le piden al cliente al reservar se puedan editar
+por servicio — un predeterminado, pero pudiendo añadir y cambiar campos. El
+formulario estaba cableado en el JS del widget (nombre, email, teléfono, notas)
+y cada negocio necesita lo suyo: matrícula, nº de personas, alergias, "acepto
+las condiciones"…
+
+Decisiones cerradas con el usuario antes de empezar:
+- **Nombre y email fijos**; teléfono y notas configurables (mostrar/ocultar,
+  obligatorio, renombrar) + campos propios encima.
+- **Tipos**: texto, texto largo, teléfono, email, número, fecha, desplegable y
+  casilla. Sin subida de archivos (arrastra límites, tipos y borrado).
+
+## Current Status / Progress Tracking (MODULOS M8 · 13/08/2026, Executor)
+
+- Migración `2026_08_13_booking_custom_fields.sql`: `booking_services.fields_json`
+  (QUÉ se pide) y `booking_bookings.extra_json` (QUÉ contestó el cliente). Las
+  dos NULL-ables: NULL = el formulario de siempre, así que lo ya instalado sigue
+  igual sin tocar nada.
+- `app/Modules/Booking/BookingFields.php`, con toda la lógica: `defaults()`,
+  `forService()`, `normalize()` (sanea definiciones), `forWidget()` (lo que ve el
+  cliente, con etiquetas traducidas) y `validate()` (la comprobación que MANDA).
+- Panel: sección "Datos que pides al cliente" en el editor de servicio, con el
+  aviso de que nombre y email son fijos, las dos filas base y un repetidor de
+  campos propios (etiqueta, tipo, opciones si es desplegable, obligatorio).
+- Widget: pinta el formulario a partir de la definición que sirve la API, marca
+  en rojo el campo que el servidor rechaza y le pone el foco.
+- Las respuestas se ven en "Reservas recibidas" y viajan en el aviso por email
+  al gestor (`{extra}` en `bk.mail.admin_new_body`).
+
+Decisiones que conviene no perder:
+- **La validación de verdad es la del servidor**, contra lo GUARDADO. El widget
+  puede pintar lo que quiera: un POST a mano sin los obligatorios, con una opción
+  inventada en un desplegable o con un campo que nadie definió se rechaza o se
+  ignora (hay test de los tres casos).
+- **Las respuestas se guardan con su etiqueta al lado del valor.** Si mañana se
+  borra el campo "Matrícula", las reservas viejas se siguen leyendo.
+- **La clave del campo es estable** (se deriva de la etiqueta una vez y se
+  conserva en un `hidden`): renombrar la etiqueta no huérfana lo ya contestado.
+- Un campo oculto no puede ser obligatorio; un desplegable sin opciones cae a
+  texto; las claves reservadas (`email`, `name`, `lang`…) se prefijan para no
+  chocar con el cuerpo JSON de la API.
+
+Cosas que aparecieron al probar y hubo que arreglar:
+1. **Una casilla desmarcada no se envía**, así que "no pedir teléfono" no se
+   guardaba nunca: cada casilla lleva ahora un `<input type="hidden" value="0">`
+   delante.
+2. **El SELECT de la API no traía `fields_json`**, así que servía siempre los
+   campos por defecto aunque el servicio tuviera otros.
+3. **La etiqueta del teléfono seguía diciendo "(opcional)"** al hacerlo
+   obligatorio: se compone con `booking.field_phone` + `(opcional)`/`*` según
+   esté configurado (claves nuevas, porque `booking.ph_*` lleva el sufijo pegado).
+4. **La casilla del widget se estiraba al 100%** y echaba su texto fuera de la
+   tarjeta: era orden de reglas CSS con la misma especificidad.
+5. `tests/booking_microcopy.php` saltaba por una variable JS llamada `el` (la
+   confundía con el artículo). Renombrada a `node`: mejor eso que aflojar el test.
+
+Verificado:
+- `tests/booking_fields.php` nuevo (31 checks): defaults, normalización de
+  definiciones sucias, los seis casos de validación, respuestas guardadas y la
+  ida y vuelta por la BD. ALL PASS. Resto de la suite sin fallos; `i18n_lint`
+  limpio en los cuatro idiomas del panel y con las cadenas del cliente en los
+  seis del widget.
+- Navegador: configurados teléfono obligatorio, notas fuera y tres campos
+  propios (texto, desplegable y casilla, los tres obligatorios) → guardados →
+  el formulario público los pinta en orden y en francés → el servidor rechaza
+  con el campo marcado en rojo → una reserva correcta guarda las respuestas y se
+  ven en el panel.
+- Servicio del sitio dev devuelto a su configuración por defecto y 0 reservas.
+
+## Lessons (MODULOS) — ampliación
+
+- **Una casilla sin marcar no existe para el navegador.** Cualquier "quitar
+  esto" hecho con checkbox necesita un hidden delante o el "no" no llega nunca.
+- **Al añadir una columna hay que repasar los SELECT con lista explícita.** Aquí
+  la API pedía columnas una a una y se quedó sin la nueva: el código estaba bien
+  y el resultado, mal.
+- **Guardar la etiqueta junto al valor** convierte un dato configurable en un
+  dato legible para siempre, aunque la configuración cambie después.
+
+## Current Status / Progress Tracking (MODULOS M9 · 14/08/2026, Executor)
+
+Petición: que los emails de confirmación se puedan editar por servicio (con un
+predeterminado que se pueda adaptar), y que el módulo se entere de si hay o no
+correo configurado — avisando y llevando a la pantalla de ajustes.
+
+### Emails editables por servicio
+
+- Migración `2026_08_14_booking_service_emails.sql`: `booking_services.emails_json`.
+  NULL = las plantillas de siempre, así que nada cambia para lo ya instalado.
+- `app/Modules/Booking/BookingEmails.php`: los tres mensajes al cliente
+  (`received`, `confirmed`, `cancelled`), con `defaultTemplate()` (la de
+  siempre, expresada con tokens), `normalize()` y `render()`.
+- `BookingMailer` ya no compone texto: pide el mensaje a `BookingEmails` y se
+  queda con lo suyo (a quién, el .ics de las confirmadas, el registro de envío).
+- Editor: sección "Emails al cliente" con los tres plegados, insignia
+  Estándar/A medida, el mensaje por defecto como `placeholder` (se ve lo que se
+  enviará sin escribir nada), "Partir del mensaje estándar" y "Volver al
+  estándar".
+
+Decisiones que conviene no perder:
+- **Los tokens tienen el MISMO nombre en todos los idiomas del panel**
+  (`{cliente} {servicio} {fecha} {precio} {sitio} {detalles} {cancelar}
+  {respuestas}`). Un token traducido rompería la plantilla al cambiar de idioma.
+- **La plantilla por defecto se compone con `Microcopy::template()`, no con
+  `t()`**: `t()` limpia los `{token}` sin valor y colapsa espacios, así que
+  devolvía "Hola ," y una plantilla mutilada. Ya existía el método para esto.
+- **Si el gestor quita `{cancelar}`, el cliente se queda sin enlace para anular
+  y NO se le añade por detrás.** Añadirlo a escondidas convertiría la plantilla
+  en una caja negra; el editor avisa en cuanto el texto se queda sin el token.
+- Guardar sin escribir nada deja `NULL`, no un JSON vacío.
+- Efecto lateral asumido: el email de "confirmada por el gestor" y el de
+  "confirmada al reservar" comparten ahora plantilla (antes se diferenciaban en
+  una frase). Son el mismo mensaje para el cliente y ahora se edita una sola vez.
+
+### Aviso de correo sin configurar
+
+`MailService::isConfigured()` decide, y el aviso sale en las TRES pantallas
+donde importa: el listado de servicios (al entrar), Reservas recibidas (donde se
+pulsa Confirmar) y el editor de emails (donde no tendría sentido escribir un
+mensaje que no se va a enviar). Todos con el botón "Configurar el correo" a
+`/admin/settings/mail`.
+
+**Bug encontrado al probarlo**: el aviso aparecía y a los cinco segundos
+desaparecía. `admin.js` auto-oculta TODOS los `.pp-alert` a los 5 s (nacieron
+como mensajes flash), y un aviso permanente no puede irse solo. Ahora se
+respetan los marcados con `data-pp-persist`.
+
+Verificado:
+- `tests/booking_email_templates.php` (19 checks): por defecto = lo de siempre y
+  traducido, lo reescrito manda, tokens sustituidos, sin huecos con tokens
+  vacíos, saneado, JSON corrupto → defaults, y guardar en blanco no deja basura.
+  ALL PASS; resto de la suite sin fallos; `i18n_lint` limpio.
+- Navegador: plantilla a medida escrita y guardada; el render real usa la del
+  servicio en `received` y las de siempre en los otros dos. El aviso de "sin
+  correo" sigue en pantalla pasados 6 s.
+- Servicio del sitio dev devuelto a su estado (sin campos ni emails a medida) y
+  0 reservas.
+
+## Lessons (MODULOS) — ampliación
+
+- **Un "aviso permanente" y un "mensaje flash" no pueden compartir componente.**
+  Aquí el auto-dismiss de los flash se comía la advertencia de configuración.
+- **Antes de escribir un helper, buscar si ya existe.** `Microcopy::template()`
+  estaba justo para esto (plantilla con tokens intactos) y su docblock ya
+  explicaba el bug que yo acababa de cometer con `t()`.
+
+---
+
+# FEAT-RESOURCES — Recursos y ebooks descargables (2026-08-25, Planner)
+
+## Background and Motivation (FEAT-RESOURCES)
+
+Se necesita poder publicar en una web en producción recursos descargables —el
+primer caso concreto son ebooks— y gestionarlos desde PromptPress como contenido
+propio. El recurso puede ser gratuito con descarga directa, entregarse después
+de completar un formulario o, más adelante, asociarse a una compra.
+
+PromptPress no tiene un registro genérico de tipos de contenido personalizables
+tipo WordPress. Las entidades actuales tienen funciones concretas: `pages`
+contiene páginas y artículos, `media` es una biblioteca de imágenes,
+`documents` es conocimiento privado para la IA y `commerce_products` representa
+productos simples físicos. Reutilizar cualquiera de ellas para PDFs públicos
+mezclaría permisos, interfaz y ciclos de vida que hoy están deliberadamente
+separados.
+
+Decisión de Planner: crear un módulo pequeño e independiente llamado
+**Recursos**, siguiendo el patrón de `Analytics`, `Booking` y `Commerce`. La v1
+resuelve descarga directa y captación mediante formulario; deja un punto de
+extensión claro para venta digital, pero no implementa aún la entrega de compras
+ni un sistema genérico de Custom Post Types.
+
+## Key Challenges and Analysis (FEAT-RESOURCES)
+
+### 1. Entidad y alcance correctos
+
+- Un recurso no es una página genérica ni un documento de contexto para IA.
+  Necesita título, slug, descripción, portada, archivo, tipo/tamaño, categoría
+  opcional, idioma, modo de acceso y estado borrador/publicado.
+- `cover_media_id` puede reutilizar una imagen existente de `media`; el archivo
+  descargable debe tener almacenamiento y validación propios.
+- V1 admite PDF/EPUB. No se incluirán ZIP ni archivos ejecutables para mantener
+  una superficie de subida pequeña. El límite de tamaño será configurable desde
+  una única constante y se verificará tanto por extensión como por MIME real.
+- Multiidioma debe formar parte del esquema inicial (`language` y
+  `translation_group`), aunque la primera interfaz cree recursos en el idioma
+  principal del sitio. Añadirlo después produciría el mismo tipo de deuda ya
+  corregida en páginas, productos y reservas.
+
+### 2. Descarga segura y estable
+
+- Los archivos vivirán fuera del acceso público directo, bajo
+  `storage/resources/{site_id}/`, con denegación web equivalente a
+  `storage/documents`. Nunca se enlaza el path físico desde el HTML.
+- Toda descarga pasa por un controller que comprueba sitio, recurso publicado y
+  modo de acceso; responde con `Content-Type`, `Content-Length`,
+  `Content-Disposition` y `X-Content-Type-Options: nosniff`.
+- La URL pública usa el slug/id lógico. Así se puede sustituir el archivo sin
+  romper enlaces y registrar la descarga en Analytics sin guardar IP ni datos
+  personales nuevos.
+- Borrar o sustituir archivos debe ser conservador: primero confirmar que el
+  recurso pertenece al sitio y que ningún flujo lo está usando; la eliminación
+  de una fila debe retirar también su archivo físico, con error visible si no se
+  puede completar de forma coherente.
+
+### 3. Dos modos de acceso en v1
+
+- `direct`: el botón llama directamente al endpoint de descarga.
+- `form`: el recurso referencia un formulario existente de `FormStore`. La ficha
+  renderiza ese formulario con un contexto firmado que vincula
+  recurso+formulario+caducidad. Solo después de que `FormController` valide y
+  guarde una respuesta válida devuelve una URL de descarga temporal.
+- El enlace temporal se firma con HMAC derivada de `app_key`; no necesita una
+  nueva tabla de sesiones. Incluirá recurso, envío y expiración. No pretende ser
+  DRM, sino evitar que saltarse el formulario sea la ruta normal.
+- La respuesta inmediata mostrará el botón de descarga. Como mejora separada,
+  el autoresponder podrá aceptar un token `{{descarga}}` cuando el envío tenga
+  contexto de recurso; no se debe acoplar este token al primer corte si retrasa
+  el flujo principal.
+- Un recurso no puede publicarse en modo `form` sin un formulario válido del
+  mismo sitio. Si el formulario se elimina de forma suave, la ficha del recurso
+  debe mostrar un estado no disponible y nunca abrir una descarga directa por
+  accidente.
+
+### 4. Publicación dentro de páginas
+
+- El módulo tendrá catálogo `/recursos` y ficha `/recursos/{slug}` con el shell,
+  design system, idioma y analítica ya usados por la tienda.
+- Para insertar listados en páginas Canvas se seguirá el patrón existente:
+  `{{resources:featured|limit=3|heading=Recursos}}`, expandido por un renderer
+  dinámico y reversible mediante `data-pp-placeholder`.
+- El Studio y la IA solo ofrecerán ese bloque si el módulo está activo y existe
+  al menos un recurso publicado. Si no hay contenido utilizable, no se ofrece
+  una acción que termina en una vía muerta.
+- Los cambios de recursos invalidarán la caché de páginas porque el listado se
+  expande a HTML al renderizar, igual que `products:featured`.
+
+### 5. Relación futura con Commerce
+
+- No se añadirá `purchase` como opción incompleta en la interfaz v1.
+- La ampliación futura correcta será dar a `commerce_products` un tipo
+  `physical|digital` y relacionar el producto digital con un recurso/archivo.
+  Tras un pedido `paid`, Commerce emitirá enlaces firmados ligados al pedido y
+  con límites configurables. El módulo Recursos seguirá siendo dueño del archivo
+  y Commerce será dueño del derecho de acceso.
+- Esta separación evita duplicar catálogo, pago, pedido y archivo, y permite que
+  el mismo ebook pase de gratuito a vendido sin cambiar su almacenamiento.
+
+### 6. Compatibilidad, privacidad y producto
+
+- Activar el módulo no publica nada automáticamente; nace vacío y los recursos
+  nacen como borrador.
+- Las descargas directas pueden registrarse como evento agregado
+  `resource_download` en Analytics. No se crea una tabla de tracking propia en
+  v1 salvo que aparezca una necesidad real de auditoría individual.
+- La captación usa el consentimiento, retención, anti-bot, bandeja de respuestas
+  y avisos por email que ya pertenecen a Formularios; Recursos no los replica.
+- Migración e instalación nueva deben quedar alineadas: cualquier tabla/columna
+  se añade a `database/migrations` y a `install/schema.sql`.
+- Antes de ejecutar, el usuario debe invocar `@web` según la regla del proyecto
+  para contrastar documentación actual de subida/descarga segura de PHP y
+  cabeceras HTTP. El resultado se documentará en `cursor/resources-api.md` antes
+  de escribir el endpoint de archivos.
+
+## High-level Task Breakdown (FEAT-RESOURCES)
+
+### R0 — Investigación y contrato aprobado
+
+- Invocar `@web` y documentar en `cursor/resources-api.md`: detección MIME,
+  subida segura, nombres de descarga UTF-8, cabeceras HTTP, protección de
+  almacenamiento y límites prácticos PDF/EPUB.
+- Cerrar el contrato v1: extensiones, tamaño máximo, campos, URLs y comportamiento
+  exacto de `direct` y `form`.
+- **Éxito:** documento breve revisado por el usuario; ninguna decisión de
+  seguridad o producto pendiente antes de migrar la BD.
+
+### R1 — Esquema y store, con TDD
+
+- Escribir primero tests del store: aislamiento por `site_id`, borrador por
+  defecto, slug único por sitio/idioma, idioma y grupo de traducción, validación
+  de acceso, formulario del mismo sitio y borrado conservador.
+- Crear tabla `resources` en migración e `install/schema.sql`; implementar
+  `ResourceStore` y el alta/edición de metadatos sin subir aún archivos.
+- **Éxito:** tests del store pasan y el esquema migración↔instalación es
+  equivalente. El usuario verifica solo el modelo de campos antes de continuar.
+
+### R2 — Almacenamiento y descarga directa
+
+- Escribir tests de validación de upload, pertenencia, traversal, MIME/extensión,
+  sustitución, archivo ausente y respuestas de descarga.
+- Implementar `ResourceFileService`, directorio protegido, subida/sustitución y
+  endpoint de descarga directa con cabeceras seguras.
+- **Éxito:** un PDF y un EPUB válidos se descargan con su nombre; un archivo
+  inválido, un recurso ajeno, borrador o path manipulado no se sirven. Usuario
+  prueba manualmente una descarga antes de avanzar.
+
+### R3 — Administración del módulo
+
+- Registrar `resources` en `ModuleRegistry`, rutas con guard y navegación
+  condicional.
+- Crear listado, alta y edición: título, descripción, portada mediante el media
+  picker existente, categoría, archivo, idioma, modo de acceso, formulario y
+  borrador/publicado. CSS únicamente en `admin/assets/css/admin.css`.
+- Estados vacíos: primero crear un recurso; las opciones de publicación se
+  muestran cuando hay al menos uno.
+- **Éxito:** ciclo admin alta→borrador→publicar→sustituir archivo→despublicar
+  funciona en navegador, y módulo apagado devuelve 404 y desaparece del menú.
+
+### R4 — Catálogo y ficha públicos
+
+- Escribir tests HTTP de visibilidad, slug/idioma, 404, portada ausente y modo de
+  acceso.
+- Construir `/recursos` y `/recursos/{slug}` reutilizando shell, DesignSystem,
+  chrome, hreflang/SEO donde proceda y Analytics.
+- **Éxito:** catálogo y ficha heredan el diseño real del sitio; solo aparecen
+  recursos publicados del idioma correcto y Lighthouse/HTML no presenta errores
+  básicos de accesibilidad.
+
+### R5 — Descarga condicionada por formulario
+
+- Escribir tests de contexto firmado: form/recurso/sitio correctos, expiración,
+  manipulación, formulario eliminado, envío inválido y reuso del enlace.
+- Renderizar el formulario asociado en la ficha; extender el resultado de un
+  envío válido para devolver una URL temporal y mostrar el botón sin recargar.
+  Mantener intactos los envíos normales sin contexto de recurso.
+- **Éxito:** no existe URL de descarga antes del envío; tras un envío válido se
+  guarda el lead y se obtiene el ebook; falsificar contexto o usar otro formulario
+  falla. Usuario prueba el flujo completo como visitante sin sesión admin.
+
+### R6 — Bloque dinámico para páginas y Studio
+
+- Añadir renderer y placeholder canónico
+  `{{resources:featured|limit=N|heading=...}}`, reversión al guardar, pista IA y
+  botón/selector del Studio condicionado a recursos publicados.
+- Invalidar caché en crear/editar/publicar/eliminar recursos.
+- **Éxito:** una página Canvas muestra tarjetas reales, el Studio conserva el
+  placeholder tras editar y guardar, y con módulo vacío/apagado no deja huecos
+  ni ofrece el bloque.
+
+### R7 — Integraciones y cierre de v1
+
+- Registrar `resource_download` en Analytics con etiqueta no personal
+  (id/slug lógico), revisar traducciones del panel y web pública y ejecutar la
+  suite completa.
+- Mejora opcional y separable: token `{{descarga}}` en autoresponder para envíos
+  originados desde un recurso.
+- Documentar la futura integración Commerce `physical|digital` sin implementarla.
+- **Éxito:** suites nuevas y regresión pasan, `i18n_lint` limpio, sin datos de
+  prueba, y el usuario valida descarga directa y mediante formulario en móvil y
+  escritorio. Solo Planner anuncia la finalización tras esa verificación.
+
+## Project Status Board (FEAT-RESOURCES)
+
+- [x] R0 Investigación `@web` + contrato de la v1 — aprobado por el usuario 25/08/2026
+- [x] R1 Esquema + `ResourceStore` con TDD — aprobado por el usuario 25/08/2026
+- [x] R2 Archivos protegidos + descarga directa — aprobado por el usuario 25/08/2026
+- [x] R3 Panel de administración del módulo — aprobado por el usuario 25/08/2026; validación manual agrupada al final en producción
+- [x] R4 Catálogo y ficha públicos — verificado localmente; validación manual agrupada al final en producción
+- [x] R5 Entrega condicionada por formulario — verificada end-to-end; validación manual agrupada al final en producción
+- [x] R6 Bloque dinámico para páginas y Studio — verificado localmente; validación manual agrupada al final en producción
+- [x] R7 Analytics, i18n, regresión y cierre — implementación verificada; pendiente validación final del usuario en producción
+- [x] R8 Disponibilidad multidioma y diagnóstico en Studio — implementación y QA local verificadas; pendiente revalidación del usuario en producción
+- [x] R9 Idioma de página en bloques Studio — implementación y QA local verificadas; pendiente revalidación del usuario en producción
+- [x] R10 Deduplicación contextual de heading en Recursos — implementación y QA local verificadas; pendiente revalidación del usuario en producción
+- [x] R11 Enlaces públicos según idioma real de página — implementación y QA local verificadas; pendiente revalidación del usuario en producción
+
+## Current Status / Progress Tracking (FEAT-RESOURCES · 25/08/2026, Planner)
+
+- Arquitectura actual revisada sin modificar funcionalidad.
+- Confirmado que no existe un sistema genérico de Custom Post Types y que
+  `documents`, `media` y `commerce_products` no deben asumir este caso.
+- Alcance recomendado de v1: módulo Recursos, PDF/EPUB, portada reutilizada de
+  Media, descarga directa, descarga tras formulario, catálogo/ficha y bloque
+  Canvas. Venta digital queda expresamente fuera de v1.
+- Plan preparado; ninguna tarea de implementación iniciada.
+
+## Current Status / Progress Tracking (FEAT-RESOURCES R0 · 25/08/2026, Executor)
+
+- Investigación actualizada completada con documentación oficial de PHP,
+  IANA, W3C EPUB, RFC 6266/9110, Apache/Nginx y la guía de seguridad de OWASP.
+- Creado `cursor/resources-api.md` con el contrato v1: PDF+EPUB, máximo de
+  producto 20 MiB pero límite efectivo del hosting visible, validación EPUB OCF,
+  almacenamiento protegido, nombres internos aleatorios y descarga por streaming.
+- Cerrado el diseño propuesto de descarga directa y descarga tras formulario:
+  contexto HMAC, enlace temporal de 24 horas y comportamiento normal intacto
+  para formularios sin contexto de recurso.
+- Entorno comprobado: PHP 8.4.11 y Fileinfo activo; el desarrollo tiene
+  `upload_max_filesize=10M`, de modo que ahora su límite efectivo es 10 MiB hasta
+  cambiar la configuración del servidor.
+- R0 sigue sin marcar como completada hasta que el usuario revise y apruebe el
+  contrato. No se han creado migraciones ni tocado funcionalidad.
+
+**Aprobación:** el usuario aprobó avanzar el 25/08/2026; R0 marcada completada.
+
+## Current Status / Progress Tracking (FEAT-RESOURCES R1 · 25/08/2026, Executor)
+
+- TDD: `tests/resources_store.php` se escribió antes del store; el primer run
+  falló al no existir aún `resources`/`ResourceStore`, como esperaba el contrato.
+- Añadida `database/migrations/2026_08_25_resources.sql` y bloque idéntico en
+  `install/schema.sql`: una tabla `resources`, FKs de sitio/portada/formulario,
+  unique por sitio+idioma+slug e índices público/traducción/formulario.
+- Implementado `app/Modules/Resources/ResourceStore.php`: create/find/all/update/
+  delete, borrador por defecto, update parcial, slug estable y desambiguado por
+  idioma, UUID de traducción, relaciones limitadas al sitio y reglas de
+  publicación. R1 solo gobierna metadatos; no mueve archivos.
+- Publicar exige los cuatro metadatos de un PDF/EPUB permitido y, en modo
+  `form`, un formulario activo del mismo sitio. Un formulario eliminado nunca
+  degrada a descarga directa.
+- `tests/resources_store.php`: **34/34 PASS**. Regresiones
+  `tests/site_language.php` y `tests/commerce_products.php`: PASS.
+- Equivalencia normalizada migración↔instalación: PASS. Fixtures retiradas:
+  `resources=0`, media/form temporales=0 e idioma inglés dev restaurado a off.
+- La ejecución del Migrator aplicó correctamente esta migración y cuatro
+  migraciones anteriores que existían en el repo pero aún no constaban como
+  aplicadas en dev (booking language, drop hello, custom fields y emails); cero
+  errores.
+- R1 queda pendiente de validación del modelo de campos por el usuario antes de
+  marcarla en el board y empezar R2.
+
+**Aprobación:** el usuario confirmó el modelo de campos el 25/08/2026; R1
+marcada completada.
+
+## Current Status / Progress Tracking (FEAT-RESOURCES R2 · 25/08/2026, Executor)
+
+- TDD: creado `tests/resources_files.php`; el primer run falló porque aún no
+  existía `ResourceFileService`, confirmando que el test precedió a la solución.
+- Implementado `ResourceFileService`: límite efectivo del hosting, errores
+  `UPLOAD_ERR_*` con diagnóstico, extensión+Fileinfo, firma `%PDF-` y estructura
+  OCF mínima de EPUB sin descomprimirlo, nombre físico aleatorio de 64 hex,
+  reemplazo seguro y limpieza tras error.
+- Directorio `storage/resources` protegido con `.htaccess`; la protección se
+  autocura en runtime porque los paquetes de actualización excluyen este árbol
+  para no copiar/sobrescribir ebooks de una instalación.
+- Preparados `ResourceDownloadController` y las rutas principal/multiidioma. No
+  están expuestas todavía: R3 registrará `resources` en `ModuleRegistry` y
+  conectará el panel bajo el guard por sitio.
+- Descarga preparada por streaming de 64 KiB, sin cargar el ebook entero, con
+  MIME/bytes, `filename` ASCII + `filename*` UTF-8, `nosniff`, `private,no-store`
+  y `Accept-Ranges:none`. Borradores, modo formulario, traversal, archivo ausente
+  o metadatos incoherentes no se sirven.
+- Ciclo de vida cubierto: `SiteResetService` borra filas y carpeta por sitio;
+  build package y updater excluyen `/storage/resources` para preservar datos.
+- Los mensajes de error se migraron a 33 claves en los cuatro idiomas del panel
+  (`es/en/fr/pt`) en lugar de silenciar el linter.
+- `tests/resources_files.php`: **29/29 PASS**; `resources_store`: 34/34 PASS;
+  `modules_registry`, catálogo admin i18n y regresiones de microcopy: PASS;
+  `i18n_lint`: limpio; `git diff --check`: limpio.
+- Limpieza verificada: tabla `resources=0`, sin binarios de prueba; solo
+  `.htaccess` y `.gitkeep` bajo el directorio raíz.
+- R2 queda pendiente de conformidad del usuario. La descarga HTTP manual se hará
+  al final de R3, cuando exista un recurso administrable y el módulo pueda
+  activarse sin exponer una pantalla incompleta.
+
+## Executor's Feedback or Assistance Requests (FEAT-RESOURCES)
+
+### R4 completada localmente (25/08/2026)
+
+- Añadidos catálogo `/recursos`, ficha `/recursos/{slug}` y sus variantes con
+  prefijo de idioma, todas bajo el guard del módulo.
+- La consulta pública está aislada por sitio, idioma y estado publicado. La
+  ficha de un borrador o de otro idioma devuelve 404.
+- El shell reutiliza DesignSystem, header, footer y Analytics; añade canonical,
+  hreflang y Open Graph. Los estilos propios viven en
+  `public/css/resources.css`, sin CSS inline del módulo.
+- UX revisada con la skill de diseño y en navegador real: catálogo editorial de
+  dos columnas, fallback PDF/EPUB sin imagen rota, ficha asimétrica con acción
+  clara, estados vacío/foco/reduced-motion y adaptación a una columna móvil.
+- Seguridad de transición: una ficha en modo `form` explica el requisito pero
+  no expone el endpoint directo hasta que R5 conecte el formulario.
+- `tests/resources_public.php`: 21 checks HTTP/store/UI, ALL PASS. Regresiones
+  `resources_store` 34/34, `resources_files` 29/29, `resources_admin` 12/12,
+  `modules_registry` y `site_language`: PASS. Linter i18n y diff: limpios.
+- Fixtures visuales retiradas (`resources=0`) y servidor local detenido.
+
+No se solicita validación manual intermedia: por indicación del usuario, se
+agrupará toda la revisión en su página de producción al finalizar R7. Siguiente
+tarea autorizable: R5, entrega condicionada por formulario.
+
+### R5 completada localmente (25/08/2026)
+
+- La ficha condicionada incrusta el formulario seleccionado con su contenido,
+  campos, traducción, validaciones, RGPD, anti-bot y estilos reales; un
+  formulario borrado muestra indisponibilidad y nunca degrada a acceso directo.
+- Añadido `ResourceAccessService`: contexto HMAC de 6 h ligado a
+  sitio+recurso+formulario y token de descarga de 24 h ligado además al id de
+  respuesta guardada. Clave derivada de `app_key` con propósito independiente
+  `resource-download-v1`; tokens manipulados, caducados o cruzados devuelven
+  404 sin revelar la causa.
+- `FormController` conserva intacto su ciclo previo y solo concede acceso tras
+  guardar correctamente la respuesta. Formularios normales o contextos
+  inválidos siguen funcionando sin `download_url`.
+- Con JS, la descarga comienza automáticamente, queda un enlace «Descargar de
+  nuevo» y el formulario se retira del estado final para reducir ruido. Sin JS,
+  el POST redirige al enlace firmado tras guardar.
+- `tests/resources_form_delivery.php`: 21 checks, incluyendo ciclo HTTP ficha →
+  POST → binario, cabeceras seguras, token inválido/caducado/cruzado, contexto
+  inválido y fallback sin JS; ALL PASS.
+- Regresiones `resources_public/files/store/admin`, `botguard_submit`,
+  `forms_language`, `modules_registry`, sintaxis JS/PHP, i18n y diff: PASS.
+- Revisión en navegador real con la skill de diseño: formulario alineado con la
+  jerarquía de la ficha, etiquetas sobre controles, privacidad visible y estado
+  de éxito reducido a confirmación + re-descarga. Dos entregas reales 200.
+- Fixtures retiradas: `resources=0`, formulario/respuestas/binario temporales
+  eliminados y servidor detenido.
+
+La revisión manual sigue agrupada para producción al cerrar R7. Siguiente
+tarea: R6, bloque dinámico para páginas y Studio.
+
+### R6 completada localmente (25/08/2026)
+
+- TDD: `tests/resources_embed.php` nació antes de la implementación y falló en
+  11 contratos. Tras implementar, cubre módulo apagado, límite/idioma/estado,
+  placeholder canónico, reversión de edición, enlaces reales, pista IA, Studio
+  condicionado e invalidación de caché; **13 comprobaciones, ALL PASS**.
+- Añadido `FeaturedResourcesRenderer` y soporte Canvas para
+  `{{resources:featured|limit=N|heading=...}}`. El render usa publicaciones
+  reales del idioma de la página, nunca inventa tarjetas y carga
+  `public/css/resources.css` solo cuando el bloque produce contenido.
+- Studio muestra `+ Recursos` únicamente si el módulo está activo y hay
+  publicaciones en el idioma de esa página. Selector breve de cantidades
+  reales (1/3/6, acotadas a las disponibles), inserción tras la parte activa o
+  al final, confirmación humana y sección movible/borrable en el índice.
+- UX guiada por `design-taste-frontend`: jerarquía editorial de dos columnas,
+  etiquetas claras, foco/active/reduced-motion, una columna móvil y estados
+  vacíos sin vías muertas. En navegador se corrigió además el singular
+  «El recurso publicado más reciente» detectado durante la revisión real.
+- Guardar una sección desde edición en vivo revierte el HTML expandido al
+  placeholder canónico. Crear, editar, publicar, despublicar o eliminar un
+  recurso invalida la caché del sitio; un catálogo vacío/apagado no deja hueco.
+- Prueba real de Studio sobre página temporal: botón condicionado → selector →
+  insertar 2 → preview con dos fichas enlazadas → mensaje de confirmación →
+  sección visible en «Partes de esta página». Escritorio y móvil revisados;
+  al retirar las publicaciones desapareció el botón y el bloque quedó vacío.
+- Regresiones en serie: `resources_store/files/admin/public/form_delivery`,
+  `canvas_runtime` y `site_language`, además de lint PHP/JS y
+  `git diff --check`: PASS. Página, recursos y versiones temporales retirados.
+
+La revisión manual continúa agrupada para producción al cerrar R7. Siguiente
+tarea del board: R7, Analytics, i18n, regresión final y entrega para validación.
+
+### R7 implementada y verificada localmente (25/08/2026)
+
+- TDD: nuevo `tests/resources_analytics.php`. Primer ciclo falló al no existir
+  el evento; segundo ciclo descubrió que el dashboard enseñaría el identificador
+  técnico. Tras corregir ambos, **13 comprobaciones, ALL PASS**.
+- Cada descarga válida registra `resource_download` solo si Analytics está
+  activo y después de validar recurso, permiso/token y archivo. La etiqueta es
+  `/recursos/{slug}/descargar`: estable y sin query, token, email ni datos del
+  formulario. Descargas 404 y Analytics apagado no registran nada.
+- Dashboard traducido en `es/en/fr/pt`: «Descarga de recurso» y equivalentes.
+  `i18n_lint` informa cero claves ausentes y cero castellano literal en panel;
+  `admin_i18n`, microcopy pública, emails, idiomas y Booking: PASS.
+- Ampliado `cursor/resources-api.md` con el contrato futuro Commerce
+  `physical|digital`: Recursos posee el binario; Commerce, precio/pedido/derecho
+  de acceso. No se implementa venta digital ni se mezcla con esta v1.
+- El token opcional `{{descarga}}` de autoresponder se mantiene fuera de v1:
+  R5 ya entrega por UI y fallback sin JS; añadir semántica de email justo antes
+  de producción ampliaría superficie sin ser requisito de aprobación.
+- Regresión total ejecutada en serie: **83/83 archivos PASS**. El test de update
+  se ejecutó declarando entorno de desarrollo, nunca con `--force`; confirmó
+  ZIP inválido/checksum, despliegue, rollback, mantenimiento y huellas intactas.
+- Lint PHP/JS, `git diff --check`, i18n y limpieza: PASS. Fixtures finales:
+  recursos R6/R7=0, página temporal=0, eventos temporales=0; storage conserva
+  solo `.gitkeep` y `.htaccess`.
+- Generado `deliverables/promptpress-resources-v1-20260825.zip`: 1007 archivos,
+  2,5 MB, sin secretos ni datos de `storage/resources`. SHA-256:
+  `6506df41e58975b065e9726ba6d4f309fa434c6ebd8abfc625c89c201eb79fa5`.
+
+La implementación queda lista para la validación agrupada del usuario en
+producción (directa, mediante formulario, Studio, móvil/escritorio y Analytics).
+Solo Planner anunciará el cierre definitivo tras esa confirmación.
+
+### R8 implementada y verificada localmente (25/08/2026)
+
+- Incidencia reproducida desde producción: el editor ocultaba el idioma cuando
+  solo había uno activo y Studio ocultaba silenciosamente `+ Recursos` si el
+  idioma interno de la página no coincidía con el del recurso.
+- TDD: `tests/resources_languages.php` se escribió primero y falló por ausencia
+  de alcance/pivote y de `visibleLanguages`. Tras implementar, sus 10 contratos
+  pasan: uno, varios y todos los idiomas; `todos` incluye idiomas que se activen
+  después; el editor siempre muestra la disponibilidad y Studio explica el
+  desajuste.
+- Añadida migración `2026_08_25_resources_languages.sql` y equivalente en
+  `install/schema.sql`: `resources.language_scope` (`selected|all`) y tabla
+  `resource_languages`. El backfill asigna a cada recurso existente su idioma
+  anterior, por lo que una actualización no amplía su visibilidad sin permiso.
+- El editor separa idioma base de disponibilidad: selector claro de uno o varios
+  idiomas y opción «Todos los idiomas», con ayuda explícita de que también cubre
+  los que se activen en el futuro. La lista admin resume esa disponibilidad.
+- Catálogo, ficha, bloque Canvas, selector de Studio y `hreflang` consultan la
+  disponibilidad nueva. La unicidad de slug evita ambigüedades entre alcances
+  que se solapan.
+- UX revisada con `design-taste-frontend` y navegador real: en página francesa,
+  `all` muestra `+ Recursos`; con solo español, Studio conserva el botón
+  desactivado, explica «ninguno está disponible en Français» y ofrece «Revisar
+  idiomas». El control «Todos» desactiva visualmente los chips individuales sin
+  ocultar qué idiomas cubre.
+- Regresión completa en serie: **84/84 archivos PASS**, incluido update/rollback
+  declarado en desarrollo y sin `--force`. PHP/JS lint, `admin_i18n`,
+  `i18n_lint` y `git diff --check`: PASS. Fixtures retiradas (`resource=0`,
+  `page=0`, francés restaurado a inactivo) y servidor local detenido.
+- Generado `deliverables/promptpress-resources-v1.1-20260825.zip`: 1009 archivos,
+  2,5 MB, incluye la migración nueva y excluye secretos/datos de recursos.
+  SHA-256: `bd95da5dac71c220cb695f1fe7c8a04febf0ebe1c15629969039ac1d717bb889`.
+
+R8 queda lista para revalidación en la instalación de producción. El usuario
+debe actualizar con este ZIP, abrir `PDF Test`, asignar Français o «Todos los
+idiomas» y volver a Studio. Como Executor no se anuncia aún el cierre final.
+
+### R9 implementada y verificada localmente (25/08/2026)
+
+- Incidencia de producción reproducida conceptualmente: el panel estaba en
+  español y la página en francés, pero `insertResources()` persistía el heading
+  con `__()`, es decir, con el idioma del gestor. La preview también declaraba
+  el idioma general del sitio en vez del idioma de la página.
+- TDD ampliado en `tests/resources_embed.php`: el primer ciclo falló en tres
+  contratos. Ahora exige que Studio no persista textos automáticos del panel,
+  que preview pase explícitamente el idioma de página, que el bloque hable
+  francés y que un bloque antiguo se repare sin tocar headings personalizados.
+- La inserción guarda solo `{{resources:featured|limit=N}}`; el renderer resuelve
+  heading y CTA dinámicamente desde el idioma de la página. El nombre y las
+  respuestas del chrome de administración continúan en el idioma del gestor,
+  que es el comportamiento correcto.
+- Compatibilidad retroactiva: `FeaturedResourcesRenderer` reconoce únicamente
+  headings automáticos antiguos de los catálogos (`Recursos destacados`, etc.)
+  y los vuelve a localizar. Un heading escrito por el usuario se conserva.
+- QA real en navegador con panel español + página `fr` + recurso `all`:
+  `Ressources`, `Voir la ressource`, URL `/fr/recursos/...` y parte de Studio
+  `Ressources`. Después se convirtió el placeholder al formato antiguo español
+  y el render siguió saliendo íntegramente en francés.
+- Regresión dirigida: Recursos, Canvas runtime, creación/idioma de página,
+  idioma del sitio y admin i18n: PASS. PHP lint, `i18n_lint` y
+  `git diff --check`: PASS. Fixtures retiradas y francés restaurado a inactivo.
+- Generado `deliverables/promptpress-resources-v1.2-20260825.zip` (1009 archivos,
+  2,5 MB). SHA-256:
+  Sustituido por el build R10 indicado a continuación.
+
+### R10 implementada y verificada localmente (25/08/2026)
+
+- Feedback visual de producción: una sección con título editorial propio
+  mostraba además el heading genérico `Recursos` del grid dinámico.
+- TDD en `tests/resources_embed.php`: el test nuevo falló primero al encontrar
+  dos `h2`. La regla final conserva el heading descriptivo de la sección y
+  elimina únicamente `pp-featured-resources__head` cuando existe otro h1-h6
+  fuera del embed dentro del mismo `data-pp-section`.
+- Un bloque independiente sigue mostrando `Ressources`; por tanto no se pierde
+  jerarquía visual ni accesibilidad. Cuando se deduplica, el `section`
+  del renderer conserva `aria-label="Ressources"`.
+- La guía `design-taste-frontend` llevó a preferir una regla contextual frente
+  a ocultar siempre el título: evita repetición sin crear listados anónimos.
+- QA real en navegador, página francesa: un único heading visible
+  `Ressources pour votre bien-être`, párrafo editorial, región accesible y CTA
+  `Voir la ressource`; cero heading genérico repetido.
+- Regresiones de Recursos, Canvas runtime/markup, Blog Canvas y Commerce Canvas:
+  PASS. PHP lint, `i18n_lint`, `git diff --check` y limpieza de fixtures: PASS.
+- Reempaquetado `deliverables/promptpress-resources-v1.2-20260825.zip` (1009
+  archivos, 2,5 MB). SHA-256 final:
+  `ff0d43f5be37f610f86c2efc81a096f6e440263dd5020b7a0c9e71af1c56ba00`.
+
+### R11 implementada y verificada localmente (25/08/2026)
+
+- Incidencia de producción: el bloque podía renderizar una tarjeta para una
+  página francesa, pero `/fr/recursos/{slug}` devolvía 404 porque los
+  controladores públicos exigían que `fr` estuviera además en `site_languages`.
+  Es un estado real de instalaciones antiguas/importadas: la fila de `pages`
+  conserva `language=fr` aunque la activación global esté desfasada.
+- TDD nuevo `tests/resources_page_language.php`: primer run reprodujo CTA con
+  enlace francés pero ficha 404 y ausencia del nuevo contrato en el store. La
+  cobertura final prueba sitio principal español, francés globalmente inactivo,
+  página `fr`, recurso `all`, CTA localizado, ficha 200 y descarga PDF 200.
+- `ResourceStore::languageAvailableForSite()` unifica la regla: son válidos los
+  idiomas activos y cualquier idioma soportado que ya use una página del sitio.
+  `visibleLanguages()` aplica la misma fuente, también para hreflang, y la
+  hidratación en lote calcula el conjunto una sola vez para evitar N+1 queries.
+- `ResourcePublicController` y `ResourceDownloadController` usan esa regla. Un
+  código no soportado sigue devolviendo 404; un recurso no disponible en ese
+  idioma sigue sin ser accesible por conocer el slug.
+- QA real en navegador con `fr_active=false`: tarjeta `Voir la ressource` →
+  `/fr/recursos/guide-anti-inflammatoire-r11` → ficha 200 con `Retour aux
+  ressources` y `Télécharger`. La guía UX confirmó que el idioma de la página
+  debe gobernar CTA, enlace, ficha y descarga como un recorrido indivisible.
+- Regresión total: **85/85 archivos PASS** (84 suites normales + update/rollback
+  declarado en desarrollo, sin `--force`). PHP lint, `i18n_lint`,
+  `git diff --check` y limpieza de fixtures: PASS.
+- Generado `deliverables/promptpress-resources-v1.3-20260825.zip`: 1010 archivos,
+  2,5 MB, sin secretos ni datos de recursos. SHA-256:
+  `4efcec7841decafe2a751cb9f183074c421f2b9cd41661a905ce88bd39acf071`.
+
+- **Pendiente ahora:** conformidad para cerrar R2 con sus pruebas automatizadas.
+  La verificación manual de la respuesta HTTP se encadena a R3 porque el módulo
+  aún no debe activarse sin interfaz de administración.
+- No iniciar R3 hasta esa confirmación. En Executor se completará una sola tarea
+  del Project Status Board cada vez y se esperará la verificación manual del
+  usuario antes de pasar a la siguiente.
+
+**Actualización R3 (25/08/2026):** las restricciones anteriores de R2 están
+resueltas. R3 está implementada y validada automáticamente, por HTTP real y en
+navegador, pero permanece sin marcar hasta que el usuario pruebe el panel. Abrir
+`/admin/resources`, crear un borrador, añadir PDF/EPUB, alternar descarga directa
+y formulario, publicar y volver a borrador. No iniciar R4 hasta esa conformidad.
+
+## Current Status / Progress Tracking (FEAT-RESOURCES R3 · 25/08/2026, Executor)
+
+- Registrado `resources` como módulo disponible, con rutas admin protegidas,
+  icono y navegación estrictamente condicional al flag por sitio.
+- Implementado `ResourceAdminController` y las vistas de listado/editor. El alta
+  rápida solo pide título y crea borrador; el editor ordena el trabajo en tres
+  pasos: presentación, archivo y forma de entrega. Portada reutiliza el selector
+  de Medios; idioma solo aparece cuando el sitio es multiidioma.
+- UX de publicación preventiva: el panel lateral explica en vivo si falta
+  archivo o formulario, permite borrador/publicado de forma explícita y no
+  oculta errores del store. En modo formulario, la selección aparece solo al
+  elegir esa entrega; si aún no hay formularios ofrece una salida directa para
+  crearlo. El borrado usa diálogo informado y elimina también el binario.
+- Responsive verificado en navegador a 390×844: columna única, cero overflow
+  horizontal y acciones después del contenido. Escritorio verificado con
+  jerarquía 2+1, estado vacío enfocado y selector de 35 imágenes sin errores de
+  consola. La skill `design-taste-frontend` guio la jerarquía, reducción de
+  tarjetas innecesarias, estados, feedback táctil y divulgación progresiva.
+- Ciclo HTTP real verificado: crear borrador → subir/publicar PDF (302) →
+  sustituir archivo y despublicar (302) → republicar sin resubir (302). Descarga
+  final 200 con `Content-Disposition` del nombre sustituido y cabeceras seguras.
+  Módulo apagado: admin 404, descarga 404 y enlace de navegación ausente.
+- TDD/regresión: `resources_admin` 12 comprobaciones, `resources_store` 34/34,
+  `resources_files` 29/29, `modules_registry` y `admin_i18n` PASS; PHP/JS lint,
+  `i18n_lint` y `git diff --check` limpios. Fixtures retiradas: `resources=0`,
+  storage solo contiene `.htaccess` y `.gitkeep`. El flag del módulo se conservó
+  en su estado previo (`enabled=true`).
+- R3 sigue pendiente de prueba manual del usuario; no se marca ni se inicia R4
+  hasta recibir su confirmación, según el flujo Executor del proyecto.
+
+## Lessons (FEAT-RESOURCES)
+
+- Fileinfo puede identificar un EPUB como `application/zip`; aceptar ese MIME sin
+  más convertiría cualquier ZIP renombrado en ebook. La validación correcta
+  combina extensión, Fileinfo y la cabecera OCF (`mimetype` primero, sin
+  compresión y con contenido exacto `application/epub+zip`).
+- Un límite declarado por la aplicación no supera `upload_max_filesize`. La UI
+  debe enseñar el mínimo efectivo del producto y del hosting para que un fallo de
+  infraestructura no parezca un error genérico del módulo.
+- Separar el store de metadatos del servicio de archivos permite probar slugs,
+  permisos multisitio y reglas de publicación sin crear binarios falsos ni
+  mezclar transacciones SQL con efectos de filesystem; R2 será el único dueño de
+  esos efectos.
+- Un directorio de datos nuevo tiene tres ciclos además de subir/descargar:
+  reset del sitio, creación de paquetes y despliegue de updates. Excluir Recursos
+  del paquete evita filtrar ebooks reales, pero obliga a autocurar su `.htaccess`
+- Las suites `resources_store` y `resources_files` comparten tabla y directorio:
+  no deben ejecutarse en paralelo. Una ejecución concurrente hizo que sus
+  limpiezas se cruzaran; se repitieron en serie y se verificó `resources=0` y
+  ausencia de binarios antes de cerrar R3.
+  al crear la primera carpeta en una instalación actualizada.
+- Los mensajes técnicos de subida también llegan al panel. Pasarlos por el
+  catálogo desde el servicio mantiene el diagnóstico (`UPLOAD_ERR_*`) sin volver
+  a introducir castellano fijo tras ADMIN-I18N.
+- Una conversión nueva no termina al insertar la fila: también necesita una
+  etiqueta humana en el mapa del dashboard y en los cuatro idiomas del panel.
+  `resource_download` se registra después de preparar el archivo para que un 404
+  o token inválido nunca infle las métricas.
+- El idioma original del contenido y los idiomas donde está disponible son
+  conceptos distintos. Ocultar el selector cuando solo hay un idioma activo
+  deja desajustes antiguos sin vía de corrección; la disponibilidad debe ser
+  siempre visible y Studio debe diagnosticar una incompatibilidad, no desaparecer.
+- En Studio hay dos idiomas simultáneos: el del gestor para botones/respuestas y
+  el de la página para cualquier texto que se persista o llegue al visitante.
+  Un placeholder dinámico no debe guardar defaults del panel; debe resolverlos
+  al renderizar con el idioma de la página y reparar defaults históricos.
+- Los embeds dinámicos necesitan jerarquía contextual: un heading interno es
+  útil cuando el bloque está solo, pero redundante dentro de una sección que ya
+  tiene título. Deduplicar por el DOM del mismo `data-pp-section` conserva ambas
+  situaciones y mantiene el nombre accesible mediante `aria-label`.
+- Para una URL pública, `site_languages` no puede contradecir una página que ya
+  existe con ese idioma. Recursos debe aceptar la unión de idiomas activos e
+  idiomas realmente usados por `pages`; después la disponibilidad concreta del
+  recurso sigue siendo la barrera que evita exponer contenido indebido.
+
+---
+
+# [STUDIO-STRUCTURE] Añadir, colocar, mover y eliminar secciones manualmente — PLAN (26/08/2026)
+
+## Background and Motivation (STUDIO-STRUCTURE)
+
+El usuario quiere controlar la estructura de una página Canvas directamente
+desde Studio: escoger exactamente dónde insertar una sección y poder retirarla
+sin escribir una orden al chat ni esperar una respuesta de IA. La operación debe
+ser cómoda para una persona no técnica, reversible y coherente con la edición
+directa que Studio ya ofrece para textos, imágenes y estilos.
+
+Alcance acordado para esta primera versión:
+
+- páginas Canvas editadas desde Studio; el editor clásico de `page_sections` no
+  cambia;
+- operaciones sobre secciones top-level: insertar en un punto explícito, mover
+  arriba/abajo y eliminar;
+- biblioteca inicial de secciones de contenido deterministas más los bloques
+  funcionales que Studio ya conoce (formularios, calendario y recursos);
+- ninguna de estas operaciones llama a IA ni abre el chat;
+- duplicar secciones y ordenar mediante drag & drop quedan fuera de v1. No son
+  necesarios para cubrir la petición y duplicar HTML exige reescribir ids,
+  `for`, fragmentos y relaciones ARIA sin introducir colisiones.
+
+## Key Challenges and Analysis (STUDIO-STRUCTURE)
+
+### Estado real comprobado
+
+- `Partes de esta página` se construye con `renderSectionList()`, pero hoy cada
+  fila solo selecciona y desplaza la preview. No hay acciones de estructura.
+- Los endpoints de Formulario, Calendario y Recursos aceptan `section` y llaman
+  a `CanvasService::insertAfterSection()`: insertan después de la selección o al
+  final. La capacidad técnica existe parcialmente, pero la posición no se ve ni
+  permite insertar antes de la primera sección.
+- `POST /admin/canvas/{id}/section` solo reemplaza el HTML de una sección editada;
+  no mueve ni elimina.
+- `CanvasService::save()` y el historial Deshacer/Rehacer ya permiten que cada
+  operación estructural sea una versión reversible. Debe reutilizarse esta vía,
+  no crear un segundo historial.
+- La nota histórica de R6 que describía el bloque como “movible/borrable en el
+  índice” era una expectativa de UX, no una capacidad implementada. Este plan
+  corrige explícitamente esa discrepancia.
+
+### Decisión de UX
+
+La estructura se editará principalmente en la barra lateral, donde ya existe la
+lista numerada y donde funciona igual con ratón, teclado y pantalla táctil:
+
+1. Habrá un punto `+ Añadir aquí` antes de la primera sección, entre cada pareja
+   y al final. En reposo será compacto; en hover/foco/selección mostrará su texto
+   completo. No se dibujarán controles flotantes encima del contenido público.
+2. Al pulsarlo se abrirá un único selector de sección anclado a ese punto. La
+   posición elegida se conservará aunque después se abra un subselector de
+   Formulario, Calendario o Recursos.
+3. La fila activa mostrará acciones pequeñas y etiquetadas: subir, bajar y
+   eliminar. En móvil y teclado serán visibles al enfocar/seleccionar, no
+   dependerán de hover.
+4. Eliminar será inmediato y devolverá foco a una sección vecina. Se mostrará
+   `Sección eliminada · Deshacer`; no habrá modal rutinario porque el historial
+   ya hace la acción recuperable. También se permitirá eliminar la última
+   sección y se mostrará un estado vacío con `Añadir la primera sección`.
+5. Los cambios deterministas informarán en la propia barra lateral y no abrirán
+   el chat. Durante la petición se bloqueará únicamente la operación afectada;
+   un fallo conservará la estructura y mostrará un error inline accionable.
+6. Tras insertar o mover, Studio recargará la preview conservando el scroll,
+   seleccionará la sección resultante y la señalará brevemente. Se respetará
+   `prefers-reduced-motion`.
+
+La guía `design-taste-frontend` lleva a priorizar manipulación directa,
+feedback táctil, estados completos y separación por líneas/espacio sobre añadir
+otra colección de tarjetas o menús permanentes que saturen la barra.
+
+### Biblioteca inicial recomendada
+
+Para que “añadir sección” no dependa de IA, la primera biblioteca será pequeña y
+editable con las capacidades que Studio ya tiene:
+
+- **Texto**: antetítulo opcional, título y párrafo;
+- **Texto + imagen**: composición adaptable con imagen sustituible desde Medios;
+- **Llamada a la acción**: título, texto y botón editable;
+- **Formulario**, **Calendario** y **Recursos**: reutilizan datos reales y sus
+  selectores existentes, solo cambia el punto de inserción.
+
+No se incluyen todavía FAQ, galería o tarjetas repetibles: Studio no ofrece aún
+controles para añadir/quitar elementos internos y una plantilla rígida sería
+frustrante. Podrán añadirse después sobre el mismo catálogo cuando exista ese
+editor interno.
+
+Las tres plantillas básicas tendrán ids únicos, HTML semántico y microcopy
+inicial en el idioma de la página, no en el idioma del panel. Sus estilos serán
+clases externas prefijadas y tokens de marca; no se generará CSS inline ni se
+copiará CSS arbitrario de otras secciones.
+
+### Contrato técnico propuesto
+
+- Añadir un endpoint estructural CSRF/site-scoped para `insert_template`,
+  `move` y `delete`. Recibirá ids opacos y una posición explícita
+  (`before|after`); el servidor resolverá siempre la sección top-level real.
+- Incorporar en `CanvasService` operaciones DOM puras para insertar relativo a
+  un ancla, mover y eliminar. Los límites (subir la primera, bajar la última,
+  ancla inexistente) no podrán corromper ni concatenar HTML silenciosamente.
+- Extender los tres endpoints funcionales existentes para aceptar la misma
+  posición explícita, conservando compatibilidad: una petición antigua sin
+  posición seguirá insertando después de la selección o al final.
+- Cada operación válida se guardará con `CanvasService::save()`, resumen humano,
+  estado de historial y lista actualizada de secciones. El borrado retira solo
+  la colocación de Formulario/Calendario/Recurso, nunca el objeto administrado.
+- No se intentará limpiar CSS antiguo al borrar: los selectores pueden ser
+  compartidos y una limpieza automática sería más peligrosa que el CSS huérfano.
+- Los textos del panel se añadirán a es/en/fr/pt. Los textos iniciales de las
+  plantillas se resolverán con el idioma de página mediante microcopy pública.
+
+## High-level Task Breakdown (STUDIO-STRUCTURE)
+
+### S1 — Contrato DOM estructural con TDD
+
+- Escribir primero pruebas para insertar antes/después/al inicio/al final,
+  eliminar una sección exacta, mover en ambos sentidos y respetar límites.
+- Cubrir ids desconocidos, HTML con embeds/placeholder y conservación byte-lógica
+  del resto de secciones en la medida permitida por DOMDocument.
+- Implementar las operaciones puras en `CanvasService`.
+- **Éxito:** la nueva suite falla antes de implementar y queda verde; ninguna
+  operación inválida modifica el HTML.
+
+### S2 — Endpoint, versionado y seguridad
+
+- Añadir controlador/ruta estructural con CSRF, pertenencia al sitio, validación
+  estricta de acción/posición/template y respuestas JSON diagnósticas.
+- Guardar cada cambio como una sola versión y devolver `history` + `sections`.
+- Adaptar Formulario/Calendario/Recursos a inserción explícita manteniendo el
+  contrato antiguo.
+- **Éxito:** pruebas HTTP verifican autorización, operación, orden final,
+  Deshacer/Rehacer y que eliminar un embed no elimina su entidad real.
+
+### S3 — Lista de partes como editor de estructura
+
+- Añadir puntos de inserción antes/entre/después y controles subir/bajar/eliminar
+  en la fila activa.
+- Implementar loading local, error inline, foco posterior, estado vacío y
+  confirmación reversible con `Deshacer`.
+- Mantener selección, scroll y destello después de recargar la preview.
+- **Éxito:** en escritorio y móvil se puede colocar, mover y borrar sin chat ni
+  IA; teclado permite recorrer y activar todas las acciones.
+
+### S4 — Selector único y plantillas básicas
+
+- Crear el selector por categorías `Contenido` y `Bloques funcionales`.
+- Materializar Texto, Texto + imagen y CTA con ids únicos, HTML semántico,
+  idioma de página y estilos externos basados en tokens de marca.
+- Integrar dentro del mismo flujo los selectores existentes de Formulario,
+  Calendario y Recursos, conservando la posición escogida.
+- **Éxito:** las seis entradas aparecen solo cuando son viables, se insertan en
+  el punto exacto y las básicas pueden editarse inmediatamente con Studio.
+
+### S5 — i18n, accesibilidad y pulido responsive
+
+- Traducir panel/estados/errores en es/en/fr/pt y separar siempre idioma del
+  gestor de idioma del contenido público.
+- Revisar roles, nombres accesibles, foco, contraste, objetivos táctiles,
+  reduced-motion y ausencia de overflow a 390 px.
+- **Éxito:** lint i18n limpio; recorrido completo por teclado; QA visual en
+  escritorio y móvil con panel español sobre página francesa.
+
+### S6 — Regresión, navegador real y entrega
+
+- Ejecutar suites Canvas, Studio, formularios, Booking, Recursos, idiomas,
+  caché e historial; lint PHP/JS/CSS y `git diff --check`.
+- Probar una página temporal: insertar en tres posiciones, editar, mover, borrar,
+  deshacer, rehacer, publicar/preview y repetir en móvil.
+- Empaquetar actualización solo tras limpiar fixtures y confirmar que no incluye
+  datos ni secretos.
+- **Éxito:** suite completa sin regresiones, cero errores de consola y recorrido
+  manual reproducible listo para validación del usuario en producción.
+
+## Project Status Board (STUDIO-STRUCTURE)
+
+- [x] S1 — Contrato DOM estructural con TDD
+- [x] S2 — Endpoint, versionado y seguridad
+- [x] S3 — Lista de partes como editor de estructura
+- [x] S4 — Selector único y plantillas básicas
+- [x] S5 — i18n, accesibilidad y responsive
+- [x] S6 — Regresión, QA real y paquete de actualización
+
+## Executor's Feedback or Assistance Requests (STUDIO-STRUCTURE)
+
+S5 y S6 completadas. El ZIP final listo para subir mediante el modo de
+actualización es `deliverables/promptpress-studio-final-20260826.zip`. No hay
+migración de base de datos.
+
+## Current Status / Progress Tracking (STUDIO-STRUCTURE)
+
+### S1 completada (26/08/2026, Executor)
+
+- Se escribió primero `tests/canvas_structure.php`; el ciclo inicial terminó en
+  error al no existir las nuevas operaciones y pasó a verde tras implementarlas.
+- `CanvasService::insertSectionRelative()` inserta una única `<section>`
+  top-level antes/después de un ancla o en los extremos sin ancla. Rechaza
+  posición, ancla, forma o id duplicado inválidos con `null`; nunca degrada en
+  silencio a insertar al final.
+- `deleteSection()` elimina solo la sección top-level exacta, permite que la
+  página quede vacía y no confunde un `data-pp-section` anidado con una parte.
+- `moveSection()` desplaza un puesto arriba/abajo; los extremos son no-op válidos
+  y dirección/id desconocidos se rechazan.
+- Los tres helpers comparten serialización DOM y preservan labels, contenido y
+  placeholders de Formulario/Recursos. El método histórico
+  `insertAfterSection()` permanece intacto para no alterar aún endpoints vivos.
+- Verificación: nueva suite **20/20 PASS**; `canvas_runtime` **49/49 PASS**;
+  `form_inline_insert` **6/6 PASS**; lint PHP y `git diff --check`, limpios.
+
+### S2 completada (26/08/2026, Executor)
+
+- Se añadió `POST /admin/canvas/{id}/structure`, protegido por sesión admin,
+  scope del sitio y CSRF. Solo acepta `move` (`up|down`) y `delete`; ids
+  obsoletos devuelven conflicto 409 y peticiones inválidas, 422.
+- Cada mutación real guarda una única versión con origen `structure`, devuelve
+  `history`, `sections`, `changed_section` y `focus_section`. Mover en un límite
+  devuelve `changed=false` y no crea versiones vacías.
+- Formulario, Calendario y Recursos comparten ahora
+  `insertAtRequestedPosition()`: aceptan `before|after` explícito y conservan el
+  comportamiento histórico si una UI antigua no manda `position`.
+- Las respuestas de inserción incluyen el id concreto recién creado para que S3
+  pueda seleccionarlo y llevar el foco tras recargar.
+- TDD HTTP real: la suite nueva empezó con 405 y con Formulario insertado en la
+  posición antigua. Tras implementar, **16/16 PASS**: login, CSRF, aislamiento
+  multisitio, orden, una sola versión, undo/redo, no-op, 409/422, inserción antes
+  del ancla y borrado de colocación sin borrar la entidad Formulario.
+- Regresión: `canvas_structure` 20/20, `canvas_runtime` 49/49,
+  `form_inline_insert` 6/6, `booking_embed` y `resources_embed`: ALL PASS.
+  `i18n_lint`: cero claves ausentes y cero castellano literal; lint PHP y
+  `git diff --check`: limpios.
+
+### S3 completada (26/08/2026, Executor)
+
+- `Partes de esta página` permanece visible al abrir el editor contextual. Cada
+  fila seleccionable incorpora acciones accesibles para subir, bajar y eliminar,
+  con estados de límite, carga y selección sin depender exclusivamente de hover.
+- Hay puntos compactos de inserción antes de la primera parte y después de cada
+  parte. La posición elegida queda explícita en el panel y se conserva al abrir
+  Formulario, Calendario o Recursos; una estructura que cambia invalida anclas
+  antiguas para evitar insertar silenciosamente en otro lugar.
+- Mover y eliminar actualizan lista, historial y preview sin abrir el chat. El
+  borrado ofrece `Deshacer`, devuelve el foco a una parte vecina y el feedback
+  se anuncia con una región de estado `aria-live`.
+- Las inserciones funcionales usan ahora la posición escogida, muestran progreso
+  y resultado en la barra lateral y enfocan la sección recién insertada tras la
+  recarga del iframe. Deshacer/Rehacer retiran mensajes estructurales obsoletos.
+- Se añadieron textos del flujo en es/en/fr/pt, estilos responsive/táctiles y
+  respeto de `prefers-reduced-motion`.
+- QA en navegador autenticado: mover y deshacer conservaron el mismo orden en
+  lista e iframe; la selección no saltó al chat; un Formulario se insertó entre
+  dos secciones exactamente en el punto indicado. A 390×844 no hubo overflow y
+  los controles siguieron operables. La página temporal se eliminó al terminar.
+- Verificación automatizada: `canvas_structure_ui` **15/15 PASS**,
+  `canvas_structure_http` **16/16 PASS**, `canvas_structure` **20/20 PASS**,
+  `canvas_runtime` **49/49 PASS**, `form_inline_insert` **6/6 PASS** y suites
+  Booking/Recursos completas. Lint PHP/JS, i18n y `git diff --check`: limpios.
+
+### S4 completada (26/08/2026, Executor)
+
+- Studio presenta un solo botón `Añadir sección`. El menú separa `Contenido`
+  de `Bloques funcionales` y solo pinta Calendario/Recursos cuando existe una
+  opción realmente insertable; Formulario reutiliza entidades y plantillas.
+- Las entradas básicas son Texto, Texto + imagen y Llamada a la acción. Se
+  materializan sin IA mediante una whitelist backend y usan exclusivamente la
+  gramática pública `ppb`/tokens de DesignSystem, sin CSS inline ni CSS nuevo
+  duplicado en cada página.
+- El contenido inicial se resuelve con `LanguageService::forPage()`: una página
+  francesa recibe títulos, cuerpo, CTA, alt y label franceses aunque el gestor
+  esté en castellano. Las claves públicas están completas en los siete idiomas.
+- Texto + imagen incluye un SVG local neutro y reemplazable desde Medios. Las
+  tres plantillas contienen elementos editables de inmediato y ids únicos.
+- El endpoint estructural acepta `insert_template`, valida plantilla/posición,
+  respeta el ancla exacta, crea una sola versión y devuelve foco, historial y
+  lista de partes. Una plantilla desconocida no modifica el Canvas.
+- QA real autenticada: `Texto + imagen` se insertó entre `Accueil` y
+  `Conclusion`, apareció como `Texte et image`, mostró microcopy francés y su
+  imagen abrió directamente el editor. El selector conservó después
+  `Añadir al final` al abrir ocho opciones de Formulario. Se eliminó la página
+  temporal al acabar.
+- TDD: `canvas_section_templates` **7/7 PASS**, `canvas_template_http` **6/6
+  PASS** y `canvas_template_ui` **11/11 PASS**. También pasaron las suites S1-S3,
+  Canvas 49/49, Formulario 6/6, Booking, Recursos e idioma. Lint PHP/JS/i18n y
+  `git diff --check`: limpios.
+
+### Paquete provisional generado (26/08/2026, Executor)
+
+- Se creó `deliverables/promptpress-studio-s4-20260826.zip` con el empaquetador
+  oficial. Contiene 1.018 archivos, versión 1.0.0 y tamaño 2,5 MB.
+- El propio empaquetador verificó la huella exigida por el actualizador y la
+  ausencia de `config/config.php` y `config/image_bank.php`. `unzip -t` terminó
+  sin errores. SHA-256:
+  `252b777e22cd33f381ac00710db1e4a8152b1a01e9c24b9b72ade772a0504871`.
+
+### S5 completada (26/08/2026, Executor)
+
+- El selector de secciones usa un grupo accesible, no un menú ARIA: puede
+  contener opciones, subselectores y el campo de origen del Formulario sin
+  anunciar una estructura de menú inválida. Todos los disparadores declaran
+  `aria-controls`; Escape cierra el selector y devuelve el foco a su botón.
+- El foco del botón principal y de cada opción es visible. En dispositivos
+  táctiles las acciones de estructura y los puntos de inserción alcanzan 40 px;
+  las opciones de bloque mantienen 52 px.
+- A menos de 640 px la barra lateral ocupa el ancho útil pero deja 56 px libres
+  abajo; el chat conserva una anchura operable y no queda reducido detrás de la
+  barra. El selector y sus animaciones respetan reduced-motion.
+- Verificación TDD: `canvas_structure_accessibility` **8/8 PASS** junto a
+  `canvas_template_ui` **11/11 PASS**, lint PHP/JS y `git diff --check` limpios.
+
+### S6 completada (26/08/2026, Executor)
+
+- Regresión completa verde: `canvas_section_templates`, `canvas_template_http`,
+  `canvas_template_ui`, `canvas_structure_accessibility`, `canvas_structure_ui`,
+  `canvas_structure_http`, `canvas_structure`, `canvas_runtime`,
+  `form_inline_insert`, `booking_embed`, `resources_embed`, `site_language`,
+  `site_language_chrome` y `page_creation_language`; lint PHP/JS, lint i18n y
+  `git diff --check` también limpios.
+- QA real en una página temporal francesa: se insertaron Texto al inicio, CTA
+  entre secciones y Texto + imagen al final. El orden quedó correcto, el
+  contenido y el alt fueron franceses, la imagen abrió su editor, mover/borrar/
+  deshacer/rehacer funcionaron, la publicación y preview público fueron
+  correctas y el modo móvil se activó sin error. Consola: 0 errores.
+- La página temporal publicada se eliminó al terminar, sin dejar contenido de
+  QA en desarrollo.
+- Se creó `deliverables/promptpress-studio-final-20260826.zip` con el
+  empaquetador oficial: 1.019 archivos, versión 1.0.0, 2,5 MB. `unzip -t` pasó
+  sin errores y la inspección confirma que no incluye configuración sensible ni
+  datos de `storage`. SHA-256:
+  `3245e78cecad1061914014683d3ed28d6968462185dafe5db6602862da85f419`.
+
+## Lessons (STUDIO-STRUCTURE)
+
+- Un helper de edición estructural no debe imitar el fallback permisivo de una
+  inserción antigua: si el usuario eligió una posición exacta y el ancla ya no
+  existe, insertar al final oculta una carrera y produce un resultado distinto
+  al solicitado. El contrato nuevo devuelve `null` y deja decidir al endpoint
+  cómo explicar el conflicto.
+- Una operación de estructura válida puede no cambiar nada (subir la primera o
+  bajar la última). Guardarla como versión haría que Deshacer pareciera roto;
+  el endpoint debe reconocer el no-op y devolver estado sin ensuciar historial.
+- Una lista de estructura persistente no puede vivir dentro del contenedor que
+  se oculta al seleccionar contenido: debe quedar fuera del estado vacío para
+  que las acciones sigan disponibles durante la edición contextual.
+- La posición de inserción es estado de interfaz de primera clase. Debe mostrarse,
+  viajar en la petición y borrarse si cambia la estructura; inferirla desde la
+  última selección produce resultados sorprendentes.
+- Las acciones deterministas de Studio necesitan feedback local y foco predecible,
+  no mensajes en el chat: así mover, borrar o insertar sigue siendo inmediato y
+  reversible sin interrumpir el flujo de edición.
+- El contenido inicial de una plantilla de Studio no es microcopy del panel: en
+  cuanto se guarda forma parte de la web pública. Debe salir de Microcopy con el
+  idioma de la página y no de `__()` con el idioma del gestor.
+- Las plantillas básicas no necesitan una hoja CSS propia si se componen con la
+  gramática pública estable `ppb`. Esto evita acumular reglas por inserción y hace
+  que hereden inmediatamente tipografía, color, espaciado y responsive de marca.
+- Un selector único puede conservar subselectores complejos sin convertirse en
+  una cadena de modales: mantener Formulario/Calendario/Recursos dentro del mismo
+  panel conserva contexto y posición, y las separaciones por líneas reducen la
+  sensación de colección de tarjetas.
+- Un selector que contiene subflujos o campos no es un menú ARIA: `role=group`
+  con nombres y controles explícitos comunica mejor su estructura a lectores de
+  pantalla y evita prometer un patrón de teclado que no existe.
+- Un panel lateral que funciona en escritorio puede dejar el chat inútil en
+  móvil por solapamiento, aunque no haya overflow. El breakpoint debe reservar
+  espacio físico para el dock y limitar explícitamente el ancho de su panel.
+- En QA de controles repetidos, las etiquetas visuales pueden coincidir (por
+  ejemplo, Deshacer en toolbar y en estado). Usar ids y regiones concretas evita
+  comprobar o activar el elemento equivocado.
+
+---
+
+# [ASSISTANT-RICH] Pegar texto enriquecido e imágenes en el IA Assistant — PLAN (26/08/2026)
+
+## Background and Motivation (ASSISTANT-RICH)
+
+Los clientes entregan cambios copiando contenido desde Word, Google Docs, Gmail
+u otras herramientas: títulos, párrafos, listas, enlaces e imágenes aparecen en
+un mismo bloque. El Assistant central solo acepta hoy texto plano de hasta 4.000
+caracteres y un documento PDF/DOCX/TXT cuyo contenido se aplana a texto. La
+petición es poder pegar el bloque completo, dejar que la IA entienda su
+estructura y sus imágenes, proponga dónde aplicarlo y, tras confirmación, actúe
+mediante el flujo de borradores ya existente.
+
+La viabilidad es **alta**. La estimación cualitativa es 8/10: el pipeline de
+planificar, confirmar, editar páginas, versionar y dejar borradores ya existe;
+también existen una biblioteca multimedia segura y soporte de visión en los
+providers OpenAI-compatible. El trabajo nuevo se concentra en ingerir el
+portapapeles, normalizarlo y transportar ese contexto sin perderlo entre el plan
+y la ejecución.
+
+Alcance recomendado para v1:
+
+- pegar párrafos, títulos, listas, negritas/cursivas, citas, enlaces y tablas
+  sencillas desde las fuentes habituales;
+- aceptar imágenes que el navegador entregue como archivo/binario y guardarlas
+  en la biblioteca del sitio;
+- conservar el orden mediante referencias visibles (`Bloque 1`, `Imagen 1`,
+  etc.), no intentar reproducir exactamente la maquetación de Word/Google Docs;
+- mantener el flujo seguro actual: **proponer plan → confirmar → aplicar como
+  borrador**. “Decidir y actuar” no significa publicar automáticamente.
+
+Fuera de v1: fidelidad visual píxel a píxel del documento original, edición
+colaborativa del contenido pegado, OCR de PDFs escaneados y descarga automática
+de cualquier imagen remota encontrada en HTML.
+
+## Key Challenges and Analysis (ASSISTANT-RICH)
+
+### Corrección de objetivo tras ver un correo real (26/08/2026)
+
+Las capturas del correo de ejemplo aclaran que **texto enriquecido no es el
+producto principal**, sino un canal de entrada. El usuario no busca solamente
+que la IA conserve negritas, listas e imágenes al pegarlas: busca delegarle el
+trabajo de leer una petición de cliente larga y desordenada, contrastarla con el
+estado real de PromptPress y devolver un criterio operativo antes de actuar.
+
+El resultado esperado debe separar, como mínimo:
+
+1. **Puedo hacerlo ahora**: cambio soportado y automatizable por el Assistant;
+   explica qué páginas/módulos tocará y queda listo para confirmar.
+2. **La plataforma lo permite, pero el Assistant aún no lo automatiza**: indica
+   desde qué panel puede hacerse o propone una tarea manual concreta.
+3. **Necesito información o archivos**: copy pendiente, precio con interrogante,
+   FAQ no entregada, CGV/CGP mencionado pero ausente, credenciales o decisión de
+   diseño. No inventa ni ejecuta esa parte.
+4. **No está incluido en la plataforma**: funcionalidad que exige desarrollo;
+   explica el alcance sin presentarla falsamente como simple cambio de contenido.
+5. **Requiere revisión sensible**: textos/consentimientos legales, cobros o
+   decisiones que el Assistant puede implementar técnicamente pero no validar
+   jurídicamente por su cuenta.
+
+El email y sus capturas son **material de ejemplo**, no instrucciones para
+modificar el sitio actual. El Assistant futuro tendrá que distinguir igualmente
+entre la orden del operador (“analiza esta petición”) y las instrucciones citadas
+dentro del material del cliente.
+
+Esto exige ampliar la arquitectura más allá de `PLAN_SITE_CHANGES`. El prompt
+actual considera automáticamente no viable todo lo que no sea editar una página
+Canvas existente (`page_id=0`), aunque PromptPress sí tenga Formularios,
+Reservas, Recursos, Commerce, Medios, Diseño, Chrome o creación de páginas en
+otros paneles. Un modelo no debe adivinar las capacidades a partir de nombres.
+
+Se necesita un **registro de capacidades del Assistant** alimentado por el estado
+real del sitio:
+
+- operación disponible en la plataforma;
+- módulo activo/disponible y datos ya configurados;
+- si existe un ejecutor automático o solo una ruta manual del panel;
+- información mínima requerida;
+- riesgos/confirmaciones especiales;
+- límites y resultado que se puede prometer.
+
+El planner clasificará cada petición contra ese registro y devolverá una salida
+tipada, no una opinión libre del modelo. Solo los items con ejecutor registrado
+podrán pasar al job. Así “puedo hacerlo” significa capacidad comprobada y no una
+alucinación.
+
+Las imágenes también cambian de papel. En un correo como el mostrado pueden ser:
+
+- una referencia visual (“quiero una ficha de ebook parecida a esta”);
+- evidencia de un problema actual (“al pulsar Mon parcours no aparece nada”);
+- una captura de estructura (“dos tipos de reserva en un mismo selector”);
+- un activo que debe publicarse realmente.
+
+No todas deben guardarse como fotos de contenido. El ingest debe conservar su
+posición y permitir/inferir el rol; si no es seguro, el plan pregunta antes de
+usar la imagen en la web.
+
+### Estado real comprobado
+
+- `views/admin/assistant/index.php` usa un `<textarea maxlength="4000">`; el
+  navegador descarta formato e imágenes al pegar.
+- `AssistantController::extract()` acepta un único PDF/DOCX/TXT, extrae hasta
+  60.000 caracteres y descarta el archivo. `TextExtractor` devuelve texto plano:
+  no conserva jerarquía, estilos ni imágenes internas del DOCX/PDF.
+- `SiteAssistantPlanner` recorta el documento a 30.000 caracteres para el prompt.
+  El plan y `assistant_job_items.instruction` dependen de que la IA vuelva a
+  copiar el contenido relevante en una instrucción de máximo 4.000 caracteres.
+  Esto sirve para cambios cortos, pero perdería o resumiría un artículo largo.
+- `MediaService` ya valida MIME real, limita cada imagen a 10 MB, reescala y la
+  guarda por `site_id`; `MediaLibraryService` la describe y la ofrece al editor
+  Canvas. No conviene crear un segundo almacenamiento para imágenes del chat.
+- `AIActionRunner` ya transporta `_images` y `OpenAIProvider` las convierte en
+  mensajes multimodales. `OpenRouterProvider` y `MistralProvider` heredan ese
+  camino. `AnthropicProvider` todavía ignora imágenes, y en los proveedores
+  compatibles el modelo concreto puede no tener visión: hace falta una capacidad
+  explícita y un fallback visible, no asumir que todo modelo “ve”.
+- `AIActionRunner` entrega hoy el `input` completo a `AILogger`, que lo serializa
+  como JSON tanto en éxito como en error. Pasar `_images` con base64 por el flujo
+  actual copiaría los binarios y datos del cliente dentro de `ai_logs`. Antes de
+  habilitar visión aquí hay que redactar `_images` globalmente y registrar solo
+  `media_id`, MIME, dimensiones, bytes y hash; no basta con acordarse en este
+  único endpoint.
+- La ejecución del Assistant llama a `CanvasChatService`, que recibe únicamente
+  la instrucción del item. Aunque una imagen recién pegada aparecería entre las
+  primeras de la biblioteca, hoy no existe una referencia inequívoca que obligue
+  a usar **esa** imagen ni un mecanismo que entregue el texto fuente largo al
+  item que lo necesita.
+
+### Qué significa “texto enriquecido” en este producto
+
+No se debe mandar HTML crudo del portapapeles a la IA ni guardarlo para pintar
+después. Word, Gmail y Google Docs añaden estilos, spans, comentarios y URLs
+internas; conservar ese HTML introduciría ruido, XSS y resultados impredecibles.
+
+El contrato correcto es un documento semántico normalizado, por ejemplo:
+
+- bloques con id estable: `heading`, `paragraph`, `list_item`, `quote`,
+  `table_row`, `image`;
+- texto y marcas útiles (`strong`, `em`, enlace saneado), sin estilos ni clases
+  de origen;
+- cada imagen sustituida por una referencia `IMG-1` enlazada a un `media_id`, su
+  ruta interna, descripción y posición entre los bloques;
+- una versión de texto legible con delimitadores de bloque para el prompt y una
+  preview humana antes de enviar.
+
+Así la IA entiende jerarquía y orden sin poder ejecutar HTML del cliente. El
+Canvas sigue pasando por su sanitizer y versionado habituales.
+
+El bloque se delimitará además como **material fuente no confiable**. Frases del
+propio documento como “ignora las instrucciones anteriores” no pueden cambiar el
+rol del planner ni autorizar operaciones; solo la instrucción escrita en el
+composer y la confirmación humana gobiernan el plan.
+
+### Imágenes: límite del navegador que hay que explicar
+
+Hay tres casos distintos al pegar:
+
+1. El portapapeles entrega un `File`/blob (captura, imagen local o ciertas copias
+   desde Word): se puede subir automáticamente con `MediaService` y analizar con
+   visión.
+2. El HTML trae una imagen `data:`: se convierte a blob, se valida y se sube por
+   el mismo camino.
+3. El HTML solo trae una URL remota, `blob:` o `file:` sin binario (frecuente en
+   Gmail/Google Docs): **no** se debe descargar desde el servidor de forma
+   automática. Hacerlo abre riesgos SSRF, privacidad, hotlink y credenciales
+   caducadas. La preview marcará “Imagen no importada” y pedirá arrastrarla o
+   elegirla desde Medios.
+
+Por eso la promesa de producto debe ser “pega texto e imágenes compatibles y te
+diremos qué hemos podido importar”, no “cualquier pegado conservará siempre el
+100 %”. Se necesita una matriz de QA real por navegador y fuente.
+
+### Transporte del contexto sin truncarlo
+
+La IA planificadora no debe reemitir todo el texto dentro del JSON del plan. Se
+le enviarán bloques numerados y responderá, para cada item, con
+`source_block_ids` y `media_ids`. Al confirmar:
+
+- el job guardará una copia normalizada de los bloques y el manifiesto de medios;
+- cada item persistirá solo las referencias que le corresponden;
+- `stepJob()` resolverá esas referencias y añadirá el fragmento fuente exacto a
+  `CanvasChatService::applyInstruction()` en el momento de editar;
+- si el planner no asigna referencias pero el cambio depende del material, el
+  backend lo mantendrá ambiguo en vez de ejecutar una paráfrasis incompleta.
+
+Para la v1 no hace falta un sistema de conversaciones ni una tabla de documentos
+permanentes. El contenido normalizado puede viajar durante la propuesta y quedar
+persistido en `assistant_jobs` solo al confirmar; una migración añadirá el bundle
+fuente al job y las referencias a sus items. `install/schema.sql` debe recibir el
+mismo cambio.
+
+### UX recomendada
+
+- Sustituir visualmente el textarea por un composer `contenteditable` de altura
+  contenida, con placeholder real, pegado, escritura normal y fallback accesible.
+- Tras pegar, mostrar el contenido dentro del mismo composer y una línea de
+  estado: “12 bloques · 3 imágenes importadas · 1 necesita revisión”. No abrir
+  un modal ni convertir cada párrafo en una tarjeta.
+- Las imágenes aparecen como miniaturas compactas en su posición; cada una puede
+  quitarse o reemplazarse desde Medios. Los avisos se muestran inline junto al
+  punto que no pudo importarse.
+- Cubrir estados completos: normalizando, subiendo imágenes, listo, importación
+  parcial, error recuperable y contenido demasiado grande. El botón de plan se
+  bloquea solo mientras haya operaciones pendientes.
+- Permitir “Pegar sin formato” como salida explícita y conservar la subida de
+  PDF/DOCX/TXT actual. El usuario no pierde ninguna capacidad existente.
+- Estilos en hoja externa, nunca inline; foco visible, controles táctiles de al
+  menos 40 px, navegación completa por teclado y layout sin overflow móvil.
+
+## High-level Task Breakdown (ASSISTANT-RICH)
+
+### AR0 — Contrato de producto y compatibilidad, sin implementar
+
+- Confirmar el alcance v1 anterior y fijar límites iniciales: 60.000 caracteres,
+  hasta 8 imágenes almacenadas, 10 MB por imagen y formatos JPEG/PNG/WebP/GIF;
+  el servidor aplicará siempre el menor límite efectivo de PHP. Una llamada de
+  visión enviará como máximo 4 imágenes JPEG/PNG/WebP reducidas a 1.600 px,
+  reutilizando el límite que ya está probado en páginas de referencia.
+- Antes de desarrollar, pedir al usuario que etiquete `@web` y consultar la
+  documentación vigente de Clipboard API/contenteditable y de entrada de imagen
+  de los proveedores/modelos admitidos. Documentar resultados por API en
+  `cursor/clipboard-api.md` y `cursor/ai-vision-api.md`.
+- Preparar una matriz manual Chrome/Safari con Google Docs, Word, Gmail, Notion,
+  HTML web, captura y archivo local, anotando qué fuente entrega binario y cuál
+  solo URL.
+- **Éxito:** contrato y mensajes de limitación aprobados; matriz mínima reproducible
+  y ninguna promesa de compatibilidad basada en suposición.
+
+### AR0b — Taxonomía de decisión y registro de capacidades
+
+- Inventariar operaciones reales de Páginas/Canvas, Diseño/Chrome, Formularios,
+  Reservas, Recursos, Commerce, Medios y legales; para cada una marcar
+  `automatizable`, `manual_en_plataforma`, `requiere_datos` o
+  `requiere_desarrollo`.
+- Definir la salida del analista con las cinco categorías anteriores, evidencia
+  de la decisión, dependencias, preguntas y siguiente acción sugerida.
+- Añadir handlers solo para operaciones que ya tengan un camino seguro y
+  reversible. Una capacidad sin handler nunca se presenta como autoejecutable.
+- Usar el correo de ejemplo como fixture de aceptación, sin convertir sus
+  instrucciones en cambios reales.
+- **Éxito:** el fixture produce un desglose útil: páginas/contenido ejecutable,
+  datos y adjuntos ausentes, módulos o acciones manuales, desarrollo nuevo y
+  asuntos legales; ninguna categoría depende de que el modelo “recuerde” qué
+  incluye PromptPress.
+
+### AR1 — Normalizador semántico con TDD
+
+- Escribir primero fixtures de HTML realista/sucio y pruebas para jerarquía,
+  listas, enlaces, tablas, orden de imágenes, límites y eliminación de
+  script/style/event handlers/clases de origen.
+- Implementar un normalizador server-side autoritativo que produzca bloques con
+  ids estables y texto para prompt. El cliente puede limpiar para la preview,
+  pero el backend no confiará en esa limpieza.
+- Definir truncado por bloques completos; nunca cortar en mitad de un enlace,
+  carácter multibyte o referencia de imagen.
+- **Éxito:** los fixtures de Word/Docs/Gmail producen el mismo contrato semántico,
+  el payload malicioso no sobrevive y el texto plano actual sigue funcionando.
+
+### AR2 — Composer enriquecido y captura de portapapeles
+
+- Añadir el composer accesible sin librería pesada: escritura, pegado, “pegar sin
+  formato”, preview ordenada y restauración del textarea como fallback.
+- Interceptar `ClipboardEvent`: mapear HTML/texto y blobs a placeholders estables;
+  convertir solo `data:` válidos y detectar URLs/`blob:`/`file:` no resolubles.
+- Implementar estados inline de progreso/error/importación parcial, eliminar o
+  reemplazar imagen y mantener el adjunto documental existente.
+- **Éxito:** teclado y móvil permiten completar el flujo; pegar contenido mixto
+  no bloquea la página y el usuario ve exactamente qué se importará.
+
+### AR3 — Ingesta de imágenes reutilizando Medios
+
+- Subir cada blob por el camino validado de `MediaService`, con CSRF, scope del
+  sitio, nombres seguros, tamaño/MIME real y respuesta JSON diagnóstica.
+- Asociar cada placeholder a `media_id` y ruta interna; describir la imagen por
+  el mecanismo existente cuando el modelo activo tenga visión.
+- No hacer fetch server-side de URLs arbitrarias. Ofrecer reemplazo desde la
+  biblioteca y conservar una advertencia bloqueante si una instrucción exige una
+  imagen que no llegó a importarse.
+- **Éxito:** una imagen pegada aparece en Medios y queda referenciada en su lugar;
+  una URL privada/remota no provoca ninguna petición del servidor.
+
+### AR4 — Planner multimodal y gate de capacidades
+
+- Extender `PLAN_SITE_CHANGES` para recibir los bloques, manifiesto de imágenes y,
+  cuando proceda, `_images`; ampliar su salida con `source_block_ids` y
+  `media_ids`, validados contra el bundle real.
+- Redactar `_images` en `AILogger` para todas las acciones IA antes de conectar
+  este flujo: conservar metadatos diagnósticos, nunca base64 ni binarios.
+- Incorporar una capacidad explícita `supportsVision` por provider/modelo. Añadir
+  soporte Anthropic solo después de revisar su documentación vigente; para un
+  modelo sin visión, usar texto/alt si existe y mostrar la degradación al usuario.
+- Mantener el presupuesto: el planner recibe como máximo las imágenes pegadas
+  necesarias, no toda la biblioteca ni binarios duplicados en logs.
+- **Éxito:** el mismo caso genera un plan coherente con un modelo visual; con uno
+  no visual nunca se afirma haber inspeccionado la imagen y el plan solicita la
+  aclaración necesaria.
+
+### AR5 — Persistencia y ejecución fiel del material confirmado
+
+- Migrar `assistant_jobs` para guardar el bundle fuente normalizado y
+  `assistant_job_items` para guardar referencias de bloques/medios; reflejar el
+  esquema idéntico en instalaciones nuevas.
+- Revalidar referencias, site ownership y límites en `createJob()`. En cada step,
+  resolver solo el fragmento citado y adjuntarlo a la instrucción de edición con
+  rutas exactas de las imágenes pegadas.
+- Evitar que la IA resuma o invente el texto marcado como literal; si el fragmento
+  no cabe, dividir el item por secciones/bloques antes de ejecutar.
+- **Éxito:** un pegado largo puede distribuirse entre dos páginas sin que el plan
+  tenga que copiarlo; ambas versiones draft conservan literalmente los bloques y
+  usan solo media del mismo sitio.
+
+### AR6 — Regresión y QA end-to-end
+
+- Suites para normalización, uploads, aislamiento multisitio, provider con/sin
+  visión, planner, persistencia, ejecución, sanitizado Canvas y límites de coste.
+- QA real: pegar desde cada fuente de AR0, revisar plan, aplicar en al menos dos
+  páginas, comprobar imágenes/textos, deshacer y confirmar que nada se publica.
+- Verificar errores de consola, accesibilidad por teclado, 390 px, archivos
+  temporales, logs sin binarios/base64 y ausencia de secretos/datos de cliente en
+  paquetes de actualización.
+- **Éxito:** recorrido reproducible verde; fallos parciales se explican y dejan el
+  sitio y el job en un estado recuperable.
+
+## Project Status Board (ASSISTANT-RICH)
+
+- [x] AR0 — Contrato, límites y matriz aprobados por el usuario (26/08/2026)
+- [x] AR0b — Taxonomía + registro aprobados por el usuario (26/08/2026)
+- [x] AR1 — Normalizador semántico aprobado por el usuario (26/08/2026)
+- [x] AR2 — Composer enriquecido aprobado por el usuario (26/08/2026)
+- [ ] AR3 — Implementado y probado; pendiente validación del usuario en producción
+- [ ] AR4 — Planner multimodal + capacidades por provider/modelo
+- [ ] AR5 — Persistencia de referencias + ejecución fiel
+- [ ] AR6 — Regresión y QA real
+
+## Current Status / Progress Tracking (ASSISTANT-RICH · 26/08/2026, Planner)
+
+- Auditoría de arquitectura completada; no se modificó código ni base de datos.
+- Viabilidad alta confirmada por capacidades existentes: Assistant por fases,
+  jobs con borradores/versionado, `MediaService`, biblioteca para IA y transporte
+  `_images` en providers OpenAI-compatible.
+- El principal riesgo no es la visión, sino perder el texto largo entre planner
+  y executor. El plan lo resuelve con bloques referenciables persistidos al
+  confirmar, en lugar de pedir al modelo que copie todo dentro de su JSON.
+- Requisito corregido con el correo real: la meta principal es pensar/triage por
+  el operador. El rich text pasa a ser infraestructura de ingesta; la pieza de
+  producto central es un registro verificable de capacidades y una clasificación
+  operativa antes de ejecutar.
+- Siguiente decisión del usuario: aprobar AR0. Antes de empezar Executor, debe
+  etiquetar `@web` para verificar APIs y modelos vigentes como exige el proyecto.
+
+### AR0 iniciada (26/08/2026, Executor)
+
+- El usuario autoriza el paso a Executor y la consulta directa de documentación
+  web vigente.
+- Alcance de este hito: contrato de ingesta, límites iniciales, documentación
+  oficial por API y matriz de compatibilidad. No se implementará todavía el
+  composer, el normalizador, la ingesta de imágenes ni el registro de
+  capacidades (AR0b).
+
+### AR0 preparada para revisión (26/08/2026, Executor)
+
+- Contrato de entrada, estados, límites, seguridad y matriz mínima documentados
+  en `cursor/assistant-ingestion-contract.md`.
+- Documentación oficial consultada y decisiones registradas por API en
+  `cursor/clipboard-api.md`, `cursor/openai-vision-api.md`,
+  `cursor/anthropic-vision-api.md`, `cursor/openrouter-vision-api.md` y
+  `cursor/mistral-vision-api.md`.
+- Se fija una importación honesta: hasta 60.000 caracteres y 8 imágenes
+  almacenadas; hasta 4 imágenes normalizadas a 1.600 px por llamada visual. Las
+  referencias remotas/privadas sin bytes no se descargan y quedan visibles como
+  pendientes.
+- OpenAI/OpenRouter/Mistral tienen un formato de imagen aprovechable en la base
+  actual, pero la capacidad depende del modelo. Anthropic requiere implementar
+  la traducción de imágenes antes de poder presentarse como visual.
+- No se modificó código ni base de datos. AR0 queda sin marcar hasta que el
+  usuario revise y apruebe el contrato; conforme a la secuencia acordada, no se
+  inicia AR0b en este hito.
+
+### AR0 aprobada / AR0b iniciada (26/08/2026, Executor)
+
+- El usuario confirmó que se puede continuar y que el modelo operativo es
+  `google/gemini-3.7-flash` servido mediante OpenRouter.
+- La documentación vigente de OpenRouter confirma entrada multimodal, salida
+  estructurada y tool calling para ese modelo. El provider/modelo no bloquea el
+  objetivo; la ingesta multimodal seguirá tratándose en AR2–AR4.
+- Alcance de este hito: implementar y probar la taxonomía de decisiones, un
+  registro verificable de capacidades y la respuesta del planner basada en ese
+  registro. No se inicia todavía el composer ni la subida de imágenes.
+
+### AR0b preparada para revisión (26/08/2026, Executor)
+
+- Nuevo `AssistantCapabilityRegistry`: inventario verificable de Páginas Canvas,
+  creación de páginas, Entradas, Header/pie, Diseño, Formularios, Medios, SEO,
+  legales, Analítica, Reservas, Recursos, Commerce y desarrollo no registrado.
+  Incluye estado real del módulo, contador de elementos configurados, panel,
+  datos requeridos, sensibilidad y handler. Solo `pages.canvas.edit` declara
+  `mode=automatic` + `handler=canvas_edit`.
+- El planner recibe el registro y devuelve `capability_id`, una de las cinco
+  categorías operativas, evidencia, siguiente acción y datos ausentes. El
+  backend impone la categoría real aunque el modelo afirme que puede ejecutar
+  más; ids inventados caen a `custom.development`.
+- `SiteAssistantJobs` repite el gate al confirmar: un JSON manipulado solo entra
+  al job si conserva `pages.canvas.edit + automatable_now + aplicar`. Las
+  categorías `needs_input` y `sensitive_review` ya no pueden promocionarse con
+  un simple “sí”; no se inventan datos ni se elude la revisión.
+- La interfaz pinta las cinco decisiones con etiquetas humanas, datos faltantes
+  y siguiente paso. Traducciones ES/EN/FR/PT completas.
+- Compatibilidad Gemini: se normaliza únicamente el wrapper inequívoco `[{plan}]`
+  que el modelo devolvió pese a pedir `json_object`; listas múltiples siguen
+  rechazándose.
+- Pruebas: `site_assistant_capabilities.php` 17/17, planificación de secciones
+  10/10, `admin_i18n.php` completo, `modules_registry.php` completo, lints PHP,
+  `node --check` y `git diff --check`, todo verde.
+- Verificación real del registro sobre site 1: 14 capacidades; 51 páginas, 3
+  formularios, 35 medios, 4 legales, 4 servicios de reserva, 0 recursos y 1
+  producto; módulos Analytics/Booking/Resources/Commerce activos.
+- Prueba real de planificación y navegador, sin aplicar cambios: las cinco
+  categorías aparecieron una vez, solo había botón “Aplicar 1 cambio”, no había
+  promoción de información ausente y la consola quedó sin errores. Se crearon
+  únicamente logs IA con una petición sintética.
+- Hallazgo de configuración: las llamadas reales usaron
+  `google/gemini-3-flash-preview`, no `google/gemini-3.7-flash`. No se cambió el
+  modelo automáticamente.
+
+### Configuración Gemini corregida (26/08/2026, Executor)
+
+- Por petición expresa del usuario, el setting `ai_model` del site 1 cambió de
+  `google/gemini-3-flash-preview` a `google/gemini-3.7-flash`. Provider y API key
+  no se tocaron; `ai_model_light` permanece en
+  `google/gemini-3.1-flash-lite-preview`.
+- También se sustituyó el modelo 3 Preview en Ajustes, comprobador del provider,
+  presets/defaults de Onboarding, vista y estimación de coste. Nuevas
+  instalaciones ya recomiendan 3.7 en vez de volver al id antiguo.
+- Prueba TDD `gemini_37_configuration.php`: 7/7. Llamada real a OpenRouter:
+  provider `openrouter`, modelo devuelto `google/gemini-3.7-flash`, contenido
+  `OK` (6 tokens de entrada, 78 de salida).
+- El ping anterior de 5 tokens resultó insuficiente porque el modelo consumió
+  tokens de razonamiento y devolvió contenido vacío. El test de conexión del
+  panel usa ahora 128 tokens y timeout de 30 segundos para evitar un falso
+  negativo.
+
+### AR1 iniciada (26/08/2026, Executor)
+
+- El usuario valida el resultado anterior y autoriza continuar.
+- Alcance exclusivo: fixtures y pruebas de HTML sucio, normalización
+  server-side a bloques semánticos, ids estables, marcas útiles, imágenes como
+  referencias, límites y eliminación de contenido activo. El composer y los
+  uploads permanecen fuera de este hito.
+
+### AR1 preparada para revisión (26/08/2026, Executor)
+
+- Nuevo `AssistantContentNormalizer`: convierte HTML de portapapeles en una
+  representación inerte con bloques `heading`, `paragraph`, `list_item`,
+  `quote`, `table_row` e `image`; conserva orden, profundidad de listas, celdas,
+  marcas `strong`/`em`/enlaces HTTP(S), ids estables y referencias `IMG-*`.
+- El backend elimina contenido activo completo (`script`, `style`, formularios,
+  iframes, SVG, embeds y similares), descarta destinos de enlace no HTTP(S) y
+  nunca devuelve HTML de origen. Las imágenes `data:` válidas quedan capturadas;
+  URLs remotas y referencias `blob:`/`file:` quedan explícitamente como
+  `needs_review`, sin descargarlas.
+- Los límites se aplican por bloques completos (60.000 caracteres, 8 imágenes y
+  10 MB por imagen por defecto), con `warnings`, estado `partial` y texto de
+  prompt referenciable; el fallback de texto plano mantiene párrafos y listas.
+- Fixtures TDD añadidos para Gmail, Word y Google Docs. Test específico
+  `assistant_content_normalizer.php`: 15/15 PASS, incluido HTML malicioso,
+  Unicode, orden texto-imagen-texto, tablas, links inseguros y truncado.
+- Regresión verde: `site_assistant_capabilities.php` 17/17,
+  `site_assistant_section_planning.php` 10/10, catálogo i18n completo, lints PHP
+  y `git diff --check`. No hay cambio visual ni de base de datos en este hito.
+
+### AR1 aprobada / AR2 preparada para revisión (26/08/2026, Executor)
+
+- El usuario aprobó AR1 y autorizó continuar. AR2 añade un editor enriquecido
+  progresivo sobre el textarea existente, sin librerías: escritura, pegado HTML,
+  modo «Pegar sin formato», Cmd/Ctrl+Enter, labels ARIA, estado `aria-live`,
+  límites y fallback legible.
+- El cliente reconstruye una preview permitiendo solo estructura útil: títulos,
+  párrafos, listas, tablas, énfasis y enlaces HTTP(S). Elimina estilos/clases,
+  handlers y contenido activo. El backend no confía en ella: `plan()` vuelve a
+  pasar `rich_html` por `AssistantContentNormalizer` y entrega al planner su
+  contrato referenciable, con un límite global de 60.000 caracteres.
+- Las imágenes `data:`/blobs disponibles se previsualizan mediante object URL y
+  conservan su posición; URLs remotas, `blob:` o `file:` sin bytes aparecen como
+  referencias a revisar. Al serializar, todas usan `data-ppa-source` inerte:
+  nunca se crea un `<img src=URL-remota>` que pueda descargar datos por accidente.
+  En AR2 los binarios aún no se envían ni se guardan; eso pertenece a AR3.
+- Pruebas: `assistant_rich_composer.js` 6/6 y normalizador 16/16; regresión de
+  capacidades 17/17, secciones 10/10, i18n completo, lints PHP/JS y diff verde.
+- QA real en navegador: HTML mixto con título, strong, enlace, lista anidada,
+  tabla, imagen remota y script; estructura correcta, 0 nodos activos y 0
+  imágenes remotas cargadas. «Pegar sin formato» elimina marcas pero mantiene
+  listas. PNG pegado queda exactamente entre «Antes» y «Después». A 390×844 no
+  hay scroll horizontal, el botón ocupa el ancho útil y la consola queda limpia.
+
+### AR2 aprobada / AR3 preparada para revisión (26/08/2026, Executor)
+
+- El usuario aprobó avanzar y hará la validación manual directamente en
+  producción. No se desplegó ni se modificó producción desde este entorno.
+- Cada blob/data-image pegado se sube automáticamente por el endpoint existente
+  `/admin/media`: CSRF, sesión/sitio, MIME real, límite de 10 MB, nombre seguro,
+  resize y alta en `media` siguen siendo responsabilidad de `MediaService`. La
+  respuesta JSON ahora incluye también `path` y `mime_type` diagnósticos.
+- El placeholder muestra estados `uploading`, `stored` o `upload_failed`, permite
+  reintentar, quitar o abrir un selector accesible de la biblioteca. URLs
+  remotas, `blob:` y `file:` sin bytes nunca se descargan; bloquean «Proponer
+  plan» hasta ser reemplazadas o eliminadas, con explicación visible.
+- Una imagen almacenada se serializa como `data-ppa-media-id` + ruta interna.
+  Nuevo `AssistantMediaReferences` vuelve a consultar la BD por `site_id`: ignora
+  la ruta declarada por el navegador, rechaza ids ajenos/inexistentes y solo
+  expone al planner `media_id` y path verificados.
+- La descripción visual reutiliza `MediaLibraryService::describeAfterResponse`
+  cuando el pegado no aporta un alt útil; por tanto usa la capacidad visual ya
+  configurada sin bloquear la respuesta de subida en producción.
+- Pruebas: composer 7/7, normalizador 16/16, referencias 4/4, biblioteca 11/11,
+  onboarding photos 28/28, capacidades 17/17, secciones 10/10, i18n completo,
+  lints PHP/JS y diff verde.
+- QA real: PNG pegado entre dos párrafos → fila `media` site 1, MIME PNG real,
+  path interno, fichero existente, placeholder `stored` en la misma posición y
+  botón habilitado. Referencia HTTP/file → 0 cargas remotas, aviso bloqueante y
+  botón deshabilitado; selector con 36 elementos → reemplazo válido y desbloqueo.
+  Cuadrícula revisada en escritorio y a 390 px (2 columnas, sin overflow),
+  consola limpia. Fila y archivo sintéticos eliminados al terminar (0 restos).
+
+## Executor's Feedback or Assistance Requests (ASSISTANT-RICH)
+
+AR3 queda preparado para la prueba del usuario en producción: pegar el correo
+real, esperar a que las imágenes indiquen «guardada en Medios» y reemplazar o
+quitar cualquier referencia privada pendiente. Conforme al flujo de un único
+hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
+
+### Release 1.1.0 solicitada (26/08/2026, Executor)
+
+- El usuario pide versionar primero el estado actual y recibir un ZIP para
+  instalarlo personalmente en producción.
+- El árbol de trabajo contiene una entrega acumulada coherente (Assistant
+  enriquecido, Recursos, reservas, Studio e internacionalización), por lo que
+  se versionará el snapshot completo en lugar de publicar un subconjunto con
+  dependencias ausentes.
+- `PP_VERSION` pasa de `1.0.0` a `1.1.0`. Credenciales, datos runtime de Medios,
+  Documentos y Recursos, logs, cachés y paquetes generados quedan excluidos de
+  Git y del ZIP.
+- Criterio de éxito: pruebas de regresión relevantes verdes, commit sin datos
+  locales ni secretos, push normal a `origin/main`, paquete aceptado por el
+  fingerprint del actualizador y verificado con `unzip -t` + SHA-256.
+
+## Lessons (ASSISTANT-RICH)
+
+- “Aceptar rich text” y “mandar HTML al modelo” no son equivalentes. El valor
+  está en conservar jerarquía y referencias; el HTML de origen es una superficie
+  de ataque y una fuente de ruido.
+- Una imagen visible en el contenido pegado no implica que el navegador entregue
+  sus bytes. Diseñar el flujo alrededor de ese supuesto produciría fallos
+  silenciosos justo en Gmail/Google Docs.
+- En un pipeline planificador→executor, el contenido largo debe viajar por
+  referencias verificables. Hacer que el planner lo repita en cada instrucción
+  introduce truncado, paráfrasis y coste multiplicado por página.
+- Soporte multimodal en el formato HTTP no demuestra que el modelo configurado
+  tenga visión. La capacidad debe comprobarse y reflejarse en la interfaz.
+- La API de Clipboard define tipos intercambiables, pero no obliga a Gmail,
+  Docs, Word o Notion a entregar los bytes de cada imagen incrustada. La
+  compatibilidad debe medirse por fuente+navegador y admitir `partial` como un
+  resultado normal, no como un error silencioso.
+- Antes de pasar imágenes por el runner común, la redacción de `_images` en
+  `AILogger` es una condición de seguridad global, no un detalle del endpoint
+  del Assistant.
+- Gemini puede respetar el contenido de un schema pero envolver el objeto único
+  en una lista. Normalizar solo `[objeto_con_items]` preserva robustez sin
+  convertir respuestas múltiples o ambiguas en un plan ejecutable.
+- La confirmación humana no resuelve por sí sola datos ausentes: una categoría
+  `needs_input` no debe tener un atajo que cambie su status a ejecutable sin
+  incorporar primero esos datos y volver a planificar.
+- Un ping con `max_tokens` extremadamente bajo no es una prueba de conexión
+  fiable para modelos con razonamiento: la llamada puede ser correcta y agotar
+  el presupuesto antes de emitir texto. El smoke test debe reservar salida
+  suficiente y verificar el id de modelo devuelto.
+- Para conservar el orden real de una imagen inline no basta con añadirla al
+  final del párrafo: el normalizador debe cerrar el bloque textual, emitir la
+  referencia de imagen y abrir un nuevo bloque con el texto posterior.
+- El texto alternativo de una imagen es metadato útil para IA y accesibilidad,
+  pero no debe contarse como un párrafo independiente al validar contenido.
+- Un fallback no es útil si solo existe: al derivar texto desde un DOM rico hay
+  que introducir separadores explícitos entre listas anidadas, filas y celdas;
+  `textContent` concatena esos elementos aunque la preview visual parezca bien.
+- Serializar una referencia remota como `<img src>` puede iniciar una descarga
+  incluso fuera de la preview. Usar `data-ppa-source` hasta el normalizador
+  server-side conserva la referencia sin producir una petición del navegador.
+- Un botón deshabilitado no explica por qué no se puede continuar. Cuando una
+  imagen queda pendiente, el estado global debe sustituir el mensaje genérico de
+  importación por una advertencia accionable (reemplazar, eliminar o reintentar).
+- Las grids dentro de un diálogo flex necesitan `min-height:0`,
+  `grid-auto-rows:max-content` y `align-content:start`; sin ello muchas filas se
+  comprimen para caber y ocultan las etiquetas aunque exista `overflow-y:auto`.
+- Nunca aceptar la ruta interna enviada junto al `media_id`: resolver siempre la
+  fila por `id + site_id` y reconstruir el path desde la BD evita tanto cruces
+  multisitio como sustitución de ruta manipulada.

@@ -23,6 +23,9 @@ final class PalettePresets
     /**
      * @return array<string,array<string,string>>
      */
+    // i18n-ignore-start: `label` y `description` no se pintan en el panel —
+    // solo describen la paleta a la IA (ver BrandPaletteService). Si algún día
+    // se enseñan, hay que traducirlas en el punto donde se pinten.
     public static function all(): array
     {
         return [
@@ -124,6 +127,8 @@ final class PalettePresets
             ],
         ];
     }
+
+    // i18n-ignore-end
 
     public static function get(string $slug): ?array
     {

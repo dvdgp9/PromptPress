@@ -71,7 +71,8 @@ final class ChromeService
                 'contact' => ['address' => '', 'phone' => '', 'email' => '', 'hours' => ''],
                 'social'  => [], // [{network,url}]
                 'newsletter' => ['enabled' => false, 'form_ref' => '', 'heading' => '', 'cta_label' => ''],
-                'copyright'  => '', // vacío => "© AÑO · Nombre"
+                // vacío se rellena con «© AÑO · Nombre»
+            'copyright'  => '',
             ],
             // I18N-FULL T5.1 — capa de TEXTO por idioma. Solo copy: el layout,
             // los colores y los bordes son compartidos a propósito (si se

@@ -82,7 +82,7 @@ final class SectionRenderer
     }
 
     /** Renderiza una sola sección. */
-    public static function render(array $section): string
+    public static function render(array $section, array $options = []): string
     {
         $type = (string) ($section['section_type'] ?? 'generic');
         $id   = (int) ($section['id'] ?? 0);
@@ -97,7 +97,7 @@ final class SectionRenderer
             'benefits'     => self::renderBenefits($content, $variant),
             'faq'          => self::renderFaq($content, $variant),
             'cta'          => self::renderCta($content, $variant),
-            'form'         => self::renderForm($content, $id, $variant),
+            'form'         => self::renderForm($content, $id, $variant, (array) ($options['form_hidden'] ?? [])),
             'testimonials' => self::renderTestimonials($content, $variant),
             'stats'        => self::renderStats($content, $variant),
             'gallery'      => self::renderGallery($content, $variant),
@@ -106,6 +106,7 @@ final class SectionRenderer
             'pricing'      => self::renderPricing($content, $variant),
             'article_body' => self::renderArticleBody($content, $variant),
             'posts_listing'=> self::renderPostsListing($content, $variant),
+            'booking'      => self::renderBooking($content, $variant),
             'custom_block' => self::renderCustomBlock($content, $section),
             default        => self::renderGeneric($content),
         };
@@ -337,8 +338,13 @@ final class SectionRenderer
         return $html;
     }
 
-    private static function renderForm(array $c, int $sectionId, string $variant): string
+    private static function renderForm(array $c, int $sectionId, string $variant, array $extraHidden = []): string
     {
+        // FORMS-LANG T6 — un formulario es UNA entidad compartida por todas las
+        // páginas que lo embeben; sus textos se resuelven al idioma de la que
+        // se está pintando. Sin traducción para ese idioma, manda el texto base.
+        $c = \App\Services\FormI18n::resolve($c, self::$lang);
+
         $heading = self::str($c, 'heading');
         $desc    = self::str($c, 'description');
         $submit  = self::str($c, 'submit_text', Microcopy::t('form.submit', self::$lang));
@@ -394,7 +400,16 @@ final class SectionRenderer
         $html .= '<form class="pp-form__form" data-pp-form-id="' . $sectionId . '" method="post" action="' . self::e(base_url('forms/' . $sectionId)) . '#sec-' . $sectionId . '"' . ($hasFile ? ' enctype="multipart/form-data"' : '') . '>';
         $html .= '<input type="hidden" name="_csrf" value="' . self::e(CSRF::token()) . '">';
         $html .= '<input type="hidden" name="_return" value="' . self::e(Request::path()) . '">';
+        // FORMS-LANG T2 — idioma con el que se pintó el formulario. Sin esto,
+        // el visitante francés recibe los mensajes de error y de éxito en el
+        // idioma principal del sitio: el POST no sabe de qué página viene.
+        $html .= '<input type="hidden" name="_lang" value="' . self::e(self::$lang) . '">';
         $html .= '<input type="hidden" name="_pp_ts" value="' . self::e(\App\Services\Security\BotGuard::issueTimestamp()) . '">';
+        foreach ($extraHidden as $name => $value) {
+            $name = (string) $name;
+            if (preg_match('/^_[a-z0-9_]{1,60}$/', $name) !== 1 || !is_scalar($value)) continue;
+            $html .= '<input type="hidden" name="' . self::e($name) . '" value="' . self::e((string) $value) . '">';
+        }
         $html .= '<div class="pp-form__hp" aria-hidden="true"><label>Web<input type="text" name="company_url" tabindex="-1" autocomplete="off"></label></div>';
         foreach ($validFields as $idx => $f) {
             if (!is_array($f)) continue;
@@ -417,7 +432,7 @@ final class SectionRenderer
             if ($ftype === 'textarea') {
                 $html .= '<textarea class="pp-form__control" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" rows="5" placeholder="' . self::e($placeholder) . '"' . $req . '></textarea>';
             } elseif ($ftype === 'select') {
-                $firstOption = $placeholder !== '' ? $placeholder : 'Selecciona una opción';
+                $firstOption = $placeholder !== '' ? $placeholder : Microcopy::t('form.select_placeholder', self::$lang);
                 $html .= '<select class="pp-form__control" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '"' . $req . '><option value="">' . self::e($firstOption) . '</option>';
                 foreach ($options as $option) {
                     $html .= '<option value="' . self::e($option) . '">' . self::e($option) . '</option>';
@@ -428,13 +443,14 @@ final class SectionRenderer
             } elseif ($ftype === 'file') {
                 $accept = \App\Services\FormSubmissionService::acceptAttributeForField($f);
                 $maxMb = \App\Services\FormSubmissionService::maxMbForField($f);
-                $help = $placeholder !== '' ? $placeholder : \App\Services\FormSubmissionService::fileHelpForField($f);
+                $fileHelp = \App\Services\FormSubmissionService::fileHelpForField($f, self::$lang);
+                $help = $placeholder !== '' ? $placeholder : $fileHelp;
                 $html .= '<label class="pp-form__file" data-pp-file-field data-max-bytes="' . (int) ($maxMb * 1024 * 1024) . '">'
                       . '<input id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" type="file" accept="' . self::e($accept) . '"' . $req . '>'
-                      . '<span class="pp-form__file-button">Seleccionar archivo</span>'
-                      . '<span class="pp-form__file-name" data-pp-file-name>Ningún archivo seleccionado</span>'
+                      . '<span class="pp-form__file-button">' . self::e(Microcopy::t('form.file_button', self::$lang)) . '</span>'
+                      . '<span class="pp-form__file-name" data-pp-file-name>' . self::e(Microcopy::t('form.file_empty', self::$lang)) . '</span>'
                       . '</label>'
-                      . '<small class="pp-form__help" data-pp-file-help="' . self::e(\App\Services\FormSubmissionService::fileHelpForField($f)) . '">' . self::e($help) . '</small>';
+                      . '<small class="pp-form__help" data-pp-file-help="' . self::e($fileHelp) . '">' . self::e($help) . '</small>';
             } else {
                 $inputType = in_array($ftype, ['email', 'tel', 'text', 'number', 'date', 'url'], true) ? $ftype : 'text';
                 $html .= '<input class="pp-form__control" type="' . $inputType . '" id="' . self::e($id) . '" name="' . self::e($nameSafe) . '" placeholder="' . self::e($placeholder) . '"' . $req . '>';
@@ -447,7 +463,7 @@ final class SectionRenderer
             $html .= '<div class="pp-form__row pp-form__row--consent">';
             $html .= '<label class="pp-form__check">'
                    . '<input type="checkbox" name="_marketing_consent" value="1">'
-                   . ' Acepto recibir comunicaciones comerciales y novedades por email. Puedo darme de baja en cualquier momento.'
+                   . ' ' . self::e(Microcopy::t('form.marketing_consent', self::$lang))
                    . '</label>';
             $html .= '</div>';
         }
@@ -470,25 +486,47 @@ final class SectionRenderer
     private static function renderFormPrivacyNotice(array $c): string
     {
         $basisKey = self::str($c, 'lawful_basis', 'legitimate_interest');
-        $basis = match ($basisKey) {
-            'consent'  => 'tras tu consentimiento explícito',
-            'contract' => 'para gestionar tu solicitud o servicio contratado',
-            default    => 'en base a nuestro interés legítimo de atender consultas',
-        };
-        $retention = trim(self::str($c, 'retention_period', '12 meses tras la última comunicación'));
+        $basis = Microcopy::t(match ($basisKey) {
+            'consent'  => 'form.privacy_basis_consent',
+            'contract' => 'form.privacy_basis_contract',
+            default    => 'form.privacy_basis_legitimate',
+        }, self::$lang);
+
+        $retention = self::retentionText(trim(self::str($c, 'retention_period')));
         $policyUrl = self::privacyPolicyUrl();
 
-        $text = 'Tus datos se tratarán ' . $basis;
-        if ($retention !== '') $text .= ' y se conservarán durante ' . mb_strtolower($retention);
-        $text .= '.';
+        $text = $retention !== ''
+            ? Microcopy::t('form.privacy_text_retention', self::$lang, [
+                'basis' => $basis, 'retention' => mb_strtolower($retention),
+              ])
+            : Microcopy::t('form.privacy_text', self::$lang, ['basis' => $basis]);
 
         $html = '<p class="pp-form__privacy">';
         $html .= self::e($text);
         if ($policyUrl !== '') {
-            $html .= ' <a href="' . self::e($policyUrl) . '">Más información en nuestra política de privacidad</a>.';
+            $html .= ' <a href="' . self::e($policyUrl) . '">'
+                   . self::e(Microcopy::t('form.privacy_link', self::$lang)) . '</a>.';
         }
         $html .= '</p>';
         return $html;
+    }
+
+    /**
+     * FORMS-LANG T2 — periodo de conservación en el idioma de render.
+     *
+     * Si lo que hay guardado es uno de los defaults castellanos históricos
+     * (nadie los eligió: los puso la plantilla), se traduce. Si el usuario
+     * escribió el suyo, manda el suyo aunque esté en otro idioma: es una
+     * declaración legal y no la reescribimos por nuestra cuenta.
+     */
+    private static function retentionText(string $stored): string
+    {
+        foreach (['form.retention_default', 'form.retention_job'] as $key) {
+            if ($stored === '' || $stored === Microcopy::t($key, \App\Services\LanguageService::DEFAULT)) {
+                return Microcopy::t($key, self::$lang);
+            }
+        }
+        return $stored;
     }
 
     /**
@@ -906,6 +944,52 @@ final class SectionRenderer
      * Pinta cards según variante. Si el sitio no tiene entradas, no renderiza
      * nada (mejor que un empty state confuso para el visitante).
      */
+    /**
+     * MODULOS M2 — Calendario de reservas en una página del sitio.
+     *
+     * El calendario en sí lo pinta el widget en el navegador (mismo código que
+     * el embed externo, ya probado); aquí solo se emite el contenedor y, si el
+     * gestor los ha puesto, el título y el texto de apoyo. Sin módulo, sin
+     * servicios activos o con el servicio elegido desactivado,
+     * `BookingEmbedRenderer::render()` devuelve vacío y la sección no se pinta:
+     * mejor un hueco que no existe que un calendario roto.
+     */
+    private static function renderBooking(array $c, string $variant): string
+    {
+        $embed = \App\Modules\Booking\BookingEmbedRenderer::render(self::$siteId, [
+            'service_id' => self::str($c, 'service_id'),
+            'days'       => self::str($c, 'days', (string) \App\Modules\Booking\BookingEmbedRenderer::DEFAULT_DAYS),
+            // El calendario habla el idioma de la página, no el del servicio.
+            'lang'       => self::$lang,
+        ]);
+        if ($embed === '') {
+            return '';
+        }
+
+        $heading = self::str($c, 'heading');
+        $desc    = self::str($c, 'description');
+        // La variante con texto necesita algo que enseñar; si está vacía, se cae
+        // a "calendario solo" en vez de dejar una columna hueca al lado.
+        if ($variant === 'with-text' && $heading === '' && $desc === '') {
+            $variant = 'default';
+        }
+
+        $html = '<div class="pp-booking-section pp-booking-section--v-' . self::cssSafe($variant) . ' container">';
+        if ($variant === 'with-text') {
+            $html .= '<div class="pp-booking-section__text">';
+            if ($heading !== '') $html .= '<h2 class="pp-booking-section__heading">' . self::e($heading) . '</h2>';
+            if ($desc !== '')    $html .= '<p class="pp-booking-section__desc">' . self::nl2br(self::e($desc)) . '</p>';
+            $html .= '</div>';
+        } elseif ($heading !== '' || $desc !== '') {
+            if ($heading !== '') $html .= '<h2 class="pp-booking-section__heading">' . self::e($heading) . '</h2>';
+            if ($desc !== '')    $html .= '<p class="pp-booking-section__desc">' . self::nl2br(self::e($desc)) . '</p>';
+        }
+        $html .= '<div class="pp-booking-section__widget">' . $embed . '</div>';
+        $html .= '</div>';
+
+        return $html;
+    }
+
     private static function renderPostsListing(array $c, string $variant): string
     {
         $heading    = self::str($c, 'heading');

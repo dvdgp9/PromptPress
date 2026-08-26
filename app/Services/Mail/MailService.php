@@ -53,7 +53,7 @@ final class MailService
     {
         $transport = MailTransportFactory::forSite($siteId);
         if ($transport === null) {
-            $result = MailResult::failure('El correo no está configurado todavía. Configúralo en Ajustes → Correo.', 'none');
+            $result = MailResult::failure(__('mail.err.not_configured'), 'none');
             self::log($siteId, $message, $result, $context);
             return $result;
         }

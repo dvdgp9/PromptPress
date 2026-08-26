@@ -144,8 +144,10 @@ class MediaController
                     'item' => [
                         'id'        => (int) ($row['id'] ?? 0),
                         'url'       => base_url(ltrim((string) ($row['path'] ?? ''), '/')),
+                        'path'      => '/' . ltrim((string) ($row['path'] ?? ''), '/'),
                         'name'      => (string) ($row['original_name'] ?? ''),
                         'alt_text'  => (string) ($row['alt_text'] ?? ''),
+                        'mime_type' => (string) ($row['mime_type'] ?? ''),
                         'width'     => (int) ($row['width'] ?? 0),
                         'height'    => (int) ($row['height'] ?? 0),
                         'file_size' => (int) ($row['file_size'] ?? 0),
@@ -153,14 +155,14 @@ class MediaController
                 ]);
                 return;
             }
-            Session::flash('success', 'Imagen subida correctamente.');
+            Session::flash('success', __('media.flash.uploaded_one'));
         } catch (\Throwable $e) {
             error_log('[MediaController] upload error: ' . $e->getMessage());
             if ($isAjax) {
                 Response::json(['ok' => false, 'error' => 'No se pudo procesar la imagen: ' . $e->getMessage()], 500);
                 return;
             }
-            Session::flash('error', 'No se pudo procesar la imagen: ' . $e->getMessage());
+            Session::flash('error', __('media.err.process', ['detalle' => $e->getMessage()]));
         }
 
         Response::redirect(base_url('admin/media'));
@@ -202,18 +204,18 @@ class MediaController
                 $ok++;
             } catch (\Throwable $e) {
                 error_log('[MediaController] batch upload error: ' . $e->getMessage());
-                $errors[] = $one['name'] . ': no se pudo procesar.';
+                $errors[] = $one['name'] . ': ' . __('media.err.process_short');
             }
         }
 
         if ($ok > 0) {
-            Session::flash('success', $ok === 1 ? 'Imagen subida correctamente.' : $ok . ' imágenes subidas correctamente.');
+            Session::flash('success', __($ok === 1 ? 'media.flash.uploaded_one' : 'media.flash.uploaded_n', ['n' => $ok]));
         }
         if ($errors !== []) {
             Session::flash('error', implode(' · ', array_slice($errors, 0, 5)));
         }
         if ($ok === 0 && $errors === []) {
-            Session::flash('error', 'Selecciona al menos una imagen.');
+            Session::flash('error', __('media.error.pick_one'));
         }
 
         Response::redirect(base_url('admin/media'));
@@ -269,7 +271,7 @@ class MediaController
         if ($items === [] && $failed > 0) {
             Response::json([
                 'ok' => false,
-                'error' => 'La IA no ha podido describir estas imágenes. Revisa Ajustes de IA e inténtalo de nuevo.',
+                'error' => __('media.error.describe_failed'),
                 'remaining' => MediaLibraryService::countMissingAlt($siteId),
             ], 502);
         }
@@ -302,7 +304,7 @@ class MediaController
             'UPDATE media SET alt_text = ? WHERE id = ? AND site_id = ?',
             [$alt !== '' ? $alt : null, (int) $row['id'], $siteId]
         );
-        Session::flash('success', 'Texto alternativo actualizado.');
+        Session::flash('success', __('media.flash.alt_updated'));
         Response::redirect(base_url('admin/media'));
     }
 
@@ -316,7 +318,7 @@ class MediaController
         $row    = self::findOrFail((int) ($params['id'] ?? 0), $siteId);
 
         MediaService::delete($row);
-        Session::flash('success', 'Imagen eliminada.');
+        Session::flash('success', __('media.flash.deleted'));
         Response::redirect(base_url('admin/media'));
     }
 
@@ -341,7 +343,7 @@ class MediaController
     {
         self::requireSiteId();
         if (!ImageBankService::isAvailable()) {
-            Response::json(['ok' => false, 'error' => 'Banco de imágenes no configurado.'], 503);
+            Response::json(['ok' => false, 'error' => __('media.error.bank_off')], 503);
         }
         $q = trim((string) Request::get('q', ''));
         $orientation = (string) Request::get('orientation', 'landscape');
@@ -376,7 +378,7 @@ class MediaController
         CSRF::check();
         $siteId = self::requireSiteId();
         if (!ImageBankService::isAvailable()) {
-            Response::json(['ok' => false, 'error' => 'Banco de imágenes no configurado.'], 503);
+            Response::json(['ok' => false, 'error' => __('media.error.bank_off')], 503);
         }
 
         $resultId = trim((string) Request::post('result_id', ''));
@@ -385,7 +387,7 @@ class MediaController
         $alt      = trim((string) Request::post('alt', ''));
 
         if ($resultId === '' || $query === '') {
-            Response::json(['ok' => false, 'error' => 'Faltan parámetros.'], 422);
+            Response::json(['ok' => false, 'error' => __('media.error.missing_params')], 422);
         }
 
         // Refetchamos los resultados en caché para localizar el result_id elegido.
@@ -396,14 +398,14 @@ class MediaController
             if (($r['id'] ?? '') === $resultId) { $hit = $r; break; }
         }
         if ($hit === null) {
-            Response::json(['ok' => false, 'error' => 'Imagen no encontrada en los resultados recientes. Repite la búsqueda.'], 404);
+            Response::json(['ok' => false, 'error' => __('media.error.not_in_results')], 404);
         }
 
         try {
             $row = ImageBankService::downloadToMedia($hit, $siteId, Auth::id(), $alt !== '' ? $alt : null);
         } catch (\Throwable $e) {
             error_log('[MediaController] bankImport error: ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => 'No se pudo descargar la imagen.'], 500);
+            Response::json(['ok' => false, 'error' => __('media.error.download_failed')], 500);
         }
 
         $path = ltrim((string) $row['path'], '/');
@@ -433,7 +435,7 @@ class MediaController
             [$id, $siteId]
         );
         if (!$row) {
-            Session::flash('error', 'Medio no encontrado.');
+            Session::flash('error', __('media.error.not_found'));
             Response::redirect(base_url('admin/media'));
         }
         return $row;
@@ -443,7 +445,7 @@ class MediaController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

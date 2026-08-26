@@ -22,21 +22,21 @@ $sel = static fn($a, $b) => ((string) $a === (string) $b) ? ' selected' : '';
 $borderValue = static fn($border, string $side, string $key): string => (string) (($border[$side][$key] ?? ''));
 $borderControls = static function (string $prefix, array $border) use ($sel, $borderValue): string {
     $mode = (string) ($border['mode'] ?? 'all');
-    $sideLabels = ['top' => 'Arriba', 'right' => 'Derecha', 'bottom' => 'Abajo', 'left' => 'Izquierda'];
+    $sideLabels = ['top' => __('chrome.side.top'), 'right' => __('chrome.side.right'), 'bottom' => __('chrome.side.bottom'), 'left' => __('chrome.side.left')];
     $hasBorder = false;
     foreach (['all', 'top', 'right', 'bottom', 'left'] as $bs) {
         if ((int) ($border[$bs]['width'] ?? 0) > 0) { $hasBorder = true; break; }
     }
     ob_start(); ?>
     <details class="pp-chrome-advanced"<?= $hasBorder ? ' open' : '' ?>>
-        <summary class="pp-chrome-advanced__summary">Bordes <span class="pp-chrome-advanced__tag">avanzado</span></summary>
+        <summary class="pp-chrome-advanced__summary"><?= e(__('chrome.borders')) ?> <span class="pp-chrome-advanced__tag"><?= e(__('chrome.advanced')) ?></span></summary>
     <div class="pp-chrome-border" data-border-editor="<?= e($prefix) ?>">
         <div class="pp-form-row pp-form-row--compact">
             <div class="pp-form-group">
-                <label for="<?= e($prefix) ?>_border_mode">Aplicar a</label>
+                <label for="<?= e($prefix) ?>_border_mode"><?= e(__('chrome.apply_to')) ?></label>
                 <select id="<?= e($prefix) ?>_border_mode" data-border-mode="<?= e($prefix) ?>">
-                    <option value="all"<?= $sel($mode, 'all') ?>>Todos juntos</option>
-                    <option value="sides"<?= $sel($mode, 'sides') ?>>Por lado</option>
+                    <option value="all"<?= $sel($mode, 'all') ?>><?= e(__('chrome.all_together')) ?></option>
+                    <option value="sides"<?= $sel($mode, 'sides') ?>><?= e(__('chrome.per_side')) ?></option>
                 </select>
             </div>
         </div>
@@ -79,16 +79,16 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Header y pie</h2>
-    <p class="pp-page-intro">Diseña el encabezado y el pie de tu sitio: menú, botón, contacto, redes y estilo. Los cambios se aplican a todas las páginas.</p>
+    <h2><?= e(__('nav.chrome')) ?></h2>
+    <p class="pp-page-intro"><?= e(__('chrome.intro')) ?></p>
 </div>
 
 <?php if (!empty($isMultilingual)): ?>
     <div class="pp-chrome-langbar" id="pp-chrome-langbar"
          data-primary="<?= e($primaryLang) ?>">
         <div class="pp-chrome-langbar__label">
-            <strong>Estás editando los textos en</strong>
-            <span>El diseño (colores, bordes, disposición) y los datos de contacto son comunes a todos los idiomas.</span>
+            <strong><?= e(__('chrome.editing_texts_in')) ?></strong>
+            <span><?= e(__('chrome.shared_note')) ?></span>
         </div>
         <div class="pp-chrome-langbar__tabs" role="tablist">
             <?php foreach ($languages as $code): ?>
@@ -96,7 +96,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                         class="pp-chrome-langtab<?= $code === $primaryLang ? ' is-active' : '' ?>"
                         data-lang="<?= e($code) ?>"
                         aria-selected="<?= $code === $primaryLang ? 'true' : 'false' ?>">
-                    <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' · principal' : '' ?>
+                    <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' · ' . e(__('chrome.primary')) : '' ?>
                 </button>
             <?php endforeach; ?>
         </div>
@@ -108,9 +108,9 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
     <form method="POST" action="<?= e(base_url('admin/chrome')) ?>" class="pp-chrome-editor__form" id="chrome-form" autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
-        <div class="pp-tabs pp-chrome-tabs" role="tablist" aria-label="Secciones del chrome">
+        <div class="pp-tabs pp-chrome-tabs" role="tablist" aria-label="<?= e(__('chrome.tabs_aria')) ?>">
             <button type="button" class="pp-tab is-active" data-chrome-tab="header" role="tab" aria-selected="true" aria-controls="chrome-panel-header">Header</button>
-            <button type="button" class="pp-tab" data-chrome-tab="footer" role="tab" aria-selected="false" aria-controls="chrome-panel-footer">Pie</button>
+            <button type="button" class="pp-tab" data-chrome-tab="footer" role="tab" aria-selected="false" aria-controls="chrome-panel-footer"><?= e(__('chrome.footer')) ?></button>
         </div>
 
         <div class="pp-tab-panel is-active" id="chrome-panel-header" data-chrome-panel="header" role="tabpanel">
@@ -118,33 +118,33 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
             <div class="pp-chrome-panel__head">
                 <div>
                     <h3>Header</h3>
-                    <p class="pp-design-hint">Estructura, botón, comportamiento visual y bordes del encabezado.</p>
+                    <p class="pp-design-hint"><?= e(__('chrome.header_help')) ?></p>
                 </div>
             </div>
             <div class="pp-chrome-panel__body">
                 <div class="pp-chrome-section">
-                    <h4>Menú</h4>
+                    <h4><?= e(__('chrome.menu')) ?></h4>
                     <div id="menu-list" class="pp-chrome-list"></div>
                     <div class="pp-chrome-addrow">
-                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="page">+ Página</button>
-                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="link">+ Enlace</button>
-                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="dropdown">+ Submenú</button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="page">+ <?= e(__('js.onb.page')) ?></button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="link">+ <?= e(__('js.chrome.link')) ?></button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-menu="dropdown">+ <?= e(__('js.chrome.submenu')) ?></button>
                     </div>
                 </div>
 
                 <div class="pp-chrome-section">
-                    <h4>Botón</h4>
+                    <h4><?= e(__('chrome.button')) ?></h4>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
-                            <label for="cta_mode">Modo</label>
+                            <label for="cta_mode"><?= e(__('chrome.mode')) ?></label>
                             <select id="cta_mode" name="_cta_mode">
-                                <option value="auto"<?= $sel($cta['mode'] ?? 'auto', 'auto') ?>>Automático</option>
+                                <option value="auto"<?= $sel($cta['mode'] ?? 'auto', 'auto') ?>><?= e(__('chrome.automatic')) ?></option>
                                 <option value="custom"<?= $sel($cta['mode'] ?? '', 'custom') ?>>Personalizado</option>
-                                <option value="off"<?= $sel($cta['mode'] ?? '', 'off') ?>>Sin botón</option>
+                                <option value="off"<?= $sel($cta['mode'] ?? '', 'off') ?>><?= e(__('chrome.no_button')) ?></option>
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="cta_style">Estilo</label>
+                            <label for="cta_style"><?= e(__('chrome.style')) ?></label>
                             <select id="cta_style" name="_cta_style">
                                 <option value="primary"<?= $sel($cta['style'] ?? 'primary', 'primary') ?>>Primario</option>
                                 <option value="ghost"<?= $sel($cta['style'] ?? '', 'ghost') ?>>Contorno</option>
@@ -153,16 +153,16 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                     </div>
                     <div class="pp-form-row pp-form-row--compact" data-cta-custom>
                         <div class="pp-form-group">
-                            <label for="cta_label">Texto</label>
+                            <label for="cta_label"><?= e(__('js.chrome.text')) ?></label>
                             <input type="text" id="cta_label" name="_cta_label" maxlength="60" value="<?= e((string) ($cta['label'] ?? '')) ?>" placeholder="Reserva una cita">
                         </div>
                         <div class="pp-form-group">
-                            <label for="cta_url">Destino</label>
+                            <label for="cta_url"><?= e(__('chrome.target')) ?></label>
                             <input type="text" id="cta_url" name="_cta_url" maxlength="300" value="<?= e((string) ($cta['url'] ?? '')) ?>" placeholder="/contacto">
                         </div>
                     </div>
                     <div class="pp-form-group">
-                        <label for="h_mobile_cta">Botón en móvil</label>
+                        <label for="h_mobile_cta"><?= e(__('chrome.mobile_button')) ?></label>
                         <select id="h_mobile_cta">
                             <option value="show"<?= $sel($hl['mobile_cta'] ?? 'show', 'show') ?>>Mostrar</option>
                             <option value="hide"<?= $sel($hl['mobile_cta'] ?? '', 'hide') ?>>Ocultar</option>
@@ -171,14 +171,14 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 </div>
 
                 <div class="pp-chrome-section">
-                    <h4>Disposición</h4>
+                    <h4><?= e(__('chrome.layout')) ?></h4>
                     <label class="pp-switch-row">
                         <span class="pp-switch">
                             <input type="checkbox" id="h_sticky"<?= !empty($hl['sticky']) ? ' checked' : '' ?>>
                             <span class="pp-switch__track"></span>
                             <span class="pp-switch__knob"></span>
                         </span>
-                        <span>Fijo al hacer scroll</span>
+                        <span><?= e(__('chrome.sticky')) ?></span>
                     </label>
                     <label class="pp-switch-row">
                         <span class="pp-switch">
@@ -186,15 +186,15 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                             <span class="pp-switch__track"></span>
                             <span class="pp-switch__knob"></span>
                         </span>
-                        <span>Transparente sobre el hero</span>
+                        <span><?= e(__('chrome.transparent')) ?></span>
                     </label>
                     <div class="pp-form-group">
-                        <label for="h_brand_url">Destino del logo / marca</label>
+                        <label for="h_brand_url"><?= e(__('chrome.brand_target')) ?></label>
                         <input type="text" id="h_brand_url" maxlength="300" value="<?= e((string) ($hb['url'] ?? '')) ?>" placeholder="Portada por defecto">
                     </div>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
-                            <label for="h_density">Densidad</label>
+                            <label for="h_density"><?= e(__('chrome.density')) ?></label>
                             <select id="h_density">
                                 <option value="compact"<?= $sel($hl['density'] ?? '', 'compact') ?>>Compacta</option>
                                 <option value="regular"<?= $sel($hl['density'] ?? 'regular', 'regular') ?>>Normal</option>
@@ -202,7 +202,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="h_logo">Posición del logo</label>
+                            <label for="h_logo"><?= e(__('chrome.logo_position')) ?></label>
                             <select id="h_logo">
                                 <option value="left"<?= $sel($hl['logo_position'] ?? 'left', 'left') ?>>Izquierda</option>
                                 <option value="center"<?= $sel($hl['logo_position'] ?? '', 'center') ?>>Centro</option>
@@ -211,14 +211,14 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                     </div>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
-                            <label for="h_width">Anchura</label>
+                            <label for="h_width"><?= e(__('chrome.width')) ?></label>
                             <select id="h_width">
                                 <option value="contained"<?= $sel($hl['width'] ?? 'contained', 'contained') ?>>Contenida</option>
                                 <option value="full"<?= $sel($hl['width'] ?? '', 'full') ?>>Ancho completo</option>
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="h_nav_alignment">Alineación del menú</label>
+                            <label for="h_nav_alignment"><?= e(__('chrome.nav_alignment')) ?></label>
                             <select id="h_nav_alignment">
                                 <option value="right"<?= $sel($hl['nav_alignment'] ?? 'right', 'right') ?>>Derecha</option>
                                 <option value="center"<?= $sel($hl['nav_alignment'] ?? '', 'center') ?>>Centro</option>
@@ -229,11 +229,11 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 </div>
 
                 <div class="pp-chrome-section">
-                    <h4>Apariencia</h4>
+                    <h4><?= e(__('chrome.appearance')) ?></h4>
                     <div class="pp-form-group">
-                        <label for="h_bg">Color de fondo</label>
+                        <label for="h_bg"><?= e(__('chrome.bg_color')) ?></label>
                         <select id="h_bg">
-                            <option value="auto"<?= $sel($hs['background'] ?? 'auto', 'auto') ?>>Automático</option>
+                            <option value="auto"<?= $sel($hs['background'] ?? 'auto', 'auto') ?>><?= e(__('chrome.automatic')) ?></option>
                             <option value="light"<?= $sel($hs['background'] ?? '', 'light') ?>>Claro</option>
                             <option value="dark"<?= $sel($hs['background'] ?? '', 'dark') ?>>Oscuro</option>
                             <option value="brand"<?= $sel($hs['background'] ?? '', 'brand') ?>>Color de marca</option>
@@ -250,10 +250,10 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         <?php
         $allFBlocks = ['brand', 'nav', 'legal', 'contact', 'social', 'newsletter'];
         $fblockTitles = [
-            'brand' => 'Marca y lema', 'nav' => 'Navegación', 'legal' => 'Enlaces legales',
+            'brand' => __('chrome.block.brand'), 'nav' => __('chrome.block.nav'), 'legal' => __('chrome.block.legal'),
             'contact' => 'Contacto', 'social' => 'Redes sociales', 'newsletter' => 'Newsletter',
         ];
-        $fblockAuto = ['nav' => 'auto: páginas publicadas', 'legal' => 'auto: páginas legales'];
+        $fblockAuto = ['nav' => __('chrome.auto_published'), 'legal' => __('chrome.auto_legal')];
         $savedFBlocks = array_values(array_filter((array) ($f['blocks'] ?? []), 'is_string'));
         $defaultFOn = ['brand', 'nav', 'legal'];
         $enabledFBlocks = $savedFBlocks ?: $defaultFOn;
@@ -266,43 +266,43 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 case 'brand': ?>
                     <div class="pp-form-group"><label for="f_brand_name">Nombre en el pie</label><input type="text" id="f_brand_name" maxlength="120" value="<?= e((string) ($fb['name'] ?? '')) ?>" placeholder="Nombre del sitio"></div>
                     <div class="pp-form-group"><label for="f_tagline">Lema</label><input type="text" id="f_tagline" maxlength="200" value="<?= e((string) ($f['tagline'] ?? '')) ?>" placeholder="Memoria del negocio"></div>
-                    <div class="pp-form-group"><label for="f_copyright">Copyright</label><input type="text" id="f_copyright" maxlength="160" value="<?= e((string) ($f['copyright'] ?? '')) ?>" placeholder="© AÑO · Nombre"></div>
+                    <div class="pp-form-group"><label for="f_copyright"><?= e(__('chrome.copyright')) ?></label><input type="text" id="f_copyright" maxlength="160" value="<?= e((string) ($f['copyright'] ?? '')) ?>" placeholder="<?= e(__('chrome.copyright_placeholder')) ?>"></div>
                 <?php break;
                 case 'nav': ?>
-                    <div class="pp-form-group"><label for="f_label_nav">Título de la columna</label><input type="text" id="f_label_nav" maxlength="60" value="<?= e((string) ($fl['nav'] ?? '')) ?>" placeholder="Explora"></div>
+                    <div class="pp-form-group"><label for="f_label_nav"><?= e(__('chrome.column_title')) ?></label><input type="text" id="f_label_nav" maxlength="60" value="<?= e((string) ($fl['nav'] ?? '')) ?>" placeholder="<?= e(__('chrome.explore')) ?>"></div>
                     <div id="footernav-list" class="pp-chrome-list"></div>
                     <div class="pp-chrome-addrow">
-                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="page">+ Página</button>
-                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="link">+ Enlace</button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="page">+ <?= e(__('js.onb.page')) ?></button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-add-footernav="link">+ <?= e(__('js.chrome.link')) ?></button>
                     </div>
-                    <p class="pp-fblock__hint">Si lo dejas vacío, se listan automáticamente tus páginas publicadas.</p>
+                    <p class="pp-fblock__hint"><?= e(__('chrome.auto_pages_hint')) ?></p>
                 <?php break;
                 case 'legal': ?>
-                    <div class="pp-form-group"><label for="f_label_legal">Título de la columna</label><input type="text" id="f_label_legal" maxlength="60" value="<?= e((string) ($fl['legal'] ?? '')) ?>" placeholder="Legal"></div>
-                    <p class="pp-fblock__hint">Los enlaces legales se generan automáticamente desde tus páginas legales publicadas.</p>
+                    <div class="pp-form-group"><label for="f_label_legal"><?= e(__('chrome.column_title')) ?></label><input type="text" id="f_label_legal" maxlength="60" value="<?= e((string) ($fl['legal'] ?? '')) ?>" placeholder="Legal"></div>
+                    <p class="pp-fblock__hint"><?= e(__('chrome.legal_hint')) ?></p>
                 <?php break;
                 case 'contact': ?>
-                    <div class="pp-form-group"><label for="f_label_contact">Título de la columna</label><input type="text" id="f_label_contact" maxlength="60" value="<?= e((string) ($fl['contact'] ?? '')) ?>" placeholder="Contacto"></div>
-                    <div class="pp-form-group"><label for="c_address">Dirección</label><textarea id="c_address" rows="2" maxlength="300"><?= e((string) ($fc['address'] ?? '')) ?></textarea></div>
+                    <div class="pp-form-group"><label for="f_label_contact"><?= e(__('chrome.column_title')) ?></label><input type="text" id="f_label_contact" maxlength="60" value="<?= e((string) ($fl['contact'] ?? '')) ?>" placeholder="<?= e(__('page_type.contact')) ?>"></div>
+                    <div class="pp-form-group"><label for="c_address"><?= e(__('chrome.address')) ?></label><textarea id="c_address" rows="2" maxlength="300"><?= e((string) ($fc['address'] ?? '')) ?></textarea></div>
                     <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="c_phone">Teléfono</label><input type="text" id="c_phone" maxlength="60" value="<?= e((string) ($fc['phone'] ?? '')) ?>"></div>
+                        <div class="pp-form-group"><label for="c_phone"><?= e(__('field.tel')) ?></label><input type="text" id="c_phone" maxlength="60" value="<?= e((string) ($fc['phone'] ?? '')) ?>"></div>
                         <div class="pp-form-group"><label for="c_email">Email</label><input type="text" id="c_email" maxlength="120" value="<?= e((string) ($fc['email'] ?? '')) ?>"></div>
                     </div>
                     <div class="pp-form-group"><label for="c_hours">Horario</label><input type="text" id="c_hours" maxlength="120" value="<?= e((string) ($fc['hours'] ?? '')) ?>" placeholder="L-V 9:00-18:00"></div>
                 <?php break;
                 case 'social': ?>
-                    <div class="pp-form-group"><label for="f_label_social">Título de la columna</label><input type="text" id="f_label_social" maxlength="60" value="<?= e((string) ($fl['social'] ?? '')) ?>" placeholder="Síguenos"></div>
+                    <div class="pp-form-group"><label for="f_label_social"><?= e(__('chrome.column_title')) ?></label><input type="text" id="f_label_social" maxlength="60" value="<?= e((string) ($fl['social'] ?? '')) ?>" placeholder="<?= e(__('chrome.follow_us')) ?>"></div>
                     <div id="social-list" class="pp-chrome-list"></div>
                     <div class="pp-chrome-addrow"><button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="add-social">+ Red social</button></div>
                 <?php break;
                 case 'newsletter': ?>
-                    <div class="pp-form-group"><label for="f_label_newsletter">Título de la columna</label><input type="text" id="f_label_newsletter" maxlength="60" value="<?= e((string) ($fl['newsletter'] ?? '')) ?>" placeholder="Newsletter"></div>
+                    <div class="pp-form-group"><label for="f_label_newsletter"><?= e(__('chrome.column_title')) ?></label><input type="text" id="f_label_newsletter" maxlength="60" value="<?= e((string) ($fl['newsletter'] ?? '')) ?>" placeholder="Newsletter"></div>
                     <div class="pp-form-row pp-form-row--compact">
-                        <div class="pp-form-group"><label for="n_heading">Titular</label><input type="text" id="n_heading" maxlength="120" value="<?= e((string) ($fn['heading'] ?? '')) ?>" placeholder="Suscríbete a nuestra newsletter"></div>
+                        <div class="pp-form-group"><label for="n_heading"><?= e(__('chrome.headline')) ?></label><input type="text" id="n_heading" maxlength="120" value="<?= e((string) ($fn['heading'] ?? '')) ?>" placeholder="<?= e(__('chrome.newsletter_placeholder')) ?>"></div>
                         <div class="pp-form-group"><label for="n_form">Destino</label><input type="text" id="n_form" maxlength="120" value="<?= e((string) ($fn['form_ref'] ?? '')) ?>" placeholder="/contacto"></div>
                     </div>
-                    <div class="pp-form-group"><label for="n_cta_label">Texto del botón</label><input type="text" id="n_cta_label" maxlength="60" value="<?= e((string) ($fn['cta_label'] ?? '')) ?>" placeholder="Suscribirme"></div>
-                    <p class="pp-fblock__hint">Activa este bloque con el interruptor para mostrar el formulario de suscripción.</p>
+                    <div class="pp-form-group"><label for="n_cta_label"><?= e(__('form_edit.button_text')) ?></label><input type="text" id="n_cta_label" maxlength="60" value="<?= e((string) ($fn['cta_label'] ?? '')) ?>" placeholder="<?= e(__('chrome.subscribe')) ?>"></div>
+                    <p class="pp-fblock__hint"><?= e(__('chrome.newsletter_hint')) ?></p>
                 <?php break;
             }
             return (string) ob_get_clean();
@@ -311,8 +311,8 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         <section class="pp-form-card pp-chrome-panel">
             <div class="pp-chrome-panel__head">
                 <div>
-                    <h3>Bloques del pie</h3>
-                    <p class="pp-design-hint">Activa, ordena y edita cada bloque en el mismo sitio. Lo que desactives no se muestra.</p>
+                    <h3><?= e(__('chrome.footer_blocks')) ?></h3>
+                    <p class="pp-design-hint"><?= e(__('chrome.footer_blocks_help')) ?></p>
                 </div>
             </div>
             <div class="pp-chrome-panel__body">
@@ -320,7 +320,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                     <?php foreach ($fOrder as $b): $on = in_array($b, $enabledFBlocks, true); ?>
                     <div class="pp-fblock<?= $on ? '' : ' is-off' ?>" data-fblock="<?= e($b) ?>">
                         <div class="pp-fblock__head">
-                            <label class="pp-switch" title="Mostrar bloque">
+                            <label class="pp-switch" title="<?= e(__('chrome.show_block')) ?>">
                                 <input type="checkbox" class="pp-fblock-on"<?= $on ? ' checked' : '' ?> aria-label="Mostrar <?= e($fblockTitles[$b]) ?>">
                                 <span class="pp-switch__track"></span>
                                 <span class="pp-switch__knob"></span>
@@ -331,8 +331,8 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                                 <span class="pp-fblock__chev" aria-hidden="true">⌄</span>
                             </button>
                             <div class="pp-fblock__reorder">
-                                <button type="button" class="pp-chrome-row__btn" data-fblock-up title="Subir">↑</button>
-                                <button type="button" class="pp-chrome-row__btn" data-fblock-down title="Bajar">↓</button>
+                                <button type="button" class="pp-chrome-row__btn" data-fblock-up title="<?= e(__('chrome.move_up')) ?>">↑</button>
+                                <button type="button" class="pp-chrome-row__btn" data-fblock-down title="<?= e(__('chrome.move_down')) ?>">↓</button>
                             </div>
                         </div>
                         <div class="pp-fblock__body" hidden><?= $fblockBody($b) ?></div>
@@ -341,10 +341,10 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                 </div>
 
                 <div class="pp-chrome-section">
-                    <h4>Apariencia del pie</h4>
+                    <h4><?= e(__('chrome.footer_appearance')) ?></h4>
                     <div class="pp-form-row pp-form-row--compact">
                         <div class="pp-form-group">
-                            <label for="f_bg">Fondo</label>
+                            <label for="f_bg"><?= e(__('chrome.background')) ?></label>
                             <select id="f_bg">
                                 <option value="dark"<?= $sel($fs['background'] ?? 'dark', 'dark') ?>>Oscuro</option>
                                 <option value="light"<?= $sel($fs['background'] ?? '', 'light') ?>>Claro</option>
@@ -352,9 +352,9 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
                             </select>
                         </div>
                         <div class="pp-form-group">
-                            <label for="f_columns">Columnas</label>
+                            <label for="f_columns"><?= e(__('chrome.columns')) ?></label>
                             <select id="f_columns">
-                                <option value="0"<?= $sel($fs['columns'] ?? 0, 0) ?>>Automático</option>
+                                <option value="0"<?= $sel($fs['columns'] ?? 0, 0) ?>><?= e(__('chrome.automatic')) ?></option>
                                 <option value="2"<?= $sel($fs['columns'] ?? 0, 2) ?>>2</option>
                                 <option value="3"<?= $sel($fs['columns'] ?? 0, 3) ?>>3</option>
                                 <option value="4"<?= $sel($fs['columns'] ?? 0, 4) ?>>4</option>
@@ -368,21 +368,21 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
         </div>
 
         <div class="pp-chrome-actions">
-            <button type="submit" class="pp-btn pp-btn--primary" id="chrome-save">Guardar cambios</button>
+            <button type="submit" class="pp-btn pp-btn--primary" id="chrome-save"><?= e(__('common.save_changes')) ?></button>
             <span class="pp-chrome-dirty" id="chrome-dirty" hidden><span class="pp-chrome-dirty__dot" aria-hidden="true"></span>Cambios sin guardar</span>
         </div>
     </form>
 
     <aside class="pp-chrome-editor__preview">
         <div class="pp-chrome-preview-head">
-            <span>Vista previa</span>
-            <div class="pp-chrome-devtoggle" role="group" aria-label="Tamaño de pantalla">
-                <button type="button" data-device="desktop" class="is-active">Escritorio</button>
-                <button type="button" data-device="mobile">Móvil</button>
+            <span><?= e(__('js.post_new.preview')) ?></span>
+            <div class="pp-chrome-devtoggle" role="group" aria-label="<?= e(__('chrome.screen_size')) ?>">
+                <button type="button" data-device="desktop" class="is-active"><?= e(__('chrome.desktop')) ?></button>
+                <button type="button" data-device="mobile"><?= e(__('chrome.mobile')) ?></button>
             </div>
         </div>
         <div class="pp-chrome-preview-frame" id="chrome-preview-frame">
-            <iframe id="chrome-preview" title="Vista previa del sitio" scrolling="no"></iframe>
+            <iframe id="chrome-preview" title="<?= e(__('chrome.preview_title')) ?>" scrolling="no"></iframe>
         </div>
     </aside>
 </div>

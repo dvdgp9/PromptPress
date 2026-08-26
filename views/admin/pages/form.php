@@ -13,7 +13,7 @@ $isEdit = ($mode === 'edit');
 $actionUrl = $isEdit
     ? base_url('admin/pages/' . (int) $page['id'])
     : base_url('admin/pages');
-$pageTitle = $isEdit ? 'Editar página' : 'Nueva página';
+$pageTitle = $isEdit ? __('page_form.title_edit') : __('page_form.title_new');
 ?>
 
 <?php \Core\View::start('title'); ?><?= e($pageTitle) ?><?php \Core\View::end(); ?>
@@ -24,7 +24,9 @@ $pageTitle = $isEdit ? 'Editar página' : 'Nueva página';
 <?php if ($isEdit): ?>
 <script>
 window.PP_SECTION_SCHEMAS = <?= json_encode(
-    \App\Services\SectionSchemas::all(),
+    // Copia traducida: el editor pinta estas etiquetas. `all()` se queda en
+    // castellano porque es la fuente del prompt que describe los schemas a la IA.
+    \App\Services\SectionSchemas::allForView(),
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
 ) ?>;
 window.PP_PAGES = <?= json_encode(
@@ -44,12 +46,12 @@ window.PP_PAGES = <?= json_encode(
         $complianceLevel = $compliance['level'] ?? 'green';
         if ($complianceLevel !== 'green'):
             $pillLabel = match ($complianceLevel) {
-                'red'    => 'Privacidad · atención',
-                'orange' => 'Privacidad incompleta',
-                default  => 'Privacidad pendiente',
+                'red'    => __('page_form.privacy_red'),
+                'orange' => __('page_form.privacy_orange'),
+                default  => __('page_form.privacy_yellow'),
             };
         ?>
-        <a href="<?= e(base_url('admin/privacy')) ?>" class="pp-privacy-pill pp-privacy-pill--<?= e($complianceLevel) ?>" title="Revisar el estado de privacidad">
+        <a href="<?= e(base_url('admin/privacy')) ?>" class="pp-privacy-pill pp-privacy-pill--<?= e($complianceLevel) ?>" title="<?= e(__('page_form.privacy_title')) ?>">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 <path d="M12 8v4"/>
@@ -58,13 +60,13 @@ window.PP_PAGES = <?= json_encode(
             <span><?= e($pillLabel) ?></span>
         </a>
         <?php endif; ?>
-        <a href="<?= e(base_url('admin/pages')) ?>" class="pp-btn pp-btn--secondary">← Volver</a>
+        <a href="<?= e(base_url('admin/pages')) ?>" class="pp-btn pp-btn--secondary">← <?= e(__('common.back')) ?></a>
     </div>
 </div>
 
 <?php if (!empty($errors)): ?>
 <div class="pp-alert pp-alert--error">
-    <strong>Revisa los errores del formulario:</strong>
+    <strong><?= e(__('settings.errors_intro')) ?></strong>
     <ul style="margin: 8px 0 0 20px;">
         <?php foreach ($errors as $msg): ?>
         <li><?= e($msg) ?></li>
@@ -83,32 +85,32 @@ window.PP_PAGES = <?= json_encode(
     <div class="pp-ai-page-builder">
         <div class="pp-ai-page-builder__head">
             <div>
-                <span>Creación asistida</span>
-                <h3>Generar página completa con IA</h3>
-                <p>Describe qué tiene que conseguir la página. PromptPress creará un borrador con secciones editables.</p>
+                <span><?= e(__('page_form.assisted')) ?></span>
+                <h3><?= e(__('page_form.generate_title')) ?></h3>
+                <p><?= e(__('page_form.generate_help')) ?></p>
             </div>
             <button type="button" class="pp-btn pp-btn--primary" id="pp-ai-create-page-btn">
-                Generar borrador
+                <?= e(__('page_form.generate_draft')) ?>
             </button>
         </div>
 
         <div class="pp-form-group">
-            <label for="ai_page_goal">Objetivo de la página</label>
+            <label for="ai_page_goal"><?= e(__('page_form.goal')) ?></label>
             <textarea id="ai_page_goal" name="ai_page_goal" rows="3"
-                      placeholder="Ej: conseguir reservas para un restaurante italiano familiar, mostrando carta online, ambiente del local y formulario de contacto"></textarea>
-            <small>Cuanto más concreto sea el objetivo, más útil será el primer borrador.</small>
+                      placeholder="<?= e(__('page_form.goal_placeholder')) ?>"></textarea>
+            <small><?= e(__('page_form.goal_help')) ?></small>
         </div>
 
         <div class="pp-form-row">
             <div class="pp-form-group">
-                <label for="ai_target_audience">Público objetivo</label>
+                <label for="ai_target_audience"><?= e(__('memory.field.target_audience.label')) ?></label>
                 <input type="text" id="ai_target_audience" name="ai_target_audience"
-                       placeholder="Ej: familias y grupos que buscan reservar online">
+                       placeholder="<?= e(__('page_form.audience_placeholder')) ?>">
             </div>
             <div class="pp-form-group">
-                <label for="ai_extra_context">Detalles importantes</label>
+                <label for="ai_extra_context"><?= e(__('page_form.details')) ?></label>
                 <input type="text" id="ai_extra_context" name="ai_extra_context"
-                       placeholder="Ej: tono cercano, destacar menú sin gluten">
+                       placeholder="<?= e(__('page_form.details_placeholder')) ?>">
             </div>
         </div>
 
@@ -117,17 +119,17 @@ window.PP_PAGES = <?= json_encode(
             $aiLight = trim((string) ($aiMeta['model_light'] ?? ''));
         ?>
         <div class="pp-form-group">
-            <label for="ai_model_choice">Modelo de IA para esta página</label>
+            <label for="ai_model_choice"><?= e(__('page_form.ai_model')) ?></label>
             <select id="ai_model_choice" name="ai_model_choice">
-                <option value="" selected>Principal<?= $aiMain !== '' ? ' · ' . e($aiMain) : '' ?> (recomendado)</option>
+                <option value="" selected><?= e(__('page_form.model_main')) ?><?= $aiMain !== '' ? ' · ' . e($aiMain) : '' ?> <?= e(__('page_form.model_recommended')) ?></option>
                 <?php if ($aiLight !== '' && $aiLight !== $aiMain): ?>
-                    <option value="<?= e($aiLight) ?>">Auxiliar · <?= e($aiLight) ?> (más rápido)</option>
+                    <option value="<?= e($aiLight) ?>"><?= e(__('page_form.model_aux')) ?> · <?= e($aiLight) ?> <?= e(__('page_form.model_faster')) ?></option>
                 <?php endif; ?>
-                <option value="__custom__">Otro modelo (escribir ID)…</option>
+                <option value="__custom__"><?= e(__('page_form.model_other')) ?></option>
             </select>
             <input type="text" id="ai_model_custom" name="ai_model_custom" hidden
-                   placeholder="Ej: anthropic/claude-3.5-sonnet" maxlength="100" autocomplete="off">
-            <small>Por defecto se usa el modelo principal. Puedes elegir el auxiliar u otro ID compatible solo para esta generación.</small>
+                   placeholder="<?= e(__('page_form.model_placeholder')) ?>" maxlength="100" autocomplete="off">
+            <small><?= e(__('page_form.model_help')) ?></small>
         </div>
 
         <div class="pp-ai-page-builder__status" id="pp-ai-create-page-status" hidden></div>
@@ -135,10 +137,10 @@ window.PP_PAGES = <?= json_encode(
     <?php endif; ?>
 
     <div class="pp-form-card">
-        <h3>Contenido principal</h3>
+        <h3><?= e(__('page_form.main_content')) ?></h3>
 
         <div class="pp-form-group <?= isset($errors['title']) ? 'has-error' : '' ?>">
-            <label for="title">Título <span class="pp-req">*</span></label>
+            <label for="title"><?= e(__('table.title')) ?> <span class="pp-req">*</span></label>
             <input type="text" id="title" name="title"
                    value="<?= e($page['title'] ?? '') ?>"
                    maxlength="500" required autofocus>
@@ -148,7 +150,7 @@ window.PP_PAGES = <?= json_encode(
         </div>
 
         <div class="pp-form-group <?= isset($errors['slug']) ? 'has-error' : '' ?>">
-            <label for="slug">Slug (URL) <span class="pp-req">*</span></label>
+            <label for="slug"><?= e(__('page_form.slug')) ?> <span class="pp-req">*</span></label>
             <div class="pp-slug-input">
                 <span class="pp-slug-input__prefix">/</span>
                 <input type="text" id="slug" name="slug"
@@ -156,7 +158,7 @@ window.PP_PAGES = <?= json_encode(
                        pattern="[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*"
                        maxlength="500">
             </div>
-            <small>Solo minúsculas, números, guiones y barras para URLs anidadas. Se autogenera del título si lo dejas vacío.</small>
+            <small><?= e(__('page_form.slug_help')) ?></small>
             <?php if (isset($errors['slug'])): ?>
             <small class="pp-err"><?= e($errors['slug']) ?></small>
             <?php endif; ?>
@@ -164,7 +166,7 @@ window.PP_PAGES = <?= json_encode(
 
         <div class="pp-form-row">
             <div class="pp-form-group <?= isset($errors['page_type']) ? 'has-error' : '' ?>">
-                <label for="page_type">Tipo de página</label>
+                <label for="page_type"><?= e(__('page_form.page_type')) ?></label>
                 <select id="page_type" name="page_type">
                     <?php foreach ($pageTypes as $value => $label): ?>
                     <option value="<?= e($value) ?>"
@@ -180,30 +182,28 @@ window.PP_PAGES = <?= json_encode(
 
             <?php if (!empty($isMultilingual)): ?>
             <div class="pp-form-group">
-                <label for="language">Idioma de la página</label>
+                <label for="language"><?= e(__('page_form.language')) ?></label>
                 <?php $curLang = (string) ($page['language'] ?? $primaryLang); ?>
                 <select id="language" name="language"<?= !empty($page['id']) ? ' disabled' : '' ?>>
                     <?php foreach ($siteLanguages as $code): ?>
                         <option value="<?= e($code) ?>" <?= $curLang === $code ? 'selected' : '' ?>>
-                            <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' (principal)' : '' ?>
+                            <?= e($languageLabels[$code] ?? $code) ?><?= $code === $primaryLang ? ' ' . e(__('page_form.lang_primary')) : '' ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
                 <?php if (!empty($page['id'])): ?>
-                    <small>El idioma no se cambia una vez creada la página: cambiarlo movería su URL.
-                    Si necesitas la misma página en otro idioma, tradúcela desde el listado.</small>
+                    <small><?= e(__('page_form.lang_locked')) ?></small>
                 <?php else: ?>
-                    <small>Si eliges un idioma que no es el principal, la página vivirá bajo su
-                    prefijo (por ejemplo <code>/fr/…</code>).</small>
+                    <small><?= __('page_form.lang_prefix.html') ?></small>
                 <?php endif; ?>
             </div>
             <?php endif; ?>
 
             <div class="pp-form-group <?= isset($errors['status']) ? 'has-error' : '' ?>">
-                <label for="status">Estado</label>
+                <label for="status"><?= e(__('table.status')) ?></label>
                 <select id="status" name="status">
-                    <option value="draft"     <?= ($page['status'] ?? 'draft') === 'draft'     ? 'selected' : '' ?>>Borrador</option>
-                    <option value="published" <?= ($page['status'] ?? '')      === 'published' ? 'selected' : '' ?>>Publicada</option>
+                    <option value="draft"     <?= ($page['status'] ?? 'draft') === 'draft'     ? 'selected' : '' ?>><?= e(__('status.draft')) ?></option>
+                    <option value="published" <?= ($page['status'] ?? '')      === 'published' ? 'selected' : '' ?>><?= e(__('status.published')) ?></option>
                 </select>
                 <?php if (isset($errors['status'])): ?>
                 <small class="pp-err"><?= e($errors['status']) ?></small>
@@ -216,7 +216,7 @@ window.PP_PAGES = <?= json_encode(
         <div class="pp-form-card__head pp-seo-card__head">
             <div>
                 <h3>SEO</h3>
-                <p>Prepara cómo aparecerá esta página en buscadores y enlaces compartidos.</p>
+                <p><?= e(__('page_form.seo_help')) ?></p>
             </div>
             <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-ai-seo-btn">
                 Mejorar con IA
@@ -224,50 +224,50 @@ window.PP_PAGES = <?= json_encode(
         </div>
 
         <div class="pp-form-group <?= isset($errors['meta_title']) ? 'has-error' : '' ?>">
-            <label for="meta_title">Meta título</label>
+            <label for="meta_title"><?= e(__('page_form.meta_title')) ?></label>
             <input type="text" id="meta_title" name="meta_title"
                    value="<?= e($page['meta_title'] ?? '') ?>"
                    maxlength="255"
-                   placeholder="Si lo dejas vacío se usará el título de la página">
-            <small>Máx. 255 caracteres. Recomendado 50–60 para buscadores.</small>
+                   placeholder="<?= e(__('page_form.meta_title_placeholder')) ?>">
+            <small><?= e(__('page_form.meta_title_help')) ?></small>
             <?php if (isset($errors['meta_title'])): ?>
             <small class="pp-err"><?= e($errors['meta_title']) ?></small>
             <?php endif; ?>
         </div>
 
         <div class="pp-form-group <?= isset($errors['meta_description']) ? 'has-error' : '' ?>">
-            <label for="meta_description">Meta descripción</label>
+            <label for="meta_description"><?= e(__('page_form.meta_desc')) ?></label>
             <textarea id="meta_description" name="meta_description"
                       maxlength="500" rows="3"
-                      placeholder="Resumen breve que aparecerá en los resultados de búsqueda"><?= e($page['meta_description'] ?? '') ?></textarea>
-            <small>Máx. 500 caracteres. Recomendado 140–160.</small>
+                      placeholder="<?= e(__('page_form.meta_desc_placeholder')) ?>"><?= e($page['meta_description'] ?? '') ?></textarea>
+            <small><?= e(__('page_form.meta_desc_help')) ?></small>
             <?php if (isset($errors['meta_description'])): ?>
             <small class="pp-err"><?= e($errors['meta_description']) ?></small>
             <?php endif; ?>
         </div>
 
         <details class="pp-seo-advanced">
-            <summary>Indexación avanzada</summary>
+            <summary><?= e(__('page_form.advanced_index')) ?></summary>
             <div class="pp-seo-advanced__body">
                 <label class="pp-checkline">
                     <input type="checkbox" name="seo_noindex" value="1" <?= (int) ($page['seo_noindex'] ?? 0) === 1 ? 'checked' : '' ?>>
-                    <span>No mostrar esta página en buscadores</span>
+                    <span><?= e(__('page_form.noindex')) ?></span>
                 </label>
-                <small>Para páginas privadas, duplicadas o temporales. La página seguirá existiendo si alguien tiene el enlace.</small>
+                <small><?= e(__('page_form.noindex_help')) ?></small>
 
                 <label class="pp-checkline">
                     <input type="checkbox" name="seo_exclude_sitemap" value="1" <?= (int) ($page['seo_exclude_sitemap'] ?? 0) === 1 ? 'checked' : '' ?>>
-                    <span>Excluir del sitemap</span>
+                    <span><?= e(__('page_form.no_sitemap')) ?></span>
                 </label>
-                <small>Normalmente conviene dejarlo desactivado.</small>
+                <small><?= e(__('page_form.no_sitemap_help')) ?></small>
 
                 <div class="pp-form-group <?= isset($errors['canonical_url']) ? 'has-error' : '' ?>">
-                    <label for="canonical_url">Canonical personalizada</label>
+                    <label for="canonical_url"><?= e(__('page_form.canonical')) ?></label>
                     <input type="url" id="canonical_url" name="canonical_url"
                            value="<?= e((string) ($page['canonical_url'] ?? '')) ?>"
                            maxlength="500"
                            placeholder="https://tudominio.com/pagina-principal">
-                    <small>Solo si esta página duplica otra URL principal.</small>
+                    <small><?= e(__('page_form.canonical_help')) ?></small>
                     <?php if (isset($errors['canonical_url'])): ?>
                     <small class="pp-err"><?= e($errors['canonical_url']) ?></small>
                     <?php endif; ?>
@@ -279,9 +279,9 @@ window.PP_PAGES = <?= json_encode(
     </div>
 
     <div class="pp-form-actions">
-        <a href="<?= e(base_url('admin/pages')) ?>" class="pp-btn pp-btn--secondary">Cancelar</a>
+        <a href="<?= e(base_url('admin/pages')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('common.cancel')) ?></a>
         <button type="submit" class="pp-btn pp-btn--primary">
-            <?= $isEdit ? 'Guardar cambios' : 'Crear página' ?>
+            <?= e($isEdit ? __('common.save_changes') : __('page_form.create_page')) ?>
         </button>
     </div>
 </form>
@@ -297,9 +297,9 @@ window.PP_PAGES = <?= json_encode(
          data-base-url="<?= e(base_url('')) ?>">
     <header class="pp-post-meta__head">
         <div>
-            <span class="pp-post-meta__eyebrow">Entrada</span>
-            <h3 class="pp-post-meta__title">Metadatos de la entrada</h3>
-            <p class="pp-post-meta__desc">Imagen de portada, resumen y autor. Se usan en el listado del blog, en SEO y en redes sociales.</p>
+            <span class="pp-post-meta__eyebrow"><?= e(__('js.onb.post')) ?></span>
+            <h3 class="pp-post-meta__title"><?= e(__('post_meta.title')) ?></h3>
+            <p class="pp-post-meta__desc"><?= e(__('post_meta.help')) ?></p>
         </div>
         <div class="pp-post-meta__status" data-status aria-live="polite"></div>
     </header>
@@ -307,7 +307,7 @@ window.PP_PAGES = <?= json_encode(
     <div class="pp-post-meta__grid">
         <!-- Featured image -->
         <div class="pp-post-meta__featured">
-            <span class="pp-post-meta__label">Imagen destacada</span>
+            <span class="pp-post-meta__label"><?= e(__('post_meta.featured_image')) ?></span>
             <?php $img = (string) ($postMeta['featured_image_path'] ?? ''); ?>
             <div class="pp-post-meta__featured-slot <?= $img ? 'has-image' : '' ?>" data-image-slot>
                 <?php if ($img): ?>
@@ -317,14 +317,14 @@ window.PP_PAGES = <?= json_encode(
                 <?php endif; ?>
                 <div class="pp-post-meta__featured-empty" data-image-empty <?= $img ? 'hidden' : '' ?>>
                     <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <span>Aún sin imagen</span>
+                    <span><?= e(__('post_meta.no_image')) ?></span>
                 </div>
             </div>
             <div class="pp-post-meta__featured-actions">
                 <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="pick">
-                    <?= $img ? 'Cambiar imagen…' : 'Elegir imagen…' ?>
+                    <?= e($img ? __('post_meta.change_image') : __('post_meta.pick_image')) ?>
                 </button>
-                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="clear" <?= $img ? '' : 'hidden' ?>>Quitar</button>
+                <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-action="clear" <?= $img ? '' : 'hidden' ?>><?= e(__('post_meta.remove')) ?></button>
             </div>
             <input type="hidden" data-image-path value="<?= e($img) ?>">
             <input type="hidden" data-image-alt-store value="<?= e((string) ($postMeta['featured_image_alt'] ?? '')) ?>">
@@ -333,24 +333,24 @@ window.PP_PAGES = <?= json_encode(
         <!-- Resumen + autor -->
         <div class="pp-post-meta__fields">
             <div class="pp-form-group">
-                <label class="pp-form-label" for="pp-post-meta-excerpt">Resumen</label>
-                <textarea id="pp-post-meta-excerpt" class="pp-input" rows="3" maxlength="500" placeholder="Frase o dos que enganchen. Aparece en el listado del blog y en SEO." data-field="excerpt"><?= e((string) ($postMeta['excerpt'] ?? '')) ?></textarea>
-                <small class="pp-form-hint"><span data-excerpt-count>0</span> / 500 caracteres · <em>idealmente bajo 155 para SEO</em></small>
+                <label class="pp-form-label" for="pp-post-meta-excerpt"><?= e(__('documents.summary')) ?></label>
+                <textarea id="pp-post-meta-excerpt" class="pp-input" rows="3" maxlength="500" placeholder="<?= e(__('post_meta.excerpt_placeholder')) ?>" data-field="excerpt"><?= e((string) ($postMeta['excerpt'] ?? '')) ?></textarea>
+                <small class="pp-form-hint"><span data-excerpt-count>0</span> <?= __('post_meta.excerpt_hint.html') ?></small>
             </div>
             <div class="pp-form-group">
-                <label class="pp-form-label" for="pp-post-meta-alt">Texto alternativo de la imagen</label>
-                <input id="pp-post-meta-alt" type="text" class="pp-input" maxlength="255" placeholder="Describe la imagen para accesibilidad y SEO" data-field="featured_image_alt" value="<?= e((string) ($postMeta['featured_image_alt'] ?? '')) ?>">
+                <label class="pp-form-label" for="pp-post-meta-alt"><?= e(__('post_meta.alt')) ?></label>
+                <input id="pp-post-meta-alt" type="text" class="pp-input" maxlength="255" placeholder="<?= e(__('post_meta.alt_placeholder')) ?>" data-field="featured_image_alt" value="<?= e((string) ($postMeta['featured_image_alt'] ?? '')) ?>">
             </div>
             <div class="pp-form-group">
-                <label class="pp-form-label" for="pp-post-meta-author">Autor</label>
-                <input id="pp-post-meta-author" type="text" class="pp-input" maxlength="120" placeholder="Nombre del autor" data-field="author_name" value="<?= e((string) ($postMeta['author_name'] ?? '')) ?>">
+                <label class="pp-form-label" for="pp-post-meta-author"><?= e(__('post_meta.author')) ?></label>
+                <input id="pp-post-meta-author" type="text" class="pp-input" maxlength="120" placeholder="<?= e(__('post_meta.author_placeholder')) ?>" data-field="author_name" value="<?= e((string) ($postMeta['author_name'] ?? '')) ?>">
             </div>
             <div class="pp-post-meta__footer">
                 <small class="pp-post-meta__reading">
                     <?php $rm = (int) ($postMeta['reading_minutes'] ?? 0); ?>
-                    <span data-reading-display><?= $rm > 0 ? $rm . ' min de lectura estimados' : 'Tiempo de lectura se calcula al guardar' ?></span>
+                    <span data-reading-display><?= e($rm > 0 ? __('post_meta.reading_time', ['n' => $rm]) : __('post_meta.reading_pending')) ?></span>
                 </small>
-                <button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-action="save">Guardar metadatos</button>
+                <button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-action="save"><?= e(__('post_meta.save')) ?></button>
             </div>
         </div>
     </div>
@@ -413,13 +413,13 @@ window.PP_PAGES = <?= json_encode(
                 onSelect: (media) => setImage(media.path || media.url, media.alt_text || ''),
             });
         } else {
-            const url = prompt('Pega la URL/ruta de la imagen (puedes subirla antes en /admin/media):');
+            const url = prompt(pp.t('js.post.image_url_prompt'));
             if (url) setImage(url.trim(), '');
         }
     });
 
     saveBtn.addEventListener('click', () => {
-        status.textContent = 'Guardando…';
+        status.textContent = pp.t('js.saving');
         status.className = 'pp-post-meta__status is-loading';
         saveBtn.disabled = true;
         const fd = new FormData();
@@ -432,15 +432,15 @@ window.PP_PAGES = <?= json_encode(
             .then(r => r.json())
             .then(data => {
                 saveBtn.disabled = false;
-                if (!data.ok) { status.textContent = data.error || 'No se pudo guardar.'; status.className = 'pp-post-meta__status is-error'; return; }
-                status.textContent = '✓ Guardado';
+                if (!data.ok) { status.textContent = data.error || pp.t('js.post_meta.save_failed'); status.className = 'pp-post-meta__status is-error'; return; }
+                status.textContent = '✓ ' + pp.t('js.saved');
                 status.className = 'pp-post-meta__status is-ok';
                 if (typeof data.reading_minutes === 'number' && readingDisplay) {
-                    readingDisplay.textContent = data.reading_minutes + ' min de lectura estimados';
+                    readingDisplay.textContent = pp.t('js.post_meta.reading_time', { n: data.reading_minutes });
                 }
                 setTimeout(() => { status.textContent = ''; status.className = 'pp-post-meta__status'; }, 2200);
             })
-            .catch(err => { saveBtn.disabled = false; status.textContent = 'Error: ' + err.message; status.className = 'pp-post-meta__status is-error'; });
+            .catch(err => { saveBtn.disabled = false; status.textContent = pp.t('js.bank.error', { error: err.message }); status.className = 'pp-post-meta__status is-error'; });
     });
 })();
 </script>
@@ -497,13 +497,13 @@ window.PP_PAGES = <?= json_encode(
          data-base-url="<?= e(base_url('')) ?>">
 
     <div class="pp-section-header">
-        <h3>Secciones de la página</h3>
+        <h3><?= e(__('page_form.sections')) ?></h3>
         <div class="pp-section-header__actions">
             <button type="button" id="pp-layout-variations-btn" class="pp-btn pp-btn--secondary">
-                Probar 3 variaciones IA
+                <?= e(__('page_form.try_variations')) ?>
             </button>
             <button type="button" id="pp-add-section-btn" class="pp-btn pp-btn--primary">
-                + Añadir sección
+                <?= e(__('page_form.add_section')) ?>
             </button>
         </div>
     </div>
@@ -515,8 +515,8 @@ window.PP_PAGES = <?= json_encode(
 
     <?php if (empty($sections)): ?>
     <div class="pp-empty pp-empty--inline" id="pp-no-sections">
-        <div class="pp-empty__title">Esta página aún no tiene secciones</div>
-        <div class="pp-empty__text">Añade la primera sección para empezar a construir el contenido.</div>
+        <div class="pp-empty__title"><?= e(__('page_form.no_sections')) ?></div>
+        <div class="pp-empty__text"><?= e(__('page_form.no_sections_text')) ?></div>
     </div>
     <?php endif; ?>
 
@@ -585,7 +585,7 @@ window.PP_PAGES = <?= json_encode(
             data-section-type="<?= e($s['section_type']) ?>"
             draggable="true">
             <header class="pp-section-card__header">
-                <span class="pp-drag-handle" title="Arrastra para reordenar" aria-hidden="true">
+                <span class="pp-drag-handle" title="<?= e(__('page_form.drag_to_reorder')) ?>" aria-hidden="true">
                     <svg width="14" height="14" viewBox="0 0 16 16"><g fill="currentColor">
                         <circle cx="6" cy="3" r="1.2"/><circle cx="10" cy="3" r="1.2"/>
                         <circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/>
@@ -601,23 +601,23 @@ window.PP_PAGES = <?= json_encode(
                     <?php if ($ppInferredTitle !== ''): ?>
                         <span class="pp-section-card__title"><?= e($ppInferredTitle) ?></span>
                     <?php else: ?>
-                        <span class="pp-section-card__title pp-section-card__title--empty">Sin contenido todavía</span>
+                        <span class="pp-section-card__title pp-section-card__title--empty"><?= e(__('page_form.no_content')) ?></span>
                     <?php endif; ?>
                 </span>
                 <span class="pp-section-card__status-pill pp-section-card__status-pill--<?= e($ppStatus) ?>"><?= e($ppStatusLabel) ?></span>
-                <button type="button" class="pp-section-card__toggle" aria-expanded="false" aria-label="Expandir sección">
+                <button type="button" class="pp-section-card__toggle" aria-expanded="false" aria-label="<?= e(__('page_form.expand_section')) ?>">
                     <svg class="pp-section-card__chevron" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
                         <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
                 <div class="pp-section-card__menu">
-                    <button type="button" class="pp-section-card__menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">
+                    <button type="button" class="pp-section-card__menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="<?= e(__('pages.more_actions')) ?>">
                         <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><g fill="currentColor">
                             <circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/>
                         </g></svg>
                     </button>
                     <div class="pp-section-card__menu-list" role="menu" hidden>
-                        <button type="button" role="menuitem" class="pp-section-card__menu-item pp-section-card__delete">Eliminar sección</button>
+                        <button type="button" role="menuitem" class="pp-section-card__menu-item pp-section-card__delete"><?= e(__('page_form.delete_section')) ?></button>
                     </div>
                 </div>
             </header>
@@ -641,24 +641,24 @@ window.PP_PAGES = <?= json_encode(
     <div class="pp-modal__backdrop" data-close-modal></div>
     <div class="pp-modal__dialog" role="dialog" aria-labelledby="pp-add-section-title">
         <header class="pp-modal__header">
-            <h3 id="pp-add-section-title">Añadir nueva sección</h3>
-            <button type="button" class="pp-modal__close" data-close-modal aria-label="Cerrar">×</button>
+            <h3 id="pp-add-section-title"><?= e(__('page_form.add_section_title')) ?></h3>
+            <button type="button" class="pp-modal__close" data-close-modal aria-label="<?= e(__('common.close')) ?>">×</button>
         </header>
         <div class="pp-modal__body">
             <div class="pp-form-group">
-                <label for="pp-new-section-type">Tipo de sección</label>
+                <label for="pp-new-section-type"><?= e(__('page_form.section_type')) ?></label>
                 <select id="pp-new-section-type">
                     <?php foreach ($sectionTypes as $val => $label): ?>
                     <option value="<?= e($val) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <small>Se creará con contenido inicial vacío.</small>
+                <small><?= e(__('page_form.section_empty_hint')) ?></small>
             </div>
         </div>
         <footer class="pp-modal__footer">
-            <button type="button" class="pp-btn pp-btn--secondary" data-close-modal>Cancelar</button>
+            <button type="button" class="pp-btn pp-btn--secondary" data-close-modal><?= e(__('common.cancel')) ?></button>
             <button type="button" class="pp-btn pp-btn--primary" id="pp-create-section-btn">
-                Crear sección
+                <?= e(__('page_form.create_section')) ?>
             </button>
         </footer>
     </div>

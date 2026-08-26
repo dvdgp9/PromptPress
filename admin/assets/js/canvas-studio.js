@@ -32,6 +32,7 @@
   var chatHistory = [];
   // STUDIO-2 B3 — sección que acaba de cambiar, para señalarla tras recargar.
   var pendingFlash = '';
+  var suppressChatFocusOnce = false;
 
   // ----------------------------------------------------------------
   // STUDIO-2 A3 — Chat flotante: pastilla plegada / panel desplegado.
@@ -46,14 +47,14 @@
   var DOCK_KEY = 'pp-studio-chat-open';
 
   function pillText() {
-    if (busy) return 'Aplicando el cambio…';
-    if (selectedSection) return 'Cambiar «' + (ctxLabel.textContent || 'esta parte') + '»';
-    return 'Pídeme un cambio';
+    if (busy) return pp.t('js.cv.applying');
+    if (selectedSection) return pp.t('js.cv.change_x', { parte: ctxLabel.textContent || pp.t('js.cv.this_part') });
+    return pp.t('cv.ask_change_js');
   }
 
   function refreshPill() {
     chatPillLabel.textContent = pillText();
-    chatPill.title = 'Abrir la conversación';
+    chatPill.title = pp.t('js.cv.open_chat');
   }
 
   function setDock(open, remember) {
@@ -104,10 +105,10 @@
     var t = Date.parse((sqlDate || '').replace(' ', 'T'));
     if (isNaN(t)) return sqlDate || '';
     var diff = Math.max(0, (Date.now() - t) / 1000);
-    if (diff < 60) return 'hace un momento';
-    if (diff < 3600) return 'hace ' + Math.floor(diff / 60) + ' min';
-    if (diff < 86400) return 'hace ' + Math.floor(diff / 3600) + ' h';
-    if (diff < 604800) return 'hace ' + Math.floor(diff / 86400) + ' días';
+    if (diff < 60) return pp.t('js.cv.just_now');
+    if (diff < 3600) return pp.t('js.cv.ago_min', { n: Math.floor(diff / 60) });
+    if (diff < 86400) return pp.t('js.cv.ago_h', { n: Math.floor(diff / 3600) });
+    if (diff < 604800) return pp.t('js.cv.ago_days', { n: Math.floor(diff / 86400) });
     return new Date(t).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   }
 
@@ -121,13 +122,14 @@
       selectedSection = d.id;
       ctxLabel.textContent = d.label;
       ctxBox.hidden = false;
-      input.placeholder = 'Ej.: cambia el titular de esta parte';
+      input.placeholder = pp.t('js.canvas.input_ph');
       markCurrentSection();
       refreshPill();
       // Si el usuario está editando texto EN la página, el foco es suyo:
       // robárselo aquí era el bug que impedía escribir inline. Y con el chat
       // plegado no hay dónde escribir: tampoco se toca el foco.
-      if (!d.editing && dockIsOpen()) input.focus();
+      if (!d.editing && dockIsOpen() && !suppressChatFocusOnce) input.focus();
+      suppressChatFocusOnce = false;
     }
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
@@ -143,11 +145,12 @@
       renderSectionList(d.sections || []);
       if (lastScrollY > 0) {
         iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'scroll-to', y: lastScrollY }, '*');
-        if (selectedSection) {
-          iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'select', id: selectedSection }, '*');
-        }
-        lastScrollY = 0;
       }
+      if (selectedSection) {
+        suppressChatFocusOnce = true;
+        iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'select', id: selectedSection }, '*');
+      }
+      lastScrollY = 0;
       // El destello va después del scroll restaurado: manda la vista a lo que
       // ha cambiado, que es lo que el usuario quiere ver.
       if (pendingFlash) {
@@ -164,12 +167,18 @@
   // ----------------------------------------------------------------
   var sideEmpty = document.getElementById('side-empty');
   var sectionList = document.getElementById('side-sections');
+  var structureStatus = document.getElementById('structure-status');
+  var insertPlacementHint = document.getElementById('studio-insert-placement');
+  var addBlock = document.getElementById('studio-add-block');
   var pageSections = [];
+  var insertPlacement = null;
+  var structureBusy = false;
+  var pendingStructureFocus = '';
 
   // "cta-final" → "Cta final" (misma regla que el overlay del iframe).
   function sectionLabel(id) {
     var s = String(id || '').replace(/[-_]+/g, ' ').trim();
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sección';
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : pp.t('js.cv.section');
   }
 
   function tellIframe(msg) {
@@ -179,34 +188,223 @@
     }
   }
 
-  function renderSectionList(ids) {
-    pageSections = Array.isArray(ids) ? ids : [];
-    if (!sectionList) return;
-    if (!pageSections.length) {
-      sectionList.innerHTML = '<li class="cvstudio-side__hint">Esta página todavía no tiene partes editables.</li>';
+  function structureIcon(name) {
+    var paths = {
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      up: '<path d="M6 15l6-6 6 6"/>',
+      down: '<path d="M6 9l6 6 6-6"/>',
+      trash: '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/>'
+    };
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + (paths[name] || '') + '</svg>';
+  }
+
+  function insertionLabel(anchor, position) {
+    if (!pageSections.length) return pp.t('js.cv.insert_at_start');
+    var part = pageSections.find(function (p) { return p.id === anchor; });
+    if (!part) return position === 'before' ? pp.t('js.cv.insert_at_start') : pp.t('js.cv.insert_at_end');
+    var index = pageSections.indexOf(part);
+    if (position === 'before' && index === 0) return pp.t('js.cv.insert_at_start');
+    if (position === 'after' && index === pageSections.length - 1) return pp.t('js.cv.insert_at_end');
+    return pp.t(position === 'before' ? 'js.cv.insert_before_x' : 'js.cv.insert_after_x', { parte: part.label });
+  }
+
+  function updateInsertionHint() {
+    if (!insertPlacementHint) return;
+    if (!insertPlacement) {
+      insertPlacementHint.hidden = true;
+      insertPlacementHint.textContent = '';
       return;
     }
+    insertPlacementHint.textContent = insertionLabel(insertPlacement.anchor, insertPlacement.position);
+    insertPlacementHint.hidden = false;
+  }
+
+  function showStructureStatus(text, kind, undoSection) {
+    if (!structureStatus) return;
+    structureStatus.innerHTML = '';
+    structureStatus.className = 'cvstudio-structure-status' + (kind ? ' is-' + kind : '');
+    var message = document.createElement('span');
+    message.textContent = text;
+    structureStatus.appendChild(message);
+    if (undoSection) {
+      var undo = document.createElement('button');
+      undo.type = 'button';
+      undo.textContent = pp.t('js.cv.undo_action');
+      undo.addEventListener('click', function () {
+        selectedSection = undoSection;
+        pendingFlash = undoSection;
+        pendingStructureFocus = undoSection;
+        doUndo(undo);
+      });
+      structureStatus.appendChild(undo);
+    }
+    structureStatus.hidden = false;
+  }
+
+  function hideStructureStatus() {
+    if (!structureStatus) return;
+    structureStatus.hidden = true;
+    structureStatus.innerHTML = '';
+    structureStatus.className = 'cvstudio-structure-status';
+  }
+
+  function chooseInsertPoint(anchor, position) {
+    insertPlacement = { anchor: anchor || '', position: position };
+    closePanel();
+    updateInsertionHint();
+    renderSectionList(pageSections);
+    if (addBlock) addBlock.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    var first = addBlock && addBlock.querySelector('.cvstudio-insert__btn:not(:disabled)');
+    if (first) setTimeout(function () { first.focus(); }, 180);
+  }
+
+  function createInsertPoint(anchor, position) {
+    var li = document.createElement('li');
+    li.className = 'cvstudio-insertpoint';
+    if (insertPlacement && insertPlacement.anchor === anchor && insertPlacement.position === position) li.classList.add('is-current');
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cvstudio-insertpoint__btn';
+    button.dataset.insertAnchor = anchor;
+    button.dataset.insertPosition = position;
+    button.setAttribute('aria-label', insertionLabel(anchor, position));
+    button.innerHTML = structureIcon('plus') + '<span>' + esc(pp.t('js.cv.add_here')) + '</span>';
+    button.addEventListener('click', function () { chooseInsertPoint(anchor, position); });
+    li.appendChild(button);
+    return li;
+  }
+
+  function structureActionButton(action, id, label, disabled) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cvstudio-seclist__action' + (action === 'delete' ? ' is-danger' : '');
+    button.dataset.structureAction = action;
+    button.disabled = !!disabled;
+    var text = action === 'up' ? pp.t('js.cv.move_up') : (action === 'down' ? pp.t('js.cv.move_down') : pp.t('js.cv.delete_section'));
+    button.title = text;
+    button.setAttribute('aria-label', text + ': ' + label);
+    button.innerHTML = structureIcon(action === 'delete' ? 'trash' : action);
+    button.addEventListener('click', function (e) {
+      e.stopPropagation();
+      updateCanvasStructure(action === 'delete' ? 'delete' : 'move', id, action === 'delete' ? '' : action, button);
+    });
+    return button;
+  }
+
+  // El iframe manda las partes como {id, label}; se acepta también un array de
+  // ids a secas por si queda una preview vieja en caché.
+  function renderSectionList(parts) {
+    pageSections = (Array.isArray(parts) ? parts : []).map(function (p) {
+      return typeof p === 'string' ? { id: p, label: sectionLabel(p) } : { id: p.id, label: p.label || sectionLabel(p.id) };
+    });
+    if (!sectionList) return;
     sectionList.innerHTML = '';
-    pageSections.forEach(function (id, i) {
+    if (!pageSections.length) {
+      sectionList.appendChild(createInsertPoint('', 'after'));
+      markCurrentSection();
+      return;
+    }
+    sectionList.appendChild(createInsertPoint(pageSections[0].id, 'before'));
+    pageSections.forEach(function (part, i) {
+      var id = part.id;
       var li = document.createElement('li');
+      li.className = 'cvstudio-seclist__item';
+      li.dataset.sectionItem = id;
+      var row = document.createElement('div');
+      row.className = 'cvstudio-seclist__row';
       var btn = document.createElement('button');
       btn.type = 'button';
+      btn.className = 'cvstudio-seclist__select';
       btn.dataset.section = id;
-      btn.innerHTML = '<span class="cvstudio-seclist__num">' + (i + 1) + '</span><span>' + esc(sectionLabel(id)) + '</span>';
-      btn.addEventListener('click', function () { tellIframe({ type: 'select', id: id, panel: true }); });
+      btn.innerHTML = '<span class="cvstudio-seclist__num">' + (i + 1) + '</span><span class="cvstudio-seclist__label">' + esc(part.label) + '</span>';
+      btn.addEventListener('click', function () {
+        suppressChatFocusOnce = true;
+        tellIframe({ type: 'select', id: id, panel: true });
+      });
       btn.addEventListener('mouseenter', function () { tellIframe({ type: 'highlight', id: id, on: true }); });
       btn.addEventListener('mouseleave', function () { tellIframe({ type: 'highlight', on: false }); });
-      li.appendChild(btn);
+      var actions = document.createElement('div');
+      actions.className = 'cvstudio-seclist__actions';
+      actions.appendChild(structureActionButton('up', id, part.label, i === 0));
+      actions.appendChild(structureActionButton('down', id, part.label, i === pageSections.length - 1));
+      actions.appendChild(structureActionButton('delete', id, part.label, false));
+      row.appendChild(btn);
+      row.appendChild(actions);
+      li.appendChild(row);
       sectionList.appendChild(li);
+      sectionList.appendChild(createInsertPoint(id, 'after'));
     });
     markCurrentSection();
+    if (pendingStructureFocus) {
+      var focusId = pendingStructureFocus;
+      pendingStructureFocus = '';
+      setTimeout(function () {
+        var target = sectionList.querySelector('button[data-section="' + CSS.escape(focusId) + '"]');
+        if (target) target.focus();
+      }, 0);
+    }
   }
 
   function markCurrentSection() {
     if (!sectionList) return;
     sectionList.querySelectorAll('button[data-section]').forEach(function (b) {
       b.classList.toggle('is-current', b.dataset.section === selectedSection);
+      var item = b.closest('.cvstudio-seclist__item');
+      if (item) item.classList.toggle('is-current', b.dataset.section === selectedSection);
     });
+  }
+
+  function updateCanvasStructure(action, sectionId, direction, trigger) {
+    if (structureBusy || busy) return;
+    structureBusy = true;
+    if (trigger) trigger.disabled = true;
+    var loadingText = action === 'delete' ? pp.t('js.cv.deleting_section') : pp.t('js.cv.moving_section');
+    showStructureStatus(loadingText, 'loading');
+
+    var fd = new FormData();
+    fd.append('_csrf', csrf);
+    fd.append('action', action);
+    fd.append('section', sectionId);
+    if (direction) fd.append('direction', direction);
+    fetch(body.dataset.structureUrl, { method: 'POST', body: fd })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .then(function (data) {
+        if (!data.ok) {
+          showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error');
+          return;
+        }
+        applyHistory(data.history);
+        if (!data.changed) {
+          showStructureStatus(pp.t('js.cv.section_at_limit'));
+          return;
+        }
+
+        var focusId = String(data.focus_section || '');
+        selectedSection = focusId;
+        suppressChatFocusOnce = true;
+        pendingStructureFocus = focusId;
+        pendingFlash = String(data.changed_section || focusId);
+        // Una posición espacial deja de ser fiable en cuanto cambia el orden.
+        insertPlacement = null;
+        updateInsertionHint();
+        if (action === 'delete') {
+          ctxBox.hidden = true;
+          selectedElementContext = '';
+          selectedElementPath = '';
+          closePanel();
+          showStructureStatus(pp.t('js.cv.section_deleted'), 'success', sectionId);
+        } else {
+          showStructureStatus(pp.t('js.cv.section_moved'), 'success');
+        }
+        renderSectionList(data.sections || []);
+        reloadPreview();
+      })
+      .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+      .finally(function () {
+        structureBusy = false;
+        if (trigger && trigger.isConnected) trigger.disabled = false;
+      });
   }
 
   // La barra enseña una cosa u otra, nunca las dos ni ninguna.
@@ -272,47 +470,47 @@
     var picker = '<label class="cvstudio-colorpick' + (custom ? ' is-on' : '') + '"' + pickerStyle + ' title="Color personalizado">'
       + '<input type="color" data-cinput="' + op + '" value="' + (hex || '#000000') + '"></label>';
     var none = opts.none ? '<button type="button" class="cvstudio-swatch cvstudio-swatch--reset' + (transp ? ' is-on' : '') + '" data-cop="' + op + '" data-cval="none" title="Sin relleno">∅</button>' : '';
-    var reset = '<button type="button" class="cvstudio-swatch cvstudio-swatch--reset" data-cop="' + op + '" data-cval="reset" title="Quitar">×</button>';
+    var reset = '<button type="button" class="cvstudio-swatch cvstudio-swatch--reset" data-cop="' + op + '" data-cval="reset" title="' + pp.t('js.cv.remove') + '">×</button>';
     return '<div class="cvstudio-field"><label>' + esc(labelTxt) + '</label><div class="cvstudio-swatches">' + sw + picker + none + reset + '</div></div>';
   }
 
   function sizeField() {
-    return '<div class="cvstudio-field"><label>Tamaño</label><div class="cvstudio-btnrow">'
-      + '<button type="button" data-op="size" data-val="down" title="Más pequeño">A−</button>'
-      + '<button type="button" data-op="size" data-val="reset" title="Tamaño normal">A</button>'
-      + '<button type="button" data-op="size" data-val="up" title="Más grande">A+</button>'
+    return '<div class="cvstudio-field"><label>' + pp.t('js.cv.size') + '</label><div class="cvstudio-btnrow">'
+      + '<button type="button" data-op="size" data-val="down" title="' + pp.t('js.cv.smaller') + '">A−</button>'
+      + '<button type="button" data-op="size" data-val="reset" title="' + pp.t('js.cv.normal_size') + '">A</button>'
+      + '<button type="button" data-op="size" data-val="up" title="' + pp.t('js.cv.bigger') + '">A+</button>'
     + '</div></div>';
   }
 
   function textControls(props) {
     return ''
       + sizeField()
-      + '<div class="cvstudio-field"><label>Estilo</label><div class="cvstudio-btnrow">'
-        + '<button type="button" data-toggle="bold" class="' + (props.bold ? 'is-on' : '') + '" title="Negrita"><b>B</b></button>'
-        + '<button type="button" data-toggle="italic" class="' + (props.italic ? 'is-on' : '') + '" title="Cursiva"><i>I</i></button>'
+      + '<div class="cvstudio-field"><label>' + pp.t('chrome.style_js') + '</label><div class="cvstudio-btnrow">'
+        + '<button type="button" data-toggle="bold" class="' + (props.bold ? 'is-on' : '') + '" title="' + pp.t('js.cv.bold') + '"><b>B</b></button>'
+        + '<button type="button" data-toggle="italic" class="' + (props.italic ? 'is-on' : '') + '" title="' + pp.t('design.italic_js') + '"><i>I</i></button>'
       + '</div></div>'
-      + '<div class="cvstudio-field"><label>Alineación</label><div class="cvstudio-btnrow">'
-        + '<button type="button" data-op="align" data-val="left" title="Izquierda">⬅</button>'
-        + '<button type="button" data-op="align" data-val="center" title="Centro">↔</button>'
-        + '<button type="button" data-op="align" data-val="right" title="Derecha">➡</button>'
-        + '<button type="button" data-op="align" data-val="justify" title="Justificado">☰</button>'
+      + '<div class="cvstudio-field"><label>' + pp.t('js.cv.align') + '</label><div class="cvstudio-btnrow">'
+        + '<button type="button" data-op="align" data-val="left" title="' + pp.t('chrome.side.left_js') + '">⬅</button>'
+        + '<button type="button" data-op="align" data-val="center" title="' + pp.t('js.cv.center') + '">↔</button>'
+        + '<button type="button" data-op="align" data-val="right" title="' + pp.t('chrome.side.right_js') + '">➡</button>'
+        + '<button type="button" data-op="align" data-val="justify" title="' + pp.t('js.cv.justify') + '">☰</button>'
       + '</div></div>'
-      + colorField('Color del texto', 'color', { current: props.color });
+      + colorField(pp.t('js.cv.text_color'), 'color', { current: props.color });
   }
 
   function radiusField() {
-    return '<div class="cvstudio-field"><label>Esquinas</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
-      + '<button type="button" data-op="radius" data-val="sharp">Recto</button>'
-      + '<button type="button" data-op="radius" data-val="soft">Suave</button>'
-      + '<button type="button" data-op="radius" data-val="round">Redondo</button>'
-      + '<button type="button" data-op="radius" data-val="pill">Píldora</button>'
+    return '<div class="cvstudio-field"><label>' + pp.t('js.cv.corners') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+      + '<button type="button" data-op="radius" data-val="sharp">' + pp.t('js.cv.sharp') + '</button>'
+      + '<button type="button" data-op="radius" data-val="soft">' + pp.t('js.cv.soft') + '</button>'
+      + '<button type="button" data-op="radius" data-val="round">' + pp.t('js.cv.round') + '</button>'
+      + '<button type="button" data-op="radius" data-val="pill">' + pp.t('js.cv.pill') + '</button>'
     + '</div></div>';
   }
 
   function cornerFields(props) {
     var fields = [
-      ['top-left', 'Superior izquierda', props.radiusTopLeft],
-      ['top-right', 'Superior derecha', props.radiusTopRight],
+      ['top-left', pp.t('js.cv.top_left'), props.radiusTopLeft],
+      ['top-right', pp.t('js.cv.top_right'), props.radiusTopRight],
       ['bottom-right', 'Inferior derecha', props.radiusBottomRight],
       ['bottom-left', 'Inferior izquierda', props.radiusBottomLeft]
     ];
@@ -324,27 +522,27 @@
 
   function boxControls(props) {
     return textControls(props)
-      + colorField('Relleno', 'fill', { none: true, current: props.fill })
+      + colorField(pp.t('js.cv.fill'), 'fill', { none: true, current: props.fill })
       + radiusField()
       + cornerFields(props);
   }
 
   function linkControls(props) {
-    var opts = '<option value="">— Elige una página —</option>'
+    var opts = '<option value="">— ' + pp.t('js.cv.pick_page') + ' —</option>'
       + LINKS.map(function (l) {
         return '<option value="' + esc(l.url) + '"' + (l.url === props.href ? ' selected' : '') + '>' + esc(l.title) + '</option>';
       }).join('');
     var styleControls = props.isButton
-      ? colorField('Relleno', 'fill', { none: true, current: props.fill }) + colorField('Color del texto', 'color', { current: props.color }) + radiusField() + sizeField()
-      : colorField('Color', 'color', { current: props.color }) + sizeField();
+      ? colorField(pp.t('js.cv.fill'), 'fill', { none: true, current: props.fill }) + colorField(pp.t('js.cv.text_color'), 'color', { current: props.color }) + radiusField() + sizeField()
+      : colorField(pp.t('js.cv.color'), 'color', { current: props.color }) + sizeField();
     return ''
-      + '<div class="cvstudio-field"><label>Texto</label>'
+      + '<div class="cvstudio-field"><label>' + pp.t('js.chrome.text') + '</label>'
         + '<input type="text" id="ep-text" value="' + esc(props.text || '') + '"></div>'
-      + '<div class="cvstudio-field"><label>Enlace a una página</label>'
+      + '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_to_page') + '</label>'
         + '<select id="ep-page">' + opts + '</select></div>'
-      + '<div class="cvstudio-field"><label>…o una dirección</label>'
+      + '<div class="cvstudio-field"><label>' + pp.t('js.cv.or_url') + '</label>'
         + '<input type="text" id="ep-url" placeholder="https://…" value="' + esc(props.href || '') + '"></div>'
-      + '<label class="cvstudio-check"><input type="checkbox" id="ep-newtab"' + (props.newTab ? ' checked' : '') + '> Abrir en una pestaña nueva</label>'
+      + '<label class="cvstudio-check"><input type="checkbox" id="ep-newtab"' + (props.newTab ? ' checked' : '') + '> ' + pp.t('js.cv.open_new_tab') + '</label>'
       + '<hr class="cvstudio-sep">'
       + styleControls;
   }
@@ -374,18 +572,18 @@
         + '</div></div>';
     // Galería/carrusel: disposición y fotos. Solo aparece si la sección lleva uno.
     var galleryBlock = props.slider
-      ? '<div class="cvstudio-field"><label>Galería · cómo se ven las fotos</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
-          + seg('sliderlayout', 'strip', props.slider, 'En fila')
-          + seg('sliderlayout', 'single', props.slider, 'Una a una')
-          + seg('sliderlayout', 'vertical', props.slider, 'En vertical')
+      ? '<div class="cvstudio-field"><label>' + pp.t('js.cv.gallery_layout') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('sliderlayout', 'strip', props.slider, pp.t('js.cv.in_row'))
+          + seg('sliderlayout', 'single', props.slider, pp.t('js.cv.one_by_one'))
+          + seg('sliderlayout', 'vertical', props.slider, pp.t('js.cv.vertical'))
         + '</div></div>'
-        + '<div class="cvstudio-field"><label>Fotos de la galería</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
-          + '<button type="button" id="ep-gallery-pick">Elegir fotos' + (props.sliderPhotos ? ' (' + props.sliderPhotos + ')' : '') + '</button>'
-        + '</div><small class="cvstudio-hint">Elige varias de tu biblioteca y sustituirán a las actuales. Para cambiar solo una, haz clic sobre ella.</small></div>'
+        + '<div class="cvstudio-field"><label>' + pp.t('js.cv.gallery_photos') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + '<button type="button" id="ep-gallery-pick">' + pp.t('js.cv.pick_photos') + (props.sliderPhotos ? ' (' + props.sliderPhotos + ')' : '') + '</button>'
+        + '</div><small class="cvstudio-hint">' + pp.t('js.cv.gallery_hint') + '</small></div>'
       : '';
 
     return ''
-      + colorField('Color de fondo', 'bgcolor', { current: props.bgcolor })
+      + colorField(pp.t('chrome.bg_color_js'), 'bgcolor', { current: props.bgcolor })
       + galleryBlock
       + bgImageBlock
       + '<div class="cvstudio-field"><label>Espaciado vertical</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
@@ -399,24 +597,25 @@
   // IA envuelve el contenido en una caja (un velo blanco sobre la foto de
   // fondo, por ejemplo) el clic cae en esa caja y los controles de la sección
   // —los únicos que cambian la imagen de fondo— se vuelven inalcanzables.
-  var CRUMB_LABELS = { text: 'Texto', box: 'Bloque', link: 'Botón', image: 'Imagen', section: 'Sección' };
+  // Las claves son tipos internos; solo la etiqueta se traduce.
+  var CRUMB_LABELS = { text: pp.t('js.chrome.text'), box: pp.t('js.cv.box'), link: pp.t('chrome.button_js'), image: pp.t('js.post_editor.image'), section: pp.t('js.cv.section') };
   var panelState = { chain: [], index: -1, sectionLabel: '' };
 
   function renderCrumbs(chain, active, sectionLabel) {
-    var parts = ['<button type="button" class="cvstudio-crumb" data-scope="-1" title="Quitar la selección: el cambio afectará a toda la página">Página</button>'];
+    var parts = ['<button type="button" class="cvstudio-crumb" data-scope="-1" title="' + pp.t('js.cv.clear_scope') + '">' + pp.t('js.onb.page') + '</button>'];
     chain.forEach(function (c, i) {
-      var label = c.kind === 'section' ? (sectionLabel || 'Sección') : (CRUMB_LABELS[c.kind] || 'Elemento');
+      var label = c.kind === 'section' ? (sectionLabel || pp.t('js.cv.section')) : (CRUMB_LABELS[c.kind] || pp.t('js.cv.element'));
       parts.push(i === active
         ? '<strong class="cvstudio-crumb is-active">' + esc(label) + '</strong>'
         : '<button type="button" class="cvstudio-crumb" data-scope="' + i + '">' + esc(label) + '</button>');
     });
-    return '<nav class="cvstudio-crumbs" aria-label="Ámbito de edición">'
+    return '<nav class="cvstudio-crumbs" aria-label="' + pp.t('js.cv.scope_aria') + '">'
       + parts.join('<i aria-hidden="true">›</i>') + '</nav>';
   }
 
   function openPanel(d) {
     var p = d.props || {};
-    var titles = { text: 'Texto', box: 'Bloque', link: 'Botón / enlace', image: 'Imagen', section: 'Sección' };
+    var titles = { text: pp.t('js.chrome.text'), box: pp.t('js.cv.box'), link: pp.t('js.cv.button_link'), image: pp.t('js.post_editor.image'), section: pp.t('js.cv.section') };
     var bodyHtml = d.kind === 'text' ? textControls(p)
       : d.kind === 'box' ? boxControls(p)
       : d.kind === 'link' ? linkControls(p)
@@ -430,11 +629,11 @@
       + '<div class="cvstudio-panel__head">'
         + (chain.length
             ? renderCrumbs(chain, panelState.index, d.sectionLabel)
-            : '<strong>' + esc(titles[d.kind] || 'Elemento') + '</strong><small>' + esc(d.sectionLabel || '') + '</small>')
-        + '<button type="button" id="ep-close" title="Cerrar">✕</button>'
+            : '<strong>' + esc(titles[d.kind] || pp.t('js.cv.element')) + '</strong><small>' + esc(d.sectionLabel || '') + '</small>')
+        + '<button type="button" id="ep-close" title="' + pp.t('js.common.close') + '">✕</button>'
       + '</div>'
       + '<div class="cvstudio-panel__body">' + bodyHtml + '</div>'
-      + '<p class="pp-chat-hint">¿Algo más complejo? Pídemelo en la conversación de abajo a la derecha.</p>';
+      + '<p class="pp-chat-hint">' + pp.t('js.cv.complex_hint') + '</p>';
     showSide('panel');
     wirePanel(d.kind);
   }
@@ -550,7 +749,7 @@
     selectedSection = null;
     selectedElementContext = '';
     ctxBox.hidden = true;
-    input.placeholder = 'Ej.: pon el titular más grande y el botón en otro color';
+    input.placeholder = pp.t('js.cv.chat_scoped_placeholder');
     if (notifyIframe !== false && iframe.contentWindow) {
       iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'deselect' }, '*');
     }
@@ -579,8 +778,8 @@
       if (!slot || !msgEl.isConnected) { clearInterval(iv); return; }
       var s = Math.round((Date.now() - t0) / 1000);
       var note = '';
-      if (s >= 45) note = scoped ? ' · está tardando; puedes pulsar «Parar»' : ' · una página entera tarda más; puedes pulsar «Parar»';
-      else if (s >= 15) note = scoped ? ' · suele tardar unos segundos' : ' · cambiar la página entera tarda algo más';
+      if (s >= 45) note = ' · ' + pp.t(scoped ? 'js.cv.slow_scoped' : 'js.cv.slow_page');
+      else if (s >= 15) note = ' · ' + pp.t(scoped ? 'js.cv.wait_scoped' : 'js.cv.wait_page');
       slot.textContent = 'Aplicando el cambio… ' + s + ' s' + note;
     }, 1000);
     return iv;
@@ -664,7 +863,7 @@
         clearInterval(waitTimer);
         thinking.remove();
         if (err && err.name === 'AbortError') return; // ya lo hemos contado al parar
-        addMsg('assistant pp-chat-msg--error', 'No hay conexión ahora mismo. Tu página no ha cambiado.');
+        addMsg('assistant pp-chat-msg--error', pp.t('js.cv.no_connection_page'));
       })
       .finally(function () {
         currentRequest = null;
@@ -692,7 +891,7 @@
           cancelBtn.disabled = false;
           var t = messages.querySelector('.pp-chat-msg:last-child');
           if (t && t.textContent.indexOf('Aplicando el cambio') >= 0) t.remove();
-          addMsg('assistant', 'Cambio cancelado. Tu página no se ha tocado.');
+          addMsg('assistant', pp.t('js.cv.cancelled'));
           setBusy(false);
         });
     });
@@ -739,12 +938,13 @@
       .then(function (data) {
         if (data.ok) {
           applyHistory(data.history);
+          hideStructureStatus();
           reloadPreview();
         } else if (data.error) {
           showSaved(data.error, true);
         }
       })
-      .catch(function () { showSaved('Sin conexión', true); })
+      .catch(function () { showSaved(pp.t('js.media.no_connection'), true); })
       .finally(function () { setBusy(false); });
   }
 
@@ -784,7 +984,7 @@
     fetch(body.dataset.restoreUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.ok) { applyHistory(data.history); reloadPreview(); showSaved('Versión recuperada'); }
+        if (data.ok) { applyHistory(data.history); reloadPreview(); showSaved(pp.t('js.cv.version_restored')); }
         else { showSaved(data.error || 'No se pudo recuperar', true); }
       })
       .catch(function () { showSaved('No se pudo recuperar ahora mismo', true); })
@@ -825,7 +1025,7 @@
           reloadPreview(); // volver al estado real persistido
         }
       })
-      .catch(function () { showSaved('Sin conexión, no guardado', true); reloadPreview(); });
+      .catch(function () { showSaved(pp.t('js.cv.offline_not_saved'), true); reloadPreview(); });
   }
 
   // ----------------------------------------------------------------
@@ -893,7 +1093,7 @@
     iframe.contentWindow.postMessage({
       source: 'pp-studio-parent', type: 'apply', op: 'gallery', value: gallerySelection.slice()
     }, '*');
-    showSaved('Galería actualizada');
+    showSaved(pp.t('js.cv.gallery_updated'));
     closeGalleryMode();
     mediaModal.hidden = true;
   }
@@ -911,13 +1111,13 @@
     var filterBar = document.getElementById('media-filter');
     if (filterBar) filterBar.hidden = tab !== 'library';
     if (tab === 'unsplash') {
-      mediaHint.textContent = 'Busca una foto en Unsplash; al elegirla se añade a tu biblioteca.';
-      mediaGrid.innerHTML = '<p class="pp-chat-hint">Escribe qué foto necesitas y pulsa «Buscar».</p>';
+      mediaHint.textContent = pp.t('js.cv.unsplash_hint');
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.cv.search_prompt') + '</p>';
       if (mediaSearchInput) mediaSearchInput.focus();
     } else {
       mediaHint.textContent = galleryMode
-        ? 'Elige las fotos de la galería: se colocarán en el orden en que las toques.'
-        : 'Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.';
+        ? pp.t('js.cv.gallery_pick_hint')
+        : pp.t('cv.media_hint_js');
       loadLibrary();
     }
   }
@@ -931,7 +1131,7 @@
       var bar = document.createElement('div');
       bar.id = 'cvstudio-gallery-bar';
       bar.className = 'cvstudio-gallery-bar';
-      bar.innerHTML = '<span>Toca las fotos en el orden que quieras verlas.</span><button type="button" disabled>Elige al menos una foto</button>';
+      bar.innerHTML = '<span>' + pp.t('js.canvas.gallery_hint') + '</span><button type="button" disabled>' + pp.t('js.canvas.gallery_pick') + '</button>';
       bar.querySelector('button').addEventListener('click', applyGallerySelection);
       mediaGrid.parentNode.insertBefore(bar, mediaGrid.nextSibling);
     }
@@ -952,7 +1152,7 @@
         mediaCache = (data.items || []).filter(function (it) { return (it.mime_type || '').indexOf('image/') === 0; });
         renderLibrary(mediaCache);
       })
-      .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo cargar la biblioteca.</p>'; });
+      .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.media.load_error') + '</p>'; });
   }
 
   function isOwn(it) { return (it.source || 'upload') === 'upload'; }
@@ -980,7 +1180,7 @@
   function renderLibrary(items) {
     if (!items.length) {
       renderFilterChips(false, false);
-      mediaGrid.innerHTML = '<p class="pp-chat-hint">Tu biblioteca está vacía. Sube una imagen o busca en Unsplash.</p>';
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.cv.library_empty') + '</p>';
       return;
     }
     var hasOwn = items.some(isOwn);
@@ -1023,7 +1223,7 @@
           mediaCache = null; // la biblioteca cambió
           useMedia(data.item);
         })
-        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo subir la imagen.</p>'; })
+        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.canvas.upload_error') + '</p>'; })
         .finally(function () { mediaUploadInput.value = ''; });
     });
   }
@@ -1041,13 +1241,13 @@
           if (!data.ok) { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + esc(data.error || 'No se pudo buscar ahora mismo.') + '</p>'; return; }
           renderUnsplash(data.items || [], q);
         })
-        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">No se pudo buscar ahora mismo.</p>'; });
+        .catch(function () { mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.canvas.search_error') + '</p>'; });
     });
   }
 
   function renderUnsplash(items, query) {
     if (!items.length) {
-      mediaGrid.innerHTML = '<p class="pp-chat-hint">Sin resultados para «' + esc(query) + '». Prueba otras palabras.</p>';
+      mediaGrid.innerHTML = '<p class="pp-chat-hint">' + pp.t('js.canvas.no_results', { query: esc(query) }) + '</p>';
       return;
     }
     mediaGrid.innerHTML = '';
@@ -1073,11 +1273,11 @@
     fetch(body.dataset.bankImportUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (data) {
-        if (!data.ok || !data.media) { showSaved(data.error || 'No se pudo añadir la imagen', true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } return; }
+        if (!data.ok || !data.media) { showSaved(data.error || pp.t('js.cv.add_image_failed'), true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } return; }
         mediaCache = null;
         useMedia(data.media);
       })
-      .catch(function () { showSaved('No se pudo añadir la imagen', true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } });
+      .catch(function () { showSaved(pp.t('js.cv.add_image_failed'), true); if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); } });
   }
 
   mediaTabs.forEach(function (b) { b.addEventListener('click', function () { setMediaTab(b.dataset.mediaTab); }); });
@@ -1107,7 +1307,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.ok || !data.versions.length) {
-          historyList.innerHTML = '<li class="pp-chat-hint">Todavía no hay versiones guardadas.</li>';
+          historyList.innerHTML = '<li class="pp-chat-hint">' + pp.t('js.cv.no_versions') + '</li>';
           return;
         }
         applyHistory(data.history);
@@ -1120,8 +1320,8 @@
               + '<span><i class="cvstudio-vkind">' + esc(v.kind) + '</i> · ' + esc(relTime(v.created_at)) + '</span>'
             + '</div>'
             + (v.is_current
-              ? '<em>Aquí estás</em>'
-              : '<button type="button" class="cvstudio-ghost-btn" data-version="' + v.id + '">Ver esta versión</button>');
+              ? '<em>' + pp.t('js.cv.you_are_here') + '</em>'
+              : '<button type="button" class="cvstudio-ghost-btn" data-version="' + v.id + '">' + pp.t('js.cv.see_version') + '</button>');
           historyList.appendChild(li);
         });
         historyList.querySelectorAll('button[data-version]').forEach(function (btn) {
@@ -1158,7 +1358,7 @@
     var vlink = document.getElementById('studio-view-link');
     if (vlink) {
       vlink.href = publishing ? body.dataset.publicUrl : body.dataset.cleanPreviewUrl;
-      var vt = publishing ? 'Ver página en el sitio' : 'Previsualizar borrador';
+      var vt = pp.t(publishing ? 'cv.view_on_site_js' : 'cv.preview_draft_js');
       vlink.title = vt; vlink.setAttribute('aria-label', vt);
     }
   }
@@ -1174,8 +1374,10 @@
         if (!data.ok) return;
         reflectPublished(publishing);
         addMsg('assistant', publishing
-          ? 'Tu página ya está publicada. <a href="' + body.dataset.publicUrl + '" target="_blank" rel="noopener">Verla en el sitio</a>.'
-          : 'La página vuelve a ser un borrador (ya no es visible para tus visitantes).');
+          ? pp.t('js.cv.now_published.html', {
+              enlace: '<a href="' + body.dataset.publicUrl + '" target="_blank" rel="noopener">' + pp.t('js.cv.see_it') + '</a>'
+            })
+          : pp.t('js.cv.now_draft'));
       })
       .finally(function () { if (triggerBtn) triggerBtn.disabled = false; });
   }
@@ -1200,6 +1402,111 @@
   publishBtn.addEventListener('click', function () { setPublished(true, publishBtn); });
   unpublishBtn.addEventListener('click', function () { closeMoreMenu(); setPublished(false, unpublishBtn); });
 
+  function appendRequestedPlacement(fd) {
+    if (insertPlacement) {
+      if (insertPlacement.anchor) fd.append('section', insertPlacement.anchor);
+      fd.append('position', insertPlacement.position);
+      return;
+    }
+    if (selectedSection) {
+      fd.append('section', selectedSection);
+      fd.append('position', 'after');
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // STUDIO-STRUCTURE S4 — un selector único para contenido y bloques reales.
+  // Los subselectores permanecen dentro del mismo panel para no perder la
+  // posición espacial que el usuario acaba de elegir.
+  // ----------------------------------------------------------------
+  var blockPicker = document.getElementById('studio-block-picker');
+  var blockPickerBtn = document.getElementById('studio-block-picker-btn');
+  var blockPickerMenu = document.getElementById('studio-block-picker-menu');
+
+  function closeBlockPicker() {
+    if (!blockPickerMenu || !blockPickerBtn) return;
+    blockPickerMenu.hidden = true;
+    blockPickerBtn.setAttribute('aria-expanded', 'false');
+    blockPickerMenu.querySelectorAll('.cvstudio-insert__pop').forEach(function (menu) { menu.hidden = true; });
+    blockPickerMenu.querySelectorAll('.cvstudio-insert__btn[aria-expanded]').forEach(function (button) {
+      button.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  if (blockPicker && blockPickerBtn && blockPickerMenu) {
+    blockPickerBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = blockPickerMenu.hidden;
+      if (!open) {
+        closeBlockPicker();
+        return;
+      }
+      blockPickerMenu.hidden = false;
+      blockPickerBtn.setAttribute('aria-expanded', 'true');
+      var first = blockPickerMenu.querySelector('[data-section-template], .cvstudio-insert__btn:not(:disabled)');
+      if (first) setTimeout(function () { first.focus(); }, 0);
+    });
+    blockPickerMenu.addEventListener('click', function (e) {
+      var trigger = e.target.closest('.cvstudio-insert__btn');
+      if (!trigger) return;
+      blockPickerMenu.querySelectorAll('.cvstudio-insert').forEach(function (wrap) {
+        if (wrap.contains(trigger)) return;
+        var menu = wrap.querySelector('.cvstudio-insert__pop');
+        var button = wrap.querySelector('.cvstudio-insert__btn');
+        if (menu) menu.hidden = true;
+        if (button) button.setAttribute('aria-expanded', 'false');
+      });
+    }, true);
+    document.addEventListener('click', function (e) {
+      if (!blockPickerMenu.hidden && !blockPicker.contains(e.target)) closeBlockPicker();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || blockPickerMenu.hidden) return;
+      closeBlockPicker();
+      blockPickerBtn.focus();
+    });
+
+    blockPickerMenu.querySelectorAll('button[data-section-template]').forEach(function (item) {
+      item.addEventListener('click', function () {
+        if (structureBusy || busy) return;
+        structureBusy = true;
+        item.disabled = true;
+        showStructureStatus(pp.t('js.cv.inserting_template'), 'loading');
+        var fd = new FormData();
+        fd.append('_csrf', csrf);
+        fd.append('action', 'insert_template');
+        fd.append('template', item.dataset.sectionTemplate || '');
+        appendRequestedPlacement(fd);
+        // Una página vacía no tiene ancla, pero sí un extremo inequívoco.
+        if (!fd.has('position')) fd.append('position', 'after');
+        fetch(body.dataset.structureUrl, { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+          .then(function (data) {
+            if (!data.ok) { showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error'); return; }
+            finishFunctionalInsert(data);
+          })
+          .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+          .finally(function () {
+            structureBusy = false;
+            if (item.isConnected) item.disabled = false;
+          });
+      });
+    });
+  }
+
+  function finishFunctionalInsert(data) {
+    applyHistory(data.history);
+    selectedSection = String(data.changed_section || '');
+    pendingStructureFocus = selectedSection;
+    pendingFlash = selectedSection;
+    insertPlacement = null;
+    updateInsertionHint();
+    showStructureStatus(data.reply || pp.t('js.cv.block_inserted'), 'success');
+    renderSectionList(data.sections || []);
+    closeBlockPicker();
+    reloadPreview();
+  }
+
   // ----------------------------------------------------------------
   // FORMS-R T3 — Insertar existente o crear desde plantilla en el punto activo.
   // ----------------------------------------------------------------
@@ -1219,32 +1526,112 @@
     });
     function insertFormItem(item) {
       item.addEventListener('click', function () {
+        if (structureBusy || busy) return;
         var formId = item.dataset.formId;
         var template = item.dataset.formTemplate;
         closeInsertMenu();
-        setDock(true);   // el progreso y el resultado se cuentan en la conversación
-        var thinking = addMsg('assistant', '<span class="pp-chat-dots"><i></i><i></i><i></i></span> Insertando el formulario…');
+        structureBusy = true;
+        item.disabled = true;
+        showStructureStatus(pp.t('js.cv.inserting_form'), 'loading');
         var fd = new FormData();
         fd.append('_csrf', csrf);
         if (formId) fd.append('form_id', formId);
         if (template) fd.append('template', template);
-        if (selectedSection) fd.append('section', selectedSection);
+        appendRequestedPlacement(fd);
         var source = document.getElementById('studio-form-source');
         if (source && source.value.trim()) fd.append('source_label', source.value.trim());
         fetch(body.dataset.insertFormUrl, { method: 'POST', body: fd })
           .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
           .then(function (data) {
-            thinking.remove();
-            if (!data.ok) { addMsg('assistant pp-chat-msg--error', esc(data.error || 'No se pudo insertar.')); return; }
-            addMsg('assistant', esc(data.reply || 'Formulario insertado.'));
-            applyHistory(data.history);
-            reloadPreview();
+            if (!data.ok) { showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error'); return; }
+            finishFunctionalInsert(data);
             if (source) source.value = '';
           })
-          .catch(function () { thinking.remove(); addMsg('assistant pp-chat-msg--error', 'No hay conexión ahora mismo.'); });
+          .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+          .finally(function () { structureBusy = false; if (item.isConnected) item.disabled = false; });
       });
     }
     insertMenu.querySelectorAll('button[data-form-id],button[data-form-template]').forEach(insertFormItem);
+  }
+
+  // ----------------------------------------------------------------
+  // MODULOS M2 — Insertar el calendario de reservas en el punto activo.
+  // Mismo gesto que el formulario: un botón, elegir servicio por su nombre, y
+  // el resultado se cuenta en la conversación.
+  // ----------------------------------------------------------------
+  var bkWrap = document.getElementById('studio-insert-booking');
+  if (bkWrap) {
+    var bkBtn = document.getElementById('studio-insert-booking-btn');
+    var bkMenu = document.getElementById('studio-insert-booking-menu');
+    function closeBkMenu() { bkMenu.hidden = true; bkBtn.setAttribute('aria-expanded', 'false'); }
+    bkBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = bkMenu.hidden;
+      bkMenu.hidden = !open;
+      bkBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+      if (!bkMenu.hidden && !bkWrap.contains(e.target)) closeBkMenu();
+    });
+    bkMenu.querySelectorAll('button[data-booking-service]').forEach(function (item) {
+      item.addEventListener('click', function () {
+        if (structureBusy || busy) return;
+        closeBkMenu();
+        structureBusy = true;
+        item.disabled = true;
+        showStructureStatus(pp.t('js.cv.inserting_booking'), 'loading');
+        var fd = new FormData();
+        fd.append('_csrf', csrf);
+        fd.append('service_id', item.dataset.bookingService || 'auto');
+        appendRequestedPlacement(fd);
+        fetch(body.dataset.insertBookingUrl, { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+          .then(function (data) {
+            if (!data.ok) { showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error'); return; }
+            finishFunctionalInsert(data);
+          })
+          .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+          .finally(function () { structureBusy = false; if (item.isConnected) item.disabled = false; });
+      });
+    });
+  }
+
+  // R6 — inserta recursos reales, no tarjetas copiadas que puedan quedar obsoletas.
+  var rsWrap = document.getElementById('studio-insert-resources');
+  if (rsWrap) {
+    var rsBtn = document.getElementById('studio-insert-resources-btn');
+    var rsMenu = document.getElementById('studio-insert-resources-menu');
+    function closeRsMenu() { rsMenu.hidden = true; rsBtn.setAttribute('aria-expanded', 'false'); }
+    rsBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = rsMenu.hidden;
+      rsMenu.hidden = !open;
+      rsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+      if (!rsMenu.hidden && !rsWrap.contains(e.target)) closeRsMenu();
+    });
+    rsMenu.querySelectorAll('button[data-resources-limit]').forEach(function (item) {
+      item.addEventListener('click', function () {
+        if (structureBusy || busy) return;
+        closeRsMenu();
+        structureBusy = true;
+        item.disabled = true;
+        showStructureStatus(pp.t('js.cv.inserting_resources'), 'loading');
+        var fd = new FormData();
+        fd.append('_csrf', csrf);
+        fd.append('limit', item.dataset.resourcesLimit || '3');
+        appendRequestedPlacement(fd);
+        fetch(body.dataset.insertResourcesUrl, { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+          .then(function (data) {
+            if (!data.ok) { showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error'); return; }
+            finishFunctionalInsert(data);
+          })
+          .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+          .finally(function () { structureBusy = false; if (item.isConnected) item.disabled = false; });
+      });
+    });
   }
 
   // ----------------------------------------------------------------
@@ -1333,7 +1720,7 @@
           setMsg('Ajustes guardados');
           showSaved('Ajustes guardados');
         })
-        .catch(function () { setMsg('Sin conexión, no guardado', true); })
+        .catch(function () { setMsg(pp.t('js.cv.offline_not_saved'), true); })
         .finally(function () { setSave.disabled = false; });
     });
 
@@ -1341,9 +1728,9 @@
     // Cada chip pide la propuesta SEO completa pero aplica SOLO su campo, así
     // el usuario puede rehacer únicamente el título, la descripción o la URL.
     var AI_FIELDS = {
-      meta_title:       { key: 'seo_title',        target: fTitle, label: 'el título' },
-      meta_description: { key: 'meta_description', target: fDesc,  label: 'la descripción' },
-      slug:             { key: 'slug',             target: fSlug,  label: 'la dirección' }
+      meta_title:       { key: 'seo_title',        target: fTitle, label: pp.t('js.cv.the_title') },
+      meta_description: { key: 'meta_description', target: fDesc,  label: pp.t('js.cv.the_desc') },
+      slug:             { key: 'slug',             target: fSlug,  label: pp.t('js.cv.the_url') }
     };
 
     setModal.querySelectorAll('[data-ai-field]').forEach(function (chip) {
@@ -1353,7 +1740,7 @@
         if (!spec || !spec.target) return;
         chip.disabled = true;
         chip.classList.add('is-busy');
-        setMsg('La IA está sugiriendo ' + spec.label + '…');
+        setMsg(pp.t('js.cv.ai_suggesting', { campo: spec.label }));
         var fd = new FormData();
         fd.append('_csrf', csrf);
         fd.append('action', 'improve_seo');
@@ -1369,7 +1756,7 @@
           .then(function (r) { return r.json(); })
           .then(function (resp) {
             var value = String((resp.data || {})[spec.key] || '').trim();
-            if (!value) { setMsg('La IA no devolvió ' + spec.label + '. Inténtalo otra vez.', true); return; }
+            if (!value) { setMsg(pp.t('js.cv.ai_no_result', { campo: spec.label }), true); return; }
             spec.target.value = value;
             refreshCounts();
             refreshSlugPreview();

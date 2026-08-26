@@ -52,10 +52,10 @@
         if (refreshBtn) refreshBtn.hidden = !architectAnalyzed;
         if (architectToggle) {
             architectToggle.setAttribute('aria-expanded', 'true');
-            architectToggle.setAttribute('aria-label', 'Ocultar diagnóstico');
+            architectToggle.setAttribute('aria-label', pp.t('js.map.hide_diagnosis'));
         }
         if (!configured && architectBody && !architectBody.dataset.errored) {
-            renderArchitectError('Configura IA para activar el diagnóstico de arquitectura.');
+            renderArchitectError(pp.t('js.map.configure_ai'));
         }
     }
 
@@ -66,7 +66,7 @@
         if (refreshBtn) refreshBtn.hidden = true;
         if (architectToggle) {
             architectToggle.setAttribute('aria-expanded', 'false');
-            architectToggle.setAttribute('aria-label', 'Mostrar diagnóstico');
+            architectToggle.setAttribute('aria-label', pp.t('js.map.show_diagnosis'));
         }
     }
 
@@ -262,7 +262,7 @@
         var holder = holdersFor(id).filter(function (el) { return !!el.dataset.pageTitle; })[0]
             || holdersFor(id)[0];
         if (!holder) return;
-        var title = holder.dataset.pageTitle || 'esta página';
+        var title = holder.dataset.pageTitle || pp.t('js.map.this_page');
 
         if (action === 'status') {
             var next = holder.dataset.pageStatus === 'published' ? 'draft' : 'published';
@@ -289,7 +289,7 @@
         }
 
         if (action === 'set-home') {
-            if (!window.confirm('¿Quieres que «' + title + '» sea la página de inicio?\n\nLa portada actual dejará de serlo (pasa a ser una landing normal y su contenido no se toca).')) return;
+            if (!window.confirm(pp.t('js.map.confirm_home', { titulo: title }) + '\n\n' + pp.t('js.map.confirm_home_note'))) return;
             postForm('/admin/pages/' + id + '/set-home', {}, 20000)
                 .then(function (body) {
                     showToast(body.message || 'Inicio actualizado.', 'success');
@@ -334,7 +334,7 @@
         }).then(readJson).then(function (info) {
             renderDeleteDialog(id, title, info);
         }).catch(function (err) {
-            showToast(err.message || 'No se pudo comprobar qué afecta al borrado.', err.gone ? 'success' : 'error');
+            showToast(err.message || pp.t('js.map.delete_check_failed'), err.gone ? 'success' : 'error');
             // La tarjeta es un fantasma: la página ya no está en la base de
             // datos. Recargar es lo único que deja la pantalla en su sitio.
             if (err.gone) setTimeout(function () { window.location.reload(); }, 1200);
@@ -346,19 +346,19 @@
     function renderDeleteDialog(id, title, info) {
         var warnings = [];
         if (info.is_home) {
-            warnings.push('<li class="is-danger"><strong>Es la página de inicio.</strong> Tu web se quedará sin portada hasta que marques otra.</li>');
+            warnings.push('<li class="is-danger">' + pp.t('js.map.warn_is_home.html') + '</li>');
         }
         if ((info.children || []).length) {
-            warnings.push('<li><strong>' + info.children.length + ' página(s) cuelgan de esta.</strong> No se borran, pero suben al primer nivel del mapa: '
-                + info.children.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</li>');
+            warnings.push('<li>' + pp.t('js.map.warn_children.html', { n: info.children.length })
+                + ' ' + info.children.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</li>');
         }
         if ((info.translations || []).length) {
-            warnings.push('<li><strong>' + info.translations.length + ' traducción(es)</strong> se quedan sin original: '
-                + info.translations.map(function (t) { return escapeHtml(t.title) + (t.language ? ' (' + escapeHtml(t.language) + ')' : ''); }).join(', ') + '.</li>');
+            warnings.push('<li>' + pp.t('js.map.warn_translations.html', { n: info.translations.length })
+                + ' ' + info.translations.map(function (t) { return escapeHtml(t.title) + (t.language ? ' (' + escapeHtml(t.language) + ')' : ''); }).join(', ') + '.</li>');
         }
         if ((info.inbound || []).length) {
-            warnings.push('<li><strong>' + info.inbound.length + ' página(s) enlazan aquí</strong> y ese enlace quedará roto: '
-                + info.inbound.map(function (p) { return escapeHtml(p.title); }).join(', ') + '.</li>');
+            warnings.push('<li>' + pp.t('js.map.warn_inbound.html', { n: info.inbound.length })
+                + ' ' + info.inbound.map(function (p) { return escapeHtml(p.title); }).join(', ') + '.</li>');
         }
 
         var redirectBlock = '';
@@ -369,9 +369,9 @@
             redirectBlock = [
                 '<div class="pp-del-redirect">',
                     '<label><input type="checkbox" data-del-redirect' + ((info.inbound || []).length ? ' checked' : '') + '> ',
-                    'Dejar una redirección 301 desde <code>/' + escapeHtml(String(info.slug || '').replace(/^\//, '')) + '</code> hacia:</label>',
+                    pp.t('js.map.redirect_label.html', { slug: '<code>/' + escapeHtml(String(info.slug || '').replace(/^\//, '')) + '</code>' }) + '</label>',
                     '<select data-del-target>' + options + '</select>',
-                    '<small>Estaba publicada: quien llegue desde Google o desde un enlace antiguo acabará en la página que elijas en vez de en un 404.</small>',
+                    '<small>' + pp.t('js.map.redirect_help') + '</small>',
                 '</div>'
             ].join('');
         }
@@ -380,15 +380,15 @@
         overlay.className = 'pp-del-overlay';
         overlay.innerHTML = [
             '<div class="pp-del-dialog" role="dialog" aria-modal="true" aria-labelledby="pp-del-title">',
-                '<h3 id="pp-del-title">Eliminar «' + escapeHtml(title) + '»</h3>',
+                '<h3 id="pp-del-title">' + pp.t('js.map.delete_title', { titulo: escapeHtml(title) }) + '</h3>',
                 warnings.length
                     ? '<ul class="pp-del-warnings">' + warnings.join('') + '</ul>'
-                    : '<p class="pp-del-clean">No cuelga nada de esta página y nadie la enlaza.</p>',
+                    : '<p class="pp-del-clean">' + pp.t('js.map.delete_clean') + '</p>',
                 redirectBlock,
-                '<p class="pp-del-final">Esta acción no se puede deshacer.</p>',
+                '<p class="pp-del-final">' + pp.t('js.map.cannot_undo') + '</p>',
                 '<div class="pp-del-actions">',
-                    '<button type="button" class="pp-btn pp-btn--secondary" data-del-cancel>Cancelar</button>',
-                    '<button type="button" class="pp-btn pp-btn--danger" data-del-confirm>Eliminar la página</button>',
+                    '<button type="button" class="pp-btn pp-btn--secondary" data-del-cancel>' + pp.t('js.common.cancel') + '</button>',
+                    '<button type="button" class="pp-btn pp-btn--danger" data-del-confirm>' + pp.t('js.map.delete_page') + '</button>',
                 '</div>',
             '</div>'
         ].join('');
@@ -413,12 +413,12 @@
             setButtonBusy(button, true, 'Eliminando…');
             postForm('/admin/pages/' + id + '/delete', payload, 25000)
                 .then(function (body) {
-                    showToast(body.message || 'Página eliminada.', 'success');
+                    showToast(body.message || pp.t('js.map.page_deleted'), 'success');
                     window.location.reload();
                 })
                 .catch(function (err) {
                     showToast(err.message || 'No se pudo eliminar.', 'error');
-                    setButtonBusy(button, false, 'Eliminar la página');
+                    setButtonBusy(button, false, pp.t('js.map.delete_page'));
                 });
         });
     }
@@ -453,7 +453,7 @@
                     if (box) box.checked = false;
                 }
             });
-            if (counter) counter.textContent = visible + (visible === 1 ? ' página' : ' páginas');
+            if (counter) counter.textContent = pp.t(visible === 1 ? 'js.onb.pages_one' : 'js.onb.pages_other', { n: visible });
             refreshBulkBar();
         };
 
@@ -486,7 +486,7 @@
                 var action = button.getAttribute('data-bulk-action');
                 var ids = selectedIds();
                 if (!ids.length) return;
-                if (action === 'delete' && !window.confirm('Vas a eliminar ' + ids.length + ' página(s). No se puede deshacer.\n\nSi alguna es la portada, se saltará.')) return;
+                if (action === 'delete' && !window.confirm(pp.t('js.map.confirm_bulk_delete', { n: ids.length }) + '\n\n' + pp.t('js.map.confirm_bulk_note'))) return;
 
                 var params = new URLSearchParams();
                 params.set('_csrf', csrf);
@@ -509,7 +509,7 @@
                     showToast(body.message || 'Hecho.', 'success');
                     window.location.reload();
                 }).catch(function (err) {
-                    showToast(err.message || 'No se pudo completar la acción.', 'error');
+                    showToast(err.message || pp.t('js.map.action_failed'), 'error');
                     setButtonBusy(button, false, null);
                 });
             });
@@ -622,7 +622,7 @@
 
             postForm('/admin/pages/' + draggedId + '/move', payload, 20000)
                 .then(function () { window.location.reload(); })
-                .catch(function (err) { showToast(err.message || 'No se pudo mover la página.', 'error'); });
+                .catch(function (err) { showToast(err.message || pp.t('js.map.move_failed'), 'error'); });
         });
     }
 
@@ -672,7 +672,7 @@
     function analyze(force) {
         if (!architectBody) return;
         if (!configured) {
-            renderArchitectError('Configura IA para activar el diagnóstico de arquitectura.');
+            renderArchitectError(pp.t('js.map.configure_ai'));
             return;
         }
         architectBody.innerHTML = skeletonHtml();
@@ -709,7 +709,7 @@
                 '<div><strong>' + escapeHtml(health.label || 'Arquitectura en progreso') + '</strong>',
                 '<span>' + escapeHtml(architecture.summary || '') + '</span></div>',
             '</div>',
-            '<p class="pp-studio-note">' + (body.cached ? 'Análisis guardado' + (body.cached_at ? ' · ' + escapeHtml(formatDate(body.cached_at)) : '') : formatAiMeta(body)) + '</p>',
+            '<p class="pp-studio-note">' + (body.cached ? pp.t('js.studio.saved_analysis') + (body.cached_at ? ' · ' + escapeHtml(formatDate(body.cached_at)) : '') : formatAiMeta(body)) + '</p>',
             diagnostics.length ? '<div class="pp-architect-diagnostics">' + diagnostics.map(diagnosticHtml).join('') + '</div>' : ''
         ].join('');
 
@@ -722,7 +722,7 @@
 
         if (!groups.length && !missing.length) {
             if (suggestions) {
-                suggestions.innerHTML = '<section class="pp-map-ai-lane pp-map-ai-lane--quiet"><div class="pp-map-ai-lane__head"><strong>No hay huecos prioritarios</strong><span>El análisis no detectó nuevas ramas urgentes.</span></div></section>';
+                suggestions.innerHTML = '<section class="pp-map-ai-lane pp-map-ai-lane--quiet"><div class="pp-map-ai-lane__head"><strong>' + pp.t('js.map.no_gaps') + '</strong><span>' + pp.t('js.map.no_gaps_help') + '</span></div></section>';
             }
             return;
         }
@@ -730,12 +730,13 @@
         injectGhostMissing(missing);
 
         if (groups.length && suggestions) {
-            var html = '<section class="pp-map-ai-lane"><div class="pp-map-ai-lane__head"><strong>Ramas sugeridas</strong><span>Grupos que podrían ordenar mejor la navegación</span></div><div class="pp-map-ai-branches">';
+            var html = '<section class="pp-map-ai-lane"><div class="pp-map-ai-lane__head"><strong>' + pp.t('js.map.suggested_branches') + '</strong><span>' + pp.t('js.map.branches_help') + '</span></div><div class="pp-map-ai-branches">';
             html += groups.map(function (g) {
                 var payload = {
                     title: g.label || 'Nueva rama',
                     page_type: 'landing',
                     parent_id: '',
+                    // i18n-ignore: objetivo que viaja a la IA, no se pinta.
                     goal: 'Crear una página agrupadora para ordenar esta rama del sitio.',
                     reason: g.reason || '',
                     architecture_context: 'Rama sugerida por AI Site Architect: /' + (g.slug || '')
@@ -793,7 +794,7 @@
 
         var priority = (p.priority || 'medium').toLowerCase();
         var payload = JSON.stringify(p);
-        var title = p.title || 'Página sugerida';
+        var title = p.title || pp.t('js.map.suggested_page');
         var slug = p.slug ? '/' + p.slug : '';
 
         li.innerHTML = [
@@ -821,9 +822,10 @@
     function createSuggested(item, button) {
         setButtonBusy(button, true, 'Creando');
         postForm('/admin/pages/ai-create', {
-            title: item.title || 'Nueva página',
+            title: item.title || pp.t('js.studio.new_page'),
             page_type: item.page_type || 'landing',
             parent_id: item.parent_id || '',
+            // i18n-ignore: objetivo que viaja a la IA, no se pinta.
             ai_page_goal: item.goal || item.reason || 'Crear una página útil para esta arquitectura.',
             ai_target_audience: item.audience || '',
             ai_extra_context: item.reason || '',
@@ -831,14 +833,14 @@
         }, 180000).then(function (body) {
             window.location.href = body.edit_url;
         }).catch(function (err) {
-            showToast(err.message || 'No se pudo crear la página.', 'error');
+            showToast(err.message || pp.t('js.studio.create_failed'), 'error');
         }).finally(function () {
             setButtonBusy(button, false, button && button.dataset.createChild ? 'Crear hija con IA' : 'Crear con IA');
         });
     }
 
     function openChildComposer(button) {
-        var parentTitle = button.getAttribute('data-parent-title') || 'esta página';
+        var parentTitle = button.getAttribute('data-parent-title') || pp.t('js.map.this_page');
         var parentId = Number(button.getAttribute('data-create-child') || 0);
         var existing = document.getElementById('pp-child-composer');
         if (existing) existing.remove();
@@ -849,12 +851,12 @@
         modal.innerHTML = [
             '<div class="pp-map-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="pp-child-composer-title">',
                 '<button type="button" class="pp-map-modal__close" data-close-child-composer aria-label="Cerrar">&times;</button>',
-                '<span>Nueva página hija</span>',
-                '<h3 id="pp-child-composer-title">Bajo ' + escapeHtml(parentTitle) + '</h3>',
-                '<label><span>Título o intención</span><input type="text" id="pp-child-composer-input" autocomplete="off" placeholder="Ej. Servicio de auditoría SEO"></label>',
+                '<span>' + pp.t('js.map.new_child_page') + '</span>',
+                '<h3 id="pp-child-composer-title">' + pp.t('js.map.under', { padre: escapeHtml(parentTitle) }) + '</h3>',
+                '<label><span>' + pp.t('js.map.title_or_intent') + '</span><input type="text" id="pp-child-composer-input" autocomplete="off" placeholder="' + pp.t('js.map.child_placeholder') + '"></label>',
                 '<div class="pp-map-modal__actions">',
-                    '<button type="button" class="pp-btn pp-btn--secondary" data-close-child-composer>Cancelar</button>',
-                    '<button type="button" class="pp-btn pp-btn--primary" id="pp-child-composer-create">Crear con IA</button>',
+                    '<button type="button" class="pp-btn pp-btn--secondary" data-close-child-composer>' + pp.t('js.common.cancel') + '</button>',
+                    '<button type="button" class="pp-btn pp-btn--primary" id="pp-child-composer-create">' + pp.t('js.map.create_with_ai') + '</button>',
                 '</div>',
             '</div>'
         ].join('');
@@ -880,7 +882,7 @@
             create.addEventListener('click', function () {
                 var title = input ? input.value.trim() : '';
                 if (!title) {
-                    showToast('Añade un título o intención para la página.', 'error');
+                    showToast(pp.t('js.map.need_title_or_intent'), 'error');
                     return;
                 }
                 modal.remove();
@@ -888,8 +890,9 @@
                     title: title,
                     page_type: 'landing',
                     parent_id: parentId,
+                    // i18n-ignore: objetivo y contexto que viajan a la IA.
                     goal: 'Crear una página hija dentro de la arquitectura del sitio.',
-                    architecture_context: 'Página hija creada desde el mapa del sitio bajo "' + parentTitle + '".'
+                    architecture_context: 'Página hija creada desde el mapa del sitio bajo "' + parentTitle + '".' // i18n-ignore: contexto para la IA.
                 }, button);
             });
         }
@@ -909,22 +912,22 @@
                 + ' data-page-type="' + escapeHtml(data.pageType || '') + '">',
                 '<button type="button" class="pp-map-inspector__close" data-close-inspector aria-label="Cerrar">&times;</button>',
                 '<div class="pp-map-inspector__head">',
-                    '<span>' + escapeHtml(data.pageType || 'Página') + '</span>',
-                    '<strong id="pp-map-inspector-title">' + escapeHtml(data.pageLabel || data.pageTitle || 'Página') + '</strong>',
+                    '<span>' + escapeHtml(data.pageType || pp.t('js.onb.page')) + '</span>',
+                    '<strong id="pp-map-inspector-title">' + escapeHtml(data.pageLabel || data.pageTitle || pp.t('js.onb.page')) + '</strong>',
                     '<code>/' + escapeHtml(data.pageSlug || '') + '</code>',
                 '</div>',
                 breadcrumbHtml(id),
                 '<div class="pp-map-inspector__actions">',
-                    '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + escapeHtml(data.pageEdit || '#') + '">Editar</a>',
+                    '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + escapeHtml(data.pageEdit || '#') + '">' + pp.t('js.post_new.edit') + '</a>',
                     '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + escapeHtml(data.pagePreview || '#') + '">Preview</a>',
-                    '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-create-child="' + id + '" data-parent-title="' + escapeHtml(data.pageLabel || data.pageTitle || 'esta página') + '">Crear hija con IA</button>',
-                    '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-page-menu-btn" data-page-menu aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">⋯</button>',
+                    '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-create-child="' + id + '" data-parent-title="' + escapeHtml(data.pageLabel || data.pageTitle || pp.t('js.map.this_page')) + '">' + pp.t('js.map.create_child_ai') + '</button>',
+                    '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm pp-page-menu-btn" data-page-menu aria-haspopup="true" aria-expanded="false" aria-label="' + pp.t('js.map.more_actions') + '">⋯</button>',
                 '</div>',
                 '<form class="pp-map-inspector-form" action="' + escapeHtml(data.pageStructure || '') + '" method="POST">',
-                    '<label><span>Etiqueta navegación</span><input type="text" name="nav_label" value="' + escapeHtml(data.pageNav || '') + '" placeholder="' + escapeHtml(data.pageTitle || '') + '"></label>',
-                    '<label><span>Padre</span><select name="parent_id">' + parentOptionsHtml(id, data.pageParent || '') + '</select></label>',
-                    '<label><span>Orden</span><input type="number" name="tree_sort_order" min="0" value="' + escapeHtml(data.pageOrder || '0') + '"></label>',
-                    '<button type="submit" class="pp-btn pp-btn--primary">Guardar estructura</button>',
+                    '<label><span>' + pp.t('js.map.nav_label') + '</span><input type="text" name="nav_label" value="' + escapeHtml(data.pageNav || '') + '" placeholder="' + escapeHtml(data.pageTitle || '') + '"></label>',
+                    '<label><span>' + pp.t('js.map.parent') + '</span><select name="parent_id">' + parentOptionsHtml(id, data.pageParent || '') + '</select></label>',
+                    '<label><span>' + pp.t('js.map.order') + '</span><input type="number" name="tree_sort_order" min="0" value="' + escapeHtml(data.pageOrder || '0') + '"></label>',
+                    '<button type="submit" class="pp-btn pp-btn--primary">' + pp.t('js.map.save_structure') + '</button>',
                 '</form>',
             '</div>'
         ].join('');
@@ -980,7 +983,7 @@
         if (!chain.length) return '';
         return [
             '<div class="pp-map-inspector__route">',
-                '<span>Ruta en el sitio</span>',
+                '<span>' + pp.t('js.map.site_path') + '</span>',
                 '<ol>',
                     chain.map(function (page) {
                         return '<li><button type="button" data-focus-page="' + escapeHtml(page.id) + '">' + escapeHtml(page.label || page.title || '') + '</button></li>';
@@ -1005,7 +1008,7 @@
     }
 
     function parentOptionsHtml(currentId, selectedId) {
-        var html = '<option value="">Raíz</option>';
+        var html = '<option value="">' + pp.t('js.map.root') + '</option>';
         pageData.forEach(function (page) {
             if (Number(page.id) === Number(currentId)) return;
             var selected = String(page.id) === String(selectedId || '') ? ' selected' : '';
@@ -1046,12 +1049,11 @@
                 body = JSON.parse(text);
             } catch (e) {
                 if (res.status === 404) {
-                    var err404 = new Error('Esa página ya no existe. Refresco la pantalla.');
+                    var err404 = new Error(pp.t('js.map.page_gone'));
                     err404.gone = true;
                     throw err404;
                 }
-                throw new Error('El servidor no ha contestado en JSON (HTTP ' + res.status + ').'
-                    + ' Si has iniciado sesión hace mucho, recarga y vuelve a entrar.');
+                throw new Error(pp.t('js.map.not_json', { code: res.status }));
             }
             if (!res.ok || !body.ok) throw new Error(body.error || ('HTTP ' + res.status));
             return body;
@@ -1064,7 +1066,7 @@
         options = options || {};
         options.signal = controller.signal;
         return fetch(url, options).catch(function (err) {
-            if (err && err.name === 'AbortError') throw new Error('La operación ha tardado demasiado. Prueba de nuevo.');
+            if (err && err.name === 'AbortError') throw new Error(pp.t('js.onb.timeout'));
             throw err;
         }).finally(function () {
             clearTimeout(timer);
@@ -1126,7 +1128,7 @@
     }
 
     function formatAiMeta(body) {
-        if (!body || !body.model) return 'Análisis nuevo';
+        if (!body || !body.model) return pp.t('js.map.new_analysis');
         var cost = typeof body.estimated_cost === 'number' ? ' · $' + body.estimated_cost.toFixed(6) : '';
         return body.model + ' · ' + Number(body.tokens_in || 0) + ' -> ' + Number(body.tokens_out || 0) + ' tokens' + cost;
     }

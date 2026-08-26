@@ -11,12 +11,12 @@ $maxMb = round($maxSize / 1024 / 1024);
 $accept = 'image/jpeg,image/png,image/webp,image/gif';
 ?>
 
-<?php \Core\View::start('title'); ?>Medios<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.media')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Medios</h2>
+    <h2><?= e(__('nav.media')) ?></h2>
     <?php if (\App\Services\ImageBankService::isAvailable()): ?>
-        <a href="<?= e(base_url('admin/media/bank')) ?>" class="pp-btn pp-btn--secondary">Buscar en Unsplash</a>
+        <a href="<?= e(base_url('admin/media/bank')) ?>" class="pp-btn pp-btn--secondary"><?= e(__('media.search_unsplash')) ?></a>
     <?php endif; ?>
 </div>
 
@@ -32,18 +32,16 @@ $missingAlt = (int) ($missingAlt ?? 0);
      data-missing="<?= (int) $missingAlt ?>">
     <div class="pp-media-describe__text">
         <strong id="pp-describe-title">
-            <?= $missingAlt === 1 ? 'Tienes 1 imagen sin descripción' : 'Tienes ' . (int) $missingAlt . ' imágenes sin descripción' ?>
+            <?= e(__($missingAlt === 1 ? 'media.missing_alt_one' : 'media.missing_alt_other', ['n' => $missingAlt])) ?>
         </strong>
-        <span id="pp-describe-hint">Sin descripción, al crear páginas no sabemos qué muestran tus fotos y tiende a usarse el banco de imágenes. También es lo que oye quien usa un lector de pantalla.</span>
+        <span id="pp-describe-hint"><?= e(__('media.describe_hint')) ?></span>
     </div>
-    <button type="button" class="pp-btn pp-btn--primary" id="pp-describe-btn">Describir con IA</button>
+    <button type="button" class="pp-btn pp-btn--primary" id="pp-describe-btn"><?= e(__('media.describe_button')) ?></button>
 </div>
 <?php endif; ?>
 
 <p class="pp-page-intro">
-    Sube imágenes para usar en las secciones de tus páginas.
-    Formatos: JPG, PNG, WebP, GIF · máximo <?= (int) $maxMb ?> MB.
-    Las imágenes mayores de <?= (int) \App\Services\MediaService::MAX_WIDTH ?>px se redimensionan automáticamente.
+    <?= e(__('media.intro', ['mb' => (int) $maxMb, 'ancho' => (int) \App\Services\MediaService::MAX_WIDTH])) ?>
 </p>
 
 <?php
@@ -64,21 +62,21 @@ $flashError   = \Core\Session::flash('error');
 
     <div class="pp-form-row pp-media-upload__row">
         <div class="pp-media-upload__field--file">
-            <label class="pp-label" for="pp-media-file">Archivo</label>
+            <label class="pp-label" for="pp-media-file"><?= e(__('documents.file')) ?></label>
             <label class="pp-file-input" id="pp-media-file-wrap">
                 <input type="file" id="pp-media-file" name="file[]" accept="<?= e($accept) ?>" multiple required>
-                <span class="pp-file-input__btn">Seleccionar imágenes</span>
-                <span class="pp-file-input__name">Ningún archivo seleccionado</span>
+                <span class="pp-file-input__btn"><?= e(__('media.select_images')) ?></span>
+                <span class="pp-file-input__name"><?= e(__('onboarding.type.no_files')) ?></span>
             </label>
         </div>
         <div class="pp-media-upload__field--alt">
-            <label class="pp-label" for="pp-media-alt">Texto alternativo (opcional)</label>
+            <label class="pp-label" for="pp-media-alt"><?= e(__('media.alt_label')) ?></label>
             <input type="text" id="pp-media-alt" name="alt_text" maxlength="500"
-                   placeholder="Describe la imagen para accesibilidad">
-            <small class="pp-media-upload__hint">Puedes elegir varias imágenes a la vez. Si subes varias, este texto se aplica a todas.</small>
+                   placeholder="<?= e(__('media.alt_placeholder')) ?>">
+            <small class="pp-media-upload__hint"><?= e(__('media.upload_hint')) ?></small>
         </div>
         <div>
-            <button type="submit" class="pp-btn pp-btn--primary" id="pp-media-submit">Subir</button>
+            <button type="submit" class="pp-btn pp-btn--primary" id="pp-media-submit"><?= e(__('media.upload')) ?></button>
         </div>
     </div>
     <ol class="pp-media-queue" id="pp-media-queue" hidden></ol>
@@ -86,9 +84,9 @@ $flashError   = \Core\Session::flash('error');
 
 <?php if (empty($items)): ?>
     <div class="pp-empty pp-empty--inline">
-        <div class="pp-empty__title">Tu galería está vacía</div>
+        <div class="pp-empty__title"><?= e(__('media.empty_title')) ?></div>
         <div class="pp-empty__text">
-            Sube tus propias imágenes aquí o usa <strong>imágenes de relleno</strong> directamente desde el editor de secciones — placeholders profesionales mientras preparas tus fotos.
+            <?= __('media.empty_text.html') ?>
         </div>
     </div>
 <?php else: ?>
@@ -112,13 +110,13 @@ $flashError   = \Core\Session::flash('error');
                 <form method="POST" action="<?= e(base_url('admin/media/' . (int) $m['id'] . '/alt')) ?>" class="pp-media-card__alt-form">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="text" name="alt_text" value="<?= e((string) ($m['alt_text'] ?? '')) ?>"
-                           maxlength="500" placeholder="Texto alternativo" class="pp-media-card__alt-input">
-                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Guardar</button>
+                           maxlength="500" placeholder="<?= e(__('media.alt_short')) ?>" class="pp-media-card__alt-input">
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('common.save')) ?></button>
                 </form>
                 <form method="POST" action="<?= e(base_url('admin/media/' . (int) $m['id'] . '/delete')) ?>"
-                      class="pp-media-card__delete-form" onsubmit="return confirm('¿Borrar esta imagen?');">
+                      class="pp-media-card__delete-form" onsubmit="return confirm(<?= e(json_encode(__('media.confirm_delete'), JSON_UNESCAPED_UNICODE)) ?>);">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                    <button type="submit" class="pp-btn pp-btn--ghost pp-btn--danger-text">Borrar</button>
+                    <button type="submit" class="pp-btn pp-btn--ghost pp-btn--danger-text"><?= e(__('common.delete_short')) ?></button>
                 </form>
             </div>
         </div>
@@ -164,10 +162,10 @@ $flashError   = \Core\Session::flash('error');
                 (data.items || []).forEach(fillCard);
                 done += (data.described || 0);
                 if (!data.ok) {
-                    title.textContent = 'No he podido describir todas';
-                    hint.textContent = data.error || 'Inténtalo de nuevo en un momento.';
+                    title.textContent = pp.t('js.media.describe_partial');
+                    hint.textContent = data.error || pp.t('js.media.try_again');
                     btn.disabled = false;
-                    btn.textContent = 'Volver a intentarlo';
+                    btn.textContent = pp.t('js.media.retry');
                     return;
                 }
                 var remaining = data.remaining || 0;
@@ -177,39 +175,37 @@ $flashError   = \Core\Session::flash('error');
                 // describir vuelven a salir en el lote siguiente.
                 if (data.blocked) {
                     title.textContent = done > 0
-                        ? (done + ' ' + plural(done, 'imagen descrita', 'imágenes descritas'))
-                        : 'No he podido describir ninguna';
-                    hint.textContent = remaining + ' ' + plural(remaining, 'imagen no se puede describir', 'imágenes no se pueden describir')
-                        + ': su archivo ya no está en el servidor. '
-                        + plural(remaining, 'Puedes borrarla o volver a subirla.', 'Puedes borrarlas o volver a subirlas.');
+                        ? pp.t(done === 1 ? 'js.media.described_one' : 'js.media.described_other', { n: done })
+                        : pp.t('js.media.described_none');
+                    hint.textContent = pp.t(remaining === 1 ? 'js.media.missing_file_one' : 'js.media.missing_file_other', { n: remaining });
                     btn.remove();
                     return;
                 }
                 if (remaining === 0) {
                     title.textContent = done > 0
-                        ? (done + ' ' + plural(done, 'imagen descrita', 'imágenes descritas'))
-                        : 'Todas tus imágenes tienen descripción';
-                    hint.textContent = 'Revísalas y ajusta a mano lo que no te cuadre: la descripción es una propuesta.';
+                        ? pp.t(done === 1 ? 'js.media.described_one' : 'js.media.described_other', { n: done })
+                        : pp.t('js.media.all_described');
+                    hint.textContent = pp.t('js.media.review_hint');
                     btn.remove();
                     return;
                 }
-                title.textContent = 'Describiendo… ' + done + ' de ' + total;
-                hint.textContent = 'Puedes seguir trabajando; lo descrito ya queda guardado.';
+                title.textContent = pp.t('js.media.describing_progress', { hechas: done, total: total });
+                hint.textContent = pp.t('js.media.keep_working');
                 nextBatch();
             })
             .catch(function () {
-                title.textContent = 'Se ha cortado la conexión';
-                hint.textContent = 'Lo descrito hasta ahora está guardado. Puedes continuar cuando quieras.';
+                title.textContent = pp.t('js.media.connection_lost');
+                hint.textContent = pp.t('js.media.saved_so_far');
                 btn.disabled = false;
-                btn.textContent = 'Continuar';
+                btn.textContent = pp.t('js.media.continue');
             });
     }
 
     btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.textContent = 'Describiendo…';
-        title.textContent = 'Describiendo… 0 de ' + total;
-        hint.textContent = 'Puedes seguir trabajando; lo descrito ya queda guardado.';
+        btn.textContent = pp.t('js.media.describing');
+        title.textContent = pp.t('js.media.describing_progress', { hechas: 0, total: total });
+        hint.textContent = pp.t('js.media.keep_working');
         stop = false;
         nextBatch();
     });
@@ -230,8 +226,8 @@ $flashError   = \Core\Session::flash('error');
     input.addEventListener('change', function () {
         var n = input.files ? input.files.length : 0;
         if (n === 1) name.textContent = input.files[0].name;
-        else if (n > 1) name.textContent = n + ' imágenes seleccionadas';
-        else name.textContent = 'Ningún archivo seleccionado';
+        else if (n > 1) name.textContent = pp.t('js.media.n_selected', { n: n });
+        else name.textContent = pp.t('js.onb.no_file');
         wrap.classList.toggle('has-file', n > 0);
     });
 
@@ -250,7 +246,7 @@ $flashError   = \Core\Session::flash('error');
         var rows = files.map(function (file) {
             var li = document.createElement('li');
             li.className = 'pp-media-queue__item is-waiting';
-            li.innerHTML = '<span class="pp-media-queue__name"></span><span class="pp-media-queue__state">En espera</span>';
+            li.innerHTML = '<span class="pp-media-queue__name"></span><span class="pp-media-queue__state">' + pp.t('js.media.waiting') + '</span>';
             li.querySelector('.pp-media-queue__name').textContent = file.name;
             queue.appendChild(li);
             return li;
@@ -273,15 +269,15 @@ $flashError   = \Core\Session::flash('error');
                 }
                 var summary = document.createElement('li');
                 summary.className = 'pp-media-queue__summary';
-                summary.textContent = okCount + (okCount === 1 ? ' imagen subida' : ' imágenes subidas') +
-                    ' · ' + failCount + (failCount === 1 ? ' con problemas' : ' con problemas') +
-                    '. Recarga la página para ver las que sí entraron.';
+                summary.textContent = pp.t(okCount === 1 ? 'js.media.uploaded_one' : 'js.media.uploaded_other', { n: okCount })
+                    + ' · ' + pp.t('js.media.with_problems', { n: failCount })
+                    + '. ' + pp.t('js.media.reload_hint');
                 queue.appendChild(summary);
                 return;
             }
 
             var file = files[i];
-            setState(rows[i], 'is-uploading', 'Subiendo…');
+            setState(rows[i], 'is-uploading', pp.t('js.doc.uploading_short'));
 
             var fd = new FormData();
             fd.append('_csrf', csrf);
@@ -293,12 +289,12 @@ $flashError   = \Core\Session::flash('error');
                 body: fd,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-                .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Respuesta inesperada del servidor.' }; }); })
+                .then(function (r) { return r.json().catch(function () { return { ok: false, error: pp.t('js.media.bad_response') }; }); })
                 .then(function (data) {
-                    if (data && data.ok) { okCount++; setState(rows[i], 'is-done', 'Subida'); }
-                    else { failCount++; setState(rows[i], 'is-error', (data && data.error) || 'No se pudo subir'); }
+                    if (data && data.ok) { okCount++; setState(rows[i], 'is-done', pp.t('js.media.done')); }
+                    else { failCount++; setState(rows[i], 'is-error', (data && data.error) || pp.t('js.media.upload_failed')); }
                 })
-                .catch(function () { failCount++; setState(rows[i], 'is-error', 'Sin conexión'); })
+                .catch(function () { failCount++; setState(rows[i], 'is-error', pp.t('js.media.no_connection')); })
                 .finally(function () { uploadAt(i + 1); });
         }
 

@@ -54,7 +54,7 @@
               btn.disabled = false;
               spinner.hidden = true;
               out.className = 'pp-ai-output pp-ai-output--error';
-              out.textContent = 'Error de red: ' + err.message;
+              out.textContent = pp.t('js.ai.network_error', { detalle: err.message });
           });
     });
 
@@ -68,18 +68,17 @@
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Test del proveedor de IA</h2>
+    <h2><?= e(__('ai_test.title')) ?></h2>
 </div>
 
 <p class="pp-page-intro">
-    Envía un prompt al proveedor configurado y verifica que la integración funciona end-to-end.
+    <?= e(__('ai_test.intro')) ?>
 </p>
 
 <?php if (!$providerMeta['configured']): ?>
     <div class="pp-alert pp-alert--error">
-        <strong>No hay proveedor configurado.</strong>
-        Completa la configuración en el instalador o añade los settings <code>ai_provider</code>,
-        <code>ai_model</code> y <code>ai_api_key</code> en la base de datos.
+        <strong><?= e(__('ai_test.no_provider')) ?></strong>
+        <?= __('ai_test.no_provider_help.html') ?>
     </div>
 <?php else: ?>
     <div class="pp-ai-provider-card">

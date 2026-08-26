@@ -8,15 +8,14 @@
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Memoria del sitio<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('memory.title')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Memoria del sitio</h2>
+    <h2><?= e(__('memory.title')) ?></h2>
 </div>
 
 <p class="pp-page-intro">
-    Esta información se inyectará en todas las llamadas a IA para generar contenido coherente con tu marca.
-    Cuanto más completa y específica sea, mejor será el resultado.
+    <?= e(__('memory.intro')) ?>
 </p>
 
 <?php
@@ -33,7 +32,7 @@ $flashError   = \Core\Session::flash('error');
 
 <?php if (!empty($errors)): ?>
 <div class="pp-alert pp-alert--error">
-    <strong>Revisa los errores:</strong>
+    <strong><?= e(__('memory.check_errors')) ?></strong>
     <ul style="margin: 8px 0 0 20px;">
         <?php foreach ($errors as $msg): ?>
         <li><?= e($msg) ?></li>
@@ -51,7 +50,7 @@ $percent = $total > 0 ? (int) round(($filled / $total) * 100) : 0;
 ?>
 <div class="pp-memory-progress">
     <div class="pp-memory-progress__label">
-        <span><strong><?= $filled ?></strong> de <?= $total ?> campos completados</span>
+        <span><?= __('memory.progress', ['hechos' => '<strong>' . $filled . '</strong>', 'total' => $total]) ?></span>
         <span class="pp-memory-progress__pct"><?= $percent ?>%</span>
     </div>
     <div class="pp-memory-progress__bar">
@@ -63,7 +62,7 @@ $percent = $total > 0 ? (int) round(($filled / $total) * 100) : 0;
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
     <div class="pp-form-card">
-        <h3>Sobre tu negocio</h3>
+        <h3><?= e(__('memory.group.business')) ?></h3>
 
         <?php foreach (['business_description', 'target_audience', 'value_proposition'] as $key): ?>
             <?php renderMemoryField($key, $fields[$key], $values[$key] ?? '', $errors); ?>
@@ -71,26 +70,26 @@ $percent = $total > 0 ? (int) round(($filled / $total) * 100) : 0;
     </div>
 
     <div class="pp-form-card">
-        <h3>Tono y estilo</h3>
+        <h3><?= e(__('memory.group.tone')) ?></h3>
         <?php renderMemoryField('tone_of_voice', $fields['tone_of_voice'], $values['tone_of_voice'] ?? '', $errors); ?>
     </div>
 
     <div class="pp-form-card">
-        <h3>Oferta comercial</h3>
+        <h3><?= e(__('memory.group.offer')) ?></h3>
         <?php foreach (['services', 'unique_selling_points'] as $key): ?>
             <?php renderMemoryField($key, $fields[$key], $values[$key] ?? '', $errors); ?>
         <?php endforeach; ?>
     </div>
 
     <div class="pp-form-card">
-        <h3>SEO y contacto</h3>
+        <h3><?= e(__('memory.group.seo')) ?></h3>
         <?php foreach (['keywords', 'contact_info'] as $key): ?>
             <?php renderMemoryField($key, $fields[$key], $values[$key] ?? '', $errors); ?>
         <?php endforeach; ?>
     </div>
 
     <div class="pp-form-actions">
-        <button type="submit" class="pp-btn pp-btn--primary">Guardar memoria</button>
+        <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('memory.save')) ?></button>
     </div>
 </form>
 

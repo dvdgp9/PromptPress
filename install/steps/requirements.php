@@ -13,81 +13,81 @@ use Core\Session;
  */
 $checks = [
     [
-        'label'    => 'Versión de PHP ≥ 8.0',
+        'label'    => __('inst.req.php'),
         'critical' => true,
         'check'    => fn() => [
             version_compare(PHP_VERSION, '8.0.0', '>='),
-            'Detectado: PHP ' . PHP_VERSION,
+            __('inst.req.detected', ['version' => PHP_VERSION]),
         ],
     ],
     [
-        'label'    => 'Extensión PDO',
+        'label'    => __('inst.req.ext', ['ext' => 'PDO']),
         'critical' => true,
-        'check'    => fn() => [extension_loaded('pdo'), extension_loaded('pdo') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('pdo'), extension_loaded('pdo') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión pdo_mysql',
+        'label'    => __('inst.req.ext', ['ext' => 'pdo_mysql']),
         'critical' => true,
-        'check'    => fn() => [extension_loaded('pdo_mysql'), extension_loaded('pdo_mysql') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('pdo_mysql'), extension_loaded('pdo_mysql') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión JSON',
+        'label'    => __('inst.req.ext', ['ext' => 'JSON']),
         'critical' => true,
-        'check'    => fn() => [extension_loaded('json'), extension_loaded('json') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('json'), extension_loaded('json') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión mbstring',
+        'label'    => __('inst.req.ext', ['ext' => 'mbstring']),
         'critical' => true,
-        'check'    => fn() => [extension_loaded('mbstring'), extension_loaded('mbstring') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('mbstring'), extension_loaded('mbstring') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión OpenSSL (encriptación de API keys)',
+        'label'    => __('inst.req.ext', ['ext' => 'OpenSSL']) . ' (' . __('inst.req.openssl_why') . ')',
         'critical' => true,
-        'check'    => fn() => [extension_loaded('openssl'), extension_loaded('openssl') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('openssl'), extension_loaded('openssl') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión cURL (llamadas a IA)',
+        'label'    => __('inst.req.ext', ['ext' => 'cURL']) . ' (' . __('inst.req.curl_why') . ')',
         'critical' => true,
-        'check'    => fn() => [extension_loaded('curl'), extension_loaded('curl') ? 'Cargada' : 'No disponible'],
+        'check'    => fn() => [extension_loaded('curl'), extension_loaded('curl') ? __('inst.req.loaded') : __('inst.req.missing')],
     ],
     [
-        'label'    => 'Extensión fileinfo (uploads)',
+        'label'    => __('inst.req.ext', ['ext' => 'fileinfo']) . ' (' . __('inst.req.fileinfo_why') . ')',
         'critical' => false,
-        'check'    => fn() => [extension_loaded('fileinfo'), extension_loaded('fileinfo') ? 'Cargada' : 'Recomendada para validar tipos de archivos'],
+        'check'    => fn() => [extension_loaded('fileinfo'), extension_loaded('fileinfo') ? __('inst.req.loaded') : __('inst.req.fileinfo_missing')],
     ],
     [
-        'label'    => 'Extensión zip (DOCX)',
+        'label'    => __('inst.req.ext', ['ext' => 'zip']) . ' (DOCX)',
         'critical' => false,
-        'check'    => fn() => [extension_loaded('zip'), extension_loaded('zip') ? 'Cargada' : 'Necesaria solo si subirás documentos DOCX'],
+        'check'    => fn() => [extension_loaded('zip'), extension_loaded('zip') ? __('inst.req.loaded') : __('inst.req.zip_missing')],
     ],
     [
-        'label'    => 'Permisos de escritura en /config',
+        'label'    => __('inst.req.writable', ['ruta' => '/config']),
         'critical' => false,
-        'check'    => fn() => [is_writable(PP_CONFIG), is_writable(PP_CONFIG) ? 'OK' : 'No escribible. Puedes darle permisos desde el Gestor de archivos del hosting (clic derecho → Permisos → 775), o continuar igual: el instalador te dará el archivo listo para subir a mano.'],
+        'check'    => fn() => [is_writable(PP_CONFIG), is_writable(PP_CONFIG) ? 'OK' : __('inst.req.config_not_writable')],
     ],
     [
-        'label'    => 'Permisos de escritura en /storage',
+        'label'    => __('inst.req.writable', ['ruta' => '/storage']),
         'critical' => true,
-        'check'    => fn() => [is_writable(PP_STORAGE), is_writable(PP_STORAGE) ? 'OK' : 'No escribible. Dale permisos de escritura (775) desde el Gestor de archivos del hosting: aquí se guardan uploads, logs y caché.'],
+        'check'    => fn() => [is_writable(PP_STORAGE), is_writable(PP_STORAGE) ? 'OK' : __('inst.req.storage_not_writable')],
     ],
     [
-        'label'    => 'Permisos de escritura en /storage/uploads',
+        'label'    => __('inst.req.writable', ['ruta' => '/storage/uploads']),
         'critical' => true,
-        'check'    => fn() => [is_writable(PP_STORAGE . '/uploads'), is_writable(PP_STORAGE . '/uploads') ? 'OK' : 'Carpeta no escribible'],
+        'check'    => fn() => [is_writable(PP_STORAGE . '/uploads'), is_writable(PP_STORAGE . '/uploads') ? 'OK' : __('inst.req.dir_not_writable')],
     ],
     [
-        'label'    => 'Permisos de escritura en /storage/logs',
+        'label'    => __('inst.req.writable', ['ruta' => '/storage/logs']),
         'critical' => true,
-        'check'    => fn() => [is_writable(PP_STORAGE . '/logs'), is_writable(PP_STORAGE . '/logs') ? 'OK' : 'Carpeta no escribible'],
+        'check'    => fn() => [is_writable(PP_STORAGE . '/logs'), is_writable(PP_STORAGE . '/logs') ? 'OK' : __('inst.req.dir_not_writable')],
     ],
     [
-        'label'    => 'Composer dependencies (vendor/autoload.php)',
+        'label'    => __('inst.req.composer'),
         'critical' => false,
         'check'    => fn() => [
             is_file(PP_ROOT . '/vendor/autoload.php'),
             is_file(PP_ROOT . '/vendor/autoload.php')
-                ? 'Detectadas — soporte completo PDF/DOCX'
-                : 'No detectadas. Sin Composer solo podrás usar TXT en documentos. Ejecuta: composer install',
+                ? __('inst.req.composer_ok')
+                : __('inst.req.composer_missing'),
         ],
     ],
 ];
@@ -117,9 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $allCriticalOk) {
 // Render
 ob_start();
 ?>
-<h1 class="pp-step-title">Comprobación de requisitos</h1>
+<h1 class="pp-step-title"><?= e(__('inst.req.title')) ?></h1>
 <p class="pp-step-intro">
-    Estamos verificando que tu servidor cumple los requisitos mínimos para ejecutar PromptPress.
+    <?= e(__('inst.req.intro')) ?>
 </p>
 
 <table class="pp-checks">
@@ -132,7 +132,7 @@ ob_start();
             <td class="pp-check__label">
                 <strong><?= e($r['label']) ?></strong>
                 <?php if (!$r['critical']): ?>
-                    <span class="pp-tag">Recomendado</span>
+                    <span class="pp-tag"><?= e(__('inst.req.recommended')) ?></span>
                 <?php endif; ?>
                 <div class="pp-check__msg"><?= e($r['msg']) ?></div>
             </td>
@@ -144,16 +144,16 @@ ob_start();
 <form method="post" class="pp-form">
     <?php if ($allCriticalOk): ?>
         <div class="pp-alert pp-alert--ok">
-            ✓ Tu servidor cumple todos los requisitos críticos. Puedes continuar.
+            ✓ <?= e(__('inst.req.all_ok')) ?>
         </div>
-        <button type="submit" class="pp-btn pp-btn--primary pp-btn--lg">Continuar →</button>
+        <button type="submit" class="pp-btn pp-btn--primary pp-btn--lg"><?= e(__('inst.continue')) ?> →</button>
     <?php else: ?>
         <div class="pp-alert pp-alert--fail">
-            ✗ Faltan requisitos críticos. Corrige los puntos marcados en rojo y recarga esta página.
+            ✗ <?= e(__('inst.req.missing_critical')) ?>
         </div>
-        <button type="button" class="pp-btn pp-btn--lg" onclick="window.location.reload()">Reintentar</button>
+        <button type="button" class="pp-btn pp-btn--lg" onclick="window.location.reload()"><?= e(__('inst.retry')) ?></button>
     <?php endif; ?>
 </form>
 <?php
 $content = (string) ob_get_clean();
-InstallerApp::renderStep('requirements', 'Requisitos del sistema', $content);
+InstallerApp::renderStep('requirements', __('inst.req.title'), $content);

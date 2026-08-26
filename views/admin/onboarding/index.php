@@ -21,23 +21,25 @@
 \Core\View::extend('admin/layout');
 
 $stepMeta = [
-    1 => ['eyebrow' => 'Paso 1 de 5 · Conoce tu negocio', 'title' => 'Cuéntale a la IA quién eres', 'subtitle' => 'Esta información se usa cada vez que la IA escriba algo: páginas, secciones, SEO. Cuanto más concreto, mejor.', 'action' => 'Siguiente'],
-    2 => ['eyebrow' => 'Paso 2 de 5 · Marca y referencias', 'title' => 'Dale dirección visual a la IA', 'subtitle' => 'Sube el logo y capturas de webs que te gusten. Canvas usará esas referencias como inspiración de estructura, ritmo y composición.', 'action' => 'Siguiente'],
-    3 => ['eyebrow' => 'Paso 3 de 5 · Modelo IA', 'title' => 'Elige el motor que va a crear tu web', 'subtitle' => 'Te proponemos una selección limitada para empezar bien. Después podrás cambiarlo desde Ajustes · IA.', 'action' => 'Siguiente'],
+    1 => ['eyebrow' => __('onboarding.step1.eyebrow'), 'title' => __('onboarding.step1.title'), 'subtitle' => __('onboarding.step1.subtitle'), 'action' => __('common.next')],
+    2 => ['eyebrow' => __('onboarding.step2.eyebrow'), 'title' => __('onboarding.step2.title'), 'subtitle' => __('onboarding.step2.subtitle'), 'action' => __('common.next')],
+    3 => ['eyebrow' => __('onboarding.step3.eyebrow'), 'title' => __('onboarding.step3.title'), 'subtitle' => __('onboarding.step3.subtitle'), 'action' => __('common.next')],
     // ONB-FOTOS — el paso deja de ser solo documentos: fotos y documentos son la
     // misma pregunta ("¿qué material tienes ya?") y las fotos son lo que evita
     // que la web se genere entera con banco de imágenes.
-    4 => ['eyebrow' => 'Paso 4 de 5 · Materiales · opcional', 'title' => '¿Qué material tienes ya?', 'subtitle' => 'Fotos reales de tu negocio y documentos que te describan. Las fotos se usan en las páginas; los documentos, como contexto para escribir con criterio.', 'action' => 'Continuar'],
-    5 => ['eyebrow' => 'Paso 5 de 5 · Web inicial', 'title' => 'Tu web, paso a paso', 'subtitle' => 'Primero elige qué páginas crear. Después verás un preview de tu estilo, hecho a medida desde tus datos.', 'action' => 'Continuar al estilo'],
+    4 => ['eyebrow' => __('onboarding.step4.eyebrow'), 'title' => __('onboarding.step4.title'), 'subtitle' => __('onboarding.step4.subtitle'), 'action' => __('common.continue')],
+    5 => ['eyebrow' => __('onboarding.step5.eyebrow'), 'title' => __('onboarding.step5.title'), 'subtitle' => __('onboarding.step5.subtitle'), 'action' => __('onboarding.step5.action')],
 ];
+// La clave es un identificador estable ('seo' se compara más abajo); la
+// etiqueta se traduce aparte. Antes la clave ERA la etiqueta en castellano.
 $groups = [
-    'Esencial' => ['business_description', 'target_audience', 'tone_of_voice'],
-    'Sobre lo que ofreces' => ['services', 'value_proposition', 'unique_selling_points'],
-    'Para SEO y contacto' => ['keywords', 'contact_info'],
+    'essential' => ['business_description', 'target_audience', 'tone_of_voice'],
+    'offer'     => ['services', 'value_proposition', 'unique_selling_points'],
+    'seo'       => ['keywords', 'contact_info'],
 ];
 ?>
 
-<?php \Core\View::start('title'); ?>Onboarding<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('onboarding.title')) ?><?php \Core\View::end(); ?>
 <?php \Core\View::start('bodyClass'); ?>pp-onboarding-mode<?php \Core\View::end(); ?>
 <?php \Core\View::start('head'); ?>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=DM+Sans:wght@300..900&family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=IBM+Plex+Sans:wght@300..700&family=Lora:wght@400..700&family=Manrope:wght@300..800&family=Montserrat:wght@300..800&family=Open+Sans:wght@300..800&family=Outfit:wght@300..900&family=Playfair+Display:wght@400..900&family=Plus+Jakarta+Sans:wght@300..800&family=Source+Sans+3:wght@300..900&family=Space+Grotesk:wght@300..700&display=swap">
@@ -52,12 +54,12 @@ $groups = [
         <strong>PromptPress</strong>
         <form method="POST" action="<?= e(base_url('admin/onboarding/exit')) ?>">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <button type="submit">Salir al panel →</button>
+            <button type="submit"><?= e(__('onboarding.exit')) ?> →</button>
         </form>
     </header>
 
     <main class="pp-onboarding-shell">
-        <nav class="pp-onboarding-progress" aria-label="Progreso del onboarding">
+        <nav class="pp-onboarding-progress" aria-label="<?= e(__('onboarding.progress_aria')) ?>">
             <?php foreach ($steps as $i => $label): ?>
                 <div class="<?= $i < $step ? 'is-done' : ($i === $step ? 'is-current' : 'is-pending') ?>">
                     <span></span>
@@ -80,27 +82,27 @@ $groups = [
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <section class="pp-onboarding-autofill" data-memory-autofill>
                         <div>
-                            <span>Entrada rápida</span>
-                            <h2>¿Ya tienes documentos del negocio?</h2>
-                            <p>Sube uno o varios PDF, DOCX o TXT y la IA intentará rellenar estos campos cruzando la información. Después podrás revisar todo antes de continuar.</p>
+                            <span><?= e(__('onboarding.autofill.eyebrow')) ?></span>
+                            <h2><?= e(__('onboarding.autofill.title')) ?></h2>
+                            <p><?= e(__('onboarding.autofill.text')) ?></p>
                         </div>
                         <label>
                             <input type="file" name="dossier[]" accept=".pdf,.docx,.txt" multiple data-memory-autofill-file>
-                            <strong data-memory-autofill-file-label>Elegir documentos</strong>
-                            <small>PDF, DOCX o TXT. Puedes seleccionar varios · 10 MB por archivo.</small>
+                            <strong data-memory-autofill-file-label><?= e(__('onboarding.autofill.choose')) ?></strong>
+                            <small><?= e(__('onboarding.docs.formats')) ?></small>
                         </label>
-                        <button type="button" class="pp-btn pp-btn--secondary" data-memory-autofill-button>Rellenar con IA</button>
+                        <button type="button" class="pp-btn pp-btn--secondary" data-memory-autofill-button><?= e(__('onboarding.autofill.button')) ?></button>
                         <p data-memory-autofill-status></p>
                     </section>
-                    <?php foreach ($groups as $groupLabel => $keys): ?>
-                        <?php $isSeo = $groupLabel === 'Para SEO y contacto'; ?>
+                    <?php foreach ($groups as $groupKey => $keys): ?>
+                        <?php $isSeo = $groupKey === 'seo'; $groupLabel = __('onboarding.group.' . $groupKey); ?>
                         <<?= $isSeo ? 'details' : 'div' ?> class="pp-onboarding-fieldset" <?= $isSeo ? '' : '' ?>>
                             <?php if ($isSeo): ?><summary><?= e($groupLabel) ?></summary><?php else: ?><h2><?= e($groupLabel) ?></h2><?php endif; ?>
                             <?php foreach ($keys as $key): $field = $memoryFields[$key]; ?>
                                 <label class="pp-onboarding-field" data-field-key="<?= e($key) ?>">
                                     <span>
                                         <?= e($field['label']) ?>
-                                        <?php if ($key === 'business_description'): ?><em>* recomendado</em><?php else: ?><em>opcional</em><?php endif; ?>
+                                        <?php if ($key === 'business_description'): ?><em>* <?= e(__('common.recommended')) ?></em><?php else: ?><em><?= e(__('common.optional')) ?></em><?php endif; ?>
                                     </span>
                                     <?php if (($field['type'] ?? '') === 'select'): ?>
                                         <select name="<?= e($key) ?>">
@@ -111,13 +113,13 @@ $groups = [
                                     <?php else: ?>
                                         <textarea name="<?= e($key) ?>" rows="<?= (int) ($field['rows'] ?? 3) ?>" placeholder="<?= e((string) ($field['placeholder'] ?? '')) ?>"><?= e((string) ($memoryValues[$key] ?? '')) ?></textarea>
                                     <?php endif; ?>
-                                    <small><?= e($key === 'tone_of_voice' ? 'Esto define cómo va a sonar tu marca en cada texto.' : (string) ($field['help'] ?? '')) ?></small>
+                                    <small><?= e($key === 'tone_of_voice' ? __('onboarding.tone_help') : (string) ($field['help'] ?? '')) ?></small>
                                     <?php if ($key === 'business_description'): ?>
                                         <details class="pp-onboarding-example">
-                                            <summary>Ver un ejemplo</summary>
-                                            <p>Somos un estudio de diseño web para clínicas dentales que necesitan atraer pacientes sin depender de plantillas genéricas. Creamos páginas claras, rápidas y orientadas a reservar cita, con una comunicación cercana y profesional.</p>
+                                            <summary><?= e(__('onboarding.see_example')) ?></summary>
+                                            <p><?= e(__('onboarding.example_text')) ?></p>
                                         </details>
-                                        <p class="pp-onboarding-warning" data-business-warning hidden>Con más detalle la IA acertará más. Suma alguna frase si puedes.</p>
+                                        <p class="pp-onboarding-warning" data-business-warning hidden><?= e(__('onboarding.business_warning')) ?></p>
                                     <?php endif; ?>
                                 </label>
                             <?php endforeach; ?>
@@ -127,25 +129,25 @@ $groups = [
                     <!-- E-GDPR G6 — Datos legales opcionales (panel desplegable) -->
                     <details class="pp-onboarding-fieldset pp-onboarding-legal">
                         <summary>
-                            <span>Datos legales · opcional</span>
-                            <em>Te ahorra trabajo después</em>
+                            <span><?= e(__('onboarding.legal.title')) ?></span>
+                            <em><?= e(__('onboarding.legal.hint')) ?></em>
                         </summary>
-                        <p class="pp-onboarding-legal__intro">Si los rellenas ahora, PromptPress podrá generar tu política de privacidad y aviso legal con un clic. Los puedes completar más tarde desde el panel.</p>
+                        <p class="pp-onboarding-legal__intro"><?= e(__('onboarding.legal.intro')) ?></p>
                         <label class="pp-onboarding-field">
-                            <span>Razón social / nombre <em>opcional</em></span>
-                            <input type="text" name="legal_name" maxlength="255" placeholder="Mi Empresa SL · Juan García López">
-                            <small>El nombre legal con el que facturas. Si eres autónomo, tu nombre completo.</small>
+                            <span><?= e(__('onboarding.legal.name')) ?> <em><?= e(__('common.optional')) ?></em></span>
+                            <input type="text" name="legal_name" maxlength="255" placeholder="<?= e(__('onboarding.legal.name_placeholder')) ?>">
+                            <small><?= e(__('onboarding.legal.name_help')) ?></small>
                         </label>
                         <label class="pp-onboarding-field">
-                            <span>NIF / CIF / NIE <em>opcional</em></span>
+                            <span><?= e(__('onboarding.legal.tax_id')) ?> <em><?= e(__('common.optional')) ?></em></span>
                             <input type="text" name="legal_tax_id" maxlength="20" placeholder="B12345678">
                         </label>
                         <label class="pp-onboarding-field">
-                            <span>Dirección completa <em>opcional</em></span>
-                            <input type="text" name="legal_address" maxlength="500" placeholder="Calle, número, código postal, ciudad">
+                            <span><?= e(__('onboarding.legal.address')) ?> <em><?= e(__('common.optional')) ?></em></span>
+                            <input type="text" name="legal_address" maxlength="500" placeholder="<?= e(__('onboarding.legal.address_placeholder')) ?>">
                         </label>
                         <label class="pp-onboarding-field">
-                            <span>Email de contacto legal <em>opcional</em></span>
+                            <span><?= e(__('onboarding.legal.email')) ?> <em><?= e(__('common.optional')) ?></em></span>
                             <input type="email" name="legal_email" maxlength="255" placeholder="contacto@tu-dominio.com">
                         </label>
                     </details>
@@ -159,11 +161,11 @@ $groups = [
                         <div class="pp-onboarding-design-fields">
                             <?php // ONB2 O2.1 — Cuatro bloques: Marca · Inspiración · Color · Tipografía y forma. ?>
                             <section class="pp-onboarding-block">
-                                <h2>Tu marca</h2>
+                                <h2><?= e(__('onboarding.brand.title')) ?></h2>
                                 <label class="pp-onboarding-field">
-                                    <span>Nombre de la empresa <em>recomendado</em></span>
+                                    <span><?= e(__('onboarding.brand.company_name')) ?> <em><?= e(__('common.recommended')) ?></em></span>
                                     <input type="text" name="site_name" value="<?= e((string) ($brandValues['name'] ?? '')) ?>" maxlength="255" data-brand-name>
-                                    <small>Lo usaremos en encabezados, SEO y llamadas a la acción.</small>
+                                    <small><?= e(__('onboarding.brand.company_name_help')) ?></small>
                                 </label>
                                 <?php // ONB2 O2.2 — Dos versiones del logo, nombradas por el FONDO donde
                                       // van (no por su color: "logo oscuro" es ambiguo). Y cuál manda
@@ -184,88 +186,89 @@ $groups = [
                                                         <b></b>
                                                     <?php endif; ?>
                                                 </span>
-                                                <strong><?= e((string) $cfg['label']) ?></strong>
-                                                <small>PNG, JPG, WEBP o SVG. Hasta 2 MB.</small>
-                                                <em data-logo-state><?= $has ? 'Cargado. Puedes sustituirlo.' : 'Sin subir.' ?></em>
+                                                <strong><?= e(\App\Services\BrandService::variantLabel($variant)) ?></strong>
+                                                <small><?= e(__('onboarding.brand.logo_formats')) ?></small>
+                                                <em data-logo-state><?= e($has ? __('onboarding.brand.logo_loaded') : __('onboarding.brand.logo_empty')) ?></em>
                                             </label>
                                             <label class="pp-onboarding-logo-primary">
                                                 <input type="radio" name="logo_primary" value="<?= e($variant) ?>"
                                                        <?= (($brandValues['logo_primary'] ?? 'light') === $variant) ? 'checked' : '' ?>>
-                                                <span>Usar esta por defecto</span>
+                                                <span><?= e(__('onboarding.brand.logo_default')) ?></span>
                                             </label>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-                                <p class="pp-onboarding-logos__hint">Si solo tienes una, sube esa: la usaremos en los dos sitios. La versión para fondos oscuros es la que va en el pie y en las secciones en negativo.</p>
+                                <p class="pp-onboarding-logos__hint"><?= e(__('onboarding.brand.logo_hint')) ?></p>
                             </section>
 
                             <section class="pp-onboarding-block">
-                                <h2>Inspiración</h2>
+                                <h2><?= e(__('onboarding.inspiration.title')) ?></h2>
                                 <label class="pp-onboarding-reference-field pp-onboarding-reference-field--hero" data-reference-dropzone>
                                     <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
                                     <span aria-hidden="true"></span>
-                                    <strong>Inspiración visual para Canvas</strong>
-                                    <small>Sube capturas de webs que te gusten. La IA tomará como referencia su estructura, ritmo y composición, siempre adaptadas a tu marca.</small>
+                                    <strong><?= e(__('onboarding.inspiration.label')) ?></strong>
+                                    <small><?= e(__('onboarding.inspiration.help')) ?></small>
                                     <em data-reference-state>
-                                        <?php if (($referenceValues['count'] ?? 0) > 0): ?>
-                                            <?= (int) $referenceValues['count'] ?> referencia<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?> guardada<?= (int) $referenceValues['count'] === 1 ? '' : 's' ?>. Puedes sustituirlas.
+                                        <?php $refCount = (int) ($referenceValues['count'] ?? 0); ?>
+                                        <?php if ($refCount > 0): ?>
+                                            <?= e(__($refCount === 1 ? 'onboarding.inspiration.saved_one' : 'onboarding.inspiration.saved_other', ['n' => $refCount])) ?>
                                         <?php else: ?>
-                                            PNG, JPG o WebP. Hasta 4 imágenes · 8 MB cada una.
+                                            <?= e(__('onboarding.inspiration.formats')) ?>
                                         <?php endif; ?>
                                     </em>
                                 </label>
                             </section>
 
                             <section class="pp-onboarding-block">
-                                <h2>Color</h2>
+                                <h2><?= e(__('onboarding.color.title')) ?></h2>
                                 <?php // ONB2 O2.4 — Los colores de la marca del usuario: la materia prima
                                       // con la que se deriva después la paleta de la web. ?>
                                 <div class="pp-onboarding-brandpalette" data-brand-palette
                                      data-max="<?= (int) \App\Controllers\Admin\OnboardingController::BRAND_PALETTE_MAX ?>">
-                                    <span>Los colores de tu marca <em>opcional</em></span>
-                                    <p>Si tienes manual de marca, ponlos aquí. Nos sirven para derivar la paleta de la web sin inventarnos tu identidad.</p>
+                                    <span><?= e(__('onboarding.color.brand_colors')) ?> <em><?= e(__('common.optional')) ?></em></span>
+                                    <p><?= e(__('onboarding.color.brand_colors_help')) ?></p>
                                     <div class="pp-onboarding-brandpalette__list" data-brand-palette-list>
                                         <?php foreach ((array) ($brandValues['brand_palette'] ?? []) as $hex): ?>
                                             <div class="pp-onboarding-brandpalette__item">
-                                                <input type="text" name="brand_palette[]" value="<?= e((string) $hex) ?>" maxlength="7" data-pp-color aria-label="Color de marca">
-                                                <button type="button" data-brand-palette-remove aria-label="Quitar este color">×</button>
+                                                <input type="text" name="brand_palette[]" value="<?= e((string) $hex) ?>" maxlength="7" data-pp-color aria-label="<?= e(__('onboarding.color.swatch_aria')) ?>">
+                                                <button type="button" data-brand-palette-remove aria-label="<?= e(__('onboarding.color.remove_aria')) ?>">×</button>
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
                                     <div class="pp-onboarding-brandpalette__actions">
-                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-add>+ Añadir color</button>
-                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-extract>Extraer del logo</button>
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-add>+ <?= e(__('onboarding.color.add')) ?></button>
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-palette-extract><?= e(__('onboarding.color.extract')) ?></button>
                                         <small data-brand-palette-status></small>
                                     </div>
                                 </div>
-                                <?= design_swatches('primary_color', 'Color principal', (string) $designValues['primary_color'], $swatches) ?>
+                                <?= design_swatches('primary_color', __('onboarding.color.primary'), (string) $designValues['primary_color'], $swatches) ?>
                                 <?php // ONB2 O2.5 — Las paletas las propone la IA a partir de los colores
                                       // de marca, y el contraste lo garantiza el servidor. Aquí ya no se
                                       // elige un preset del catálogo ni un "color de texto" suelto: el
                                       // texto, los fondos y las líneas los decide la paleta. ?>
                                 <div class="pp-onboarding-field pp-onboarding-palette-field" data-palette-field>
-                                    <span>Paleta de la web <em>la deriva la IA de tus colores</em></span>
+                                    <span><?= e(__('onboarding.color.palette')) ?> <em><?= e(__('onboarding.color.palette_hint')) ?></em></span>
                                     <div class="pp-onboarding-palette-grid" data-palette-grid>
                                         <?php if (!empty($currentPalette)): ?>
-                                            <?= palette_card('Tu paleta actual', 'La que ya tiene guardada este sitio.', (array) $currentPalette, true) ?>
+                                            <?= palette_card(__('onboarding.color.current_palette'), __('onboarding.color.current_palette_desc'), (array) $currentPalette, true) ?>
                                         <?php endif; ?>
                                     </div>
                                     <p class="pp-onboarding-palette-empty" data-palette-empty <?= !empty($currentPalette) ? 'hidden' : '' ?>>
-                                        Todavía no hay paleta. Pulsa el botón y te proponemos tres, con los contrastes ya comprobados.
+                                        <?= e(__('onboarding.color.palette_empty')) ?>
                                     </p>
                                     <div class="pp-onboarding-palette-actions">
-                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-palette-generate>Generar paletas con IA</button>
+                                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-palette-generate><?= e(__('onboarding.color.generate')) ?></button>
                                         <small data-palette-status></small>
                                     </div>
                                     <input type="hidden" name="palette_custom" value="<?= e(!empty($currentPalette) ? json_encode($currentPalette) : '') ?>" data-palette-value>
-                                    <small>Fondos, texto, texto secundario, líneas y acentos salen de aquí. El color principal solo es el punto de partida.</small>
+                                    <small><?= e(__('onboarding.color.palette_note')) ?></small>
                                 </div>
                             </section>
 
                             <section class="pp-onboarding-block pp-onboarding-block--duo">
-                                <h2>Tipografía y forma</h2>
+                                <h2><?= e(__('onboarding.type.title')) ?></h2>
                                 <label class="pp-onboarding-field">
-                                    <span>Tipografía <em>opcional</em></span>
+                                    <span><?= e(__('onboarding.type.font')) ?> <em><?= e(__('common.optional')) ?></em></span>
                                     <select name="typography_pair" data-preview-font>
                                         <?php foreach ($typographyOptions as $value => $opt): ?>
                                             <option value="<?= e($value) ?>" data-heading="<?= e((string) $opt['heading']) ?>" data-body="<?= e((string) $opt['body']) ?>" <?= $designValues['typography_pair'] === $value ? 'selected' : '' ?>><?= e($value . ' — ' . $opt['label']) ?></option>
@@ -273,10 +276,10 @@ $groups = [
                                     </select>
                                 </label>
                                 <div class="pp-onboarding-field">
-                                    <span>Esquinas <em>opcional</em></span>
+                                    <span><?= e(__('onboarding.type.corners')) ?> <em><?= e(__('common.optional')) ?></em></span>
                                     <div class="pp-onboarding-radius-control">
                                         <input type="range" name="border_radius" min="0" max="60" step="1" value="<?= e((string) $designValues['border_radius']) ?>" data-radius-range>
-                                        <div><span>Rectas</span><strong data-radius-label><?= e((string) $designValues['border_radius']) ?> px</strong><span>Redondas</span></div>
+                                        <div><span><?= e(__('onboarding.type.square')) ?></span><strong data-radius-label><?= e((string) $designValues['border_radius']) ?> px</strong><span><?= e(__('onboarding.type.round')) ?></span></div>
                                     </div>
                                 </div>
                                 <?php /* FONTS · ONB2 O2.7 — Tipografía propia del cliente, ahora con
@@ -293,19 +296,19 @@ $groups = [
                                 }
                                 $sameForBoth = $ownFonts !== [] && ($ownFonts[0]['role'] ?? '') === 'both';
                                 $fontSlots = [
-                                    'heading' => ['label' => 'Para los títulos', 'placeholder' => 'Ej. Helvetica Now Display'],
-                                    'body'    => ['label' => 'Para los textos',  'placeholder' => 'Ej. Inter'],
+                                    'heading' => ['label' => __('onboarding.type.for_headings'), 'placeholder' => __('onboarding.type.heading_placeholder')],
+                                    'body'    => ['label' => __('onboarding.type.for_body'),     'placeholder' => __('onboarding.type.body_placeholder')],
                                 ];
                                 ?>
                                 <details class="pp-onboarding-fonts" <?= $ownFonts !== [] ? 'open' : '' ?>>
                                     <summary>
-                                        <strong>¿Tu marca tiene sus propias tipografías?</strong>
-                                        <small><?= $ownFonts !== [] ? e(implode(' · ', array_map(fn(array $f): string => (string) $f['name'], $ownFonts))) : 'Súbelas y las usaremos en toda la web' ?></small>
+                                        <strong><?= e(__('onboarding.type.own_fonts')) ?></strong>
+                                        <small><?= $ownFonts !== [] ? e(implode(' · ', array_map(fn(array $f): string => (string) $f['name'], $ownFonts))) : __('onboarding.type.own_fonts_hint') ?></small>
                                     </summary>
                                     <div class="pp-onboarding-fonts__body">
                                         <label class="pp-onboarding-fonts__same">
                                             <input type="checkbox" name="custom_font_same" value="1" <?= $sameForBoth ? 'checked' : '' ?> data-fonts-same>
-                                            <span>Uso la misma tipografía para títulos y textos</span>
+                                            <span><?= e(__('onboarding.type.same_font')) ?></span>
                                         </label>
                                         <div class="pp-onboarding-fonts__slots">
                                             <?php foreach ($fontSlots as $role => $slot):
@@ -315,7 +318,7 @@ $groups = [
                                                 <div class="pp-onboarding-fonts__slot" data-font-slot="<?= e($role) ?>">
                                                     <strong><?= e($slot['label']) ?></strong>
                                                     <label class="pp-onboarding-field">
-                                                        <span>Nombre <em>opcional</em></span>
+                                                        <span><?= e(__('onboarding.type.font_name')) ?> <em><?= e(__('common.optional')) ?></em></span>
                                                         <input type="text" name="custom_font_name[<?= e($role) ?>]" maxlength="120"
                                                                placeholder="<?= e($slot['placeholder']) ?>"
                                                                value="<?= e((string) ($current['name'] ?? '')) ?>">
@@ -323,20 +326,20 @@ $groups = [
                                                     <label class="pp-onboarding-fonts__file">
                                                         <input type="file" name="custom_fonts_<?= e($role) ?>[]" accept=".woff2,.woff,.ttf,.otf" multiple data-onboarding-fonts>
                                                         <span aria-hidden="true"></span>
-                                                        <strong>Subir archivos</strong>
-                                                        <small>WOFF2, WOFF, TTF u OTF · hasta 3 MB. Un archivo por peso (Regular, Bold…): detectamos el peso por el nombre.</small>
+                                                        <strong><?= e(__('onboarding.type.upload_files')) ?></strong>
+                                                        <small><?= e(__('onboarding.type.font_formats')) ?></small>
                                                         <em data-onboarding-fonts-state>
                                                             <?php if ($files !== []): ?>
-                                                                <?= count($files) ?> archivo<?= count($files) === 1 ? '' : 's' ?> guardado<?= count($files) === 1 ? '' : 's' ?>. Puedes añadir más.
+                                                                <?= e(__(count($files) === 1 ? 'onboarding.type.files_one' : 'onboarding.type.files_other', ['n' => count($files)])) ?>
                                                             <?php else: ?>
-                                                                Ningún archivo seleccionado.
+                                                                <?= e(__('onboarding.type.no_files')) ?>
                                                             <?php endif; ?>
                                                         </em>
                                                     </label>
                                                 </div>
                                             <?php endforeach; ?>
                                         </div>
-                                        <p class="pp-onboarding-fonts__legal">Necesitas licencia de uso web (webfont) para los archivos que subas. Si prefieres, puedes hacerlo luego desde Diseño.</p>
+                                        <p class="pp-onboarding-fonts__legal"><?= e(__('onboarding.type.font_license')) ?></p>
                                     </div>
                                 </details>
                             </section>
@@ -348,13 +351,13 @@ $groups = [
                                 <?php else: ?>
                                     <b data-preview-logo-fallback></b>
                                 <?php endif; ?>
-                                <i data-preview-brand-kicker><?= e((string) ($brandValues['name'] ?: 'Tu marca')) ?></i>
+                                <i data-preview-brand-kicker><?= e((string) ($brandValues['name'] ?: __('onboarding.preview.your_brand'))) ?></i>
                             </span>
-                            <h2><span data-preview-brand-name><?= e((string) ($brandValues['name'] ?: 'Tu marca')) ?></span> en acción</h2>
-                            <p>Una página clara, con una llamada a la acción visible y una tarjeta de confianza para que el visitante sepa qué hacer después.</p>
-                            <div><button type="button">Pedir información</button><button type="button">Ver servicios</button></div>
+                            <h2><span data-preview-brand-name><?= e((string) ($brandValues['name'] ?: __('onboarding.preview.your_brand'))) ?></span> <?= e(__('onboarding.preview.in_action')) ?></h2>
+                            <p><?= e(__('onboarding.preview.text')) ?></p>
+                            <div><button type="button"><?= e(__('onboarding.preview.cta1')) ?></button><button type="button"><?= e(__('onboarding.preview.cta2')) ?></button></div>
                             <hr>
-                            <article><b></b><strong>Mensaje consistente</strong><small>La IA usa esta identidad como punto de partida.</small></article>
+                            <article><b></b><strong><?= e(__('onboarding.preview.card_title')) ?></strong><small><?= e(__('onboarding.preview.card_text')) ?></small></article>
                         </aside>
                     </div>
                     <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action']) ?>
@@ -365,7 +368,7 @@ $groups = [
                     <div class="pp-onboarding-ai-choice">
                         <?php foreach ($aiModels as $modelId => $model): ?>
                             <label class="pp-onboarding-ai-card">
-                                <input type="radio" name="ai_model_choice" value="<?= e($modelId) ?>" <?= (($aiValues['model'] ?? '') === $modelId || (($aiValues['model'] ?? '') === '' && $modelId === 'google/gemini-3-flash-preview')) ? 'checked' : '' ?>>
+                                <input type="radio" name="ai_model_choice" value="<?= e($modelId) ?>" <?= (($aiValues['model'] ?? '') === $modelId || (($aiValues['model'] ?? '') === '' && $modelId === 'google/gemini-3.7-flash')) ? 'checked' : '' ?>>
                                 <span>
                                     <small><?= e((string) $model['badge']) ?></small>
                                     <strong><?= e((string) $model['name']) ?></strong>
@@ -376,25 +379,25 @@ $groups = [
                         <?php endforeach; ?>
                     </div>
                     <p class="pp-onboarding-ai-note">
-                        Recomendación inicial: Gemini 3 Flash para crear páginas. Gemini 3.5 Flash si prefieres calidad extra. Para tareas pequeñas usaremos Gemini 3.1 Flash Lite.
+                        <?= e(__('onboarding.ai.note')) ?>
                     </p>
                     <details class="pp-onboarding-advanced-models" <?= empty($aiValues['is_recommended']) ? 'open' : '' ?>>
-                        <summary>Más modelos</summary>
+                        <summary><?= e(__('onboarding.ai.more_models')) ?></summary>
                         <label class="pp-onboarding-ai-card pp-onboarding-ai-card--advanced">
                             <input type="radio" name="ai_model_choice" value="advanced" <?= empty($aiValues['is_recommended']) ? 'checked' : '' ?>>
                             <span>
-                                <small>Avanzado</small>
-                                <strong>Usar otro modelo de OpenRouter</strong>
-                                <em>Solo si ya sabes qué ID quieres probar. Puedes cambiarlo luego en Ajustes · IA.</em>
+                                <small><?= e(__('onboarding.ai.advanced')) ?></small>
+                                <strong><?= e(__('onboarding.ai.other_model')) ?></strong>
+                                <em><?= e(__('onboarding.ai.other_model_help')) ?></em>
                             </span>
                         </label>
                         <div class="pp-onboarding-advanced-grid">
                             <label class="pp-onboarding-field">
-                                <span>Modelo principal</span>
-                                <input type="text" name="ai_model_advanced" value="<?= e((string) ($aiValues['model'] ?? 'google/gemini-3-flash-preview')) ?>" maxlength="100" placeholder="google/gemini-3-flash-preview">
+                                <span><?= e(__('onboarding.ai.main_model')) ?></span>
+                                <input type="text" name="ai_model_advanced" value="<?= e((string) ($aiValues['model'] ?? 'google/gemini-3.7-flash')) ?>" maxlength="100" placeholder="google/gemini-3.7-flash">
                             </label>
                             <label class="pp-onboarding-field">
-                                <span>Modelo auxiliar</span>
+                                <span><?= e(__('onboarding.ai.light_model')) ?></span>
                                 <input type="text" name="ai_model_light_advanced" value="<?= e((string) ($aiValues['model_light'] ?? 'google/gemini-3.1-flash-lite')) ?>" maxlength="100" placeholder="google/gemini-3.1-flash-lite">
                             </label>
                         </div>
@@ -417,19 +420,19 @@ $groups = [
                              data-delete-url="<?= e(base_url('admin/onboarding/photo-delete')) ?>"
                              data-describe-url="<?= e(base_url('admin/media/describe-missing')) ?>">
                         <header class="pp-onboarding-photos__head">
-                            <h2>Fotos de tu negocio</h2>
-                            <p>Tu local, tu equipo, tu producto, tu trabajo terminado. La IA las mira, las describe y las coloca en las páginas. <strong>No son las capturas de webs del paso 2</strong>: aquello era inspiración de diseño, esto es tu material real.</p>
+                            <h2><?= e(__('onboarding.photos.title')) ?></h2>
+                            <p><?= __('onboarding.photos.intro.html') ?></p>
                         </header>
 
                         <label class="pp-onboarding-dropzone pp-onboarding-dropzone--photos" data-photos-dropzone>
                             <input type="file" name="business_photos[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple data-photos-input>
                             <span></span>
-                            <strong>Arrastra tus fotos aquí o haz click para elegir</strong>
-                            <small>JPG, PNG, WebP o GIF · hasta 10 MB cada una · máximo <?= (int) $photosMax ?> fotos. Con 4-6 buenas fotos ya cubrimos una web entera.</small>
+                            <strong><?= e(__('onboarding.photos.dropzone')) ?></strong>
+                            <small><?= e(__('onboarding.photos.formats', ['max' => (int) $photosMax])) ?></small>
                         </label>
 
                         <p class="pp-onboarding-photos__status" data-photos-status <?= empty($businessPhotos) ? '' : 'hidden' ?>>
-                            Si no subes ninguna, usaremos un banco de imágenes genérico.
+                            <?= e(__('onboarding.photos.none_note')) ?>
                         </p>
 
                         <ul class="pp-onboarding-photos__grid" data-photos-grid<?= empty($businessPhotos) ? ' hidden' : '' ?>>
@@ -437,23 +440,23 @@ $groups = [
                                 <li class="pp-onboarding-photo" data-photo-id="<?= (int) $photo['id'] ?>">
                                     <div class="pp-onboarding-photo__thumb">
                                         <img src="<?= e((string) $photo['url']) ?>" alt="">
-                                        <button type="button" class="pp-onboarding-photo__remove" data-photo-remove aria-label="Quitar esta foto">×</button>
+                                        <button type="button" class="pp-onboarding-photo__remove" data-photo-remove aria-label="<?= e(__('onboarding.photos.remove_aria')) ?>">×</button>
                                     </div>
                                     <textarea class="pp-onboarding-photo__alt" rows="3" data-photo-alt
-                                              placeholder="Sin descripción"><?= e((string) $photo['alt_text']) ?></textarea>
-                                    <small data-photo-state><?= $photo['alt_text'] === '' ? 'Sin describir' : 'Descrita' ?></small>
+                                              placeholder="<?= e(__('onboarding.photos.no_alt')) ?>"><?= e((string) $photo['alt_text']) ?></textarea>
+                                    <small data-photo-state><?= e($photo['alt_text'] === '' ? __('onboarding.photos.undescribed') : __('onboarding.photos.described')) ?></small>
                                 </li>
                             <?php endforeach; ?>
                         </ul>
                     </section>
 
-                    <h2 class="pp-onboarding-photos__divider">Documentos que te describan</h2>
-                    <p class="pp-onboarding-photos__divider-hint">Brochures, plan de negocio, catálogo, tarifas o dosieres. La IA los usa como contexto extra al escribir.</p>
+                    <h2 class="pp-onboarding-photos__divider"><?= e(__('onboarding.docs.title')) ?></h2>
+                    <p class="pp-onboarding-photos__divider-hint"><?= e(__('onboarding.docs.hint')) ?></p>
 
                     <?php if (!empty($documents)): ?>
                         <section class="pp-onboarding-doc-current">
-                            <strong>Documentos ya cargados</strong>
-                            <p>La IA usará estos documentos como contexto cuando genere la web. Puedes mantenerlos y añadir más.</p>
+                            <strong><?= e(__('onboarding.docs.already')) ?></strong>
+                            <p><?= e(__('onboarding.docs.already_help')) ?></p>
                             <ul>
                                 <?php foreach (array_slice($documents, 0, 5) as $doc): ?>
                                     <li><em><?= e((string) $doc['original_filename']) ?></em> · <?= e((string) $doc['status']) ?></li>
@@ -464,29 +467,30 @@ $groups = [
                     <label class="pp-onboarding-dropzone" data-dropzone>
                         <input type="file" name="files[]" accept=".pdf,.docx,.txt" multiple>
                         <span></span>
-                        <strong><?= !empty($documents) ? 'Añadir más documentos' : 'Arrastra archivos aquí o haz click para elegir' ?></strong>
-                        <small>PDF, DOCX o TXT. Puedes seleccionar varios · 10 MB por archivo.</small>
-                        <p data-file-state><?php if ($document): ?>Último: <?= e((string) $document['original_filename']) ?> · <?= e((string) $document['status']) ?><?php endif; ?></p>
+                        <strong><?= e(!empty($documents) ? __('onboarding.docs.add_more') : __('onboarding.docs.dropzone')) ?></strong>
+                        <small><?= e(__('onboarding.docs.formats')) ?></small>
+                        <p data-file-state><?php if ($document): ?><?= e(__('onboarding.docs.last')) ?>: <?= e((string) $document['original_filename']) ?> · <?= e((string) $document['status']) ?><?php endif; ?></p>
                     </label>
-                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], 'Saltar este paso') ?>
+                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], __('onboarding.skip_step')) ?>
                 </form>
             <?php else: ?>
                 <div class="pp-onboarding-architecture" data-architecture-step data-intent-saved="<?= e($savedIntent ?? '') ?>">
                     <!-- F22.T22.1 — Selector de intent (qué quiere conseguir el usuario) -->
                     <div class="pp-onboarding-intent" data-intent-picker>
                         <header class="pp-onboarding-intent__head">
-                            <span class="pp-onboarding-intent__eyebrow">Antes de proponerte una arquitectura</span>
-                            <h2 class="pp-onboarding-intent__title">¿Qué quieres conseguir con tu web?</h2>
-                            <p class="pp-onboarding-intent__desc">Elige el objetivo principal. Adaptaremos la propuesta de páginas y, si te interesa el SEO orgánico, también te dejaremos preparado un blog con entradas iniciales.</p>
+                            <span class="pp-onboarding-intent__eyebrow"><?= e(__('onboarding.intent.eyebrow')) ?></span>
+                            <h2 class="pp-onboarding-intent__title"><?= e(__('onboarding.intent.title')) ?></h2>
+                            <p class="pp-onboarding-intent__desc"><?= e(__('onboarding.intent.desc')) ?></p>
                         </header>
-                        <ul class="pp-onboarding-intent__grid" role="radiogroup" aria-label="Objetivo del sitio">
+                        <ul class="pp-onboarding-intent__grid" role="radiogroup" aria-label="<?= e(__('onboarding.intent.aria')) ?>">
                             <?php
+                            // Los slugs son valores que se guardan y viajan a la IA: no se traducen.
                             $intents = [
-                                'presence'  => ['emoji' => '🪧', 'title' => 'Presencia mínima',           'desc' => 'Aparecer online con lo básico: una página principal y un contacto. Ideal si solo necesitas existir.'],
-                                'services'  => ['emoji' => '🤝', 'title' => 'Captar clientes (servicios)', 'desc' => 'Explicar lo que ofreces, generar confianza y abrir conversaciones. La opción más común para PYMES.'],
-                                'seo'       => ['emoji' => '🔍', 'title' => 'Aparecer en Google (SEO)',     'desc' => 'Atraer tráfico orgánico con contenido. Te montamos blog + entradas iniciales para empezar con buen pie.'],
-                                'portfolio' => ['emoji' => '🎨', 'title' => 'Mostrar mi trabajo',           'desc' => 'Portfolio o galería de proyectos. Para creativos, fotógrafos, estudios, freelancers de cualquier oficio.'],
-                                'product'   => ['emoji' => '🚀', 'title' => 'Lanzar un producto',          'desc' => 'Página de aterrizaje optimizada para conversión. Producto, evento, app o lanzamiento.'],
+                                'presence'  => ['emoji' => '🪧', 'title' => __('onboarding.intent.presence.title'),  'desc' => __('onboarding.intent.presence.desc')],
+                                'services'  => ['emoji' => '🤝', 'title' => __('onboarding.intent.services.title'),  'desc' => __('onboarding.intent.services.desc')],
+                                'seo'       => ['emoji' => '🔍', 'title' => __('onboarding.intent.seo.title'),       'desc' => __('onboarding.intent.seo.desc')],
+                                'portfolio' => ['emoji' => '🎨', 'title' => __('onboarding.intent.portfolio.title'), 'desc' => __('onboarding.intent.portfolio.desc')],
+                                'product'   => ['emoji' => '🚀', 'title' => __('onboarding.intent.product.title'),   'desc' => __('onboarding.intent.product.desc')],
                             ];
                             foreach ($intents as $slug => $cfg): ?>
                                 <li>
@@ -503,26 +507,26 @@ $groups = [
                             <?php endforeach; ?>
                         </ul>
                         <div class="pp-onboarding-intent__actions">
-                            <button type="button" class="pp-btn pp-btn--secondary" data-intent-skip>Saltar (sin preferencia)</button>
-                            <button type="button" class="pp-btn pp-btn--primary" data-intent-go disabled>Ver mi arquitectura →</button>
+                            <button type="button" class="pp-btn pp-btn--secondary" data-intent-skip><?= e(__('onboarding.intent.skip')) ?></button>
+                            <button type="button" class="pp-btn pp-btn--primary" data-intent-go disabled><?= e(__('onboarding.intent.go')) ?> →</button>
                         </div>
                     </div>
 
                     <div class="pp-onboarding-arch-loading" data-arch-loading hidden>
                         <div><span></span><span></span><span></span></div>
-                        <p data-loading-msg>Pensando en la mejor arquitectura para tu negocio…</p>
+                        <p data-loading-msg><?= e(__('onboarding.arch.loading')) ?></p>
                     </div>
                     <div data-arch-result hidden></div>
                     <div data-arch-error hidden>
-                        <p>No hemos podido analizar tu sitio en este momento. Puedes seguir e iniciar el mapa vacío — la propuesta estará disponible más tarde.</p>
+                        <p><?= e(__('onboarding.arch.error')) ?></p>
                         <form method="POST" action="<?= e(base_url('admin/onboarding/skip')) ?>">
                             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                             <input type="hidden" name="step" value="5">
-                            <button class="pp-btn pp-btn--primary" type="submit">Empezar desde el mapa vacío</button>
+                            <button class="pp-btn pp-btn--primary" type="submit"><?= e(__('onboarding.arch.empty_map')) ?></button>
                         </form>
                     </div>
                     <?php // ONB-REV T1 — oculto hasta que se pinta la propuesta; si no, duplica los CTAs del picker de intent. ?>
-                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], 'Saltar', true) ?>
+                    <?= onboarding_footer($step, $csrf, $stepMeta[$step]['action'], __('onboarding.skip'), true) ?>
                 </div>
             <?php endif; ?>
         </section>
@@ -530,11 +534,12 @@ $groups = [
 </div>
 
 <?php
-function onboarding_footer(int $step, string $csrf, string $action, string $skip = 'Saltar', bool $hidden = false): string
+function onboarding_footer(int $step, string $csrf, string $action, ?string $skip = null, bool $hidden = false): string
 {
+    $skip ??= __('onboarding.skip');
     ob_start(); ?>
     <footer class="pp-onboarding-footer" data-onboarding-footer <?= $hidden ? 'hidden' : '' ?>>
-        <?php if ($step > 1): ?><a href="<?= e(base_url('admin/onboarding?step=' . ($step - 1))) ?>">← Atrás</a><?php else: ?><span></span><?php endif; ?>
+        <?php if ($step > 1): ?><a href="<?= e(base_url('admin/onboarding?step=' . ($step - 1))) ?>">← <?= e(__('common.back')) ?></a><?php else: ?><span></span><?php endif; ?>
         <?php if ($step < 5): ?>
             <input type="hidden" name="step" value="<?= (int) $step ?>">
             <button type="submit" class="pp-onboarding-skip" formmethod="POST" formaction="<?= e(base_url('admin/onboarding/skip')) ?>"><?= e($skip) ?></button>
@@ -579,7 +584,7 @@ function design_swatches(string $name, string $label, string $value, array $swat
     $value = preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? $value : '#ea580c';
     ob_start(); ?>
     <div class="pp-onboarding-field pp-onboarding-swatches">
-        <span><?= e($label) ?> <em>opcional</em></span>
+        <span><?= e($label) ?> <em><?= e(__('common.optional')) ?></em></span>
         <div>
             <?php foreach ($swatches as $color): ?>
                 <label style="--swatch: <?= e($color) ?>"><input type="radio" name="<?= e($name) ?>" value="<?= e($color) ?>" <?= strtolower($value) === strtolower($color) ? 'checked' : '' ?>><i></i></label>
@@ -588,7 +593,7 @@ function design_swatches(string $name, string $label, string $value, array $swat
         <?php // ONB2 O2.3 — El diálogo nativo de color se sustituye por el picker propio,
               // que se monta sobre este campo HEX (ver admin/assets/js/color-picker.js). ?>
         <div class="pp-onboarding-hex">
-            <input type="text" name="<?= e($name) ?>_hex" value="<?= e($value) ?>" maxlength="7" data-color-hex="<?= e($name) ?>" data-pp-color inputmode="text" autocomplete="off" aria-label="<?= e($label) ?> en HEX">
+            <input type="text" name="<?= e($name) ?>_hex" value="<?= e($value) ?>" maxlength="7" data-color-hex="<?= e($name) ?>" data-pp-color inputmode="text" autocomplete="off" aria-label="<?= e(__('onboarding.color.hex_aria', ['campo' => $label])) ?>">
         </div>
         <?php if ($help !== ''): ?><small><?= e($help) ?></small><?php endif; ?>
     </div>

@@ -17,6 +17,7 @@ final class SiteResetService
         return [
             'pages' => self::countWhere('pages', 'site_id', $siteId),
             'documents' => self::countWhere('documents', 'site_id', $siteId),
+            'resources' => self::countWhere('resources', 'site_id', $siteId),
             'messages' => self::countWhere('form_submissions', 'site_id', $siteId),
             'memory' => self::countWhere('site_memory', 'site_id', $siteId),
             'media' => self::countWhere('media', 'site_id', $siteId),
@@ -41,6 +42,8 @@ final class SiteResetService
                 self::deleteVersions($sectionIds);
             }
             Database::execute('DELETE FROM form_submissions WHERE site_id = ?', [$siteId]);
+            // Antes de secciones/media: Recursos puede referenciar ambas.
+            Database::execute('DELETE FROM resources WHERE site_id = ?', [$siteId]);
             if ($pageIds !== []) {
                 self::deleteIn('page_sections', 'page_id', $pageIds);
             }
@@ -72,6 +75,7 @@ final class SiteResetService
         self::emptyDir(PP_ROOT . '/storage/uploads/' . $siteId);
         self::emptyDir(PP_ROOT . '/storage/form_uploads/' . $siteId);
         self::emptyDir(PP_ROOT . '/storage/documents/' . $siteId);
+        self::emptyDir(PP_ROOT . '/storage/resources/' . $siteId);
         self::emptyDir(PP_ROOT . '/storage/cache/' . $siteId);
 
         return [

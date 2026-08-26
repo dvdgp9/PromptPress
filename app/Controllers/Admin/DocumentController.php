@@ -95,7 +95,7 @@ class DocumentController
         // 3) Generar ruta de destino: storage/documents/{site_id}/{uuid}.{ext}
         $basedir = self::documentsDir($siteId);
         if (!is_dir($basedir) && !mkdir($basedir, 0775, true) && !is_dir($basedir)) {
-            Session::flash('error', 'No se pudo crear la carpeta de documentos.');
+            Session::flash('error', __('documents.error.no_folder'));
             Response::redirect(base_url('admin/documents'));
             return;
         }
@@ -106,7 +106,7 @@ class DocumentController
         $relPath  = 'storage/documents/' . $siteId . '/' . $destName;
 
         if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-            Session::flash('error', 'No se pudo guardar el archivo subido.');
+            Session::flash('error', __('documents.error.save_failed'));
             Response::redirect(base_url('admin/documents'));
             return;
         }
@@ -129,14 +129,15 @@ class DocumentController
                 'UPDATE documents SET extracted_text = ?, summary = ?, status = "ready" WHERE id = ?',
                 [$text, $summary, $docId]
             );
-            Session::flash('success', 'Documento procesado correctamente.');
+            Session::flash('success', __('documents.flash.processed'));
         } catch (\Throwable $e) {
             Database::execute(
                 'UPDATE documents SET status = "error" WHERE id = ?',
                 [$docId]
             );
+            // i18n-ignore: traza de log del servidor, no se pinta.
             error_log('[DocumentController] Extracción fallida (doc ' . $docId . '): ' . $e->getMessage());
-            Session::flash('error', 'El documento se subió pero la extracción de texto falló: ' . $e->getMessage());
+            Session::flash('error', __('documents.error.extract_failed', ['error' => $e->getMessage()]));
         }
 
         Response::redirect(base_url('admin/documents'));
@@ -174,13 +175,13 @@ class DocumentController
 
         $title = trim((string) Request::post('title', ''));
         if ($title === '' || mb_strlen($title) > 255) {
-            Session::flash('error', 'El título es obligatorio y no puede superar 255 caracteres.');
+            Session::flash('error', __('documents.error.title_required'));
             Response::redirect(base_url('admin/documents/' . $doc['id']));
             return;
         }
 
         Database::execute('UPDATE documents SET title = ? WHERE id = ?', [$title, $doc['id']]);
-        Session::flash('success', 'Título actualizado.');
+        Session::flash('success', __('documents.flash.title_updated'));
         Response::redirect(base_url('admin/documents/' . $doc['id']));
     }
 
@@ -195,7 +196,7 @@ class DocumentController
 
         $absPath = PP_ROOT . '/' . $doc['file_path'];
         if (!is_file($absPath)) {
-            Session::flash('error', 'El archivo físico no existe. Sube de nuevo el documento.');
+            Session::flash('error', __('documents.error.file_missing'));
             Response::redirect(base_url('admin/documents/' . $doc['id']));
             return;
         }
@@ -209,11 +210,11 @@ class DocumentController
                 'UPDATE documents SET extracted_text = ?, summary = ?, status = "ready" WHERE id = ?',
                 [$text, $summary, $doc['id']]
             );
-            Session::flash('success', 'Extracción completada.');
+            Session::flash('success', __('documents.flash.extracted'));
         } catch (\Throwable $e) {
             Database::execute('UPDATE documents SET status = "error" WHERE id = ?', [$doc['id']]);
             error_log('[DocumentController::retry] doc ' . $doc['id'] . ': ' . $e->getMessage());
-            Session::flash('error', 'La extracción falló de nuevo: ' . $e->getMessage());
+            Session::flash('error', __('documents.error.extract_again', ['error' => $e->getMessage()]));
         }
         Response::redirect(base_url('admin/documents/' . $doc['id']));
     }
@@ -234,7 +235,7 @@ class DocumentController
         }
         Database::execute('DELETE FROM documents WHERE id = ?', [$doc['id']]);
 
-        Session::flash('success', 'Documento eliminado.');
+        Session::flash('success', __('documents.flash.deleted'));
         Response::redirect(base_url('admin/documents'));
     }
 
@@ -253,7 +254,7 @@ class DocumentController
             [$id, $siteId]
         );
         if (!$row) {
-            Session::flash('error', 'Documento no encontrado.');
+            Session::flash('error', __('documents.error.not_found'));
             Response::redirect(base_url('admin/documents'));
         }
         return $row;
@@ -265,31 +266,31 @@ class DocumentController
     private static function validateUpload($file): ?string
     {
         if (!is_array($file) || !isset($file['error'])) {
-            return 'No se recibió ningún archivo.';
+            return __('documents.error.no_file');
         }
         switch ($file['error']) {
             case UPLOAD_ERR_OK:
                 break;
             case UPLOAD_ERR_INI_SIZE:
             case UPLOAD_ERR_FORM_SIZE:
-                return 'El archivo excede el tamaño máximo permitido.';
+                return __('documents.error.too_big');
             case UPLOAD_ERR_NO_FILE:
                 return 'Debes seleccionar un archivo.';
             case UPLOAD_ERR_PARTIAL:
-                return 'La subida se interrumpió. Inténtalo de nuevo.';
+                return __('documents.error.interrupted');
             default:
-                return 'Error al subir el archivo (código ' . $file['error'] . ').';
+                return __('documents.error.upload_code', ['code' => $file['error']]);
         }
         if ($file['size'] > self::MAX_SIZE) {
             return 'El archivo supera los ' . (self::MAX_SIZE / 1024 / 1024) . ' MB permitidos.';
         }
         if (!is_uploaded_file($file['tmp_name'])) {
-            return 'Archivo subido no válido.';
+            return __('documents.error.invalid_upload');
         }
 
         $type = self::detectType($file);
         if ($type === null) {
-            return 'Tipo de archivo no soportado. Sube PDF, DOCX o TXT.';
+            return __('documents.error.bad_type');
         }
         return null;
     }
@@ -328,7 +329,7 @@ class DocumentController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('common.no_active_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

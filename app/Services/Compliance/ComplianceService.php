@@ -244,7 +244,9 @@ final class ComplianceService
             'banner' => [
                 'version'         => 1,
                 'title'           => 'Cookies en este sitio',
-                'description'     => 'Usamos cookies necesarias para que la web funcione. Si lo aceptas, también usaremos otras para analítica y mejorar tu experiencia. Puedes cambiar tu decisión cuando quieras.',
+                // i18n-ignore: texto por defecto del banner que ve el VISITANTE;
+            // su idioma es el del sitio (Microcopy lo sustituye si está definido).
+            'description'     => 'Usamos cookies necesarias para que la web funcione. Si lo aceptas, también usaremos otras para analítica y mejorar tu experiencia. Puedes cambiar tu decisión cuando quieras.',
                 'accept_label'    => 'Aceptar todas',
                 'reject_label'    => 'Rechazar opcionales',
                 'configure_label' => 'Configurar',

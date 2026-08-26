@@ -149,6 +149,7 @@ final class SectorPriors
     public static function normalizeSlug(string $raw): string
     {
         $raw = mb_strtolower(trim($raw));
+        // i18n-ignore: tabla de transliteración, no interfaz.
         $raw = strtr($raw, ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ñ'=>'n','ç'=>'c']);
         $raw = preg_replace('/[^a-z0-9]+/', '-', $raw) ?? '';
         return trim($raw, '-');

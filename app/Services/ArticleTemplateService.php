@@ -15,12 +15,16 @@ final class ArticleTemplateService
     public const SETTING_KEY = 'article_template';
     public const DEFAULT = 'classic';
 
+    // i18n-ignore-start: castellano de referencia. La etiqueta que se PINTA
+    // sale de `SettingsController::articleTemplateOptions()`, por clave.
     private const TEMPLATES = [
         'classic' => 'Clásico editorial',
         'magazine' => 'Revista visual',
         'minimal' => 'Minimalista',
         'visual' => 'Visual amplio',
     ];
+
+    // i18n-ignore-end
 
     /** @return array<string,string> */
     public static function options(): array

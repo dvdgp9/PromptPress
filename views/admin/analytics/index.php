@@ -12,20 +12,20 @@
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Analítica<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.analytics')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
     <div>
-        <h2>Analítica</h2>
-        <p class="pp-page-header__lead">Tu tráfico, tu dato. Sin cookies, sin Google Analytics: nadie más ve las visitas de tu web.</p>
+        <h2><?= e(__('nav.analytics')) ?></h2>
+        <p class="pp-page-header__lead"><?= e(__('analytics.intro')) ?></p>
     </div>
-    <div class="pp-analytics-ranges" role="tablist" aria-label="Rango de fechas">
+    <div class="pp-analytics-ranges" role="tablist" aria-label="<?= e(__('analytics.range_aria')) ?>">
         <?php foreach ($ranges as $r): ?>
         <button type="button" role="tab"
                 class="pp-analytics-range<?= (int) $stats['range'] === $r ? ' is-active' : '' ?>"
                 data-range="<?= (int) $r ?>"
                 aria-selected="<?= (int) $stats['range'] === $r ? 'true' : 'false' ?>">
-            <?= (int) $r ?> días
+            <?= e(__('analytics.n_days', ['n' => (int) $r])) ?>
         </button>
         <?php endforeach; ?>
     </div>
@@ -36,21 +36,21 @@
     <!-- KPIs -->
     <div class="pp-analytics-kpis">
         <div class="pp-analytics-kpi" data-kpi="visitors">
-            <span class="pp-analytics-kpi__label">Visitantes</span>
+            <span class="pp-analytics-kpi__label"><?= e(__('analytics.visitors')) ?></span>
             <span class="pp-analytics-kpi__value">—</span>
             <span class="pp-analytics-kpi__delta" hidden></span>
         </div>
         <div class="pp-analytics-kpi" data-kpi="pageviews">
-            <span class="pp-analytics-kpi__label">Páginas vistas</span>
+            <span class="pp-analytics-kpi__label"><?= e(__('analytics.pageviews')) ?></span>
             <span class="pp-analytics-kpi__value">—</span>
             <span class="pp-analytics-kpi__delta" hidden></span>
         </div>
         <div class="pp-analytics-kpi" data-kpi="avg">
-            <span class="pp-analytics-kpi__label">Vistas / día</span>
+            <span class="pp-analytics-kpi__label"><?= e(__('analytics.views_per_day')) ?></span>
             <span class="pp-analytics-kpi__value">—</span>
         </div>
         <div class="pp-analytics-kpi" data-kpi="events">
-            <span class="pp-analytics-kpi__label">Conversiones</span>
+            <span class="pp-analytics-kpi__label"><?= e(__('analytics.conversions')) ?></span>
             <span class="pp-analytics-kpi__value">—</span>
         </div>
     </div>
@@ -58,10 +58,10 @@
     <!-- Gráfica principal -->
     <div class="pp-analytics-chart-card">
         <div class="pp-analytics-chart-head">
-            <h3>Evolución diaria</h3>
+            <h3><?= e(__('analytics.daily')) ?></h3>
             <div class="pp-analytics-legend">
-                <span class="pp-analytics-legend__item pp-analytics-legend__item--pv">Páginas vistas</span>
-                <span class="pp-analytics-legend__item pp-analytics-legend__item--vis">Visitantes</span>
+                <span class="pp-analytics-legend__item pp-analytics-legend__item--pv"><?= e(__('analytics.pageviews')) ?></span>
+                <span class="pp-analytics-legend__item pp-analytics-legend__item--vis"><?= e(__('analytics.visitors')) ?></span>
             </div>
         </div>
         <div class="pp-analytics-chart" data-chart>
@@ -72,34 +72,34 @@
     <!-- Estado vacío -->
     <div class="pp-analytics-empty" data-empty hidden>
         <div class="pp-analytics-empty__icon" aria-hidden="true">📊</div>
-        <h3>Aún no hay visitas registradas</h3>
-        <p>Cuando alguien visite tu web, verás aquí sus estadísticas. Las visitas se cuentan sin cookies y de forma anónima desde el momento en que activaste el módulo.</p>
+        <h3><?= e(__('analytics.empty')) ?></h3>
+        <p><?= e(__('analytics.empty_help')) ?></p>
     </div>
 
     <!-- Desgloses -->
     <div class="pp-analytics-grid" data-breakdowns>
         <div class="pp-analytics-card">
-            <h3>Páginas más vistas</h3>
+            <h3><?= e(__('analytics.top_pages')) ?></h3>
             <ol class="pp-analytics-list" data-list="pages"></ol>
         </div>
         <div class="pp-analytics-card">
-            <h3>Fuentes de tráfico</h3>
+            <h3><?= e(__('analytics.sources')) ?></h3>
             <ol class="pp-analytics-list" data-list="referrers"></ol>
         </div>
         <div class="pp-analytics-card">
-            <h3>Dispositivos</h3>
+            <h3><?= e(__('analytics.devices')) ?></h3>
             <div class="pp-analytics-devices" data-devices></div>
-            <h3 class="pp-analytics-card__subtitle">Navegadores</h3>
+            <h3 class="pp-analytics-card__subtitle"><?= e(__('analytics.browsers')) ?></h3>
             <ol class="pp-analytics-list" data-list="browsers"></ol>
         </div>
         <div class="pp-analytics-card">
-            <h3>Conversiones</h3>
+            <h3><?= e(__('analytics.conversions')) ?></h3>
             <ol class="pp-analytics-list" data-list="events"></ol>
-            <p class="pp-analytics-hint">Los envíos de formulario se registran automáticamente. Añade eventos propios con <code>ppTrack('nombre')</code>.</p>
+            <p class="pp-analytics-hint"><?= __('analytics.events_hint.html') ?></p>
         </div>
     </div>
 
-    <p class="pp-analytics-footnote">Los visitantes se identifican con un código anónimo que cambia cada día: los totales de varios días suman los únicos de cada día. Los datos detallados se conservan 90 días; los resúmenes diarios, para siempre.</p>
+    <p class="pp-analytics-footnote"><?= e(__('analytics.footnote')) ?></p>
 </div>
 
 <script type="application/json" id="pp-analytics-data"><?= json_encode($stats, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?></script>

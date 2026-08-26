@@ -32,6 +32,11 @@ final class ServiceStore
         'auto_confirm'     => 0,
         'price_label'      => '',
         'active'           => 1,
+        // MODULOS M8 — definición de los campos que se le piden al cliente.
+        // NULL = los de siempre (nombre, email, teléfono y notas).
+        'fields_json'      => null,
+        // MODULOS M9 — plantillas de email reescritas. NULL = las de siempre.
+        'emails_json'      => null,
     ];
 
     /** @return array<int, array<string,mixed>> servicios del sitio (con nº de reservas futuras activas) */
@@ -121,18 +126,26 @@ final class ServiceStore
     public static function create(int $siteId, array $fields): int
     {
         $f = self::normalize($fields);
+        // El idioma se fija al crear: la columna tiene DEFAULT 'es', así que sin
+        // esto TODO servicio nacía en castellano — también en una web francesa,
+        // y sus emails y textos salían en el idioma equivocado.
+        $lang = isset($fields['language']) && trim((string) $fields['language']) !== ''
+            ? \App\Services\LanguageService::normalize((string) $fields['language'])
+            : \App\Services\LanguageService::codeFor($siteId);
         Database::execute(
             'INSERT INTO booking_services
                 (site_id, name, description, duration_min, buffer_min, capacity,
                  min_notice_hours, max_advance_days, auto_confirm, price_label, active,
-                 created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+                 language, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
             [
                 $siteId, $f['name'], $f['description'], $f['duration_min'], $f['buffer_min'],
                 $f['capacity'], $f['min_notice_hours'], $f['max_advance_days'],
                 $f['auto_confirm'], $f['price_label'] !== '' ? $f['price_label'] : null, $f['active'],
+                $lang,
             ]
         );
+        self::flushPageCache($siteId);
         return (int) Database::lastInsertId();
     }
 
@@ -150,12 +163,13 @@ final class ServiceStore
             'UPDATE booking_services
                 SET name = ?, description = ?, duration_min = ?, buffer_min = ?, capacity = ?,
                     min_notice_hours = ?, max_advance_days = ?, auto_confirm = ?, price_label = ?,
-                    active = ?, updated_at = UTC_TIMESTAMP()
+                    active = ?, fields_json = ?, emails_json = ?, updated_at = UTC_TIMESTAMP()
               WHERE site_id = ? AND id = ?',
             [
                 $f['name'], $f['description'], $f['duration_min'], $f['buffer_min'], $f['capacity'],
                 $f['min_notice_hours'], $f['max_advance_days'], $f['auto_confirm'],
                 $f['price_label'] !== '' ? $f['price_label'] : null, $f['active'],
+                $f['fields_json'], $f['emails_json'],
                 $siteId, $id,
             ]
         );
@@ -189,16 +203,38 @@ final class ServiceStore
                 ]
             );
         }
+        self::flushPageCache($siteId);
         return true;
     }
 
     /** Borra el servicio (las reglas y reservas caen por FK CASCADE). */
     public static function delete(int $siteId, int $id): bool
     {
-        return Database::execute(
+        $deleted = Database::execute(
             'DELETE FROM booking_services WHERE site_id = ? AND id = ?',
             [$siteId, $id]
         ) > 0;
+        if ($deleted) {
+            self::flushPageCache($siteId);
+        }
+        return $deleted;
+    }
+
+    /**
+     * MODULOS M2: las páginas (canvas y de secciones) pueden llevar el
+     * calendario incrustado y se cachean como HTML estático, con el nombre y la
+     * duración del servicio ya escritos dentro. Sin esto, renombrar un servicio
+     * dejaba el nombre viejo en las páginas cacheadas, y desactivarlo dejaba un
+     * calendario que luego avisaba "no disponible" en lugar de desaparecer.
+     * Mismo criterio que `ProductStore` con {{products:featured}}.
+     */
+    private static function flushPageCache(int $siteId): void
+    {
+        try {
+            \App\Services\CacheService::flush($siteId);
+        } catch (\Throwable) {
+            // la caché nunca rompe una operación sobre los servicios
+        }
     }
 
     /**
@@ -220,6 +256,27 @@ final class ServiceStore
         $f['max_advance_days'] = max(1, min(365, (int) $f['max_advance_days']));
         $f['auto_confirm']     = (int) ((string) $f['auto_confirm'] === '1');
         $f['active']           = (int) ((string) $f['active'] === '1');
+        // Los campos llegan como array desde el editor; se guardan saneados y en
+        // JSON. Si no vienen, se deja lo que hubiera (null) para no pisar la
+        // configuración con un guardado que no los incluía.
+        if (is_array($fields['fields'] ?? null)) {
+            $f['fields_json'] = json_encode(
+                BookingFields::normalize($fields['fields']),
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+        } elseif (is_string($f['fields_json']) && trim($f['fields_json']) === '') {
+            $f['fields_json'] = null;
+        }
+        // Igual con las plantillas de email: si no se ha reescrito nada, se
+        // guarda NULL y el servicio sigue usando las de siempre (traducidas).
+        if (is_array($fields['emails'] ?? null)) {
+            $emails = BookingEmails::normalize($fields['emails']);
+            $f['emails_json'] = BookingEmails::isEmpty($emails)
+                ? null
+                : json_encode($emails, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } elseif (is_string($f['emails_json']) && trim($f['emails_json']) === '') {
+            $f['emails_json'] = null;
+        }
         return $f;
     }
 }

@@ -8,39 +8,36 @@
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Banco de imágenes<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('bank.title')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Banco de imágenes</h2>
-    <a href="<?= e(base_url('admin/media')) ?>" class="pp-btn pp-btn--secondary">← Volver a medios</a>
+    <h2><?= e(__('bank.title')) ?></h2>
+    <a href="<?= e(base_url('admin/media')) ?>" class="pp-btn pp-btn--secondary">← <?= e(__('bank.back_to_media')) ?></a>
 </div>
 
 <?php if (!$available): ?>
     <div class="pp-alert pp-alert--info">
-        <strong>Banco no disponible.</strong>
-        Aún no se ha configurado la conexión con Unsplash.
-        Actívala en <a href="<?= e(base_url('admin/settings/ai')) ?>">Ajustes · IA</a>, en la sección «Imágenes · Unsplash».
+        <strong><?= e(__('bank.unavailable')) ?></strong>
+        <?= __('bank.unavailable_help.html', ['enlace' => '<a href="' . e(base_url('admin/settings/ai')) . '">' . e(__('settings_ai.title')) . '</a>']) ?>
     </div>
 <?php else: ?>
 
     <p class="pp-page-intro">
-        Busca fotografías profesionales de Unsplash. Al importar una imagen se descarga a tu sitio
-        y queda disponible en la galería de medios. La atribución al fotógrafo se conserva
-        automáticamente y se muestra en las páginas públicas, como exigen los términos de Unsplash.
+        <?= e(__('bank.intro')) ?>
     </p>
 
     <div class="pp-bank">
         <form class="pp-bank__form" id="pp-bank-form" autocomplete="off">
             <div class="pp-bank__row">
-                <input type="search" id="pp-bank-q" class="pp-input" placeholder="Ej. equipo trabajando, comida mediterránea, oficina moderna…" required minlength="2">
+                <input type="search" id="pp-bank-q" class="pp-input" placeholder="<?= e(__('bank.search_placeholder')) ?>" required minlength="2">
                 <select id="pp-bank-orientation" class="pp-input pp-input--small">
-                    <option value="landscape">Horizontal</option>
-                    <option value="portrait">Vertical</option>
-                    <option value="squarish">Cuadrada</option>
+                    <option value="landscape"><?= e(__('bank.landscape')) ?></option>
+                    <option value="portrait"><?= e(__('bank.portrait')) ?></option>
+                    <option value="squarish"><?= e(__('bank.square')) ?></option>
                 </select>
-                <button type="submit" class="pp-btn pp-btn--primary">Buscar</button>
+                <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('bank.search')) ?></button>
             </div>
-            <small class="pp-bank__hint">Las búsquedas se cachean 24h en el servidor para no agotar el rate-limit común a todos los sitios.</small>
+            <small class="pp-bank__hint"><?= e(__('bank.cache_hint')) ?></small>
         </form>
 
         <div id="pp-bank-status" class="pp-bank__status" aria-live="polite"></div>
@@ -71,17 +68,17 @@
             lastQuery = q;
             lastOrientation = o;
             results.innerHTML = '';
-            status.textContent = 'Buscando…';
+            status.textContent = pp.t('js.bank.searching');
             const url = '<?= e(base_url('admin/media/bank/search')) ?>?q=' + encodeURIComponent(q) + '&orientation=' + encodeURIComponent(o);
             fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
                 .then(r => r.json())
                 .then(data => {
-                    if (!data.ok) { status.textContent = data.error || 'Error en la búsqueda.'; return; }
-                    if (!data.items.length) { status.textContent = 'Sin resultados para "' + q + '". Prueba con otros términos.'; return; }
-                    status.textContent = data.items.length + ' resultados.';
+                    if (!data.ok) { status.textContent = data.error || pp.t('js.bank.search_error'); return; }
+                    if (!data.items.length) { status.textContent = pp.t('js.bank.no_results', { q: q }); return; }
+                    status.textContent = pp.t('js.bank.results', { n: data.items.length });
                     renderResults(data.items);
                 })
-                .catch(err => { status.textContent = 'Error de conexión: ' + err.message; });
+                .catch(err => { status.textContent = pp.t('js.bank.connection_error', { error: err.message }); });
         }
 
         function renderResults(items) {
@@ -93,8 +90,8 @@
                     + '<figure class="pp-bank__figure">'
                     + '<img loading="lazy" src="' + escAttr(item.preview) + '" alt="' + escAttr(item.alt || item.description) + '">'
                     + '<figcaption class="pp-bank__caption">'
-                    + '<span class="pp-bank__photog">por <a href="' + escAttr(item.profile_url) + '?utm_source=promptpress&utm_medium=referral" target="_blank" rel="noopener">' + escHtml(item.photographer) + '</a></span>'
-                    + '<button type="button" class="pp-btn pp-btn--primary pp-btn--small" data-import="' + escAttr(item.id) + '">Importar</button>'
+                    + '<span class="pp-bank__photog">' + pp.t('js.bank.by') + ' <a href="' + escAttr(item.profile_url) + '?utm_source=promptpress&utm_medium=referral" target="_blank" rel="noopener">' + escHtml(item.photographer) + '</a></span>'
+                    + '<button type="button" class="pp-btn pp-btn--primary pp-btn--small" data-import="' + escAttr(item.id) + '">' + pp.t('js.bank.import') + '</button>'
                     + '</figcaption>'
                     + '</figure>';
                 li.querySelector('[data-import]').addEventListener('click', function () { importImage(item, this); });
@@ -104,7 +101,7 @@
 
         function importImage(item, btn) {
             btn.disabled = true;
-            btn.textContent = 'Importando…';
+            btn.textContent = pp.t('js.bank.importing');
             const body = new FormData();
             body.append('_csrf', csrf);
             body.append('result_id', item.id);
@@ -116,12 +113,12 @@
             })
                 .then(r => r.json())
                 .then(data => {
-                    if (!data.ok) { btn.disabled = false; btn.textContent = 'Importar'; alert(data.error || 'No se pudo importar.'); return; }
-                    btn.textContent = '✓ Importada';
+                    if (!data.ok) { btn.disabled = false; btn.textContent = pp.t('js.bank.import'); alert(data.error || pp.t('js.bank.import_failed')); return; }
+                    btn.textContent = '✓ ' + pp.t('js.bank.imported');
                     btn.classList.remove('pp-btn--primary');
                     btn.classList.add('pp-btn--success');
                 })
-                .catch(err => { btn.disabled = false; btn.textContent = 'Importar'; alert('Error: ' + err.message); });
+                .catch(err => { btn.disabled = false; btn.textContent = pp.t('js.bank.import'); alert(pp.t('js.bank.error', { error: err.message })); });
         }
 
         function escAttr(s) { return String(s == null ? '' : s).replace(/[&"<>]/g, c => ({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c])); }

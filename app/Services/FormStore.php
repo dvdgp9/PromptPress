@@ -71,7 +71,7 @@ final class FormStore
             $fields = is_array($content['fields'] ?? null) ? $content['fields'] : [];
             $out[] = [
                 'id'          => (int) $row['id'],
-                'heading'     => trim((string) ($content['heading'] ?? 'Formulario sin título')),
+                'heading'     => trim((string) ($content['heading'] ?? __('forms.untitled'))),
                 'field_count' => count($fields),
                 'updated_at'  => (string) $row['updated_at'],
             ];
@@ -136,7 +136,13 @@ final class FormStore
      */
     public static function createFromTemplate(int $siteId, string $templateKey): int
     {
-        return self::create($siteId, FormTemplates::content($templateKey));
+        // FORMS-LANG T3 — el formulario nace en el idioma PRINCIPAL del sitio.
+        // El texto se copia aquí a la BD: si nace en castellano, en castellano
+        // se queda por mucho que el sitio sea francés.
+        return self::create($siteId, FormTemplates::content(
+            $templateKey,
+            LanguageService::primaryFor($siteId)
+        ));
     }
 
     /**
@@ -147,7 +153,7 @@ final class FormStore
     public static function create(int $siteId, ?array $content = null): int
     {
         $pageId = self::containerPageId($siteId);
-        $content ??= self::defaultContact();
+        $content ??= self::defaultContact($siteId);
 
         $last = Database::selectOne(
             'SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM page_sections WHERE page_id = ?',
@@ -214,8 +220,11 @@ final class FormStore
      *
      * @return array<string,mixed>
      */
-    public static function defaultContact(): array
+    public static function defaultContact(?int $siteId = null): array
     {
-        return FormTemplates::content('contact');
+        return FormTemplates::content(
+            'contact',
+            $siteId !== null ? LanguageService::primaryFor($siteId) : null
+        );
     }
 }

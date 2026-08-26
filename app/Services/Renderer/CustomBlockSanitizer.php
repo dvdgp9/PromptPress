@@ -68,6 +68,11 @@ final class CustomBlockSanitizer
     /**
      * @return array{ok:bool,html:string,fields:array<string,mixed>,warnings:array<int,array<string,string>>,errors:array<int,array<string,string>>,removed:array<int,array<string,string>>}
      */
+    // i18n-ignore-start: los avisos de este saneador son diagnóstico técnico
+    // sobre el markup que devolvió el MODELO ("data-ppb-icon solo es válido en
+    // <span>"). No es interfaz del gestor: solo salen en el explorador de
+    // prompts, la pantalla de depuración. Si algún día se enseñan al cliente,
+    // hay que traducirlos.
     public static function sanitize(string $html, array $context = []): array
     {
         $state = [
@@ -779,4 +784,5 @@ final class CustomBlockSanitizer
     {
         $state['removed'][] = ['kind' => $kind, 'name' => $name, 'reason' => $reason];
     }
+    // i18n-ignore-end
 }

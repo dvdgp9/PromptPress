@@ -9,6 +9,7 @@ use App\Services\AI\AIProviderFactory;
 use App\Services\BrandService;
 use App\Services\Canvas\CanvasCancelToken;
 use App\Services\Canvas\CanvasChatService;
+use App\Services\Canvas\CanvasSectionTemplates;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
 use App\Services\FormStore;
@@ -44,12 +45,15 @@ final class CanvasController
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
 
         $canvas = CanvasService::get((int) $page['id']) ?? ['html' => '', 'css' => ''];
+        $pageLang = \App\Services\LanguageService::forPage($page, $siteId);
+        $resourcesEnabled = \App\Modules\ModuleRegistry::isEnabled($siteId, 'resources');
+        $publishedResources = $resourcesEnabled ? self::resourcesForStudio($siteId, $pageLang) : [];
 
         // Vista standalone (sin layout admin): el studio es una app a pantalla completa.
         View::send('admin/canvas/studio', [
             'page' => $page,
             // FH9 — tokens de marca para que el chrome del Studio use --pp-primary.
-            'brandVars' => DesignSystem::renderCssVars(DesignSystem::load($siteId)),
+            'brandVars' => DesignSystem::renderCssVars(DesignSystem::effective($siteId), $siteId),
             'sections' => CanvasService::listSections($canvas['html']),
             'versionsCount' => count(CanvasService::versions((int) $page['id'])),
             'history' => CanvasService::historyState((int) $page['id']),
@@ -60,7 +64,20 @@ final class CanvasController
             ),
             // FORMS F5 — formularios disponibles para insertar en el Studio.
             'forms' => FormStore::all($siteId),
-            'formTemplates' => FormTemplates::catalog(),
+            'formTemplates' => FormTemplates::catalogForView(),
+            // MODULOS M2/M5 — servicios reservables para el botón "+ Calendario".
+            // El botón solo existe si hay algo que insertar: con el módulo
+            // apagado, o encendido pero sin ningún servicio activo, no se pinta
+            // (mismo criterio que la pantalla de Reservas).
+            'bookingServices' => \App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')
+                ? \App\Modules\Booking\BookingEmbedRenderer::embeddableServices($siteId)
+                : [],
+            // R6 — solo ofrecemos un bloque que pueda enseñar contenido real
+            // en el idioma de esta página. Sin publicaciones, no hay vía muerta.
+            'publishedResources' => $publishedResources,
+            'resourcesModuleEnabled' => $resourcesEnabled,
+            'hasPublishedResources' => $resourcesEnabled && \App\Modules\Resources\ResourceStore::hasPublished($siteId),
+            'resourcePageLanguage' => \App\Services\LanguageService::label($pageLang),
             // Selector de modelo de IA para el chat (principal + auxiliar + sugeridos).
             'aiModels' => self::chatModelOptions($siteId),
             // ¿Está Unsplash configurado? (habilita la búsqueda en el selector de imágenes)
@@ -74,16 +91,21 @@ final class CanvasController
         $siteId = self::requireSiteId();
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         $pageId = (int) $page['id'];
+        $pageLang = \App\Services\LanguageService::forPage($page, $siteId);
 
-        $canvas = CanvasService::renderPublic($pageId, $siteId);
-        $site = Database::selectOne('SELECT name, language FROM sites WHERE id = ?', [$siteId]) ?? [];
+        $canvas = CanvasService::renderPublic($pageId, $siteId, $pageLang);
+        $site = Database::selectOne('SELECT name FROM sites WHERE id = ?', [$siteId]) ?? [];
         $styleSlug = VisualStyleService::selectedForSite($siteId);
 
-        $h  = '<!doctype html><html lang="' . e((string) ($site['language'] ?? 'es')) . '"><head>';
+        $h  = '<!doctype html><html lang="' . e($pageLang) . '"><head>';
         $h .= '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         $h .= '<meta name="robots" content="noindex">';
         $h .= '<title>' . e((string) $page['title']) . ' — preview</title>';
         $h .= DesignSystem::renderHead($siteId, $styleSlug);
+        if (!empty($canvas['has_resources'])) {
+            $resourcesCss = PP_ROOT . '/public/css/resources.css';
+            $h .= '<link rel="stylesheet" href="' . e(base_url('public/css/resources.css')) . '?v=' . e((string) (@filemtime($resourcesCss) ?: PP_VERSION)) . '">';
+        }
         $h .= '</head><body class="' . e(VisualStyleService::bodyClass($styleSlug)) . '">';
         $h .= BrandService::publicHeader($siteId);
         $h .= '<main>' . $canvas['html'] . '</main>';
@@ -111,7 +133,7 @@ final class CanvasController
         $sectionId = trim((string) Request::post('section', ''));
         $elementContext = trim((string) Request::post('element_context', ''));
         if ($instruction === '' || mb_strlen($instruction) > 1200) {
-            Response::json(['ok' => false, 'error' => 'Cuéntame el cambio en unas pocas frases.'], 422);
+            Response::json(['ok' => false, 'error' => __('canvas.error.describe_change')], 422);
         }
 
         // STUDIO-2 B1/B2 — memoria de la conversación y camino del elemento
@@ -155,7 +177,7 @@ final class CanvasController
             error_log('[canvas chat] page=' . $pageId . ' ' . get_class($e) . ': ' . $e->getMessage());
             Response::json([
                 'ok' => false,
-                'error' => 'No he podido aplicar ese cambio. Prueba a pedirlo de otra forma, o un cambio más concreto.',
+                'error' => __('canvas.error.cant_apply'),
             ], 502);
         }
 
@@ -184,6 +206,10 @@ final class CanvasController
     {
         $status = $e->getHttpStatus();
         $detail = mb_strtolower($e->getMessage());
+        // i18n-ignore-start: NO son textos de interfaz, son fragmentos del mensaje
+        // de excepción que se comparan para clasificar el fallo. Si alguien
+        // traduce el mensaje original (`CanvasChatService`), esta detección deja
+        // de funcionar en silencio y el usuario ve el error genérico.
         $isTimeout = $status === 408
             || str_contains($detail, 'timeout')
             || str_contains($detail, 'timed out')
@@ -193,18 +219,19 @@ final class CanvasController
         $isTruncated = str_contains($detail, 'sobre de texto')
             || str_contains($detail, 'sobre válido')
             || str_contains($detail, 'ni html ni estilos');
+        // i18n-ignore-end
 
         return match (true) {
-            in_array($status, [401, 403], true) => 'La configuración del proveedor de IA no es válida. Revisa Ajustes de IA.',
-            $status === 429 => 'El proveedor de IA ha alcanzado temporalmente su límite. Espera un momento y vuelve a intentarlo.',
-            $status >= 500 => 'El proveedor de IA no está disponible ahora mismo. Tu página no ha cambiado.',
+            in_array($status, [401, 403], true) => __('canvas.error.bad_provider'),
+            $status === 429 => __('canvas.error.rate_limited'),
+            $status >= 500 => __('canvas.error.provider_down'),
             $isTimeout => $scoped
-                ? 'El cambio ha tardado demasiado y lo he parado. Tu página no ha cambiado: prueba a pedir algo más concreto sobre esta parte.'
-                : 'El cambio ha tardado demasiado y lo he parado. Tu página no ha cambiado. Selecciona primero una parte concreta: así el cambio es mucho más rápido.',
+                ? __('canvas.error.timeout_scoped')
+                : __('canvas.error.timeout_page'),
             $isTruncated => $scoped
-                ? 'La respuesta ha llegado cortada, así que no he tocado la página. Vuelve a intentarlo; si se repite, pide el cambio en dos pasos.'
-                : 'La respuesta ha llegado cortada porque esta página es grande. No he tocado nada: selecciona una parte concreta y pídelo ahí.',
-            default => 'La IA no devolvió un cambio válido. Tu página no ha cambiado.',
+                ? __('canvas.error.truncated_scoped')
+                : __('canvas.error.truncated_page'),
+            default => __('canvas.error.no_valid_change'),
         };
     }
 
@@ -257,7 +284,7 @@ final class CanvasController
 
         $canvas = CanvasService::get($pageId);
         if ($canvas === null) {
-            Response::json(['ok' => false, 'error' => 'Esta página aún no tiene contenido canvas.'], 404);
+            Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
         }
 
         $sectionId = trim((string) Request::post('section', ''));
@@ -266,17 +293,280 @@ final class CanvasController
         $embedId = 'form-' . $formId . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
         $embed = '<section data-pp-section="' . $embedId . '" data-pp-label="' . e($heading)
             . '" class="pp-canvas-form-embed">{{form:' . $formId . '}}</section>';
-        $html = CanvasService::insertAfterSection($canvas['html'], $embed, $sectionId);
+        $html = self::insertAtRequestedPosition($canvas['html'], $embed, $sectionId);
         $saved = CanvasService::save($pageId, $html, $canvas['css'], 'insert', 'Formulario insertado: ' . $heading);
         FormPlacementStore::record($formId, $pageId, $sourceLabel !== '' ? $sourceLabel : $sectionId);
 
         Response::json([
             'ok'       => true,
-            'reply'    => 'He añadido el formulario «' . $heading . '»' . ($sectionId !== '' ? ' en el punto seleccionado.' : ' al final de la pagina.'),
+            'reply'    => __($sectionId !== '' ? 'canvas.form_added_here' : 'canvas.form_added_end', ['formulario' => $heading]),
             'form'     => ['id' => $formId, 'heading' => $heading],
             'history'  => CanvasService::historyState($pageId),
             'sections' => CanvasService::listSections($saved['html']),
+            'changed_section' => $embedId,
         ]);
+    }
+
+    /**
+     * MODULOS M2 — Insertar el calendario de reservas en el punto activo.
+     *
+     * Mismo camino que `insertForm()`: en una página canvas el gestor no escribe
+     * HTML, así que el calendario se añade con un botón del Studio y se guarda
+     * como el placeholder `{{booking:N}}` dentro de su propia sección. Queda
+     * listado en "Partes de esta página", se puede mover y borrar como el resto,
+     * y el chat puede seguir hablando de él.
+     */
+    public function insertBooking(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+
+        CSRF::check();
+        if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')) {
+            Response::json(['ok' => false, 'error' => __('cv.booking.module_off')], 422);
+        }
+
+        // "auto" (o vacío) = el primer servicio activo, que es lo que ofrece el
+        // menú por defecto para no obligar a elegir.
+        $raw = trim((string) Request::post('service_id', ''));
+        $isAuto = ($raw === '' || $raw === 'auto' || $raw === '0');
+        $serviceId = \App\Modules\Booking\BookingEmbedRenderer::resolveServiceId($siteId, $isAuto ? 0 : (int) $raw);
+        if ($serviceId === null) {
+            Response::json(['ok' => false, 'error' => __('cv.booking.no_services')], 422);
+        }
+
+        $canvas = CanvasService::get($pageId);
+        if ($canvas === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
+        }
+
+        $service = Database::selectOne(
+            'SELECT name FROM booking_services WHERE site_id = ? AND id = ? LIMIT 1',
+            [$siteId, $serviceId]
+        );
+        $name = (string) ($service['name'] ?? '');
+        $label = __('cv.booking.section_label', ['servicio' => $name]);
+
+        // Se guarda `auto` si el gestor no eligió servicio: así la página sigue
+        // funcionando si más adelante cambia cuál es el primer servicio activo.
+        $ref = $isAuto ? 'auto' : (string) $serviceId;
+        $sectionId = trim((string) Request::post('section', ''));
+        $embedId = 'booking-' . $ref . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+        $embed = '<section data-pp-section="' . $embedId . '" data-pp-label="' . e($label) . '"'
+            . ' class="pp-canvas-booking-embed">{{booking:' . $ref . '}}</section>';
+        $html = self::insertAtRequestedPosition($canvas['html'], $embed, $sectionId);
+        $saved = CanvasService::save($pageId, $html, $canvas['css'], 'insert', $label);
+
+        Response::json([
+            'ok'       => true,
+            'reply'    => __($sectionId !== '' ? 'cv.booking.added_here' : 'cv.booking.added_end', ['servicio' => $name]),
+            'history'  => CanvasService::historyState($pageId),
+            'sections' => CanvasService::listSections($saved['html']),
+            'changed_section' => $embedId,
+        ]);
+    }
+
+    /** Recursos publicados que tiene sentido ofrecer en Studio. */
+    public static function resourcesForStudio(int $siteId, string $lang): array
+    {
+        if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'resources')) return [];
+        return \App\Modules\Resources\ResourceStore::publishedForLanguage($siteId, $lang);
+    }
+
+    /** R6 — inserta un bloque dinámico de recursos tras la parte activa. */
+    public function insertResources(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+
+        CSRF::check();
+        $lang = \App\Services\LanguageService::forPage($page, $siteId);
+        $resources = self::resourcesForStudio($siteId, $lang);
+        if ($resources === []) {
+            $error = \App\Modules\ModuleRegistry::isEnabled($siteId, 'resources')
+                ? __('cv.resources.no_published')
+                : __('cv.resources.module_off');
+            Response::json(['ok' => false, 'error' => $error], 422);
+        }
+
+        $limit = max(1, min(6, (int) Request::post('limit', 3)));
+        $limit = min($limit, count($resources));
+        $canvas = CanvasService::get($pageId);
+        if ($canvas === null) Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
+
+        // El contenido insertado pertenece a la página, no al idioma del panel.
+        // No persistimos un heading traducido: el renderer lo resuelve en cada
+        // render con el idioma actual de la página. Así tampoco queda obsoleto
+        // si una página cambia de idioma más adelante.
+        $label = \App\Services\Microcopy::t('resources.title', $lang);
+        $sectionId = trim((string) Request::post('section', ''));
+        $embedId = 'resources-' . substr(bin2hex(random_bytes(5)), 0, 10);
+        $placeholder = '{{resources:featured|limit=' . $limit . '}}';
+        $embed = '<section data-pp-section="' . $embedId . '" data-pp-label="' . e($label) . '"'
+            . ' class="pp-canvas-resources-embed">' . $placeholder . '</section>';
+        $html = self::insertAtRequestedPosition($canvas['html'], $embed, $sectionId);
+        $saved = CanvasService::save($pageId, $html, $canvas['css'], 'insert', $label);
+
+        Response::json([
+            'ok' => true,
+            'reply' => __($sectionId !== '' ? 'cv.resources.added_here' : 'cv.resources.added_end', ['n' => $limit]),
+            'history' => CanvasService::historyState($pageId),
+            'sections' => CanvasService::listSections($saved['html']),
+            'changed_section' => $embedId,
+        ]);
+    }
+
+    /**
+     * STUDIO-STRUCTURE S2 — Mueve o elimina una parte top-level sin IA.
+     * Cada cambio real crea exactamente una versión Canvas; un límite de orden
+     * es un no-op explícito y no ensucia el historial.
+     */
+    public function updateCanvasStructure(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+        CSRF::check();
+
+        $action = trim((string) Request::post('action', ''));
+        $sectionId = trim((string) Request::post('section', ''));
+        if ($action !== 'insert_template' && $sectionId === '') {
+            Response::json(['ok' => false, 'error' => __('canvas.error.missing_section')], 422);
+        }
+
+        $canvas = CanvasService::get($pageId);
+        if ($canvas === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
+        }
+
+        if ($action === 'insert_template') {
+            $template = trim((string) Request::post('template', ''));
+            $position = trim((string) Request::post('position', ''));
+            if (!in_array($position, ['before', 'after'], true)) {
+                Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+            }
+
+            $lang = \App\Services\LanguageService::forPage($page, $siteId);
+            $block = CanvasSectionTemplates::render(
+                $template,
+                $lang,
+                null,
+                base_url('public/assets/img/studio-placeholder.svg')
+            );
+            if ($block === null) {
+                Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+            }
+
+            $newHtml = CanvasService::insertSectionRelative(
+                (string) $canvas['html'],
+                $block['html'],
+                $sectionId,
+                $position
+            );
+            if ($newHtml === null) {
+                Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+            }
+
+            $saved = CanvasService::save(
+                $pageId,
+                $newHtml,
+                (string) $canvas['css'],
+                'structure',
+                $block['label'] . ' — ' . __('canvas.hist.change')
+            );
+            Response::json([
+                'ok' => true,
+                'changed' => true,
+                'action' => $action,
+                'reply' => __('cv.template_added', ['bloque' => $block['label']]),
+                'changed_section' => $block['id'],
+                'focus_section' => $block['id'],
+                'history' => CanvasService::historyState($pageId),
+                'sections' => CanvasService::listSections($saved['html']),
+            ]);
+        }
+
+        $before = CanvasService::listSections($canvas['html']);
+        $index = null;
+        $label = $sectionId;
+        foreach ($before as $i => $part) {
+            if ((string) ($part['id'] ?? '') !== $sectionId) continue;
+            $index = $i;
+            $label = (string) ($part['label'] ?? $sectionId);
+            break;
+        }
+        if ($index === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+        }
+
+        $focusSection = $sectionId;
+        if ($action === 'move') {
+            $direction = trim((string) Request::post('direction', ''));
+            if (!in_array($direction, ['up', 'down'], true)) {
+                Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+            }
+            $newHtml = CanvasService::moveSection($canvas['html'], $sectionId, $direction);
+            $summary = $label . ' — ' . __('canvas.hist.change');
+        } elseif ($action === 'delete') {
+            $newHtml = CanvasService::deleteSection($canvas['html'], $sectionId);
+            $summary = $label . ' — ' . __('canvas.hist.change');
+            $next = $before[$index + 1]['id'] ?? $before[$index - 1]['id'] ?? '';
+            $focusSection = (string) $next;
+        } else {
+            Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+        }
+
+        if ($newHtml === null) {
+            // El DOM pudo cambiar entre el listado y la operación; se trata como
+            // conflicto recuperable, no como una inserción/mutación aproximada.
+            Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+        }
+
+        if ($newHtml === trim((string) $canvas['html'])) {
+            Response::json([
+                'ok' => true,
+                'changed' => false,
+                'action' => $action,
+                'changed_section' => $sectionId,
+                'focus_section' => $focusSection,
+                'history' => CanvasService::historyState($pageId),
+                'sections' => $before,
+            ]);
+        }
+
+        $saved = CanvasService::save($pageId, $newHtml, $canvas['css'], 'structure', $summary);
+        Response::json([
+            'ok' => true,
+            'changed' => true,
+            'action' => $action,
+            'changed_section' => $action === 'delete' ? '' : $sectionId,
+            'focus_section' => $focusSection,
+            'history' => CanvasService::historyState($pageId),
+            'sections' => CanvasService::listSections($saved['html']),
+        ]);
+    }
+
+    /**
+     * Posición común para los bloques funcionales del Studio.
+     * Sin `position` conserva el contrato anterior (después o al final).
+     */
+    private static function insertAtRequestedPosition(string $pageHtml, string $insertHtml, string $sectionId): string
+    {
+        $position = trim((string) Request::post('position', ''));
+        if ($position === '') {
+            return CanvasService::insertAfterSection($pageHtml, $insertHtml, $sectionId);
+        }
+        if (!in_array($position, ['before', 'after'], true)) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+        }
+
+        $result = CanvasService::insertSectionRelative($pageHtml, $insertHtml, $sectionId, $position);
+        if ($result === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+        }
+        return $result;
     }
 
     /**
@@ -294,21 +584,21 @@ final class CanvasController
         $sectionId = trim((string) Request::post('section', ''));
         $sectionHtml = (string) Request::post('html', '');
         if ($sectionId === '' || trim($sectionHtml) === '') {
-            Response::json(['ok' => false, 'error' => 'Falta la sección o el contenido.'], 422);
+            Response::json(['ok' => false, 'error' => __('canvas.error.missing_section')], 422);
         }
 
         $canvas = CanvasService::get($pageId);
         if ($canvas === null) {
-            Response::json(['ok' => false, 'error' => 'Esta página aún no tiene contenido canvas.'], 404);
+            Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
         }
 
         $clean = CanvasService::normalizeEditedSectionHtml($sectionHtml);
         $newHtml = CanvasService::replaceSection($canvas['html'], $sectionId, $clean);
         if ($newHtml === null) {
-            Response::json(['ok' => false, 'error' => 'No se encontró esa parte de la página.'], 404);
+            Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 404);
         }
 
-        $summary = CanvasChatService::sectionLabel($sectionId) . ' — edición directa';
+        $summary = CanvasChatService::sectionLabel($sectionId) . ' — ' . __('canvas.hist.inline');
         CanvasService::save($pageId, $newHtml, $canvas['css'], 'inline', $summary);
         Response::json(['ok' => true, 'history' => CanvasService::historyState($pageId)]);
     }
@@ -325,7 +615,7 @@ final class CanvasController
 
         $requestId = trim((string) Request::post('request_id', ''));
         if (!CanvasCancelToken::isValidId($requestId)) {
-            Response::json(['ok' => false, 'error' => 'Petición no reconocida.'], 422);
+            Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
         }
 
         // Cerrar la sesión cuanto antes: esta petición solo escribe un fichero.
@@ -370,21 +660,21 @@ final class CanvasController
             'versions' => array_map(static function (array $v): array {
                 $summary = trim((string) ($v['summary'] ?? ''));
                 $fallback = match ((string) $v['origin']) {
-                    'generate' => 'Generación inicial',
+                    'generate' => __('canvas.hist.generate'),
                     'chat' => 'Cambio por chat',
-                    'restore' => 'Versión restaurada',
-                    'inline' => 'Edición directa',
-                    default => 'Edición',
+                    'restore' => __('canvas.hist.restore'),
+                    'inline' => __('canvas.hist.inline'),
+                    default => __('canvas.hist.edit'),
                 };
                 return [
                     'id' => (int) $v['id'],
                     'origin' => (string) $v['origin'],
                     'label' => $summary !== '' ? $summary : $fallback,
                     'kind' => match ((string) $v['origin']) {
-                        'generate' => 'Generación',
-                        'chat' => 'Chat IA',
-                        'inline' => 'Edición directa',
-                        default => 'Cambio',
+                        'generate' => __('canvas.hist.generation'),
+                        'chat' => __('canvas.hist.chat'),
+                        'inline' => __('canvas.hist.inline'),
+                        default => __('canvas.hist.change'),
                     },
                     'is_current' => (bool) ($v['is_current'] ?? false),
                     'created_at' => (string) $v['created_at'],
@@ -401,8 +691,8 @@ final class CanvasController
         $versionId = (int) Request::post('version_id', '0');
         $state = $versionId > 0 ? CanvasService::restore((int) $page['id'], $versionId) : null;
         Response::json($state !== null
-            ? ['ok' => true, 'reply' => 'Listo, he recuperado esa versión.', 'history' => $state]
-            : ['ok' => false, 'error' => 'No se encontró esa versión.'], $state !== null ? 200 : 404);
+            ? ['ok' => true, 'reply' => __('canvas.version_restored'), 'history' => $state]
+            : ['ok' => false, 'error' => __('canvas.error.version_not_found')], $state !== null ? 200 : 404);
     }
 
     public function publish(array $params = []): void
@@ -564,7 +854,12 @@ final class CanvasController
   var EDITABLE = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,a';
   var selected = null, tag = null, editing = null, editingOriginal = '', activeTarget = null;
 
-  function label(id){ var s = id.replace(/[-_]+/g,' '); return s.charAt(0).toUpperCase()+s.slice(1); }
+  // Igual que en el servidor: si la sección trae `data-pp-label` (los bloques
+  // insertados desde el panel), ese es el nombre que entiende el gestor.
+  function label(id, el){
+    if(el){ var l = (el.getAttribute('data-pp-label')||'').trim(); if(l) return l; }
+    var s = id.replace(/[-_]+/g,' '); return s.charAt(0).toUpperCase()+s.slice(1);
+  }
   function post(type, data){ parent.postMessage(Object.assign({source:'pp-studio', type:type}, data||{}), '*'); }
   function sectionOf(el){ return el.closest('[data-pp-section]'); }
   function inEmbed(el){ return !!el.closest('[data-pp-placeholder]'); }
@@ -572,7 +867,7 @@ final class CanvasController
   function showTag(el){
     if(!tag){ tag = document.createElement('div'); tag.className='pp-studio-tag'; document.body.appendChild(tag); }
     var r = el.getBoundingClientRect();
-    tag.textContent = label(el.getAttribute('data-pp-section'));
+    tag.textContent = label(el.getAttribute('data-pp-section'), el);
     tag.style.left = (r.left + window.scrollX + 12) + 'px';
     tag.style.top = (r.top + window.scrollY + 28) + 'px';
     tag.style.display = 'block';
@@ -587,7 +882,7 @@ final class CanvasController
     }
     if(selected && selected !== sec) selected.classList.remove('pp-studio-selected');
     selected = sec; sec.classList.add('pp-studio-selected');
-    post('section-selected', { id: sec.getAttribute('data-pp-section'), label: label(sec.getAttribute('data-pp-section')), editing: !!editingFlag });
+    post('section-selected', { id: sec.getAttribute('data-pp-section'), label: label(sec.getAttribute('data-pp-section'), sec), editing: !!editingFlag });
   }
 
   // ---------- Serializado y guardado de la sección editada ----------
@@ -687,6 +982,7 @@ final class CanvasController
     var veils = [], url = null;
     splitLayers(bi).forEach(function(layer){
       var l = layer.trim();
+      // i18n-ignore: comentario dentro del JS embebido, no es interfaz.
       if(l === '' || l === 'none') return;   // 'none' no es un velo: es una capa vacía
       if(/^url\(/i.test(l)){ if(url === null) url = l; }
       else veils.push(l);
@@ -848,7 +1144,7 @@ final class CanvasController
       kind: kind,
       props: describe(el, kind),
       sectionId: sec ? sec.getAttribute('data-pp-section') : '',
-      sectionLabel: sec ? label(sec.getAttribute('data-pp-section')) : '',
+      sectionLabel: sec ? label(sec.getAttribute('data-pp-section'), sec) : '',
       chain: activeChain.map(function(c){ return { kind: c.kind }; }),
       chainIndex: chainIndexOf(el),
       elementPath: pathWithinSection(el)
@@ -1204,7 +1500,12 @@ final class CanvasController
     probe.remove();
     return pal;
   }
-  post('ready', { scrollY: 0, palette: brandPalette(), sections: Array.prototype.map.call(document.querySelectorAll('[data-pp-section]'), function(s){ return s.getAttribute('data-pp-section'); }) });
+  // Cada parte viaja con su nombre visible (data-pp-label si lo trae), para que
+  // la lista "Partes de esta página" no tenga que adivinarlo desde el id.
+  post('ready', { scrollY: 0, palette: brandPalette(), sections: Array.prototype.map.call(document.querySelectorAll('[data-pp-section]'), function(s){
+    var id = s.getAttribute('data-pp-section');
+    return { id: id, label: label(id, s) };
+  }) });
   window.addEventListener('scroll', function(){ hideTag(); }, {passive:true});
 })();
 </script>

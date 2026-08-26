@@ -83,6 +83,8 @@ final class PageTemplateService
      *
      * @return string[]
      */
+    // i18n-ignore-start: errores de validación del JSON de una plantilla. Los
+    // lee quien escribe plantillas (nosotros), no el gestor de un sitio.
     public static function validate(array $tpl): array
     {
         $errors = [];
@@ -153,6 +155,8 @@ final class PageTemplateService
      *
      * Devuelve un SVG completo (string), seguro para inyectar tal cual en HTML.
      */
+    // i18n-ignore-end
+
     public static function renderThumbnailSvg(array $tpl, int $width = 320, int $height = 200): string
     {
         $sections = is_array($tpl['sections'] ?? null) ? $tpl['sections'] : [];
@@ -203,6 +207,9 @@ final class PageTemplateService
      * (sin "John Doe"). Cada llamada con el mismo type+seed devuelve lo mismo
      * — los previews no fluctúan.
      */
+    // i18n-ignore-start: CONTENIDO DEMO de la web pública (titulares, precios,
+    // testimonios de relleno). Lo lee el VISITANTE, así que su idioma es el del
+    // sitio, no el del panel: su sitio natural es `Microcopy`. Gap preexistente.
     public static function placeholderContent(string $type, string $seed = 'demo'): array
     {
         $img = static fn(string $tag, int $w = 1200, int $h = 800): string =>
@@ -362,6 +369,8 @@ final class PageTemplateService
     // ======================================================================
     // Helpers privados
     // ======================================================================
+
+    // i18n-ignore-end
 
     private static function dir(): string
     {

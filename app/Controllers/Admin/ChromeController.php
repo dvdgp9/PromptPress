@@ -77,8 +77,8 @@ class ChromeController
               . '</head><body class="' . e(VisualStyleService::bodyClass($styleSlug)) . '">'
               . BrandService::publicHeader($siteId, $config, $lang)
               . '<main class="pp-section"><div class="container" style="padding:64px 24px;text-align:center">'
-              . '<h1 style="font-family:var(--pp-font-heading)">Vista previa</h1>'
-              . '<p style="color:var(--pp-text-muted)">Así se ven el header y el pie con los cambios actuales. El contenido de las páginas no se modifica.</p>'
+              . '<h1 style="font-family:var(--pp-font-heading)">' . e(__('chrome.preview_h1')) . '</h1>'
+              . '<p style="color:var(--pp-text-muted)">' . e(__('chrome.preview_note')) . '</p>'
               . '</div></main>'
               . BrandService::publicFooter($siteId, $config, $lang)
               . '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>'

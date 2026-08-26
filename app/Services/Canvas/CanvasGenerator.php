@@ -20,6 +20,9 @@ use Core\Database;
  */
 final class CanvasGenerator
 {
+    // i18n-ignore-start: este servicio construye el prompt de generación del
+    // canvas. Su castellano es carga que viaja al modelo, no interfaz.
+
     /**
      * @param array{
      *   title:string, goal:string, language?:string, design_language?:string,
@@ -335,4 +338,5 @@ final class CanvasGenerator
         }
         return trim($out) !== '' ? trim($out) : $html;
     }
+    // i18n-ignore-end
 }

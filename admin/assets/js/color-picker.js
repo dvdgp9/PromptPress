@@ -126,17 +126,17 @@
         panel.className = 'pp-cp__panel';
         panel.hidden = true;
         panel.setAttribute('role', 'dialog');
-        panel.setAttribute('aria-label', 'Selector de color');
+        panel.setAttribute('aria-label', pp.t('js.cp.panel_aria'));
         panel.innerHTML =
-            '<div class="pp-cp__area" tabindex="0" role="application" aria-label="Saturación y luminosidad. Usa las flechas para ajustar.">'
+            '<div class="pp-cp__area" tabindex="0" role="application" aria-label="' + pp.t('js.cp.area_aria') + '">'
           + '<i class="pp-cp__area-handle"></i></div>'
             // Un <div>, no un <label>: la página anfitriona puede tener reglas
             // para `label input` (el onboarding esconde así los radios de los
             // swatches) y se llevarían por delante el control de tono.
           + '<div class="pp-cp__hue">'
-          + '<input type="range" min="0" max="360" step="1" aria-label="Tono"></div>'
+          + '<input type="range" min="0" max="360" step="1" aria-label="' + pp.t('js.cp.hue_aria') + '"></div>'
           + '<div class="pp-cp__foot">'
-          + '<button type="button" class="pp-cp__eyedrop" hidden aria-label="Cuentagotas">⊙</button>'
+          + '<button type="button" class="pp-cp__eyedrop" hidden aria-label="' + pp.t('js.cp.eyedrop_aria') + '">⊙</button>'
           + '<div class="pp-cp__recents"></div>'
           + '</div>';
         wrap.appendChild(panel);
@@ -153,7 +153,7 @@
             var hex = currentHex();
             trigger.style.background = hex;
             trigger.style.color = readableOn(hex);
-            trigger.setAttribute('aria-label', 'Elegir color. Actual ' + hex);
+            trigger.setAttribute('aria-label', pp.t('js.cp.trigger_aria', { hex: hex }));
             area.style.background =
                 'linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,' + hsvToHex(hsv.h, 1, 1) + ')';
             handle.style.left = (hsv.s * 100) + '%';
@@ -194,7 +194,7 @@
                 b.className = 'pp-cp__recent';
                 b.style.background = hex;
                 b.title = hex;
-                b.setAttribute('aria-label', 'Usar ' + hex);
+                b.setAttribute('aria-label', pp.t('js.cp.use_aria', { hex: hex }));
                 b.addEventListener('click', function () { setFromHex(hex); });
                 recentsBox.appendChild(b);
             });

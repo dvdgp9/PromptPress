@@ -37,7 +37,7 @@ final class SeoController
             'notFoundStatus' => (string) Request::get('status', 'open'),
             'linkIssues' => $linkIssues,
             'linksByPage' => self::groupLinksByPage($linkIssues),
-            'sectionTypes' => SectionController::SECTION_TYPES,
+            'sectionTypes' => SectionController::sectionTypesForView(),
             'metaIssues' => $metaIssues,
             'technicalIssues' => $technicalIssues,
             'indexation' => self::indexationStatus($siteId),
@@ -73,7 +73,7 @@ final class SeoController
             if ($from404 > 0) {
                 Seo404Service::mark($siteId, $from404, 'resolved', (int) ($redirect['id'] ?? 0));
             }
-            Session::flash('success', 'Redirección guardada.');
+            Session::flash('success', __('seo.ok.redirect_saved'));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
@@ -90,13 +90,13 @@ final class SeoController
 
         if ($action === 'deactivate') {
             SeoRedirectService::deactivate($siteId, $id);
-            Session::flash('success', 'Redirección pausada.');
+            Session::flash('success', __('seo.ok.redirect_paused'));
         } elseif ($action === 'activate') {
             SeoRedirectService::activate($siteId, $id);
-            Session::flash('success', 'Redirección activada.');
+            Session::flash('success', __('seo.ok.redirect_enabled'));
         } elseif ($action === 'delete') {
             SeoRedirectService::delete($siteId, $id);
-            Session::flash('success', 'Redirección eliminada.');
+            Session::flash('success', __('seo.ok.redirect_deleted'));
         }
 
         Response::redirect(base_url('admin/seo?tab=redirects'));
@@ -111,13 +111,13 @@ final class SeoController
 
         if ($action === 'ignore') {
             Seo404Service::mark($siteId, $id, 'ignored');
-            Session::flash('success', '404 ignorado.');
+            Session::flash('success', __('seo.ok.404_ignored'));
         } elseif ($action === 'open') {
             Seo404Service::mark($siteId, $id, 'open');
-            Session::flash('success', '404 reabierto.');
+            Session::flash('success', __('seo.ok.404_reopened'));
         } elseif ($action === 'resolved') {
             Seo404Service::mark($siteId, $id, 'resolved');
-            Session::flash('success', '404 marcado como resuelto.');
+            Session::flash('success', __('seo.ok.404_resolved'));
         }
 
         Response::redirect(base_url('admin/seo?tab=404'));
@@ -151,11 +151,11 @@ final class SeoController
             }
             $title = trim((string) ($page['meta_title'] ?? ''));
             $notes = [];
-            if ($desc === '') $notes[] = 'Sin meta descripción';
-            if ($desc !== '' && mb_strlen($desc) < 70) $notes[] = 'Descripción muy corta';
-            if (mb_strlen($desc) > 160) $notes[] = 'Descripción larga';
-            if ($title === '') $notes[] = 'Sin meta título específico';
-            if (mb_strlen($title) > 65) $notes[] = 'Título largo';
+            if ($desc === '') $notes[] = __('seo.note.no_desc');
+            if ($desc !== '' && mb_strlen($desc) < 70) $notes[] = __('seo.note.desc_short');
+            if (mb_strlen($desc) > 160) $notes[] = __('seo.note.desc_long');
+            if ($title === '') $notes[] = __('seo.note.no_title');
+            if (mb_strlen($title) > 65) $notes[] = __('seo.note.title_long');
 
             if ($notes !== []) {
                 $page['notes'] = $notes;
@@ -217,7 +217,7 @@ final class SeoController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

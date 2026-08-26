@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" role="img" aria-labelledby="title desc">
+  <title id="title">Image placeholder</title>
+  <desc id="desc">Abstract composition ready to be replaced in Studio</desc>
+  <rect width="1200" height="750" fill="#eef1ec"/>
+  <path d="M0 568 294 286l183 170 164-151 559 445H0Z" fill="#c8d4c4"/>
+  <circle cx="884" cy="205" r="94" fill="#91ae89"/>
+  <path d="M0 642c210-116 388-113 542 8 151 119 367 118 658-36v136H0Z" fill="#445247" opacity=".18"/>
+</svg>

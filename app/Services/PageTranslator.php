@@ -59,7 +59,7 @@ final class PageTranslator
         $canvas = CanvasService::get((int) $page['id']);
         $html = trim((string) ($canvas['html'] ?? ''));
         if ($html === '') {
-            return ['ok' => false, 'message' => 'Esta página no tiene contenido que traducir todavía.'];
+            return ['ok' => false, 'message' => __('tr.err.empty_page')];
         }
 
         $mode = self::modeFor((string) ($page['page_type'] ?? ''));
@@ -107,7 +107,7 @@ final class PageTranslator
             [(int) $page['id']]
         );
         if ($rows === []) {
-            return ['ok' => false, 'message' => 'Esta página no tiene contenido que traducir todavía.'];
+            return ['ok' => false, 'message' => __('tr.err.empty_page')];
         }
 
         $mode = self::modeFor((string) ($page['page_type'] ?? ''));
@@ -198,16 +198,14 @@ final class PageTranslator
         if ($sectionsAfter < $sectionsBefore) {
             return [
                 'ok' => false,
-                'message' => 'La traducción se ha dejado parte de la página por el camino. '
-                    . 'No hemos guardado nada; puedes volver a intentarlo.',
+                'message' => __('tr.err.lost_sections'),
             ];
         }
 
         if ($mode === self::MODE_LITERAL && $fieldsAfter !== $fieldsBefore) {
             return [
                 'ok' => false,
-                'message' => 'La traducción no ha respetado el contenido original de la página. '
-                    . 'No hemos guardado nada; puedes volver a intentarlo.',
+                'message' => __('tr.err.changed_content'),
             ];
         }
 
@@ -215,14 +213,13 @@ final class PageTranslator
         if ($sectionsBefore > 0 && $sectionsAfter === 0) {
             return [
                 'ok' => false,
-                'message' => 'La traducción ha quedado vacía. No hemos guardado nada; puedes volver a intentarlo.',
+                'message' => __('tr.err.empty_result'),
             ];
         }
         if ($sectionsBefore === 0 && mb_strlen(strip_tags($translated)) < mb_strlen(strip_tags($source)) / 4) {
             return [
                 'ok' => false,
-                'message' => 'La traducción ha quedado mucho más corta que el original. '
-                    . 'No hemos guardado nada; puedes volver a intentarlo.',
+                'message' => __('tr.err.too_short'),
             ];
         }
 
@@ -305,6 +302,7 @@ final class PageTranslator
     // =====================================================================
 
     /** Directiva de modo que se inyecta en el prompt. */
+    // i18n-ignore-start: no es interfaz, es la instrucción que viaja a la IA.
     private static function modeDirective(string $mode): string
     {
         if ($mode === self::MODE_LITERAL) {
@@ -342,6 +340,7 @@ final class PageTranslator
         }
         return $original;
     }
+    // i18n-ignore-end
 
     /** @return array{title:string, html:string, meta_title:string, meta_description:string} */
     private static function parseEnvelope(string $raw): array
@@ -369,17 +368,11 @@ final class PageTranslator
     /** Mensajes de error pensados para alguien que no sabe qué es un `<section>`. */
     private static function friendlyFailure(): string
     {
-        return 'No hemos podido traducir esta página. No se ha guardado nada, así que puedes volver a intentarlo '
-             . 'sin miedo a perder nada.';
+        return __('tr.err.friendly');
     }
 
     private static function partialFailure(int $done, int $total): string
     {
-        return sprintf(
-            'La traducción solo ha cubierto %d de los %d bloques de la página, así que no la hemos guardado. '
-            . 'Vuelve a intentarlo.',
-            $done,
-            $total
-        );
+        return __('tr.err.partial', ['hechos' => (string) $done, 'total' => (string) $total]);
     }
 }

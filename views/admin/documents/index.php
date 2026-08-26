@@ -10,7 +10,7 @@ $maxMb = round($maxSize / 1024 / 1024);
 $accept = '.' . implode(',.', $allowedExt);
 ?>
 
-<?php \Core\View::start('title'); ?>Documentos base<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('documents.title')) ?><?php \Core\View::end(); ?>
 
 <?php \Core\View::start('scripts'); ?>
 <script>window.PP_DOC_MAX_SIZE = <?= (int) $maxSize ?>;</script>
@@ -18,12 +18,11 @@ $accept = '.' . implode(',.', $allowedExt);
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Documentos base</h2>
+    <h2><?= e(__('documents.title')) ?></h2>
 </div>
 
 <p class="pp-page-intro">
-    Sube PDFs, DOCX o TXT con información de tu empresa (catálogos, presentaciones, propuestas). El texto se extraerá automáticamente
-    y estará disponible como contexto para las llamadas a IA.
+    <?= e(__('documents.intro')) ?>
 </p>
 
 <?php
@@ -43,9 +42,9 @@ $flashError   = \Core\Session::flash('error');
 
     <label class="pp-dropzone" id="pp-dropzone" for="pp-file-input">
         <div class="pp-dropzone__icon">📄</div>
-        <div class="pp-dropzone__title">Arrastra un archivo aquí o haz clic para seleccionar</div>
+        <div class="pp-dropzone__title"><?= e(__('documents.dropzone')) ?></div>
         <div class="pp-dropzone__hint">
-            PDF, DOCX o TXT · máximo <?= (int) $maxMb ?> MB
+            <?= e(__('documents.formats', ['mb' => (int) $maxMb])) ?>
         </div>
         <input type="file" id="pp-file-input" name="file"
                accept="<?= e($accept) ?>" hidden>
@@ -60,42 +59,42 @@ $flashError   = \Core\Session::flash('error');
         <div class="pp-dropzone-progress__bar">
             <div class="pp-dropzone-progress__fill" id="pp-dropzone-progress-fill"></div>
         </div>
-        <div class="pp-dropzone-progress__label" id="pp-dropzone-progress-label">Subiendo 0%…</div>
+        <div class="pp-dropzone-progress__label" id="pp-dropzone-progress-label"><?= e(__('documents.uploading', ['pct' => 0])) ?></div>
     </div>
 
     <div class="pp-form-row pp-dropzone-extras" id="pp-dropzone-extras" hidden>
         <div class="pp-form-group">
-            <label for="title">Título (opcional)</label>
+            <label for="title"><?= e(__('documents.doc_title')) ?></label>
             <input type="text" id="title" name="title" maxlength="255"
-                   placeholder="Si lo dejas vacío, se usará el nombre del archivo.">
+                   placeholder="<?= e(__('documents.title_placeholder')) ?>">
         </div>
         <div class="pp-form-group pp-dropzone-actions-group">
             <label>&nbsp;</label>
             <div class="pp-dropzone-actions">
-                <button type="button" class="pp-btn pp-btn--secondary" id="pp-dropzone-clear">Cambiar archivo</button>
-                <button type="submit" class="pp-btn pp-btn--primary" id="pp-doc-submit">Subir y procesar</button>
+                <button type="button" class="pp-btn pp-btn--secondary" id="pp-dropzone-clear"><?= e(__('documents.change_file')) ?></button>
+                <button type="submit" class="pp-btn pp-btn--primary" id="pp-doc-submit"><?= e(__('documents.upload_process')) ?></button>
             </div>
         </div>
     </div>
 </form>
 
-<h3 class="pp-docs-section-title">Documentos subidos <span class="pp-docs-count">(<?= count($documents) ?>)</span></h3>
+<h3 class="pp-docs-section-title"><?= e(__('documents.uploaded')) ?> <span class="pp-docs-count">(<?= count($documents) ?>)</span></h3>
 
 <?php if (empty($documents)): ?>
 <div class="pp-empty">
-    <div class="pp-empty__title">No hay documentos aún</div>
-    <div class="pp-empty__text">Sube tu primer documento usando el formulario de arriba.</div>
+    <div class="pp-empty__title"><?= e(__('documents.empty_title')) ?></div>
+    <div class="pp-empty__text"><?= e(__('documents.empty_text')) ?></div>
 </div>
 <?php else: ?>
 <table class="pp-table">
     <thead>
         <tr>
-            <th>Título</th>
-            <th>Tipo</th>
-            <th>Estado</th>
-            <th>Texto extraído</th>
-            <th>Resumen</th>
-            <th>Subido</th>
+            <th><?= e(__('table.title')) ?></th>
+            <th><?= e(__('table.type')) ?></th>
+            <th><?= e(__('table.status')) ?></th>
+            <th><?= e(__('documents.extracted_text')) ?></th>
+            <th><?= e(__('documents.summary')) ?></th>
+            <th><?= e(__('documents.uploaded_at')) ?></th>
             <th></th>
         </tr>
     </thead>
@@ -109,9 +108,9 @@ $flashError   = \Core\Session::flash('error');
             default      => 'pp-badge--muted',
         };
         $statusLabel = match ($d['status']) {
-            'ready'      => 'Listo',
-            'processing' => 'Procesando',
-            'error'      => 'Error',
+            'ready'      => __('documents.status.ready'),
+            'processing' => __('documents.status.processing'),
+            'error'      => __('status.error'),
             default      => $d['status'],
         };
         $detailUrl = base_url('admin/documents/' . $d['id']);
@@ -127,7 +126,7 @@ $flashError   = \Core\Session::flash('error');
             <td><span class="pp-badge <?= $statusBadge ?>"><?= e($statusLabel) ?></span></td>
             <td>
                 <?php if ((int) $d['text_length'] > 0): ?>
-                <span title="Caracteres extraídos"><?= number_format((int) $d['text_length'], 0, ',', '.') ?> car.</span>
+                <span title="<?= e(__('documents.chars_title')) ?>"><?= e(__('documents.chars', ['n' => number_format((int) $d['text_length'], 0, ',', '.')])) ?></span>
                 <?php else: ?>
                 <span class="pp-muted">—</span>
                 <?php endif; ?>
@@ -141,7 +140,7 @@ $flashError   = \Core\Session::flash('error');
             </td>
             <td><small><?= e(substr((string) $d['created_at'], 0, 16)) ?></small></td>
             <td class="pp-doc-row-actions">
-                <a href="<?= e($detailUrl) ?>" class="pp-btn pp-btn--sm pp-btn--secondary">Ver</a>
+                <a href="<?= e($detailUrl) ?>" class="pp-btn pp-btn--sm pp-btn--secondary"><?= e(__('common.view')) ?></a>
             </td>
         </tr>
     <?php endforeach; ?>

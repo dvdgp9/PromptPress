@@ -30,7 +30,7 @@ $warning = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!CSRF::validate((string) (Request::post('_csrf') ?? ''))) {
-        $errors[] = 'Token CSRF inválido. Recarga la página e inténtalo de nuevo.';
+        $errors[] = __('inst.err.csrf');
     }
 
     $provider = (string) $defaults['provider'];
@@ -41,16 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         if (!array_key_exists($provider, $providers)) {
-            $errors[] = 'Proveedor no válido.';
+            $errors[] = __('inst.ai.err.provider');
         }
         if ($model === '' || strlen($model) > 100) {
-            $errors[] = 'El modelo principal es obligatorio (máx. 100 caracteres).';
+            $errors[] = __('inst.ai.err.model');
         }
         if ($modelLight !== '' && strlen($modelLight) > 100) {
-            $errors[] = 'El modelo pequeño no puede superar 100 caracteres.';
+            $errors[] = __('inst.ai.err.model_light');
         }
         if (trim($apiKey) === '') {
-            $errors[] = 'La API key es obligatoria.';
+            $errors[] = __('inst.ai.err.api_key');
         }
     }
 
@@ -58,10 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $result = AIProviderTester::test($provider, $model, $apiKey);
         if (!$result['ok']) {
-            $errors[] = $result['error'] ?? 'Error desconocido al probar la API key.';
+            $errors[] = $result['error'] ?? __('inst.ai.err.unknown');
         } elseif (empty($result['model_found'])) {
-            $warning = 'La API key es válida, pero el modelo "' . $model . '" no aparece en el listado de '
-                     . $providers[$provider] . '. Continuamos igualmente — verifica el nombre del modelo más tarde.';
+            $warning = __('inst.ai.warn.model_unknown', [
+                'modelo'    => $model,
+                'proveedor' => (string) $providers[$provider],
+            ]);
         }
     }
 
@@ -74,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $siteId = (int) (Session::get('site_id') ?? 0);
             if ($siteId <= 0) {
-                throw new RuntimeException('No hay site_id en sesión. Vuelve atrás y recrea el sitio.');
+                throw new RuntimeException(__('inst.ai.err.no_site'));
             }
 
             $pdo = Database::connection();
@@ -100,13 +102,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $check = \App\Services\ImageBankService::validateKey($unsplashKey);
                 if (InstallerApp::writeImageBankFile($unsplashKey)) {
                     if (!$check['ok']) {
-                        $warning = trim($warning . ' No hemos podido verificar la clave de Unsplash ('
-                            . ($check['error'] ?? 'motivo desconocido')
-                            . '). La hemos guardado igualmente; si no aparecen imágenes, revísala.');
+                        $warning = trim($warning . ' ' . __('inst.ai.warn.unsplash_unverified', [
+                            'motivo' => (string) ($check['error'] ?? __('inst.ai.unknown_reason')),
+                        ]));
                     }
                 } else {
-                    $warning = trim($warning . ' No se pudo escribir config/image_bank.php (¿permisos de la carpeta config?). '
-                        . 'Las imágenes de Unsplash quedarán desactivadas hasta crear ese archivo a mano.');
+                    $warning = trim($warning . ' ' . __('inst.ai.warn.unsplash_unwritable'));
                 }
             }
 
@@ -125,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($pdo) && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $errors[] = 'Error guardando la configuración: ' . $e->getMessage();
+            $errors[] = __('inst.ai.err.save', ['detalle' => $e->getMessage()]);
         }
     }
 }
@@ -134,15 +135,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $csrfToken = CSRF::token();
 ob_start();
 ?>
-<h1 class="pp-step-title">Conexión con la IA y las imágenes</h1>
+<h1 class="pp-step-title"><?= e(__('inst.ai.title')) ?></h1>
 <p class="pp-step-intro">
-    PromptPress usa una API de IA para generar el contenido y, opcionalmente, Unsplash para las fotos.
-    Configura tu proveedor de IA (verificaremos la API key) y, si quieres, añade tu clave de Unsplash.
+    <?= e(__('inst.ai.intro')) ?>
 </p>
 
 <?php if (!empty($errors)): ?>
     <div class="pp-alert pp-alert--fail">
-        <strong>No se ha podido continuar:</strong>
+        <strong><?= e(__('inst.err.cannot_continue')) ?></strong>
         <ul style="margin: 0.5rem 0 0 1.25rem;">
             <?php foreach ($errors as $err): ?>
                 <li><?= e($err) ?></li>
@@ -155,7 +155,7 @@ ob_start();
     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
     <div class="pp-field">
-        <label for="provider">Proveedor</label>
+        <label for="provider"><?= e(__('inst.ai.provider')) ?></label>
         <select id="provider" name="provider" required>
             <?php foreach ($providers as $code => $label): ?>
                 <option value="<?= e($code) ?>" <?= $code === $defaults['provider'] ? 'selected' : '' ?>>
@@ -166,7 +166,7 @@ ob_start();
     </div>
 
     <div class="pp-field">
-        <label for="model">Modelo principal</label>
+        <label for="model"><?= e(__('inst.ai.model')) ?></label>
         <input type="text" id="model" name="model" value="<?= e($defaults['model']) ?>" required maxlength="100" list="model-suggestions">
         <datalist id="model-suggestions">
             <?php foreach ($suggestedModels as $providerCode => $models): ?>
@@ -175,41 +175,37 @@ ob_start();
                 <?php endforeach; ?>
             <?php endforeach; ?>
         </datalist>
-        <small id="model-help">Para generación de páginas, secciones y artículos completos.</small>
+        <small id="model-help"><?= e(__('inst.ai.model_help')) ?></small>
     </div>
 
     <div class="pp-field">
-        <label for="model_light">Modelo pequeño</label>
+        <label for="model_light"><?= e(__('inst.ai.model_light')) ?></label>
         <input type="text" id="model_light" name="model_light" value="<?= e($defaults['model_light']) ?>" maxlength="100" list="model-suggestions">
-        <small id="model-light-help">Para reescrituras, SEO, resúmenes y tareas rápidas. Puedes dejarlo vacío para usar siempre el principal.</small>
+        <small id="model-light-help"><?= e(__('inst.ai.model_light_help')) ?></small>
     </div>
 
     <div class="pp-field">
         <label for="api_key">API Key</label>
         <input type="password" id="api_key" name="api_key" required autocomplete="off" placeholder="sk-or-v1-...">
         <small>
-            Se almacenará <strong>encriptada</strong> en la base de datos (AES-256-GCM con la clave única de tu instalación).
-            Solo el servidor podrá descifrarla.
+            <?= __('inst.ai.api_key_help.html') ?>
         </small>
     </div>
 
     <hr class="pp-sep">
 
     <div class="pp-field">
-        <label for="unsplash_key">Unsplash Access Key <span style="font-weight:normal;opacity:.7;">(opcional)</span></label>
+        <label for="unsplash_key">Unsplash Access Key <span style="font-weight:normal;opacity:.7;">(<?= e(__('common.optional')) ?>)</span></label>
         <input type="password" id="unsplash_key" name="unsplash_key" autocomplete="off"
-               value="<?= e((string) (Request::post('unsplash_key') ?? '')) ?>" placeholder="Tu Access Key de Unsplash">
+               value="<?= e((string) (Request::post('unsplash_key') ?? '')) ?>" placeholder="<?= e(__('inst.ai.unsplash_ph')) ?>">
         <small>
-            Permite que las páginas se generen con fotos reales. Consigue una gratis en
-            <a href="https://unsplash.com/developers" target="_blank" rel="noopener">unsplash.com/developers</a>
-            (crea una app → copia la <em>Access Key</em>; 50 imágenes/hora en modo demo).
-            Si la dejas vacía, podrás añadirla más tarde y, mientras, las páginas se generarán sin imágenes.
+            <?= __('inst.ai.unsplash_help.html') ?>
         </small>
     </div>
 
     <div class="pp-form__actions">
         <button type="submit" class="pp-btn pp-btn--primary pp-btn--lg">
-            Probar conexión y finalizar →
+            <?= e(__('inst.ai.submit')) ?> →
         </button>
     </div>
 </form>
@@ -223,13 +219,19 @@ ob_start();
     var help        = document.getElementById('model-help');
     var lightHelp   = document.getElementById('model-light-help');
     var suggestions = <?= json_encode($suggestedModels, JSON_UNESCAPED_SLASHES) ?>;
+    var i18n = <?= json_encode([
+        'main'      => __('inst.ai.js.main_suggested'),
+        'light'     => __('inst.ai.js.light_suggested'),
+        'write_id'  => __('inst.ai.js.write_id'),
+        'optional'  => __('common.optional'),
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
     function update() {
         var p = providerSel.value;
         var arr = suggestions[p] || [];
         modelInput.placeholder = arr[0] || '';
         if (modelLightInput) modelLightInput.placeholder = arr[1] || arr[0] || '';
-        if (help) help.textContent = 'Principal sugerido: ' + (arr[0] || 'escribe un ID compatible');
-        if (lightHelp) lightHelp.textContent = 'Pequeño sugerido: ' + (arr[1] || arr[0] || 'opcional');
+        if (help) help.textContent = i18n.main + ': ' + (arr[0] || i18n.write_id);
+        if (lightHelp) lightHelp.textContent = i18n.light + ': ' + (arr[1] || arr[0] || i18n.optional);
     }
     providerSel.addEventListener('change', update);
     update();
@@ -237,4 +239,4 @@ ob_start();
 </script>
 <?php
 $content = (string) ob_get_clean();
-InstallerApp::renderStep('ai_provider', 'Proveedor IA', $content);
+InstallerApp::renderStep('ai_provider', __('inst.ai.step_title'), $content);

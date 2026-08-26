@@ -39,6 +39,11 @@ final class SiteAssistantJobs
             if (!is_array($item)) {
                 continue;
             }
+            // El cliente puede manipular el JSON confirmado. Repetimos aquí
+            // el gate del registro: hoy solo Canvas tiene handler automático.
+            if (!self::isExecutablePlanItem($item)) {
+                continue;
+            }
             $pageId      = (int) ($item['page_id'] ?? 0);
             $instruction = trim((string) ($item['instruction'] ?? ''));
             $section     = trim((string) ($item['section'] ?? ''));
@@ -65,7 +70,7 @@ final class SiteAssistantJobs
         }
 
         if ($clean === []) {
-            return ['ok' => false, 'error' => 'No hay ningún cambio aplicable en este plan.'];
+            return ['ok' => false, 'error' => __('asst.err.nothing_to_apply')];
         }
 
         Database::execute(
@@ -82,6 +87,14 @@ final class SiteAssistantJobs
         }
 
         return ['ok' => true, 'job' => self::jobState($jobId, $siteId)];
+    }
+
+    /** @param array<string,mixed> $item */
+    public static function isExecutablePlanItem(array $item): bool
+    {
+        return ($item['status'] ?? '') === 'aplicar'
+            && ($item['category'] ?? '') === 'automatable_now'
+            && ($item['capability_id'] ?? '') === 'pages.canvas.edit';
     }
 
     /**
@@ -124,7 +137,7 @@ final class SiteAssistantJobs
 
         try {
             if ($page === null) {
-                throw new \RuntimeException('La página ya no existe o dejó de ser editable.');
+                throw new \RuntimeException(__('asst.err.page_gone'));
             }
             $outcome = self::applyWithRetry($siteId, $page, $item);
             if ($outcome['ok']) {
@@ -142,13 +155,13 @@ final class SiteAssistantJobs
             error_log('[assistant job] job=' . $jobId . ' item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
             Database::execute(
                 'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
-                ['La IA no devolvió un cambio válido para esta página. La página no ha cambiado.', $item['id']]
+                [__('asst.err.no_valid_change'), $item['id']]
             );
         } catch (\Throwable $e) {
             error_log('[assistant job] job=' . $jobId . ' item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
             Database::execute(
                 'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
-                [mb_substr('No se pudo aplicar: ' . $e->getMessage(), 0, 1000), $item['id']]
+                [mb_substr(__('asst.err.apply', ['detalle' => $e->getMessage()]), 0, 1000), $item['id']]
             );
         }
 

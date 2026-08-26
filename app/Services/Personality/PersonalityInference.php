@@ -444,6 +444,7 @@ final class PersonalityInference
      */
     private static function buildBusinessContext(array $signals): string
     {
+        // i18n-ignore-start: etiquetas del contexto que viaja al prompt.
         $parts = [];
         $fields = [
             'business_description'  => 'Qué hace la empresa',
@@ -453,6 +454,7 @@ final class PersonalityInference
             'unique_selling_points' => 'Diferenciadores',
             'document_summary'      => 'Resumen del documento adjunto',
         ];
+        // i18n-ignore-end
         foreach ($fields as $key => $label) {
             $v = trim((string) ($signals[$key] ?? ''));
             if ($v === '') continue;
@@ -562,6 +564,7 @@ final class PersonalityInference
             throw new \InvalidArgumentException('Eje no soportado: ' . $axis);
         }
         if ($direction !== 'up' && $direction !== 'down') {
+            // i18n-ignore: excepción interna.
             throw new \InvalidArgumentException('Dirección inválida: ' . $direction);
         }
 
@@ -570,6 +573,7 @@ final class PersonalityInference
             ? json_decode((string) $row['personality'], true)
             : null;
         if (!is_array($personality) || !isset($personality['vector'])) {
+            // i18n-ignore: excepción interna dirigida a quien programa.
             throw new \InvalidArgumentException('El sitio no tiene personality inferida todavía. Llama a compose() primero.');
         }
 
@@ -607,6 +611,7 @@ final class PersonalityInference
             'UPDATE sites SET personality = ?, skin_json = ?, updated_at = NOW() WHERE id = ?',
             [$personalityJson, $skinJson, $siteId]
         );
+        \App\Services\DesignSystem::forgetSkin($siteId);
 
         return [
             'vector'       => $vector,
@@ -630,5 +635,6 @@ final class PersonalityInference
             'UPDATE sites SET personality = ?, skin_json = ?, updated_at = NOW() WHERE id = ?',
             [$personalityJson, $skinJson, $siteId]
         );
+        \App\Services\DesignSystem::forgetSkin($siteId);
     }
 }

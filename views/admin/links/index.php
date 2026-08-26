@@ -7,45 +7,44 @@
 \Core\View::extend('admin/layout');
 ?>
 
-<?php \Core\View::start('title'); ?>Enlaces<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('links.title_short')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Enlaces internos</h2>
+    <h2><?= e(__('links.title')) ?></h2>
 </div>
 
 <p class="pp-page-intro">
-    Revisamos los botones y enlaces de tus secciones para detectar destinos que no
-    funcionarán: páginas que no existen o que están en borrador (no visibles en tu web).
+    <?= e(__('links.intro')) ?>
 </p>
 
 <?php if (empty($issues)): ?>
     <div class="pp-links-ok">
         <div class="pp-links-ok__icon" aria-hidden="true">✓</div>
         <div>
-            <p class="pp-links-ok__title">Todos los enlaces apuntan a páginas publicadas</p>
-            <p class="pp-links-ok__hint">No hay botones rotos en tu sitio.</p>
+            <p class="pp-links-ok__title"><?= e(__('links.all_ok')) ?></p>
+            <p class="pp-links-ok__hint"><?= e(__('links.no_broken')) ?></p>
         </div>
     </div>
 <?php else: ?>
     <div class="pp-alert pp-alert--warning">
-        <?= count($issues) === 1 ? 'Hay 1 enlace que revisar.' : 'Hay ' . count($issues) . ' enlaces que revisar.' ?>
+        <?= e(__(count($issues) === 1 ? 'links.count_one' : 'links.count_other', ['n' => count($issues)])) ?>
     </div>
 
     <?php foreach ($byPage as $pageId => $group): ?>
     <div class="pp-form-card">
         <div class="pp-links-group__head">
             <h3><?= e($group['title']) ?></h3>
-            <a href="<?= e(base_url('admin/pages/' . (int) $pageId . '/edit')) ?>" class="pp-btn pp-btn--secondary pp-btn--sm">Editar página →</a>
+            <a href="<?= e(base_url('admin/pages/' . (int) $pageId . '/edit')) ?>" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('links.edit_page')) ?> →</a>
         </div>
         <ul class="pp-links-list">
             <?php foreach ($group['issues'] as $i): ?>
             <li class="pp-links-item">
                 <code class="pp-links-item__link"><?= e($i['link']) ?></code>
-                <span class="pp-links-item__where">en <?= e($sectionTypes[$i['section_type']] ?? $i['section_type']) ?></span>
+                <span class="pp-links-item__where"><?= e(__('links.in_section', ['seccion' => $sectionTypes[$i['section_type']] ?? $i['section_type']])) ?></span>
                 <?php if ($i['problem'] === 'missing'): ?>
-                    <span class="pp-links-badge pp-links-badge--missing">No existe esa página</span>
+                    <span class="pp-links-badge pp-links-badge--missing"><?= e(__('links.missing')) ?></span>
                 <?php else: ?>
-                    <span class="pp-links-badge pp-links-badge--draft">En borrador</span>
+                    <span class="pp-links-badge pp-links-badge--draft"><?= e(__('links.draft')) ?></span>
                 <?php endif; ?>
             </li>
             <?php endforeach; ?>
@@ -54,7 +53,6 @@
     <?php endforeach; ?>
 
     <p class="pp-form-hint">
-        <strong>¿Cómo se arregla?</strong> «No existe» → crea esa página (o cambia el destino del botón).
-        «En borrador» → abre la página de destino y cámbiala a <em>Publicada</em>.
+        <?= __('links.how_to_fix.html') ?>
     </p>
 <?php endif; ?>

@@ -44,10 +44,49 @@ final class TranslationWriter
             (string) ($payload['html'] ?? ''),
             (string) (CanvasService::get((int) $source['id'])['css'] ?? ''),
             'translation',
-            'Traducción automática'
+            __('tr.auto_label')
         );
 
+        // FORMS-LANG T7 — los formularios embebidos no viven en la página: el
+        // `{{form:12}}` se copia tal cual y apuntaría al MISMO formulario en el
+        // idioma original. Aquí se le añade la traducción que le falte.
+        self::translateEmbeddedForms($siteId, (string) ($payload['html'] ?? ''), $targetLang);
+
         return ['ok' => true, 'page_id' => $pageId];
+    }
+
+    /**
+     * Asegura que los formularios embebidos en un HTML canvas tienen textos en
+     * el idioma destino.
+     *
+     * Es best-effort a propósito: la página traducida ya está guardada y no se
+     * pierde porque un formulario falle. Si no se traduce, se sigue pintando en
+     * su idioma base, que es el comportamiento de antes.
+     */
+    private static function translateEmbeddedForms(int $siteId, string $html, string $targetLang): void
+    {
+        if (!preg_match_all('/\{\{form:(\d+)\}\}/', $html, $matches)) {
+            return;
+        }
+
+        $targetLang = LanguageService::normalize($targetLang);
+        foreach (array_unique(array_map('intval', $matches[1])) as $formId) {
+            try {
+                $form = FormStore::find($siteId, $formId);
+                if ($form === null) continue;
+                if (FormI18n::baseLanguage($form) === $targetLang) continue;
+                if (in_array($targetLang, FormI18n::translatedLanguages($form), true)) continue;
+
+                unset($form['id']);
+                $result = FormTranslator::toLanguage($siteId, $form, $targetLang);
+                if ($result['ok'] ?? false) {
+                    FormStore::update($siteId, $formId, $result['content']);
+                }
+            } catch (\Throwable $e) {
+                // La página traducida es lo importante; el formulario se puede
+                // traducir a mano desde su editor.
+            }
+        }
     }
 
     /**
@@ -167,7 +206,7 @@ final class TranslationWriter
             return [
                 'ok' => false,
                 'error' => 'same_language',
-                'message' => 'Esta página ya está en ' . LanguageService::label($own) . '.',
+                'message' => __('tr.err.same_language', ['idioma' => LanguageService::label($own)]),
             ];
         }
 
@@ -175,8 +214,7 @@ final class TranslationWriter
             return [
                 'ok' => false,
                 'error' => 'inactive_language',
-                'message' => LanguageService::label($targetLang) . ' no está activo en esta web. '
-                    . 'Puedes activarlo en Ajustes.',
+                'message' => __('tr.err.inactive_language', ['idioma' => LanguageService::label($targetLang)]),
             ];
         }
 
@@ -186,8 +224,7 @@ final class TranslationWriter
                 'ok' => false,
                 'error' => 'exists',
                 'page_id' => (int) $existing['id'],
-                'message' => 'Esta página ya tiene versión en ' . LanguageService::label($targetLang)
-                    . '. Ábrela para revisarla o edítala a mano; no la hemos tocado.',
+                'message' => __('tr.err.already_exists', ['idioma' => LanguageService::label($targetLang)]),
             ];
         }
 

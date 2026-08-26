@@ -9,22 +9,22 @@
 \Core\View::extend('admin/layout');
 
 $fieldTypes = [
-    'text'     => 'Texto',
-    'email'    => 'Email',
-    'tel'      => 'Teléfono',
-    'textarea' => 'Área de texto',
-    'checkbox' => 'Casilla',
-    'select'   => 'Selector',
-    'number'   => 'Número',
-    'date'     => 'Fecha',
+    'text'     => __('field.text'),
+    'email'    => __('field.email'),
+    'tel'      => __('field.tel'),
+    'textarea' => __('field.textarea'),
+    'checkbox' => __('field.checkbox'),
+    'select'   => __('field.select'),
+    'number'   => __('field.number'),
+    'date'     => __('field.date'),
     'url'      => 'URL',
-    'file'     => 'Archivo',
+    'file'     => __('field.file'),
 ];
 $filePresets = [
-    'documents' => 'Documentos (PDF, DOCX, TXT)',
-    'images'    => 'Imágenes (JPG, PNG, WebP)',
-    'cv'        => 'CV / portfolio (PDF, DOCX)',
-    'custom'    => 'Personalizado',
+    'documents' => __('field.accept.documents'),
+    'images'    => __('field.accept.images'),
+    'cv'        => __('field.accept.cv'),
+    'custom'    => __('field.accept.custom'),
 ];
 $fields = is_array($form['fields'] ?? null) ? $form['fields'] : [];
 $lawful = (string) ($form['lawful_basis'] ?? 'legitimate_interest');
@@ -47,58 +47,58 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         <div class="pp-fb-row__head">
             <span class="pp-fb-row__drag" aria-hidden="true">⠿</span>
             <div class="pp-fb-row__identity">
-                <strong data-fb-title><?= e($label !== '' ? $label : 'Campo sin título') ?></strong>
+                <strong data-fb-title><?= e($label !== '' ? $label : __('form_edit.untitled_field')) ?></strong>
                 <span><b data-fb-type-label><?= e($typeLabel) ?></b><i data-fb-required><?= $req ? 'Obligatorio' : 'Opcional' ?></i></span>
             </div>
-            <button type="button" class="pp-fb-row__remove" data-fb-remove title="Quitar campo" aria-label="Quitar campo">
+            <button type="button" class="pp-fb-row__remove" data-fb-remove title="<?= e(__('form_edit.remove_field')) ?>" aria-label="<?= e(__('form_edit.remove_field')) ?>">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
         </div>
         <div class="pp-fb-row__grid">
             <label class="pp-fb-control">
-                <span>Etiqueta visible</span>
-                <input type="text" name="fields[<?= $i ?>][label]" value="<?= e($label) ?>" placeholder="Nombre, email, CV..." data-fb-label required>
+                <span><?= e(__('form_edit.field_label')) ?></span>
+                <input type="text" name="fields[<?= $i ?>][label]" value="<?= e($label) ?>" placeholder="<?= e(__('form_edit.field_label_placeholder')) ?>" data-fb-label required>
             </label>
             <label class="pp-fb-control">
-                <span>Tipo de campo</span>
-                <select name="fields[<?= $i ?>][field_type]" aria-label="Tipo de campo" data-fb-type>
+                <span><?= e(__('form_edit.field_type')) ?></span>
+                <select name="fields[<?= $i ?>][field_type]" aria-label="<?= e(__('form_edit.field_type')) ?>" data-fb-type>
                     <?php foreach ($fieldTypes as $val => $lbl): ?>
                         <option value="<?= e($val) ?>" <?= $type === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
                     <?php endforeach; ?>
                 </select>
             </label>
             <label class="pp-fb-control pp-fb-control--wide">
-                <span>Ayuda para el visitante</span>
-                <input type="text" name="fields[<?= $i ?>][placeholder]" value="<?= e($ph) ?>" placeholder="Ej. Cuéntanos qué necesitas">
+                <span><?= e(__('form_edit.field_help')) ?></span>
+                <input type="text" name="fields[<?= $i ?>][placeholder]" value="<?= e($ph) ?>" placeholder="<?= e(__('form_edit.field_help_placeholder')) ?>">
             </label>
             <input type="hidden" name="fields[<?= $i ?>][name]" value="<?= e($name) ?>" data-fb-name>
             <label class="pp-fb-switch pp-fb-row__req">
                 <input type="checkbox" name="fields[<?= $i ?>][required]" value="1" <?= $req ? 'checked' : '' ?>>
-                <span>Obligatorio</span>
+                <span><?= e(__('form_edit.required')) ?></span>
             </label>
             <label class="pp-fb-control pp-fb-row__options" data-fb-options-wrap <?= $type === 'select' ? '' : 'hidden' ?>>
-                <span>Opciones del selector</span>
-                <textarea name="fields[<?= $i ?>][options]" rows="3" placeholder="Una opción por línea&#10;Ej. Consultoría&#10;Soporte&#10;Presupuesto" data-fb-options><?= e($optionsText) ?></textarea>
+                <span><?= e(__('form_edit.select_options')) ?></span>
+                <textarea name="fields[<?= $i ?>][options]" rows="3" placeholder="<?= e(__('form_edit.options_placeholder')) ?>" data-fb-options><?= e($optionsText) ?></textarea>
             </label>
             <div class="pp-fb-row__file" data-fb-file <?= $type === 'file' ? '' : 'hidden' ?>>
                 <div class="pp-fb-row__file-head">
-                    <strong>Subida de archivo</strong>
-                    <span>Define qué puede adjuntar el visitante. Los archivos se guardan seguros y se descargan desde Mensajes.</span>
+                    <strong><?= e(__('form_edit.file_upload')) ?></strong>
+                    <span><?= e(__('form_edit.file_upload_help')) ?></span>
                 </div>
                 <label class="pp-fb-control">
-                    <span>Formatos permitidos</span>
-                    <select name="fields[<?= $i ?>][file_accept]" aria-label="Tipos de archivo permitidos" data-fb-file-accept>
+                    <span><?= e(__('form_edit.allowed_formats')) ?></span>
+                    <select name="fields[<?= $i ?>][file_accept]" aria-label="<?= e(__('form_edit.allowed_formats')) ?>" data-fb-file-accept>
                         <?php foreach ($filePresets as $val => $lbl): ?>
                             <option value="<?= e($val) ?>" <?= $fileAccept === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
                 <label class="pp-fb-control">
-                    <span>Tamaño máximo</span>
-                    <input type="number" name="fields[<?= $i ?>][file_max_mb]" value="<?= e((string) max(1, min(10, $fileMaxMb))) ?>" min="1" max="10" step="1" aria-label="Tamaño máximo en MB" placeholder="MB">
+                    <span><?= e(__('form_edit.max_size')) ?></span>
+                    <input type="number" name="fields[<?= $i ?>][file_max_mb]" value="<?= e((string) max(1, min(10, $fileMaxMb))) ?>" min="1" max="10" step="1" aria-label="<?= e(__('form_edit.max_size_mb')) ?>" placeholder="MB">
                 </label>
                 <label class="pp-fb-control pp-fb-control--wide" data-fb-file-custom-wrap <?= $fileAccept === 'custom' ? '' : 'hidden' ?>>
-                    <span>Extensiones personalizadas</span>
+                    <span><?= e(__('form_edit.custom_ext')) ?></span>
                     <input type="text" name="fields[<?= $i ?>][file_custom_ext]" value="<?= e($fileCustomExt) ?>" placeholder="pdf,jpg,png" data-fb-file-custom>
                 </label>
             </div>
@@ -150,7 +150,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         var fileCustomWrap = row.querySelector('[data-fb-file-custom-wrap]');
         var drag = row.querySelector('.pp-fb-row__drag');
         function syncSummary() {
-            if (title) title.textContent = (label && label.value.trim()) ? label.value.trim() : 'Campo sin título';
+            if (title) title.textContent = (label && label.value.trim()) ? label.value.trim() : pp.t('js.form_edit.untitled_field');
             if (typeLabel) typeLabel.textContent = selectedText(type) || 'Texto';
             if (requiredLabel) requiredLabel.textContent = requiredInput && requiredInput.checked ? 'Obligatorio' : 'Opcional';
         }
@@ -283,10 +283,10 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             if (desc.length < 5) { descIn.focus(); return; }
             designBtn.disabled = true;
             designStatus.hidden = false; designStatus.classList.remove('is-error');
-            designStatus.textContent = 'Generando el formulario…';
+            designStatus.textContent = pp.t('js.form_edit.generating');
             runAction('design_form', { description: desc })
                 .then(function (res) {
-                    if (!res || !res.ok || !res.data) throw new Error((res && res.error) || 'No se pudo generar');
+                    if (!res || !res.ok || !res.data) throw new Error((res && res.error) || pp.t('js.form_edit.generate_failed'));
                     var d = res.data;
                     setVal('pp-f-heading', d.heading);
                     setVal('pp-f-desc', d.description);
@@ -302,11 +302,11 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
                         // Si la IA propone autorrespuesta, la dejamos activada y visible.
                         if (arToggle && !arToggle.checked) { arToggle.checked = true; arFields.hidden = false; }
                     }
-                    designStatus.textContent = 'Listo. Revísalo y ajústalo a tu gusto.';
+                    designStatus.textContent = pp.t('js.form_edit.generated_ok');
                 })
                 .catch(function (e) {
                     designStatus.classList.add('is-error');
-                    designStatus.textContent = 'No se pudo generar: ' + e.message;
+                    designStatus.textContent = pp.t('js.form_edit.generate_error', { error: e.message });
                 })
                 .finally(function () { designBtn.disabled = false; });
         });
@@ -318,9 +318,10 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             var heading = (document.getElementById('pp-f-heading').value || '').trim();
             var labels = Array.prototype.map.call(list.querySelectorAll('[data-fb-label]'), function (i) { return i.value; })
                 .filter(function (v) { return v; });
+            // i18n-ignore: resumen que viaja a la IA, no se pinta en pantalla.
             var summary = 'Título: ' + heading + '\nCampos: ' + labels.join(', ');
             arBtn.disabled = true;
-            var prev = arBtn.textContent; arBtn.textContent = 'Redactando…';
+            var prev = arBtn.textContent; arBtn.textContent = pp.t('js.form_edit.drafting');
             runAction('draft_form_autoresponder', { form_summary: summary })
                 .then(function (res) {
                     if (!res || !res.ok || !res.data) throw new Error('error');
@@ -339,46 +340,107 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
 <div class="pp-forms-wrap pp-forms-wrap--editor">
 <div class="pp-page-header">
     <div>
-        <a class="pp-back-link" href="<?= e(base_url('admin/formularios')) ?>">← Formularios</a>
-        <h2>Editar formulario</h2>
+        <a class="pp-back-link" href="<?= e(base_url('admin/formularios')) ?>">← <?= e(__('forms.title')) ?></a>
+        <h2><?= e(__('form_edit.title')) ?></h2>
     </div>
 </div>
 
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 <?php if (!empty($errors)): ?>
     <div class="pp-alert pp-alert--error">
-        <strong>Revisa lo siguiente:</strong>
+        <strong><?= e(__('settings_ai.check_errors')) ?></strong>
         <ul><?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?></ul>
     </div>
 <?php endif; ?>
+
+<?php
+// FORMS-LANG T5/T8 — idiomas del formulario. Se enseña siempre: aunque el
+// sitio tenga un solo idioma, un formulario heredado puede estar en otro
+// (webs creadas antes de esto: nacían en castellano pasara lo que pasara).
+$baseLang    = $baseLang    ?? \App\Services\LanguageService::DEFAULT;
+$primaryLang = $primaryLang ?? $baseLang;
+$siteLangs   = $siteLangs   ?? [$primaryLang];
+$translated  = $translated  ?? [];
+$langLabels  = $langLabels  ?? \App\Services\LanguageService::LANGUAGES;
+$pendingLangs = array_values(array_filter(
+    $siteLangs,
+    fn (string $code): bool => $code !== $baseLang && !in_array($code, $translated, true)
+));
+$baseIsWrong = $baseLang !== $primaryLang;
+?>
+<section class="pp-form-langs<?= $baseIsWrong ? ' is-warning' : '' ?>">
+    <div class="pp-form-langs__head">
+        <h3><?= e(__('form_edit.languages')) ?></h3>
+        <p>
+            <?= __('form_edit.written_in.html', ['idioma' => '<strong>' . e($langLabels[$baseLang] ?? $baseLang) . '</strong>']) ?>
+            <?php if ($baseIsWrong): ?>
+                <?= __('form_edit.wrong_base.html', ['idioma' => '<strong>' . e($langLabels[$primaryLang] ?? $primaryLang) . '</strong>']) ?>
+            <?php elseif (count($siteLangs) > 1): ?>
+                <?= e(__('form_edit.shared_inbox')) ?>
+            <?php endif; ?>
+        </p>
+    </div>
+    <div class="pp-form-langs__list">
+        <?php foreach ($siteLangs as $code): ?>
+            <?php
+            $isBase = $code === $baseLang;
+            $isDone = in_array($code, $translated, true);
+            $state  = $isBase ? 'base' : ($isDone ? 'done' : 'pending');
+            $stateLabel = $isBase ? __('form_edit.state_base') : ($isDone ? __('form_edit.state_done') : __('form_edit.state_pending'));
+            ?>
+            <div class="pp-form-lang pp-form-lang--<?= e($state) ?>">
+                <div>
+                    <strong><?= e($langLabels[$code] ?? $code) ?></strong>
+                    <small><?= e($stateLabel) ?></small>
+                </div>
+                <?php if (!$isBase): ?>
+                <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id . '/translate')) ?>">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="lang" value="<?= e($code) ?>">
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">
+                        <?php if ($code === $primaryLang): ?><?= e(__('form_edit.translate_to', ['idioma' => $langLabels[$code] ?? $code])) ?>
+                        <?php elseif ($isDone): ?><?= e(__('form_edit.retranslate')) ?>
+                        <?php else: ?><?= e(__('form_edit.translate_ai')) ?><?php endif; ?>
+                    </button>
+                </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php if ($pendingLangs !== [] && !$baseIsWrong): ?>
+    <p class="pp-form-langs__note">
+        <?= e(__('form_edit.untranslated_note', ['idioma' => $langLabels[$baseLang] ?? $baseLang])) ?>
+    </p>
+    <?php endif; ?>
+</section>
 
 <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id)) ?>" class="pp-form" id="pp-form-editor" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
     <section class="pp-ai-config-panel pp-form-ai-box">
-        <div class="pp-ai-section-head"><div><h3>✨ Crear con IA</h3><p>Describe el formulario que necesitas y la IA propone los campos y la autorrespuesta. Podrás ajustar todo después.</p></div></div>
+        <div class="pp-ai-section-head"><div><h3>✨ <?= e(__('form_edit.ai_create')) ?></h3><p><?= e(__('form_edit.ai_create_help')) ?></p></div></div>
         <div class="pp-form-ai-row">
             <input type="text" id="pp-ai-desc" maxlength="300"
-                   placeholder="Ej: inscripción a un curso con nombre, email, teléfono y nivel de experiencia">
-            <button type="button" class="pp-btn pp-btn--secondary" id="pp-ai-design">Generar</button>
+                   placeholder="<?= e(__('form_edit.ai_placeholder')) ?>">
+            <button type="button" class="pp-btn pp-btn--secondary" id="pp-ai-design"><?= e(__('form_edit.generate')) ?></button>
         </div>
         <small id="pp-ai-design-status" class="pp-design-hint" hidden></small>
     </section>
 
     <section class="pp-ai-config-panel">
-        <div class="pp-ai-section-head"><div><h3>Cabecera</h3><p>Lo que ve el visitante encima del formulario.</p></div></div>
+        <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.header')) ?></h3><p><?= e(__('form_edit.header_help')) ?></p></div></div>
         <div class="pp-form-group">
-            <label for="pp-f-heading">Título</label>
+            <label for="pp-f-heading"><?= e(__('table.title')) ?></label>
             <input type="text" id="pp-f-heading" name="heading" maxlength="160" required value="<?= e((string) ($form['heading'] ?? '')) ?>" placeholder="Contacta con nosotros">
         </div>
         <div class="pp-form-group">
-            <label for="pp-f-desc">Descripción <span class="pp-ai-optional-tag">opcional</span></label>
-            <textarea id="pp-f-desc" name="description" rows="2" maxlength="500" placeholder="Una línea que invite a escribir."><?= e((string) ($form['description'] ?? '')) ?></textarea>
+            <label for="pp-f-desc"><?= e(__('form_edit.description')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></label>
+            <textarea id="pp-f-desc" name="description" rows="2" maxlength="500" placeholder="<?= e(__('form_edit.description_placeholder')) ?>"><?= e((string) ($form['description'] ?? '')) ?></textarea>
         </div>
     </section>
 
     <section class="pp-ai-config-panel">
-        <div class="pp-ai-section-head"><div><h3>Campos</h3><p>Los datos que pides. Arrastra para reordenar, o quita los que no necesites.</p></div></div>
+        <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.fields')) ?></h3><p><?= e(__('form_edit.fields_help')) ?></p></div></div>
         <div id="pp-fb-list" class="pp-fb-list">
             <?php if ($fields === []): ?>
                 <?= $renderFieldRow(0, ['label' => '', 'field_type' => 'text', 'required' => '0']) ?>
@@ -386,78 +448,78 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
                 <?= $renderFieldRow((int) $i, is_array($f) ? $f : []) ?>
             <?php endforeach; endif; ?>
         </div>
-        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-fb-add">+ Añadir campo</button>
+        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" id="pp-fb-add"><?= e(__('form_edit.add_field')) ?></button>
     </section>
 
     <section class="pp-ai-config-panel">
-        <div class="pp-ai-section-head"><div><h3>Al enviarse</h3><p>Qué pasa cuando alguien completa el formulario.</p></div></div>
+        <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.on_submit')) ?></h3><p><?= e(__('form_edit.on_submit_help')) ?></p></div></div>
         <div class="pp-form-grid-2">
             <div class="pp-form-group">
-                <label for="pp-f-submit">Texto del botón</label>
+                <label for="pp-f-submit"><?= e(__('form_edit.button_text')) ?></label>
                 <input type="text" id="pp-f-submit" name="submit_text" maxlength="60" value="<?= e((string) ($form['submit_text'] ?? 'Enviar')) ?>" placeholder="Enviar">
             </div>
             <div class="pp-form-group">
-                <label for="pp-f-notify">Avisar a este email</label>
+                <label for="pp-f-notify"><?= e(__('form_edit.notify_email')) ?></label>
                 <input type="email" id="pp-f-notify" name="notify_email" maxlength="255" value="<?= e((string) ($form['notify_email'] ?? '')) ?>" placeholder="Por defecto, el del sitio">
-                <small>A dónde llega el aviso con cada respuesta. Si lo dejas vacío, usamos el del sitio.</small>
+                <small><?= e(__('form_edit.notify_help')) ?></small>
             </div>
         </div>
         <div class="pp-form-group">
-            <label for="pp-f-success">Mensaje de éxito</label>
+            <label for="pp-f-success"><?= e(__('form_edit.success_message')) ?></label>
             <input type="text" id="pp-f-success" name="success_message" maxlength="240" value="<?= e((string) ($form['success_message'] ?? '')) ?>" placeholder="Gracias, te contactaremos pronto.">
-            <small>Lo que ve el visitante tras enviar.</small>
+            <small><?= e(__('form_edit.success_help')) ?></small>
         </div>
     </section>
 
     <section class="pp-ai-config-panel">
-        <div class="pp-ai-section-head"><div><h3>Autorrespuesta al visitante <span class="pp-ai-optional-tag">opcional</span></h3><p>Un correo automático de "te hemos recibido". Necesita un campo de tipo Email en el formulario.</p></div></div>
+        <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.autoresponder')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></h3><p>Un correo automático de "te hemos recibido". Necesita un campo de tipo Email en el formulario.</p></div></div>
         <div class="pp-form-group pp-ai-test-row">
             <label class="pp-checkbox-label">
                 <input type="checkbox" name="autoresponder_enabled" value="1" id="pp-f-ar-enabled" <?= $arEnabled ? 'checked' : '' ?>>
-                Enviar autorrespuesta automática
+                <?= e(__('form_edit.send_autoresponder')) ?>
             </label>
         </div>
         <div id="pp-ar-fields" <?= $arEnabled ? '' : 'hidden' ?>>
             <div class="pp-form-group">
-                <label for="pp-f-ar-subject">Asunto</label>
+                <label for="pp-f-ar-subject"><?= e(__('form_edit.subject')) ?></label>
                 <input type="text" id="pp-f-ar-subject" name="autoresponder_subject" maxlength="200" value="<?= e((string) ($form['autoresponder_subject'] ?? '')) ?>" placeholder="Hemos recibido tu mensaje">
             </div>
             <div class="pp-form-group">
                 <label for="pp-f-ar-body">Mensaje
-                    <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" id="pp-ai-autoresp" style="float:right;">✨ Redáctalo con IA</button>
+                    <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" id="pp-ai-autoresp" style="float:right;">✨ <?= e(__('form_edit.draft_ai')) ?></button>
                 </label>
                 <textarea id="pp-f-ar-body" name="autoresponder_body" rows="6" maxlength="4000" placeholder="Hola {{nombre}}: gracias por escribirnos…"><?= e((string) ($form['autoresponder_body'] ?? '')) ?></textarea>
-                <small>Puedes usar <code>{{nombre}}</code> y <code>{{sitio}}</code>: se sustituyen por los datos reales al enviar.</small>
+                <small><?= __('form_edit.tokens_help.html') ?></small>
             </div>
         </div>
     </section>
 
     <details class="pp-ai-config-panel pp-forms-legal">
-        <summary><strong>Privacidad (RGPD)</strong> · ajustes legales del formulario</summary>
+        <summary><strong><?= e(__('form_edit.privacy')) ?></strong> · <?= e(__('form_edit.privacy_sub')) ?></summary>
         <div class="pp-form-group">
-            <label for="pp-f-lawful">Base legal del tratamiento</label>
+            <label for="pp-f-lawful"><?= e(__('form_edit.lawful_basis')) ?></label>
             <select id="pp-f-lawful" name="lawful_basis">
-                <option value="legitimate_interest" <?= $lawful === 'legitimate_interest' ? 'selected' : '' ?>>Interés legítimo (atender tu consulta)</option>
-                <option value="consent" <?= $lawful === 'consent' ? 'selected' : '' ?>>Consentimiento explícito</option>
-                <option value="contract" <?= $lawful === 'contract' ? 'selected' : '' ?>>Ejecución de un contrato o precontrato</option>
+                <option value="legitimate_interest" <?= $lawful === 'legitimate_interest' ? 'selected' : '' ?>><?= e(__('form_edit.lawful.legitimate')) ?></option>
+                <option value="consent" <?= $lawful === 'consent' ? 'selected' : '' ?>><?= e(__('form_edit.lawful.consent')) ?></option>
+                <option value="contract" <?= $lawful === 'contract' ? 'selected' : '' ?>><?= e(__('form_edit.lawful.contract')) ?></option>
             </select>
         </div>
         <div class="pp-form-group">
-            <label for="pp-f-retention">Plazo de conservación</label>
-            <input type="text" id="pp-f-retention" name="retention_period" maxlength="160" value="<?= e((string) ($form['retention_period'] ?? '')) ?>" placeholder="12 meses tras la última comunicación">
+            <label for="pp-f-retention"><?= e(__('form_edit.retention')) ?></label>
+            <input type="text" id="pp-f-retention" name="retention_period" maxlength="160" value="<?= e((string) ($form['retention_period'] ?? '')) ?>" placeholder="<?= e(__('form_edit.retention_placeholder')) ?>">
         </div>
         <div class="pp-form-group pp-ai-test-row">
             <label class="pp-checkbox-label">
                 <input type="checkbox" name="marketing_opt_in" value="1" <?= (string) ($form['marketing_opt_in'] ?? '0') === '1' ? 'checked' : '' ?>>
-                Pedir consentimiento de marketing por separado
+                <?= e(__('form_edit.marketing_optin')) ?>
             </label>
-            <small>Para usar el email en newsletter u ofertas: aparece una casilla aparte, no premarcada.</small>
+            <small><?= e(__('form_edit.marketing_help')) ?></small>
         </div>
     </details>
 
     <div class="pp-form-actions">
-        <button type="submit" class="pp-btn pp-btn--primary"><span class="pp-icon pp-icon--check"></span> Guardar</button>
-        <a href="<?= e(base_url('admin/formularios')) ?>" class="pp-btn pp-btn--ghost">Cancelar</a>
+        <button type="submit" class="pp-btn pp-btn--primary"><span class="pp-icon pp-icon--check"></span> <?= e(__('common.save')) ?></button>
+        <a href="<?= e(base_url('admin/formularios')) ?>" class="pp-btn pp-btn--ghost"><?= e(__('common.cancel')) ?></a>
     </div>
 </form>
 </div>

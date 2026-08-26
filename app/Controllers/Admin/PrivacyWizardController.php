@@ -105,7 +105,7 @@ class PrivacyWizardController
 
         // Precondición fallida: faltan datos del responsable → volver al paso 1.
         if (!$result['ok'] && !isset($result['results'])) {
-            Session::flash('error', 'Antes de generar tus páginas legales completa los datos de tu empresa.');
+            Session::flash('error', __('priv.err.wizard_data'));
             Response::redirect(base_url('admin/privacy/wizard?step=1'));
         }
 
@@ -120,9 +120,11 @@ class PrivacyWizardController
                     $failedTitles[] = $label;
                 }
             }
-            $msg = 'Se generaron ' . $generated . ' de ' . ($generated + $failed)
-                 . ' páginas. Fallaron: ' . implode(' · ', $failedTitles)
-                 . '. Pulsa de nuevo para reintentar.';
+            $msg = __('priv.err.partial_wizard', [
+                'hechas' => (string) $generated,
+                'total'  => (string) ($generated + $failed),
+                'fallos' => implode(' · ', $failedTitles),
+            ]);
             Session::flash('error', $msg);
             Response::redirect(base_url('admin/privacy/wizard?step=3'));
         }
@@ -151,7 +153,7 @@ class PrivacyWizardController
         if ($missing !== []) {
             Response::json([
                 'ok'      => false,
-                'error'   => 'Faltan páginas por generar: ' . implode(' · ', $missing),
+                'error'   => __('priv.err.missing_pages', ['paginas' => implode(' · ', $missing)]),
                 'missing' => $missing,
             ], 409);
         }
@@ -187,8 +189,8 @@ class PrivacyWizardController
             'legalErrors'        => $legalErrors,
             'legalPagesState'    => PrivacyController::loadLegalPagesState($siteId),
             'legalTypes'         => LegalPageGenerator::typesFor($siteId),
-            'trackingCatalog'    => TrackingCatalog::services(),
-            'trackingCategories' => TrackingCatalog::CATEGORIES,
+            'trackingCatalog'    => TrackingCatalog::servicesForView(),
+            'trackingCategories' => TrackingCatalog::categoriesForView(),
             'formsList'          => PrivacyController::loadFormsList($siteId),
             'csrf'               => CSRF::token(),
         ]);

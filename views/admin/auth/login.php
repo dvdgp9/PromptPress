@@ -6,11 +6,11 @@
  * @var string $csrf
  */
 ?><!DOCTYPE html>
-<html lang="es">
+<html lang="<?= e(\App\Services\AdminI18n::htmlLang()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar sesión — PromptPress</title>
+    <title><?= e(__('auth.title')) ?> — PromptPress</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..900&family=Geist+Mono:wght@400..700&display=swap">
@@ -25,7 +25,7 @@
                 <h1>PromptPress</h1>
             </div>
 
-            <p class="pp-login__subtitle">Inicia sesión para acceder al panel</p>
+            <p class="pp-login__subtitle"><?= e(__('auth.subtitle')) ?></p>
 
             <?php if (!empty($error)): ?>
             <div class="pp-alert pp-alert--error"><?= e($error) ?></div>
@@ -41,7 +41,7 @@
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
                 <div class="pp-form-group">
-                    <label for="identifier">Usuario o email</label>
+                    <label for="identifier"><?= e(__('auth.identifier')) ?></label>
                     <input type="text" id="identifier" name="identifier"
                            value="<?= e($identifier) ?>"
                            autocomplete="username"
@@ -49,13 +49,13 @@
                 </div>
 
                 <div class="pp-form-group">
-                    <label for="password">Contraseña</label>
+                    <label for="password"><?= e(__('auth.password')) ?></label>
                     <input type="password" id="password" name="password"
                            autocomplete="current-password" required>
                 </div>
 
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--block">
-                    Iniciar sesión
+                    <?= e(__('auth.submit')) ?>
                 </button>
             </form>
 

@@ -7,7 +7,7 @@ namespace App\Services\AI;
 /**
  * Precios estimados por modelo en USD por 1M tokens.
  *
- * Fuente: pricing pages de cada proveedor a principios de 2025.
+ * Fuente: pricing pages de cada proveedor; revisión parcial 26/08/2026.
  * Son ESTIMACIONES — el proveedor final factura según su propia lista.
  * Para OpenRouter, el precio es el que OpenRouter cobra (markup ~0-5% sobre el base).
  *
@@ -46,7 +46,7 @@ final class AIPricing
             'anthropic/claude-3.5-haiku'                     => [0.80, 4.00],
             'anthropic/claude-3.5-sonnet'                    => [3.00, 15.00],
             'google/gemini-3.1-pro-preview'                  => [2.00, 12.00],
-            'google/gemini-3-flash-preview'                  => [0.50, 3.00],
+            'google/gemini-3.7-flash'                        => [0.375, 1.875],
             'google/gemini-3.1-flash-lite-preview'           => [0.25, 1.50],
             'google/gemini-2.5-pro'                          => [1.25, 10.00],
             'google/gemini-2.5-flash'                        => [0.30, 2.50],

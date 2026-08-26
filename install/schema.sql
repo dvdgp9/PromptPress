@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin','editor') NOT NULL DEFAULT 'admin',
+    -- ADMIN-I18N: idioma del PANEL. NULL = heredar el del sitio.
+    language VARCHAR(5) DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_users_username (username),
@@ -597,6 +599,52 @@ CREATE TABLE IF NOT EXISTS commerce_order_items (
     INDEX idx_ci_order (order_id),
     CONSTRAINT fk_ci_order   FOREIGN KEY (order_id)   REFERENCES commerce_orders(id)   ON DELETE CASCADE,
     CONSTRAINT fk_ci_product FOREIGN KEY (product_id) REFERENCES commerce_products(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Módulo Recursos — ebooks y archivos descargables (FEAT-RESOURCES R1)
+-- Los binarios se guardan protegidos; esta tabla conserva metadatos y acceso.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS resources (
+    id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id           INT UNSIGNED NOT NULL,
+    title             VARCHAR(180) NOT NULL,
+    slug              VARCHAR(180) NOT NULL,
+    description       TEXT NULL,
+    category          VARCHAR(100) NULL,
+    cover_media_id    INT UNSIGNED DEFAULT NULL,
+    file_path         VARCHAR(500) DEFAULT NULL,
+    original_filename VARCHAR(255) DEFAULT NULL,
+    file_mime         VARCHAR(100) DEFAULT NULL,
+    file_size         INT UNSIGNED DEFAULT NULL,
+    access_mode       ENUM('direct','form') NOT NULL DEFAULT 'direct',
+    form_id           INT UNSIGNED DEFAULT NULL,
+    language          VARCHAR(5) NOT NULL,
+    language_scope    ENUM('selected','all') NOT NULL DEFAULT 'selected',
+    translation_group CHAR(36) NOT NULL,
+    status            ENUM('draft','published') NOT NULL DEFAULT 'draft',
+    published_at      DATETIME DEFAULT NULL,
+    created_at        DATETIME NOT NULL,
+    updated_at        DATETIME NOT NULL,
+    UNIQUE KEY uq_resources_slug (site_id, language, slug),
+    INDEX idx_resources_public (site_id, language, status, published_at),
+    INDEX idx_resources_translation (translation_group),
+    INDEX idx_resources_form (form_id),
+    CONSTRAINT fk_resources_site
+        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    CONSTRAINT fk_resources_cover
+        FOREIGN KEY (cover_media_id) REFERENCES media(id) ON DELETE SET NULL,
+    CONSTRAINT fk_resources_form
+        FOREIGN KEY (form_id) REFERENCES page_sections(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS resource_languages (
+    resource_id INT UNSIGNED NOT NULL,
+    language    VARCHAR(5) NOT NULL,
+    PRIMARY KEY (resource_id, language),
+    INDEX idx_resource_languages_language (language, resource_id),
+    CONSTRAINT fk_resource_languages_resource
+        FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

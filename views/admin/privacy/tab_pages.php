@@ -14,9 +14,8 @@ $controllerReady = trim((string) ($controller['legal_name'] ?? '')) !== ''
 
 <?php if (!$controllerReady): ?>
 <div class="pp-privacy-notice pp-privacy-notice--warning">
-    <strong>Antes de generar tus páginas legales:</strong> completa los datos de tu empresa (razón social, dirección y email).
-    Sin ellos, la IA dejaría huecos en los textos.
-    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/privacy?tab=legal')) ?>">Rellenar datos</a>
+    <?= __('privacy.pages.before.html') ?>
+    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/privacy?tab=legal')) ?>"><?= e(__('privacy.pages.fill_data')) ?></a>
 </div>
 <?php endif; ?>
 
@@ -39,11 +38,11 @@ foreach ($legalTypes as $typeKey => $typeInfo) {
           data-done-url="<?= e(base_url('admin/privacy?tab=pages')) ?>">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
         <div class="pp-privacy-bulk__text">
-            <strong><?= $missingCount === $typesCount ? 'Genera tus ' . $typesCount . ' páginas legales de una vez' : 'Regenerar todas las páginas legales' ?></strong>
-            <p>La IA las escribe una a una y verás el progreso aquí mismo. Cualquier hueco quedará marcado con <code>TODO-LEGAL:</code>.</p>
+            <strong><?= e($missingCount === $typesCount ? __('privacy.pages.generate_all', ['n' => $typesCount]) : __('privacy.pages.regenerate_all')) ?></strong>
+            <p><?= __('privacy.pages.bulk_help.html') ?></p>
         </div>
         <button type="submit" class="pp-btn pp-btn--primary">
-            <?= $missingCount > 0 ? 'Generar las ' . $typesCount . ' con IA' : 'Regenerar las ' . $typesCount . ' con IA' ?>
+            <?= e($missingCount > 0 ? __('privacy.pages.generate_n', ['n' => $typesCount]) : __('privacy.pages.regenerate_n', ['n' => $typesCount])) ?>
         </button>
     </form>
 </div>
@@ -60,13 +59,13 @@ foreach ($legalTypes as $typeKey => $typeInfo) {
                 <h3><?= e($info['label']) ?></h3>
                 <?php if ($generated): ?>
                     <p class="pp-privacy-pagecard__meta">
-                        <span class="pp-privacy-pagecard__badge pp-privacy-pagecard__badge--ok">Generada</span>
-                        <span>Última actualización: <?= e(date('d/m/Y H:i', strtotime($existing['updated_at']))) ?></span>
+                        <span class="pp-privacy-pagecard__badge pp-privacy-pagecard__badge--ok"><?= e(__('privacy.pages.generated')) ?></span>
+                        <span><?= e(__('privacy.pages.last_update')) ?>: <?= e(date('d/m/Y H:i', strtotime($existing['updated_at']))) ?></span>
                     </p>
                 <?php else: ?>
                     <p class="pp-privacy-pagecard__meta">
-                        <span class="pp-privacy-pagecard__badge pp-privacy-pagecard__badge--missing">No creada</span>
-                        <span>La IA la generará con tus datos en menos de un minuto.</span>
+                        <span class="pp-privacy-pagecard__badge pp-privacy-pagecard__badge--missing"><?= e(__('privacy.pages.not_created')) ?></span>
+                        <span><?= e(__('privacy.pages.will_generate')) ?></span>
                     </p>
                 <?php endif; ?>
             </div>
@@ -80,12 +79,12 @@ foreach ($legalTypes as $typeKey => $typeInfo) {
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <input type="hidden" name="type" value="<?= e($typeKey) ?>">
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" <?= !$controllerReady ? 'disabled aria-disabled="true"' : '' ?>>
-                    <?= $generated ? 'Regenerar con IA' : 'Generar con IA' ?>
+                    <?= e($generated ? __('privacy.pages.regenerate_ai') : __('privacy.pages.generate_ai')) ?>
                 </button>
             </form>
             <?php if ($generated): ?>
-                <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/posts/' . (int) $existing['id'] . '/edit')) ?>">Editar</a>
-                <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url(ltrim((string) $existing['slug'], '/'))) ?>" target="_blank" rel="noopener">Ver pública ↗</a>
+                <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/posts/' . (int) $existing['id'] . '/edit')) ?>"><?= e(__('common.edit')) ?></a>
+                <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url(ltrim((string) $existing['slug'], '/'))) ?>" target="_blank" rel="noopener"><?= e(__('privacy.pages.see_public')) ?> ↗</a>
             <?php endif; ?>
         </div>
 
@@ -97,6 +96,6 @@ foreach ($legalTypes as $typeKey => $typeInfo) {
 </div>
 
 <div class="pp-privacy-summary__hint" style="margin-top: 24px;">
-    <strong>Cómo funciona</strong>
-    <p>La IA usa los datos que has rellenado en "Datos de tu empresa", los formularios que tengas y los servicios de tracking activos para redactar cada texto. Si algún dato falta, lo deja marcado como <code>TODO-LEGAL:</code> en el texto para que lo revises. Puedes editar la página después como cualquier otra desde el editor.</p>
+    <strong><?= e(__('privacy.how_it_works')) ?></strong>
+    <p><?= __('privacy.pages.how_help.html') ?></p>
 </div>

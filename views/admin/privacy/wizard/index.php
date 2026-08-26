@@ -16,9 +16,9 @@
 \Core\View::extend('admin/layout');
 
 $steps = [
-    1 => ['Datos de tu empresa', 'Quién eres y cómo contactarte.'],
-    2 => ['Cookies y tracking',  'Servicios externos que usas.'],
-    3 => ['Generar páginas',     'La IA escribe los textos legales.'],
+    1 => [__('privacy.tab_legal'),        __('privacy.wizard.step1_help')],
+    2 => [__('privacy.wizard.step2'),     __('privacy.wizard.step2_help')],
+    3 => [__('privacy.wizard.step3'),     __('privacy.wizard.step3_help')],
 ];
 
 // El paso solicitado nunca puede ser mayor que el "current" real (sino el
@@ -27,17 +27,17 @@ $activeStep = min($wizardStep, $wizardCurrentStep);
 if ($wizardDone) $activeStep = 3;
 ?>
 
-<?php \Core\View::start('title'); ?>Asistente de Privacidad<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('privacy.wizard.title')) ?><?php \Core\View::end(); ?>
 <?php \Core\View::start('scripts'); ?>
 <script src="<?= e(base_url('admin/assets/js/privacy-generate.js')) ?>?v=<?= @filemtime(PP_ROOT . '/admin/assets/js/privacy-generate.js') ?: '1' ?>"></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
     <div>
-        <h2>Asistente de Privacidad</h2>
-        <p class="pp-page-header__lead">Cuatro pasos rápidos. La IA escribe tus páginas legales al final.</p>
+        <h2><?= e(__('privacy.wizard.title')) ?></h2>
+        <p class="pp-page-header__lead"><?= e(__('privacy.wizard.intro')) ?></p>
     </div>
-    <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url('admin/privacy?tab=summary')) ?>">Saltar asistente y usar pestañas</a>
+    <a class="pp-btn pp-btn--ghost pp-btn--sm" href="<?= e(base_url('admin/privacy?tab=summary')) ?>"><?= e(__('privacy.wizard.skip')) ?></a>
 </div>
 
 <nav class="pp-wizard__steps" aria-label="Pasos del asistente">

@@ -75,6 +75,8 @@ final class MaintenanceMode
             . 'h1{margin:0 0 12px;font-size:1.35rem}p{margin:0;color:#6b7280;line-height:1.6}'
             . '</style></head><body><div class="box">'
             . '<h1>Volvemos enseguida</h1>'
+            // i18n-ignore: página que ve el VISITANTE mientras dura el update;
+            // su idioma es el del sitio. Su sitio natural es Microcopy.
             . '<p>Estamos aplicando una actualización. En un par de minutos la web estará disponible otra vez.</p>'
             . '</div></body></html>';
     }

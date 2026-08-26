@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\BrandColorExtractor;
+use App\Services\LanguageService;
 use Core\Database;
 
 /**
@@ -59,6 +61,171 @@ final class BrandPaletteService
 
         $data = json_decode($raw, true);
         return is_array($data) ? self::normalize($data) : null;
+    }
+
+    // =====================================================================
+    // DESIGN-MANDA T11 — Materia prima y propuestas.
+    //
+    // Todo esto vivía en `OnboardingController`, así que el editor bueno de
+    // paleta solo existía dentro de un flujo de un solo uso. Al bajarlo aquí,
+    // el paso 2 del onboarding y la pestaña Diseño comparten LÓGICA, no copias.
+    // =====================================================================
+
+    /** Clave de los colores de MARCA (materia prima, no la paleta de la web). */
+    public const BRAND_COLORS_KEY = 'site_brand_palette';
+
+    public const BRAND_COLORS_MAX = 5;
+
+    /**
+     * Colores de marca declarados por el usuario (manual de marca o extraídos
+     * del logo). No son la paleta de la web: son con lo que se deriva.
+     *
+     * @return array<int,string>
+     */
+    public static function brandColors(int $siteId): array
+    {
+        $row = Database::selectOne(
+            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+            [$siteId, self::BRAND_COLORS_KEY]
+        );
+        $list = json_decode((string) ($row['setting_value'] ?? '[]'), true);
+        if (!is_array($list)) return [];
+
+        return self::cleanHexList($list);
+    }
+
+    /** @param array<int,mixed> $colors */
+    public static function saveBrandColors(int $siteId, array $colors): void
+    {
+        Database::execute(
+            'INSERT INTO settings (site_id, setting_key, setting_value, is_encrypted)
+             VALUES (?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_encrypted = 0',
+            [$siteId, self::BRAND_COLORS_KEY, json_encode(self::cleanHexList($colors), JSON_UNESCAPED_SLASHES)]
+        );
+    }
+
+    /**
+     * Normaliza una lista suelta de hex: descarta lo inválido, quita repetidos
+     * y corta al máximo.
+     *
+     * @param array<int,mixed> $raw
+     * @return array<int,string>
+     */
+    public static function cleanHexList(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $value) {
+            $hex = self::hex((string) $value);
+            if ($hex !== null && !in_array($hex, $out, true)) $out[] = $hex;
+            if (count($out) >= self::BRAND_COLORS_MAX) break;
+        }
+        return $out;
+    }
+
+    /**
+     * Colores dominantes de los logos del sitio (claro y oscuro).
+     *
+     * @return array<int,string>
+     */
+    public static function extractFromLogos(int $siteId): array
+    {
+        $colors = [];
+        foreach (['site_logo_path', 'site_logo_dark_path'] as $key) {
+            $row = Database::selectOne(
+                'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+                [$siteId, $key]
+            );
+            $rel = trim((string) ($row['setting_value'] ?? ''));
+            if ($rel === '') continue;
+
+            $path = PP_ROOT . '/' . ltrim($rel, '/');
+            if (!is_file($path)) continue;
+
+            foreach (BrandColorExtractor::fromFile($path) as $hex) {
+                if (!in_array($hex, $colors, true)) $colors[] = $hex;
+            }
+        }
+        return array_slice($colors, 0, self::BRAND_COLORS_MAX);
+    }
+
+    /**
+     * Propuestas de paleta para la web a partir de los colores de marca.
+     *
+     * Lo que devuelve el modelo pasa SIEMPRE por el validador de contraste; si
+     * una propuesta no se puede arreglar, no se enseña. Si la IA falla entera,
+     * se cae a las recetas curadas para no dejar al usuario sin nada que elegir.
+     *
+     * @param array<int,string> $brandColors
+     * @return array{palettes:array<int,array<string,mixed>>,model:string,fallback:bool,error:string}
+     */
+    public static function propose(int $siteId, array $brandColors, string $styleHint = ''): array
+    {
+        $proposals = [];
+        $model = '';
+        $error = '';
+
+        try {
+            $result = \App\Services\AI\AIActionRunner::run(\App\Services\AI\Actions::GENERATE_SITE_PALETTE, [
+                'brand_colors'     => implode(', ', $brandColors),
+                'business_context' => self::businessContext($siteId),
+                'language'         => LanguageService::promptLabelFor($siteId),
+                'design_language'  => $styleHint !== '' ? $styleHint : '(sin referencia)',
+            ], $siteId);
+            $model = (string) ($result['model'] ?? '');
+            $proposals = self::normalizeProposals((array) ($result['data'] ?? []));
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        $fallback = false;
+        if ($proposals === []) {
+            $proposals = self::fallbackProposals($brandColors);
+            $fallback = true;
+        }
+
+        return ['palettes' => $proposals, 'model' => $model, 'fallback' => $fallback, 'error' => $error];
+    }
+
+    /**
+     * @param array<string,mixed> $data respuesta cruda del modelo
+     * @return array<int,array<string,mixed>>
+     */
+    public static function normalizeProposals(array $data): array
+    {
+        $list = $data['palettes'] ?? [];
+        if (!is_array($list)) return [];
+
+        $out = [];
+        foreach ($list as $item) {
+            if (!is_array($item)) continue;
+            $tokens = self::enforceContrast((array) ($item['tokens'] ?? []));
+            if ($tokens === null) continue;   // irreparable: fuera
+            $out[] = [
+                'name'      => mb_substr(trim((string) ($item['name'] ?? 'Paleta')), 0, 60) ?: 'Paleta',
+                'rationale' => mb_substr(trim((string) ($item['rationale'] ?? '')), 0, 240),
+                'tokens'    => $tokens,
+                'source'    => 'ai',
+            ];
+            if (count($out) >= 3) break;
+        }
+        return $out;
+    }
+
+    /** Resumen corto del negocio para que la paleta no sea un ejercicio abstracto. */
+    private static function businessContext(int $siteId): string
+    {
+        $rows = Database::select(
+            'SELECT field_key, field_value FROM site_memory WHERE site_id = ? AND field_key IN (?, ?, ?)',
+            [$siteId, 'business_description', 'target_audience', 'tone_of_voice']
+        );
+        $parts = [];
+        foreach ($rows as $row) {
+            $value = trim((string) ($row['field_value'] ?? ''));
+            if ($value !== '') $parts[] = $row['field_key'] . ': ' . mb_substr($value, 0, 400);
+        }
+        // i18n-ignore: relleno del prompt cuando no hay datos.
+        return $parts === [] ? '(sin datos; usa un registro sobrio y profesional)' : implode("\n", $parts);
     }
 
     /** @param array<string,string> $tokens */
@@ -167,6 +334,8 @@ final class BrandPaletteService
      * @param array<string,string> $p
      * @return array<int,string> lista de incumplimientos ([] = todo correcto)
      */
+    // i18n-ignore-start: diagnóstico de contraste que solo se registra en el
+    // log y se le pasa a la IA para que corrija la paleta; no se pinta.
     public static function contrastIssues(array $p): array
     {
         $clean = self::normalize($p);
@@ -183,6 +352,42 @@ final class BrandPaletteService
         $add('acento sobre fondo', self::contrast($clean['accent'], $clean['bg']), self::MIN_ACCENT_ON_BG);
         $add('etiqueta sobre acento', self::bestLabelContrast($clean['accent']), self::MIN_LABEL_ON_ACCENT);
         return $issues;
+    }
+
+    // i18n-ignore-end
+
+    /**
+     * DESIGN-MANDA T3/T5 — El mismo diagnóstico que `contrastIssues()`, pero en
+     * DATOS en vez de en frases: el panel está traducido (ADMIN-I18N) y necesita
+     * poner cada incumplimiento en el idioma del gestor.
+     *
+     * `contrastIssues()` se queda como está: sus frases viajan al log y a la IA,
+     * que es carga, no interfaz.
+     *
+     * @param array<string,string> $p
+     * @return array<int,array{pair:string,value:float,min:float}>
+     */
+    public static function contrastReport(array $p): array
+    {
+        $clean = self::normalize($p);
+        if ($clean === null) return [];
+
+        $checks = [
+            ['text_on_bg',      self::contrast($clean['text'], $clean['bg']),        self::MIN_TEXT],
+            ['text_on_surface', self::contrast($clean['text'], $clean['surface']),   self::MIN_TEXT],
+            ['muted_on_bg',     self::contrast($clean['muted'], $clean['bg']),       self::MIN_MUTED],
+            ['line_on_bg',      self::contrast($clean['line'], $clean['bg']),        self::MIN_LINE],
+            ['accent_on_bg',    self::contrast($clean['accent'], $clean['bg']),      self::MIN_ACCENT_ON_BG],
+            ['label_on_accent', self::bestLabelContrast($clean['accent']),           self::MIN_LABEL_ON_ACCENT],
+        ];
+
+        $out = [];
+        foreach ($checks as [$pair, $value, $min]) {
+            if ($value < $min) {
+                $out[] = ['pair' => $pair, 'value' => round($value, 2), 'min' => $min];
+            }
+        }
+        return $out;
     }
 
     /** Color de texto legible sobre un fondo: blanco o negro, el que gane. */

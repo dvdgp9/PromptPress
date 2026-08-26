@@ -78,19 +78,18 @@ final class TranslationJobs
         if (!LanguageService::isActive($siteId, $targetLang)) {
             return [
                 'ok' => false,
-                'message' => LanguageService::label($targetLang) . ' no está activo en esta web. '
-                    . 'Puedes activarlo en Ajustes.',
+                'message' => __('tr.err.inactive_language', ['idioma' => LanguageService::label($targetLang)]),
             ];
         }
         if ($targetLang === LanguageService::primaryFor($siteId)) {
-            return ['ok' => false, 'message' => 'Ese ya es el idioma principal de la web.'];
+            return ['ok' => false, 'message' => __('tr.err.is_primary')];
         }
 
         $pages = self::candidates($siteId, $targetLang, $onlyPageIds);
         if ($pages === []) {
             return [
                 'ok' => false,
-                'message' => 'Todas tus páginas ya tienen versión en ' . LanguageService::label($targetLang) . '.',
+                'message' => __('tr.err.all_translated', ['idioma' => LanguageService::label($targetLang)]),
             ];
         }
 
@@ -126,7 +125,7 @@ final class TranslationJobs
             [$jobId, $siteId]
         );
         if (!$job) {
-            return ['ok' => false, 'error' => 'No hemos encontrado ese trabajo de traducción.'];
+            return ['ok' => false, 'error' => __('tr.err.job_not_found')];
         }
         if ($job['status'] === 'done') {
             return ['ok' => true, 'job' => self::jobState($jobId, $siteId)];
@@ -154,7 +153,7 @@ final class TranslationJobs
 
         try {
             if ($page === null) {
-                throw new \RuntimeException('Esta página ya no existe.');
+                throw new \RuntimeException(__('tr.err.page_gone'));
             }
 
             // Puede haberse traducido entre medias (a mano, o en otro trabajo).
@@ -182,7 +181,7 @@ final class TranslationJobs
             error_log('[translation job] job=' . $jobId . ' item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
             Database::execute(
                 'UPDATE translation_job_items SET status = "failed", error = ? WHERE id = ?',
-                ['No hemos podido traducir esta página. No se ha creado nada para ella.', $item['id']]
+                [__('tr.err.page_failed_nothing'), $item['id']]
             );
         }
 
@@ -267,7 +266,7 @@ final class TranslationJobs
                     : PageTranslator::translateSections($siteId, $page, $targetLang);
 
                 if (!($translation['ok'] ?? false)) {
-                    return ['ok' => false, 'message' => (string) ($translation['message'] ?? 'No se pudo traducir.')];
+                    return ['ok' => false, 'message' => (string) ($translation['message'] ?? __('tr.err.cannot_translate'))];
                 }
 
                 $saved = $isCanvas
@@ -275,7 +274,7 @@ final class TranslationJobs
                     : TranslationWriter::createSections($siteId, $page, $targetLang, $translation);
 
                 if (!($saved['ok'] ?? false)) {
-                    return ['ok' => false, 'message' => (string) ($saved['message'] ?? 'No se pudo guardar.')];
+                    return ['ok' => false, 'message' => (string) ($saved['message'] ?? __('tr.err.cannot_save'))];
                 }
                 return ['ok' => true, 'page_id' => (int) $saved['page_id']];
             } catch (AIException $e) {
@@ -284,14 +283,13 @@ final class TranslationJobs
                 if (!$transient || $attempt === 2) {
                     return [
                         'ok' => false,
-                        'message' => 'La traducción de esta página no llegó a completarse. '
-                            . 'No se ha creado nada para ella; puedes traducirla suelta más tarde.',
+                        'message' => __('tr.err.page_incomplete'),
                     ];
                 }
                 sleep(2);
             }
         }
 
-        return ['ok' => false, 'message' => 'No hemos podido traducir esta página.'];
+        return ['ok' => false, 'message' => __('tr.err.page_failed')];
     }
 }

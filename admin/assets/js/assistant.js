@@ -11,6 +11,9 @@
     const cfg = window.PPA || {};
     const thread = document.getElementById('ppa-thread');
     const input = document.getElementById('ppa-input');
+    const richInput = document.getElementById('ppa-rich-input');
+    const richStatus = document.getElementById('ppa-rich-status');
+    const pastePlainBtn = document.getElementById('ppa-paste-plain');
     const sendBtn = document.getElementById('ppa-send');
     const attachBtn = document.getElementById('ppa-attach-btn');
     const fileInput = document.getElementById('ppa-file-input');
@@ -20,10 +23,74 @@
     const attachmentToggle = document.getElementById('ppa-attachment-toggle');
     const attachmentRemove = document.getElementById('ppa-attachment-remove');
     const attachmentPreview = document.getElementById('ppa-attachment-preview');
+    const mediaPicker = document.getElementById('ppa-media-picker');
+    const mediaPickerClose = document.getElementById('ppa-media-picker-close');
+    const mediaPickerStatus = document.getElementById('ppa-media-picker-status');
+    const mediaPickerGrid = document.getElementById('ppa-media-picker-grid');
 
     /** Documento extraído pendiente de enviar: {filename, chars, truncated, text} | null */
     let attachedDoc = null;
     let extracting = false;
+    let richComposer = null;
+    let mediaTargetId = null;
+    let mediaPickerOpener = null;
+
+    function closeMediaPicker() {
+        if (!mediaPicker) return;
+        mediaPicker.hidden = true;
+        mediaTargetId = null;
+        if (mediaPickerOpener) mediaPickerOpener.focus();
+        mediaPickerOpener = null;
+    }
+
+    async function openMediaPicker(imageId) {
+        if (!mediaPicker || !mediaPickerGrid || !mediaPickerStatus) return;
+        mediaTargetId = imageId;
+        mediaPickerOpener = document.activeElement;
+        mediaPicker.hidden = false;
+        mediaPickerGrid.replaceChildren();
+        mediaPickerStatus.textContent = pp.t('js.as.media_loading');
+        mediaPicker.setAttribute('aria-busy', 'true');
+        mediaPickerClose.focus();
+        try {
+            const response = await fetch(cfg.mediaLibraryUrl, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok || !body.ok) throw new Error(body.error || pp.t('js.as.media_load_failed'));
+            const items = (body.items || [])
+                .map((item) => window.PPARichComposer.normalizeMediaItem(item))
+                .filter(Boolean);
+            mediaPickerStatus.textContent = items.length > 0
+                ? pp.t('js.as.media_choose_one')
+                : pp.t('js.as.media_empty');
+            items.forEach((item) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'ppa-media-picker__item';
+                button.setAttribute('aria-label', item.alt || item.name || pp.t('js.as.media_image'));
+                const image = document.createElement('img');
+                image.src = item.url;
+                image.alt = '';
+                image.loading = 'lazy';
+                button.appendChild(image);
+                const label = document.createElement('span');
+                label.textContent = item.alt || item.name || pp.t('js.as.media_image');
+                button.appendChild(label);
+                button.addEventListener('click', () => {
+                    if (richComposer && mediaTargetId && richComposer.useMedia(mediaTargetId, item)) {
+                        closeMediaPicker();
+                    }
+                });
+                mediaPickerGrid.appendChild(button);
+            });
+        } catch (error) {
+            mediaPickerStatus.textContent = error && error.message ? error.message : pp.t('js.as.media_load_failed');
+        } finally {
+            mediaPicker.removeAttribute('aria-busy');
+        }
+    }
 
     // ------------------------------------------------------------------
     // Hilo de mensajes
@@ -47,7 +114,7 @@
         attachedDoc = doc;
         if (doc) {
             attachmentName.textContent = doc.filename;
-            attachmentMeta.textContent = doc.chars.toLocaleString('es-ES') + ' caracteres extraídos'
+            attachmentMeta.textContent = pp.t('js.as.chars_extracted', { n: doc.chars.toLocaleString() })
                 + (doc.truncated ? ' (recortado)' : '');
             attachment.hidden = false;
         } else {
@@ -60,8 +127,10 @@
     }
 
     function refreshSendState() {
-        const hasContent = input.value.trim() !== '' || attachedDoc !== null;
-        sendBtn.disabled = !hasContent || extracting || planning;
+        const richState = richComposer ? richComposer.state() : null;
+        const hasContent = richState ? !richState.empty : input.value.trim() !== '';
+        const valid = richState ? richState.valid : true;
+        sendBtn.disabled = (!hasContent && attachedDoc === null) || !valid || extracting || planning;
     }
 
     async function extractFile(file) {
@@ -86,7 +155,7 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.ok) {
                 setAttachment(null);
-                addMessage('assistant', data.error || 'No se pudo procesar el documento. Inténtalo de nuevo.', 'ppa-msg--error');
+                addMessage('assistant', data.error || pp.t('js.as.doc_failed'), 'ppa-msg--error');
                 return;
             }
             setAttachment({
@@ -98,7 +167,7 @@
             attachmentPreview.textContent = data.text;
         } catch (err) {
             setAttachment(null);
-            addMessage('assistant', 'Error de red al subir el documento. Inténtalo de nuevo.', 'ppa-msg--error');
+            addMessage('assistant', pp.t('js.as.upload_network'), 'ppa-msg--error');
         } finally {
             extracting = false;
             attachBtn.classList.remove('is-busy');
@@ -109,12 +178,21 @@
     // ------------------------------------------------------------------
     // F5-T3 — Render del plan propuesto
     // ------------------------------------------------------------------
-    const STATUS_META = {
-        aplicar:   { label: 'Se aplicará',      cls: 'ppa-item--ok' },
-        ambiguo:   { label: 'Necesito aclarar', cls: 'ppa-item--ask' },
-        no_viable: { label: 'No viable',        cls: 'ppa-item--no' }
+    const CATEGORY_META = {
+        automatable_now:      { label: pp.t('js.as.cat.automatic'), cls: 'ppa-item--ok' },
+        manual_in_platform:   { label: pp.t('js.as.cat.manual'), cls: 'ppa-item--ask' },
+        needs_input:          { label: pp.t('js.as.cat.input'), cls: 'ppa-item--ask' },
+        requires_development: { label: pp.t('js.as.cat.development'), cls: 'ppa-item--no' },
+        sensitive_review:     { label: pp.t('js.as.cat.sensitive'), cls: 'ppa-item--no' }
     };
     let lastPlanContext = null;
+
+    function itemCategory(it) {
+        if (CATEGORY_META[it.category]) return it.category;
+        if (it.status === 'aplicar') return 'automatable_now';
+        if (it.status === 'ambiguo') return 'needs_input';
+        return 'requires_development';
+    }
 
     function renderPlan(plan) {
         const msg = document.createElement('div');
@@ -131,11 +209,10 @@
         }
 
         const items = plan.items || [];
-        const promoters = [];
-        const order = ['aplicar', 'ambiguo', 'no_viable'];
-        order.forEach((status) => {
-            items.filter((it) => it.status === status).forEach((it) => {
-                const meta = STATUS_META[status];
+        const order = ['automatable_now', 'manual_in_platform', 'needs_input', 'requires_development', 'sensitive_review'];
+        order.forEach((category) => {
+            items.filter((it) => itemCategory(it) === category).forEach((it) => {
+                const meta = CATEGORY_META[category];
                 const card = document.createElement('div');
                 card.className = 'ppa-item ' + meta.cls;
 
@@ -148,45 +225,27 @@
                 const title = document.createElement('span');
                 title.className = 'ppa-item__page';
                 title.textContent = it.page_title
-                    ? it.page_title + (it.section ? ' · sección «' + it.section + '»' : '')
-                    : 'Fuera de las páginas';
+                    ? it.page_title + (it.section ? ' · ' + pp.t('js.as.section_x', { seccion: it.section }) : '')
+                    : pp.t('js.as.outside_pages');
                 head.appendChild(title);
                 card.appendChild(head);
 
                 const body = document.createElement('div');
                 body.className = 'ppa-item__body';
-                body.textContent = status === 'aplicar' ? it.instruction : (it.reason || it.instruction);
+                body.textContent = category === 'automatable_now' ? it.instruction : (it.reason || it.instruction);
                 card.appendChild(body);
 
-                // Una ambigüedad real puede ejecutarse bajo confirmación
-                // expresa del usuario. Antes no había ningún control y una
-                // respuesta "sí, procede" se perdía como petición nueva.
-                if (status === 'ambiguo' && it.page_title && it.instruction) {
-                    const controls = document.createElement('div');
-                    controls.className = 'ppa-plan__foot';
-                    const proceed = document.createElement('button');
-                    proceed.type = 'button';
-                    proceed.className = 'pp-btn pp-btn--secondary';
-                    proceed.textContent = 'Aplicar con esta información';
-                    controls.appendChild(proceed);
-                    card.appendChild(controls);
-
-                    const promote = () => {
-                        if (it.status === 'aplicar') return;
-                        it.status = 'aplicar';
-                        card.classList.remove('ppa-item--ask');
-                        card.classList.add('ppa-item--ok');
-                        badge.textContent = 'Se aplicará';
-                        body.textContent = it.instruction;
-                        controls.remove();
-                    };
-                    proceed.addEventListener('click', () => {
-                        promote();
-                        if (lastPlanContext && lastPlanContext.plan === plan) {
-                            lastPlanContext.refresh();
-                        }
-                    });
-                    promoters.push(promote);
+                if (Array.isArray(it.required_inputs) && it.required_inputs.length > 0) {
+                    const missing = document.createElement('div');
+                    missing.className = 'ppa-item__body';
+                    missing.textContent = pp.t('js.as.missing_data', { datos: it.required_inputs.join(' · ') });
+                    card.appendChild(missing);
+                }
+                if (it.next_action) {
+                    const next = document.createElement('div');
+                    next.className = 'ppa-plan__note';
+                    next.textContent = pp.t('js.as.next_action', { accion: it.next_action });
+                    card.appendChild(next);
                 }
 
                 bubble.appendChild(card);
@@ -195,11 +254,11 @@
 
         if (items.length === 0) {
             const p = document.createElement('p');
-            p.textContent = 'No he identificado ningún cambio concreto que aplicar.';
+            p.textContent = pp.t('js.as.no_changes');
             bubble.appendChild(p);
         }
 
-        const actionable = items.filter((it) => it.status === 'aplicar' || (it.status === 'ambiguo' && it.page_title && it.instruction));
+        const actionable = items.filter((it) => itemCategory(it) === 'automatable_now');
         if (actionable.length > 0) {
             const foot = document.createElement('div');
             foot.className = 'ppa-plan__foot';
@@ -207,31 +266,27 @@
             btn.type = 'button';
             btn.className = 'pp-btn pp-btn--primary ppa-plan__apply';
             const refresh = () => {
-                const applicable = items.filter((it) => it.status === 'aplicar');
+                const applicable = items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
                 btn.disabled = applicable.length === 0;
                 btn.textContent = applicable.length > 0
-                    ? 'Aplicar ' + applicable.length + (applicable.length === 1 ? ' cambio' : ' cambios')
-                    : 'Confirma arriba qué cambios aplicar';
+                    ? pp.t(applicable.length === 1 ? 'js.as.apply_one' : 'js.as.apply_n', { n: applicable.length })
+                    : pp.t('js.as.confirm_above');
             };
             btn.addEventListener('click', () => {
-                const applicable = items.filter((it) => it.status === 'aplicar');
+                const applicable = items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
                 if (applicable.length > 0) applyPlan(plan, applicable, btn);
             });
             foot.appendChild(btn);
             const note = document.createElement('span');
             note.className = 'ppa-plan__note';
-            note.textContent = 'Los cambios quedan como borrador; nada se publica solo.';
+            note.textContent = pp.t('js.asst.draft_note');
             foot.appendChild(note);
             bubble.appendChild(foot);
             refresh();
             lastPlanContext = {
                 plan,
                 button: btn,
-                refresh,
-                promoteAll: () => {
-                    promoters.forEach((promote) => promote());
-                    refresh();
-                }
+                refresh
             };
         } else {
             lastPlanContext = null;
@@ -245,10 +300,10 @@
     // F5-T4/T5 — Ejecución del plan confirmado, con progreso e informe
     // ------------------------------------------------------------------
     const ITEM_STATUS = {
-        pending: { icon: '·', label: 'En cola' },
-        running: { icon: '⏳', label: 'Aplicando…' },
-        done:    { icon: '✓', label: 'Hecho' },
-        failed:  { icon: '✗', label: 'Falló' }
+        pending: { icon: '·', label: pp.t('js.as.queued') },
+        running: { icon: '…', label: pp.t('js.as.applying') },
+        done:    { icon: '✓', label: pp.t('js.as.done') },
+        failed:  { icon: '✗', label: pp.t('js.as.failed') }
     };
 
     function itemLabel(it) {
@@ -340,7 +395,7 @@
             head.className = 'ppa-item__head';
             const badge = document.createElement('span');
             badge.className = 'ppa-item__badge';
-            badge.textContent = 'Falló';
+            badge.textContent = pp.t('js.as.failed');
             head.appendChild(badge);
             const t = document.createElement('span');
             t.className = 'ppa-item__page';
@@ -349,7 +404,7 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || 'Error desconocido.') + ' Tu página no ha cambiado; puedes volver a pedirlo.';
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t('js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
@@ -357,7 +412,7 @@
         if (doneItems.length > 0) {
             const note = document.createElement('p');
             note.className = 'ppa-plan__note';
-            note.textContent = 'Los cambios están guardados como borrador en cada página, con su historial (puedes deshacer). Nada se ha publicado.';
+            note.textContent = pp.t('js.as.saved_note');
             bubble.appendChild(note);
         }
 
@@ -394,7 +449,7 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.ok) {
                 progressMsg.remove();
-                addMessage('assistant', data.error || 'No se pudo iniciar la aplicación de cambios.', 'ppa-msg--error');
+                addMessage('assistant', data.error || pp.t('js.as.cant_start'), 'ppa-msg--error');
                 btn.disabled = false;
                 return;
             }
@@ -409,7 +464,7 @@
                 });
                 const stepData = await stepRes.json().catch(() => ({}));
                 if (!stepRes.ok || !stepData.ok) {
-                    addMessage('assistant', stepData.error || 'La ejecución se interrumpió. Los cambios ya aplicados están guardados.', 'ppa-msg--error');
+                    addMessage('assistant', stepData.error || pp.t('js.as.interrupted'), 'ppa-msg--error');
                     break;
                 }
                 job = stepData.job;
@@ -420,7 +475,7 @@
                 renderReport(job);
             }
         } catch (err) {
-            addMessage('assistant', 'Error de red durante la ejecución. Los cambios ya aplicados están guardados; recarga y revisa las páginas.', 'ppa-msg--error');
+            addMessage('assistant', pp.t('js.as.exec_network'), 'ppa-msg--error');
         } finally {
             applying = false;
         }
@@ -434,25 +489,29 @@
     function isAffirmativeReply(text) {
         const normalized = text.toLocaleLowerCase('es-ES')
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[.,;:!?¿¡]/g, ' ')
+            // i18n-ignore: clase de caracteres de una expresión regular, no es texto.
+        .replace(/[.,;:!?¿¡]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
         return /^(?:si|vale|ok|de acuerdo|adelante|procede|hazlo|aplica|si procede|si adelante|si hazlo)$/.test(normalized);
     }
 
     async function sendRequest() {
-        const text = input.value.trim();
-        if ((text === '' && !attachedDoc) || extracting || planning) return;
+        const text = richComposer ? richComposer.getPlainText() : input.value.trim();
+        const richHtml = richComposer ? richComposer.getRichHtml() : '';
+        const richState = richComposer ? richComposer.state() : null;
+        if ((text === '' && (!richState || richState.images === 0) && !attachedDoc) || extracting || planning) return;
+        if (richState && !richState.valid) return;
 
         // Continuación natural del plan mostrado: una confirmación breve
         // aplica el último plan en vez de pedir a la IA que planifique la frase
         // aislada "sí, procede" (que lógicamente no contiene cambios).
-        if (!attachedDoc && lastPlanContext && isAffirmativeReply(text)) {
+        if (!attachedDoc && (!richState || richState.images === 0) && lastPlanContext && isAffirmativeReply(text)) {
             addMessage('user', text);
-            input.value = '';
+            if (richComposer) richComposer.reset();
+            else input.value = '';
             const context = lastPlanContext;
-            context.promoteAll();
-            const applicable = context.plan.items.filter((it) => it.status === 'aplicar');
+            const applicable = context.plan.items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
             await applyPlan(context.plan, applicable, context.button);
             refreshSendState();
             return;
@@ -460,33 +519,39 @@
 
         let userLabel = text !== '' ? text : 'Aplica los cambios descritos en el documento adjunto.';
         if (attachedDoc) {
-            userLabel += '\n📄 ' + attachedDoc.filename;
+            userLabel += '\n[Documento] ' + attachedDoc.filename;
         }
         addMessage('user', userLabel);
         lastPlanContext = null;
 
         const docText = attachedDoc ? attachedDoc.text : '';
-        input.value = '';
+        if (richComposer) richComposer.reset();
+        else input.value = '';
         setAttachment(null);
 
         planning = true;
         refreshSendState();
-        const thinking = addMessage('assistant', 'Analizando la petición y el mapa del sitio…', 'ppa-msg--thinking');
+        const thinking = addMessage('assistant', pp.t('js.as.analyzing'), 'ppa-msg--thinking');
 
-        const body = new URLSearchParams({ _csrf: cfg.csrf, instruction: text, doc_text: docText });
+        const body = new URLSearchParams({
+            _csrf: cfg.csrf,
+            instruction: text,
+            doc_text: docText,
+            rich_html: richHtml
+        });
         try {
             const res = await fetch(cfg.baseUrl + '/plan', { method: 'POST', body });
             const data = await res.json().catch(() => ({}));
             thinking.closest('.ppa-msg').remove();
             if (!res.ok || !data.ok) {
-                addMessage('assistant', data.error || 'No he podido generar el plan. Inténtalo de nuevo.', 'ppa-msg--error');
+                addMessage('assistant', data.error || pp.t('js.as.plan_failed'), 'ppa-msg--error');
                 return;
             }
             data.plan._request = text !== '' ? text : userLabel;
             renderPlan(data.plan);
         } catch (err) {
             thinking.closest('.ppa-msg').remove();
-            addMessage('assistant', 'Error de red al generar el plan. Inténtalo de nuevo.', 'ppa-msg--error');
+            addMessage('assistant', pp.t('js.as.plan_network'), 'ppa-msg--error');
         } finally {
             planning = false;
             refreshSendState();
@@ -496,6 +561,34 @@
     // ------------------------------------------------------------------
     // Eventos
     // ------------------------------------------------------------------
+    if (window.PPARichComposer && richInput && richStatus) {
+        richComposer = new window.PPARichComposer.Composer({
+            editor: richInput,
+            fallback: input,
+            status: richStatus,
+            maxChars: cfg.richMaxChars,
+            maxImages: cfg.richMaxImages,
+            maxImageBytes: cfg.richMaxImageBytes,
+            csrf: cfg.csrf,
+            uploadUrl: cfg.mediaUploadUrl,
+            t: (key, vars) => pp.t(key, vars),
+            onChooseMedia: openMediaPicker,
+            onChange: refreshSendState
+        }).enhance();
+        richInput.addEventListener('ppa:send', sendRequest);
+        if (pastePlainBtn) pastePlainBtn.addEventListener('click', () => richComposer.armPlainPaste());
+    } else if (pastePlainBtn) {
+        pastePlainBtn.hidden = true;
+    }
+    if (mediaPickerClose) mediaPickerClose.addEventListener('click', closeMediaPicker);
+    if (mediaPicker) {
+        mediaPicker.addEventListener('click', (event) => {
+            if (event.target === mediaPicker) closeMediaPicker();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !mediaPicker.hidden) closeMediaPicker();
+        });
+    }
     attachBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
         if (fileInput.files && fileInput.files[0]) extractFile(fileInput.files[0]);

@@ -128,18 +128,21 @@ checkMail('customer_emails_have_no_hardcoded_spanish', $leftovers === [], implod
 
 $commerceSrc = (string) file_get_contents(PP_ROOT . '/app/Modules/Commerce/CommerceMailer.php');
 $bookingSrc  = (string) file_get_contents(PP_ROOT . '/app/Modules/Booking/BookingMailer.php');
+// ADMIN-I18N (11/08/2026): esto era justo al revés. Los avisos al admin
+// estaban fijos en castellano porque el panel lo estaba; ahora el panel se
+// traduce, así que el aviso sale en el idioma de quien gestiona el sitio.
 checkMail(
-    'admin_notices_stay_in_spanish',
-    str_contains($commerceSrc, 'Nuevo pedido') && str_contains($bookingSrc, 'Nueva reserva'),
-    'Los avisos al administrador NO se traducen: el panel es castellano'
+    'admin_notices_use_the_panel_language',
+    str_contains($commerceSrc, "__('order.mail.admin_new_body'")
+        && str_contains($bookingSrc, "__('bk.mail.admin_new_body'"),
+    'Los avisos al administrador salen por el catálogo del panel, no fijos'
 );
 
-// El aviso al admin va entero en castellano: también la fecha.
+// Lo que sigue valiendo: el aviso va entero en UN idioma, también la fecha.
 checkMail(
-    'admin_notice_date_is_spanish_too',
-    str_contains($bookingSrc, '$whenAdmin = self::humanWhen($booking, $tz)')
-        && str_contains($bookingSrc, "'Nueva reserva: ' . \$service['name'] . ' — ' . \$whenAdmin"),
-    'Un aviso en castellano con la fecha en francés queda a medio camino'
+    'admin_notice_date_matches_the_notice',
+    str_contains($bookingSrc, 'self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale())'),
+    'Un aviso en un idioma con la fecha en otro queda a medio camino'
 );
 
 // El idioma tiene que resolverse por una única función, preparada para que la

@@ -48,11 +48,11 @@ class AITestController
 
         $prompt = trim((string) (Request::post('prompt') ?? ''));
         if ($prompt === '') {
-            Response::json(['ok' => false, 'error' => 'El prompt está vacío'], 422);
+            Response::json(['ok' => false, 'error' => __('aitest.err.empty')], 422);
             return;
         }
         if (strlen($prompt) > 2000) {
-            Response::json(['ok' => false, 'error' => 'El prompt no puede exceder 2000 caracteres'], 422);
+            Response::json(['ok' => false, 'error' => __('aitest.err.too_long')], 422);
             return;
         }
 
@@ -66,7 +66,7 @@ class AITestController
         if ($provider === null) {
             Response::json([
                 'ok'    => false,
-                'error' => 'No hay proveedor de IA configurado. Ve al instalador o a Ajustes para configurar uno.',
+                'error' => __('aitest.err.no_provider'),
             ], 400);
             return;
         }
@@ -124,13 +124,14 @@ class AITestController
         $rawInp = (string) (Request::post('input_json') ?? '{}');
         $decoded = json_decode($rawInp, true);
         if (!is_array($decoded)) {
-            Response::json(['ok' => false, 'error' => 'input_json no es un JSON válido'], 422);
+            Response::json(['ok' => false, 'error' => __('aitest.err.bad_json')], 422);
             return;
         }
 
         // Extras comunes (ej. section_schema como hint para generate_section)
         $extras = [];
         if ($action === Actions::GENERATE_SECTION && isset($decoded['section_type'])) {
+            // i18n-ignore: va dentro del prompt que se manda a la IA, no se pinta.
             $extras['section_schema'] = '(schema del tipo de sección disponible en T3.3)';
         }
 
@@ -166,7 +167,7 @@ class AITestController
         $rawInp = (string) (Request::post('input_json') ?? '{}');
         $decoded = json_decode($rawInp, true);
         if (!is_array($decoded)) {
-            Response::json(['ok' => false, 'error' => 'input_json no es un JSON válido'], 422);
+            Response::json(['ok' => false, 'error' => __('aitest.err.bad_json')], 422);
             return;
         }
 
@@ -194,7 +195,7 @@ class AITestController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

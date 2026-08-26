@@ -54,7 +54,7 @@ class MailSettingsController
             if ($result->ok) {
                 Session::flash('notice', 'Ajustes guardados y correo de prueba enviado a ' . $input['from_email'] . '. Revisa tu bandeja (y la carpeta de spam).');
             } else {
-                Session::flash('error', 'Ajustes guardados, pero el correo de prueba falló: ' . $result->error);
+                Session::flash('error', __('mail.saved_but_test_failed', ['error' => $result->error]));
             }
             Response::redirect(base_url('admin/settings/mail'));
             return;
@@ -86,7 +86,7 @@ class MailSettingsController
         if ($result->ok) {
             Session::flash('notice', 'Correo de prueba enviado a ' . $to . '. Revisa tu bandeja (y la carpeta de spam).');
         } else {
-            Session::flash('error', 'No se pudo enviar el correo de prueba: ' . $result->error);
+            Session::flash('error', __('mail.err.test', ['detalle' => (string) $result->error]));
         }
         Response::redirect(base_url('admin/settings/mail'));
     }
@@ -98,20 +98,27 @@ class MailSettingsController
     private function sendTestEmail(int $siteId, string $to): \App\Services\Mail\MailResult
     {
         $site = Database::selectOne('SELECT name FROM sites WHERE id = ? LIMIT 1', [$siteId]);
-        $siteName = (string) ($site['name'] ?? 'tu sitio');
+        $siteName = (string) ($site['name'] ?? __('mail.your_site'));
 
-        $text = "¡Funciona! 🎉\n\n"
-            . "Este es un correo de prueba enviado desde PromptPress para «{$siteName}».\n"
-            . "Si lo estás leyendo, el envío de correo está bien configurado.\n\n"
-            . 'Fecha: ' . date('Y-m-d H:i:s');
+        // Este correo lo lee el GESTOR (se lo manda a su propia dirección para
+        // comprobar la conexión), no un visitante: va en el idioma del panel y
+        // no en el de la web.
+        $works = __('mail.test_works');
+        $body  = __('mail.test_body', ['sitio' => $siteName]);
+        $bodyHtml = __('mail.test_body', ['sitio' => '<strong>' . e($siteName) . '</strong>']);
+        $reading = __('mail.test_reading');
+        $dateLabel = __('mail.test_date');
+
+        $text = $works . "\n\n" . $body . "\n" . $reading . "\n\n"
+            . $dateLabel . ': ' . date('Y-m-d H:i:s');
         $html = '<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1f2937;line-height:1.6">'
-            . '<p style="font-size:18px;font-weight:700;margin:0 0 12px">¡Funciona! 🎉</p>'
-            . '<p>Este es un correo de prueba enviado desde PromptPress para <strong>' . e($siteName) . '</strong>.</p>'
-            . '<p>Si lo estás leyendo, el envío de correo está bien configurado.</p>'
-            . '<p style="color:#6b7280;font-size:13px;margin-top:20px">Fecha: ' . date('Y-m-d H:i:s') . '</p>'
+            . '<p style="font-size:18px;font-weight:700;margin:0 0 12px">' . e($works) . '</p>'
+            . '<p>' . $bodyHtml . '</p>'
+            . '<p>' . e($reading) . '</p>'
+            . '<p style="color:#6b7280;font-size:13px;margin-top:20px">' . e($dateLabel) . ': ' . date('Y-m-d H:i:s') . '</p>'
             . '</div>';
 
-        $message = new MailMessage($to, 'Prueba de correo · PromptPress', $text, $html);
+        $message = new MailMessage($to, __('mail.test_subject'), $text, $html);
         return MailService::send($siteId, $message, 'test');
     }
 
@@ -134,17 +141,17 @@ class MailSettingsController
     {
         $errors = [];
         if ($input['from_email'] === '' || !filter_var($input['from_email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'La dirección de remitente debe ser un email válido (ej. info@tudominio.com).';
+            $errors[] = __('mail.error.from_email');
         }
         if ($input['host'] === '') {
             $errors[] = 'Falta el servidor de correo saliente.';
         }
         $port = (int) $input['port'];
         if ($port < 1 || $port > 65535) {
-            $errors[] = 'El puerto debe ser un número entre 1 y 65535 (lo habitual es 587 o 465).';
+            $errors[] = __('mail.error.port');
         }
         if (!in_array($input['encryption'], self::ENCRYPTIONS, true)) {
-            $errors[] = 'Tipo de cifrado no válido.';
+            $errors[] = __('mail.error.encryption');
         }
         return $errors;
     }
@@ -164,7 +171,7 @@ class MailSettingsController
         if ($input['pass'] !== '') {
             $appKey = (string) (App::config()['app_key'] ?? '');
             if ($appKey === '') {
-                Session::flash('error', 'No se pudo cifrar la contraseña: falta app_key en la configuración.');
+                Session::flash('error', __('mail.error.no_app_key'));
                 return;
             }
             $encrypted = Crypto::encrypt($input['pass'], $appKey);

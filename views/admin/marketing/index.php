@@ -18,23 +18,23 @@ $catList = $customCategories;
 $placeList = $customPlacements;
 ?>
 
-<?php \Core\View::start('title'); ?>Marketing<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.marketing')) ?><?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
     <div>
-        <h2>Marketing</h2>
-        <p class="pp-page-header__lead">Conecta tus herramientas de medición y publicidad. Cada script se carga solo cuando el visitante acepta su categoría de cookies, así que cumples con el RGPD sin esfuerzo.</p>
+        <h2><?= e(__('nav.marketing')) ?></h2>
+        <p class="pp-page-header__lead"><?= e(__('marketing.intro')) ?></p>
     </div>
     <?php if ($needsBanner): ?>
-    <span class="pp-status-pill pp-status-pill--green" title="Banner de cookies">Banner activo</span>
+    <span class="pp-status-pill pp-status-pill--green" title="<?= e(__('marketing.cookie_banner')) ?>"><?= e(__('marketing.banner_active')) ?></span>
     <?php endif; ?>
 </div>
 
 <!-- ============ Integraciones de catálogo ============ -->
 <section class="pp-privacy-section">
     <header class="pp-privacy-section__head">
-        <h3>Integraciones</h3>
-        <p>Activa solo las herramientas que uses y pega su identificador. No hace falta tocar código.</p>
+        <h3><?= e(__('marketing.integrations')) ?></h3>
+        <p><?= e(__('marketing.integrations_help')) ?></p>
     </header>
 
     <?php
@@ -46,12 +46,12 @@ $placeList = $customPlacements;
 <!-- ============ Código personalizado ============ -->
 <section class="pp-privacy-section">
     <header class="pp-privacy-section__head">
-        <h3>Código personalizado</h3>
-        <p>¿Tu herramienta no está en la lista? Pega aquí cualquier snippet (Pinterest, Hotjar, un chat…). Elige su categoría de consentimiento y dónde inyectarlo.</p>
+        <h3><?= e(__('marketing.custom_code')) ?></h3>
+        <p><?= e(__('marketing.custom_code_help')) ?></p>
     </header>
 
     <div class="pp-privacy-notice pp-privacy-notice--quiet">
-        <strong>Bajo tu responsabilidad.</strong> El código se inserta tal cual en tu web, solo tras el consentimiento de la categoría que elijas. Pega únicamente código de proveedores en los que confíes.
+        <strong><?= e(__('marketing.your_responsibility')) ?></strong> <?= e(__('marketing.responsibility_help')) ?>
     </div>
 
     <?php if (!empty($customSnippets)): ?>
@@ -69,7 +69,7 @@ $placeList = $customPlacements;
                 <span class="pp-snippet__name"><?= e($slabel) ?></span>
                 <span class="pp-snippet__meta">
                     <?= e($catList[$scat] ?? $scat) ?>
-                    <span class="pp-snippet__badge pp-snippet__badge--<?= $senabled ? 'on' : 'off' ?>"><?= $senabled ? 'Activo' : 'Pausado' ?></span>
+                    <span class="pp-snippet__badge pp-snippet__badge--<?= $senabled ? 'on' : 'off' ?>"><?= e($senabled ? __('modules.active') : __('marketing.paused')) ?></span>
                 </span>
             </summary>
             <form method="POST" action="<?= e(base_url('admin/marketing/custom')) ?>" class="pp-snippet__form">
@@ -78,11 +78,11 @@ $placeList = $customPlacements;
 
                 <div class="pp-form-row">
                     <div class="pp-form-group">
-                        <label>Nombre</label>
+                        <label><?= e(__('onboarding.type.font_name')) ?></label>
                         <input type="text" name="label" maxlength="120" value="<?= e($slabel) ?>" required>
                     </div>
                     <div class="pp-form-group">
-                        <label>Categoría de consentimiento</label>
+                        <label><?= e(__('marketing.consent_category')) ?></label>
                         <select name="category">
                             <?php foreach ($catList as $ck => $cl): ?>
                             <option value="<?= e($ck) ?>" <?= $ck === $scat ? 'selected' : '' ?>><?= e($cl) ?></option>
@@ -90,7 +90,7 @@ $placeList = $customPlacements;
                         </select>
                     </div>
                     <div class="pp-form-group">
-                        <label>Ubicación</label>
+                        <label><?= e(__('marketing.placement')) ?></label>
                         <select name="placement">
                             <?php foreach ($placeList as $pk => $pl): ?>
                             <option value="<?= e($pk) ?>" <?= $pk === $splace ? 'selected' : '' ?>><?= e($pl) ?></option>
@@ -100,24 +100,24 @@ $placeList = $customPlacements;
                 </div>
 
                 <div class="pp-form-group">
-                    <label>Código</label>
+                    <label><?= e(__('marketing.code')) ?></label>
                     <textarea name="code" rows="6" class="pp-snippet__code" spellcheck="false"><?= e($scode) ?></textarea>
                 </div>
 
                 <label class="pp-snippet__enable">
                     <input type="checkbox" name="enabled" value="1" <?= $senabled ? 'checked' : '' ?>>
-                    Activo (cárgalo en la web pública)
+                    <?= e(__('marketing.active_load')) ?>
                 </label>
 
                 <div class="pp-form-actions pp-snippet__actions">
-                    <button type="submit" class="pp-btn pp-btn--primary">Guardar</button>
+                    <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('common.save')) ?></button>
                 </div>
             </form>
             <form method="POST" action="<?= e(base_url('admin/marketing/custom/delete')) ?>"
-                  onsubmit="return confirm('¿Eliminar este snippet?');" class="pp-snippet__delete">
+                  onsubmit="return confirm(<?= e(json_encode(__('marketing.confirm_delete_snippet'), JSON_UNESCAPED_UNICODE)) ?>);" class="pp-snippet__delete">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <input type="hidden" name="custom_id" value="<?= e($sid) ?>">
-                <button type="submit" class="pp-btn pp-btn--danger">Eliminar</button>
+                <button type="submit" class="pp-btn pp-btn--danger"><?= e(__('common.delete')) ?></button>
             </form>
         </details>
         <?php endforeach; ?>
@@ -125,17 +125,17 @@ $placeList = $customPlacements;
     <?php endif; ?>
 
     <details class="pp-snippet pp-snippet--new">
-        <summary class="pp-snippet__summary"><span class="pp-snippet__name">+ Añadir snippet</span></summary>
+        <summary class="pp-snippet__summary"><span class="pp-snippet__name">+ <?= e(__('marketing.add_snippet')) ?></span></summary>
         <form method="POST" action="<?= e(base_url('admin/marketing/custom')) ?>" class="pp-snippet__form">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
             <div class="pp-form-row">
                 <div class="pp-form-group">
-                    <label>Nombre</label>
-                    <input type="text" name="label" maxlength="120" placeholder="Pixel de Pinterest" required>
+                    <label><?= e(__('onboarding.type.font_name')) ?></label>
+                    <input type="text" name="label" maxlength="120" placeholder="<?= e(__('marketing.snippet_placeholder')) ?>" required>
                 </div>
                 <div class="pp-form-group">
-                    <label>Categoría de consentimiento</label>
+                    <label><?= e(__('marketing.consent_category')) ?></label>
                     <select name="category">
                         <?php foreach ($catList as $ck => $cl): ?>
                         <option value="<?= e($ck) ?>" <?= $ck === 'advertising' ? 'selected' : '' ?>><?= e($cl) ?></option>
@@ -143,7 +143,7 @@ $placeList = $customPlacements;
                     </select>
                 </div>
                 <div class="pp-form-group">
-                    <label>Ubicación</label>
+                    <label><?= e(__('marketing.placement')) ?></label>
                     <select name="placement">
                         <?php foreach ($placeList as $pk => $pl): ?>
                         <option value="<?= e($pk) ?>" <?= $pk === 'body_end' ? 'selected' : '' ?>><?= e($pl) ?></option>
@@ -153,17 +153,17 @@ $placeList = $customPlacements;
             </div>
 
             <div class="pp-form-group">
-                <label>Código</label>
+                <label><?= e(__('marketing.code')) ?></label>
                 <textarea name="code" rows="6" class="pp-snippet__code" spellcheck="false" placeholder="&lt;script&gt;…&lt;/script&gt;"></textarea>
             </div>
 
             <label class="pp-snippet__enable">
                 <input type="checkbox" name="enabled" value="1" checked>
-                Activo (cárgalo en la web pública)
+                <?= e(__('marketing.active_load')) ?>
             </label>
 
             <div class="pp-form-actions pp-snippet__actions">
-                <button type="submit" class="pp-btn pp-btn--primary">Añadir snippet</button>
+                <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('marketing.add_snippet')) ?></button>
             </div>
         </form>
     </details>

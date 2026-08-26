@@ -68,30 +68,38 @@ final class CommerceMailer
         );
         self::deliverToCustomer($siteId, $orderId, $msg);
 
-        self::notifyAdmin($siteId, sprintf(
-            "Nuevo pedido %s (%s)\n\nCliente: %s <%s>%s\nTotal: %s\nMétodo de pago: %s\n\nGestión: %s",
-            $order['order_number'],
-            'pendiente de pago',
-            $order['customer_name'],
-            $order['customer_email'],
-            $order['customer_phone'] !== null ? "\nTeléfono: " . $order['customer_phone'] : '',
-            CommerceSettings::format((int) $order['total_cents']),
-            (string) $order['payment_method'],
-            base_url('admin/commerce/pedidos/' . $orderId)
-        ), 'Nuevo pedido ' . $order['order_number'] . ' — ' . CommerceSettings::format((int) $order['total_cents']));
+        self::notifyAdmin($siteId, __('order.mail.admin_new_body', [
+            'pedido'   => (string) $order['order_number'],
+            'estado'   => __('order.status.pending'),
+            'cliente'  => (string) $order['customer_name'],
+            'email'    => (string) $order['customer_email'],
+            'telefono' => $order['customer_phone'] !== null ? "\n" . __('bk.mail.phone') . ': ' . $order['customer_phone'] : '',
+            'total'    => CommerceSettings::format((int) $order['total_cents']),
+            'metodo'   => (string) $order['payment_method'],
+            'url'      => base_url('admin/commerce/pedidos/' . $orderId),
+        ]), __('order.mail.admin_new_subject', [
+            'pedido' => (string) $order['order_number'],
+            'total'  => CommerceSettings::format((int) $order['total_cents']),
+        ]));
     }
 
-    /** Email al cliente cuando el pedido cambia de estado (C6). */
-    public static function sendStatusChange(int $siteId, int $orderId, string $newStatus): void
+    /**
+     * Email al cliente cuando el pedido cambia de estado (C6).
+     *
+     * Devuelve qué pasó con el envío ('sent', 'skipped' si el sitio no tiene
+     * email configurado, 'failed' si falló) para que el panel no prometa un
+     * aviso que nadie ha recibido. Mismo criterio que `BookingMailer`.
+     */
+    public static function sendStatusChange(int $siteId, int $orderId, string $newStatus): string
     {
         $ctx = self::context($siteId, $orderId);
         if ($ctx === null) {
-            return;
+            return 'skipped';
         }
         [$order, $siteName] = $ctx;
 
         if (!in_array($newStatus, ['paid', 'shipped', 'cancelled'], true)) {
-            return;
+            return 'skipped';
         }
         $lang = self::language($siteId, $order);
         $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
@@ -105,7 +113,7 @@ final class CommerceMailer
                 'total' => CommerceSettings::format((int) $order['total_cents']),
             ])
             . "\n\n" . $siteName;
-        self::deliverToCustomer($siteId, $orderId, new MailMessage(
+        return self::deliverToCustomer($siteId, $orderId, new MailMessage(
             (string) $order['customer_email'],
             $subject,
             $body,
@@ -144,17 +152,21 @@ final class CommerceMailer
         return [$order, (string) ($site['name'] ?? 'PromptPress')];
     }
 
-    private static function deliverToCustomer(int $siteId, int $orderId, MailMessage $msg): void
+    /** @return string el email_status resultante: 'sent', 'skipped' o 'failed'. */
+    private static function deliverToCustomer(int $siteId, int $orderId, MailMessage $msg): string
     {
         try {
             if (!MailService::isConfigured($siteId)) {
                 self::mark($orderId, 'skipped', null);
-                return;
+                return 'skipped';
             }
             $result = MailService::send($siteId, $msg, 'commerce');
-            self::mark($orderId, $result->ok ? 'sent' : 'failed', $result->ok ? null : (string) $result->error);
+            $status = $result->ok ? 'sent' : 'failed';
+            self::mark($orderId, $status, $result->ok ? null : (string) $result->error);
+            return $status;
         } catch (\Throwable $e) {
             self::mark($orderId, 'failed', $e->getMessage());
+            return 'failed';
         }
     }
 

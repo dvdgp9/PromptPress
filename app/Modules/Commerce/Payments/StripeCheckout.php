@@ -66,7 +66,8 @@ final class StripeCheckout implements PaymentMethodInterface
             $url = (string) ($session['url'] ?? '');
             $sessionId = (string) ($session['id'] ?? '');
             if ($url === '' || $sessionId === '') {
-                throw new \RuntimeException('Stripe: la sesión no trae url/id');
+                // i18n-ignore: excepción interna, va al log.
+            throw new \RuntimeException('Stripe: la sesión no trae url/id');
             }
             Database::execute(
                 'UPDATE commerce_orders SET payment_ref = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?',
@@ -87,6 +88,8 @@ final class StripeCheckout implements PaymentMethodInterface
     public function pendingInstructions(int $siteId, array $order): ?string
     {
         $payUrl = base_url('tienda/pagar/' . $order['order_number'] . '?k=' . $order['access_key']);
+        // i18n-ignore-start: página de vuelta que ve el CLIENTE de la tienda;
+        // su idioma es el del sitio (Microcopy). Gap preexistente.
         $html  = '<p>El pago con tarjeta <strong>todavía no se ha completado</strong>.</p>';
         $html .= '<p><a class="pp-btn pp-btn--lg" href="' . e($payUrl) . '">Completar el pago ahora</a></p>';
         $html .= '<p>Si acabas de pagar, la confirmación puede tardar unos segundos: recarga esta página. '
@@ -123,6 +126,7 @@ final class StripeCheckout implements PaymentMethodInterface
             $items[] = self::lineItem($name, $unit, $qty);
         }
         if ((int) $order['shipping_cents'] > 0) {
+            // i18n-ignore: concepto que ve el CLIENTE en Stripe; idioma del sitio.
             $items[] = self::lineItem('Envío', (int) $order['shipping_cents'], 1);
         }
         return $items;

@@ -13,6 +13,19 @@ namespace App\Services;
  *
  * El `form_type` es la base para: deduplicación (un form por tipo) y, más
  * adelante, el evento de conversión asociado.
+ *
+ * FORMS-LANG T3 — los textos salen del diccionario `Microcopy` en el idioma
+ * que se pida (por defecto, el principal del sitio). Antes estaban en
+ * castellano literal aquí, y como el catálogo se COPIA a la base de datos al
+ * crear el formulario, una web en francés nacía con formularios en castellano
+ * y no había render que lo arreglara después.
+ *
+ * Lo que NO se traduce, a propósito:
+ *   - el `name` de cada campo (`nombre`, `email`…): es la clave con la que se
+ *     guardan las respuestas y la variable del autorespondedor (`{{nombre}}`).
+ *     Traducirlo rompería las bandejas de entrada ya existentes.
+ *   - `label` y `description` del catálogo: son textos del PANEL, y el panel
+ *     está en castellano.
  */
 final class FormTemplates
 {
@@ -21,90 +34,100 @@ final class FormTemplates
      * El content tiene el mismo shape que `FormStore` espera (heading, fields,
      * lawful_basis, etc.) + `form_type`.
      *
+     * @param string|null $lang Idioma de los textos del `content`. Null =
+     *                          castellano (el histórico), para que quien no
+     *                          pase idioma se comporte como antes.
      * @return array<string,array{label:string,description:string,content:array<string,mixed>}>
      */
-    public static function catalog(): array
+    public static function catalog(?string $lang = null): array
     {
+        // OJO: `label` y `description` son CLAVES de traducción del panel, no
+        // texto. Tienen dos consumidores: el selector de plantillas (que las
+        // quiere traducidas, vía `catalogForView()`) y el prompt de Canvas
+        // (`CanvasGenerator`), que necesita el castellano estable de siempre.
+        $lang = LanguageService::normalize($lang ?? LanguageService::DEFAULT);
+        $t = static fn(string $key): string => Microcopy::t($key, $lang);
+
         return [
             'contact' => [
-                'label'       => 'Contacto',
-                'description' => 'El clásico: nombre, email y mensaje. Para "contáctanos".',
-                'content'     => self::wrap('contact', [
-                    'heading'         => 'Contacta con nosotros',
-                    'success_message' => 'Gracias, te contactaremos pronto.',
-                    'submit_text'     => 'Enviar',
+                'label'       => 'form_tpl.contact.label',
+                'description' => 'form_tpl.contact.desc',
+                'content'     => self::wrap('contact', $lang, [
+                    'heading'         => $t('form.tpl.contact.heading'),
+                    'success_message' => $t('form.tpl.contact.success'),
+                    'submit_text'     => $t('form.submit'),
                     'lawful_basis'    => 'legitimate_interest',
                     'fields'          => [
-                        self::field('Nombre',  'nombre',  'text',     true),
-                        self::field('Email',   'email',   'email',    true),
-                        self::field('Mensaje', 'mensaje', 'textarea', true),
+                        self::field($t('form.tpl.field.name'),    'nombre',  'text',     true),
+                        self::field($t('form.tpl.field.email'),   'email',   'email',    true),
+                        self::field($t('form.tpl.field.message'), 'mensaje', 'textarea', true),
                     ],
                 ]),
             ],
             'newsletter' => [
-                'label'       => 'Newsletter',
-                'description' => 'Suscripción por email. Marca consentimiento de marketing.',
-                'content'     => self::wrap('newsletter', [
-                    'heading'          => 'Suscríbete a nuestra newsletter',
-                    'success_message'  => '¡Listo! Revisa tu correo para confirmar la suscripción.',
-                    'submit_text'      => 'Suscribirme',
+                'label'       => 'form_tpl.newsletter.label',
+                'description' => 'form_tpl.newsletter.desc',
+                'content'     => self::wrap('newsletter', $lang, [
+                    'heading'          => $t('form.tpl.newsletter.heading'),
+                    'success_message'  => $t('form.tpl.newsletter.success'),
+                    'submit_text'      => $t('form.tpl.newsletter.submit'),
                     'lawful_basis'     => 'consent',
                     'marketing_opt_in' => '1',
                     'fields'           => [
-                        self::field('Email', 'email', 'email', true),
+                        self::field($t('form.tpl.field.email'), 'email', 'email', true),
                     ],
                 ]),
             ],
             'quote' => [
-                'label'       => 'Presupuesto',
-                'description' => 'Solicitud de presupuesto: contacto + qué necesita el cliente.',
-                'content'     => self::wrap('quote', [
-                    'heading'         => 'Pide tu presupuesto',
-                    'success_message' => 'Gracias, prepararemos tu presupuesto y te lo enviaremos pronto.',
-                    'submit_text'     => 'Solicitar presupuesto',
+                'label'       => 'form_tpl.quote.label',
+                'description' => 'form_tpl.quote.desc',
+                'content'     => self::wrap('quote', $lang, [
+                    'heading'         => $t('form.tpl.quote.heading'),
+                    'success_message' => $t('form.tpl.quote.success'),
+                    'submit_text'     => $t('form.tpl.quote.submit'),
                     'lawful_basis'    => 'legitimate_interest',
                     'fields'          => [
-                        self::field('Nombre',          'nombre',    'text',     true),
-                        self::field('Email',           'email',     'email',    true),
-                        self::field('Teléfono',        'telefono',  'tel',      false),
-                        self::field('¿Qué necesitas?', 'necesidad', 'textarea', true),
+                        self::field($t('form.tpl.field.name'),  'nombre',    'text',     true),
+                        self::field($t('form.tpl.field.email'), 'email',     'email',    true),
+                        self::field($t('form.tpl.field.phone'), 'telefono',  'tel',      false),
+                        self::field($t('form.tpl.field.need'),  'necesidad', 'textarea', true),
                     ],
                 ]),
             ],
             'booking' => [
-                'label'       => 'Reserva / cita',
-                'description' => 'Para pedir cita o reservar: contacto + fecha preferida.',
-                'content'     => self::wrap('booking', [
-                    'heading'         => 'Reserva tu cita',
-                    'success_message' => 'Hemos recibido tu solicitud de reserva. Te confirmaremos en breve.',
-                    'submit_text'     => 'Reservar',
+                'label'       => 'form_tpl.booking.label',
+                'description' => 'form_tpl.booking.desc',
+                'content'     => self::wrap('booking', $lang, [
+                    'heading'         => $t('form.tpl.booking.heading'),
+                    'success_message' => $t('form.tpl.booking.success'),
+                    'submit_text'     => $t('form.tpl.booking.submit'),
                     'lawful_basis'    => 'legitimate_interest',
                     'fields'          => [
-                        self::field('Nombre',          'nombre',    'text', true),
-                        self::field('Email',           'email',     'email', true),
-                        self::field('Teléfono',        'telefono',  'tel',  true),
-                        self::field('Fecha preferida', 'fecha',     'date', true),
+                        self::field($t('form.tpl.field.name'),  'nombre',   'text', true),
+                        self::field($t('form.tpl.field.email'), 'email',    'email', true),
+                        self::field($t('form.tpl.field.phone'), 'telefono', 'tel',  true),
+                        self::field($t('form.tpl.field.date'),  'fecha',    'date', true),
                     ],
                 ]),
             ],
             'job' => [
-                'label'       => 'Empleo',
-                'description' => 'Candidaturas: contacto + adjuntar CV.',
-                'content'     => self::wrap('job', [
-                    'heading'         => 'Trabaja con nosotros',
-                    'success_message' => 'Gracias por tu interés. Revisaremos tu candidatura.',
-                    'submit_text'     => 'Enviar candidatura',
-                    'lawful_basis'    => 'legitimate_interest',
-                    'retention_period'=> '12 meses tras el cierre del proceso de selección',
-                    'fields'          => [
-                        self::field('Nombre',  'nombre',  'text',  true),
-                        self::field('Email',   'email',   'email', true),
-                        self::field('Teléfono','telefono','tel',   false),
-                        array_merge(self::field('CV', 'cv', 'file', true), [
+                'label'       => 'form_tpl.job.label',
+                'description' => 'form_tpl.job.desc',
+                'content'     => self::wrap('job', $lang, [
+                    'heading'          => $t('form.tpl.job.heading'),
+                    'success_message'  => $t('form.tpl.job.success'),
+                    'submit_text'      => $t('form.tpl.job.submit'),
+                    'lawful_basis'     => 'legitimate_interest',
+                    'retention_period' => $t('form.retention_job'),
+                    'fields'           => [
+                        self::field($t('form.tpl.field.name'),  'nombre',  'text',  true),
+                        self::field($t('form.tpl.field.email'), 'email',   'email', true),
+                        self::field($t('form.tpl.field.phone'), 'telefono','tel',   false),
+                        array_merge(self::field($t('form.tpl.field.cv'), 'cv', 'file', true), [
                             'file_accept'  => 'documents',
                             'file_max_mb'  => 5,
                         ]),
-                        self::field('Mensaje', 'mensaje', 'textarea', false),
+                        self::field($t('form.tpl.field.message'), 'mensaje', 'textarea', false),
                     ],
                 ]),
             ],
@@ -128,17 +151,35 @@ final class FormTemplates
      *
      * @return array<string,mixed>
      */
-    public static function content(string $key): array
+    public static function content(string $key, ?string $lang = null): array
     {
-        $catalog = self::catalog();
+        $catalog = self::catalog($lang);
         $key = isset($catalog[$key]) ? $key : 'contact';
         return $catalog[$key]['content'];
     }
 
     /** Etiqueta humana de un tipo (o el propio tipo si no está en catálogo). */
+    /**
+     * Catálogo con `label` y `description` ya traducidos al idioma del gestor.
+     * Solo para pintar: el prompt de Canvas sigue usando `catalog()`.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public static function catalogForView(?string $lang = null): array
+    {
+        $out = [];
+        foreach (self::catalog($lang) as $key => $tpl) {
+            $tpl['label']       = __($tpl['label']);
+            $tpl['description'] = __($tpl['description']);
+            $out[$key] = $tpl;
+        }
+        return $out;
+    }
+
     public static function label(string $key): string
     {
-        return self::catalog()[$key]['label'] ?? $key;
+        $key2 = self::catalog()[$key]['label'] ?? null;
+        return $key2 !== null ? __($key2) : $key;
     }
 
     // ----------------------------------------------------------------------
@@ -152,21 +193,27 @@ final class FormTemplates
      * @param array<string,mixed> $partial
      * @return array<string,mixed>
      */
-    private static function wrap(string $type, array $partial): array
+    private static function wrap(string $type, string $lang, array $partial): array
     {
         $defaults = [
             'form_type'             => $type,
-            'heading'               => 'Formulario',
+            // FORMS-LANG T6 — idioma BASE de estos textos. Los formularios
+            // anteriores a esto no lo llevan: se asume castellano (que es lo
+            // que tenían escrito a mano en el catálogo).
+            'language'              => $lang,
+            'heading'               => Microcopy::t('form.tpl.default_heading', $lang),
             'description'           => '',
-            'submit_text'           => 'Enviar',
-            'success_message'       => 'Gracias, hemos recibido tu mensaje.',
+            'submit_text'           => Microcopy::t('form.submit', $lang),
+            'success_message'       => Microcopy::t('form.success', $lang),
             'fields'                => [],
             'lawful_basis'          => 'legitimate_interest',
-            'retention_period'      => '12 meses tras la última comunicación',
+            'retention_period'      => Microcopy::t('form.retention_default', $lang),
             'marketing_opt_in'      => '0',
             'autoresponder_enabled' => '0',
-            'autoresponder_subject' => 'Hemos recibido tu mensaje',
-            'autoresponder_body'    => "Hola {{nombre}}:\n\nGracias por escribirnos. Hemos recibido tu mensaje y te responderemos lo antes posible.\n\nUn saludo,\n{{sitio}}",
+            'autoresponder_subject' => Microcopy::t('form.tpl.autoresponder_subject', $lang),
+            // `template()` y no `t()`: el cuerpo lleva `{{nombre}}` y `{{sitio}}`,
+            // y `t()` limpia los `{token}` sin valor —dejaría el saludo a medias—.
+            'autoresponder_body'    => Microcopy::template('form.tpl.autoresponder_body', $lang),
             'notify_email'          => '',
         ];
         return array_merge($defaults, $partial, ['form_type' => $type]);

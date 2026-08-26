@@ -16,12 +16,15 @@ window.PP_AI_ACTIONS = <?= json_encode(array_map(fn($a) => [
     'output'   => $a['output'] ?? 'text',
 ], $actions), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
+// i18n-ignore-start: ejemplos de INPUT para la IA (herramienta interna de
+// desarrollo). No son interfaz: se envían tal cual al modelo.
 window.PP_AI_SAMPLES = {
     generate_section: { section_type: 'hero', page_title: 'Inicio', extra_context: 'Para una empresa de desarrollo web.' },
     rewrite_text:     { original_text: 'Somos una empresa con experiencia que hacemos webs.', rewrite_goal: 'Hazlo más específico y orientado a beneficios.' },
     improve_seo:      { page_title: 'Servicios de desarrollo web', page_content: 'Ofrecemos desarrollo web a medida con WordPress, tiendas online y mantenimiento. Llevamos 15 años ayudando a PYMEs.' },
     generate_page_structure: { page_title: 'Página de servicio SEO', page_goal: 'Convertir visitas en leads para una consultoría SEO B2B.' },
 };
+// i18n-ignore-end
 
 (function () {
     var form = document.getElementById('pp-ai-prompt-form');
@@ -69,14 +72,14 @@ window.PP_AI_SAMPLES = {
                         + '<span>' + data.tokens_in + ' → ' + data.tokens_out + ' tokens</span>'
                         + '<span>' + data.latency_ms + ' ms</span>'
                         + '</div>'
-                        + (warn ? '<div class="pp-ai-warn"><strong>Avisos:</strong><ul>' + warn + '</ul></div>' : '')
-                        + '<h4 class="pp-ai-prompt-h4">Resultado (' + escapeHtml(data.output) + ')</h4>'
+                        + (warn ? '<div class="pp-ai-warn"><strong>' + pp.t('js.ai.warnings') + ':</strong><ul>' + warn + '</ul></div>' : '')
+                        + '<h4 class="pp-ai-prompt-h4">' + pp.t('js.ai.result') + ' (' + escapeHtml(data.output) + ')</h4>'
                         + '<pre class="pp-ai-prompt-pre">' + escapeHtml(data.output === 'json' ? JSON.stringify(data.data, null, 2) : String(data.data)) + '</pre>';
                     out.innerHTML = html;
                 })
                 .catch(function (err) {
                     out.className = 'pp-ai-output pp-ai-output--error';
-                    out.textContent = 'Error de red: ' + err.message;
+                    out.textContent = pp.t('js.ai.network_error', { detalle: err.message });
                 });
             return;
         }
@@ -93,8 +96,8 @@ window.PP_AI_SAMPLES = {
                 var html = '<div class="pp-ai-output__meta">'
                     + '<span>action: <strong>' + escapeHtml(data.meta.action) + '</strong></span>'
                     + '<span>output: ' + escapeHtml(data.meta.output) + '</span>'
-                    + '<span>~' + (data.tokens_estimate.system + data.tokens_estimate.user) + ' tokens estimados</span>'
-                    + '<span>memory: ' + data.meta.memory_fields_used.length + ' campos</span>'
+                    + '<span>~' + (data.tokens_estimate.system + data.tokens_estimate.user) + ' ' + pp.t('js.ai.tokens_est') + '</span>'
+                    + '<span>memory: ' + data.meta.memory_fields_used.length + ' ' + pp.t('js.ai.fields') + '</span>'
                     + '<span>docs: ' + data.meta.documents_used.length + '</span>'
                     + '</div>'
                     + '<h4 class="pp-ai-prompt-h4">System prompt</h4>'
@@ -107,7 +110,7 @@ window.PP_AI_SAMPLES = {
             })
             .catch(function (err) {
                 out.className = 'pp-ai-output pp-ai-output--error';
-                out.textContent = 'Error de red: ' + err.message;
+                out.textContent = pp.t('js.ai.network_error', { detalle: err.message });
             });
     }
 
@@ -120,18 +123,17 @@ window.PP_AI_SAMPLES = {
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Explorador de prompts</h2>
+    <h2><?= e(__('ai_usage.prompt_explorer')) ?></h2>
 </div>
 <p class="pp-page-intro">
-    Vista previa del prompt generado para cada acción de IA, sin llamar al modelo.
-    Útil para auditar qué contexto (memoria + documentos) se inyecta.
+    <?= e(__('ai_prompts.intro')) ?>
 </p>
 
 <form id="pp-ai-prompt-form" method="POST" action="<?= e(base_url('admin/ai/prompts/preview')) ?>" class="pp-form">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
     <div class="pp-form-field">
-        <label for="pp-ai-action-select">Acción</label>
+        <label for="pp-ai-action-select"><?= e(__('table.action')) ?></label>
         <select id="pp-ai-action-select" name="action">
             <?php foreach ($actions as $key => $def): ?>
                 <option value="<?= e($key) ?>"><?= e($def['label']) ?> — <code><?= e($key) ?></code></option>
@@ -140,9 +142,9 @@ window.PP_AI_SAMPLES = {
     </div>
 
     <div class="pp-form-field">
-        <label for="pp-ai-input-json">Input (JSON con los campos de la acción)</label>
+        <label for="pp-ai-input-json"><?= e(__('ai_prompts.input_label')) ?></label>
         <textarea id="pp-ai-input-json" name="input_json" rows="8" spellcheck="false"></textarea>
-        <small class="pp-design-hint">Campos requeridos se listan en <code>Actions::all()</code>. El ejemplo se precarga automáticamente.</small>
+        <small class="pp-design-hint"><?= __('ai_prompts.fields_hint.html') ?></small>
     </div>
 
     <div class="pp-form-actions">

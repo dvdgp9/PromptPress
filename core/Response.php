@@ -36,6 +36,8 @@ final class Response
         exit;
     }
 
+    // i18n-ignore: mensaje por defecto del 404; lo ve el VISITANTE, así que su
+    // idioma es el del sitio. Gap preexistente, fuera de ADMIN-I18N.
     public static function notFound(string $message = 'Página no encontrada'): never
     {
         http_response_code(404);

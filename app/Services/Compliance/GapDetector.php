@@ -44,23 +44,24 @@ final class GapDetector
             $gaps[] = [
                 'key'         => 'controller_incomplete',
                 'severity'    => $severity,
-                'title'       => 'Completa los datos de tu empresa',
-                'description' => 'Faltan ' . count($missingControllerFields) . ' campos (razón social, NIF, dirección…). Sin ellos, los textos legales saldrán con huecos.',
+                'title'       => __('gap.controller.title'),
+                'description' => __('gap.controller.desc', ['n' => (string) count($missingControllerFields)]),
                 'cta_url'     => '/admin/privacy?tab=legal',
-                'cta_label'   => 'Rellenar datos',
+                'cta_label'   => __('gap.controller.cta'),
             ];
         }
 
         // --- Páginas legales ---
-        foreach (['privacy_policy' => 'Política de privacidad', 'legal_notice' => 'Aviso legal'] as $k => $label) {
+        foreach (['privacy_policy', 'legal_notice'] as $k) {
+            $label = __('legal.type.' . $k);
             if (empty($legalPages[$k])) {
                 $gaps[] = [
                     'key'         => 'missing_legal_page_' . $k,
                     'severity'    => $hasPublishedPages ? 'orange' : 'yellow',
-                    'title'       => 'Genera tu ' . mb_strtolower($label),
-                    'description' => 'La IA puede crearla a partir de tus datos en menos de un minuto.',
+                    'title'       => __('gap.legal.title', ['pagina' => mb_strtolower($label)]),
+                    'description' => __('gap.legal.desc'),
                     'cta_url'     => '/admin/privacy?tab=pages',
-                    'cta_label'   => 'Generar',
+                    'cta_label'   => __('gap.legal.cta'),
                 ];
             }
         }
@@ -71,10 +72,10 @@ final class GapDetector
                 $gaps[] = [
                     'key'         => 'tracking_without_cookie_policy',
                     'severity'    => 'red',
-                    'title'       => 'Tienes tracking activo sin política de cookies',
-                    'description' => 'Activaste analítica o píxeles pero falta la política de cookies. Es obligatoria.',
+                    'title'       => __('gap.tracking.title'),
+                    'description' => __('gap.tracking.desc'),
                     'cta_url'     => '/admin/privacy?tab=pages',
-                    'cta_label'   => 'Generar política',
+                    'cta_label'   => __('gap.tracking.cta'),
                 ];
             }
         }

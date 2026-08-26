@@ -33,25 +33,33 @@ final class BookingApiController
 {
     private const MAX_RANGE_DAYS = 31;
 
+    /** Motivo del último rechazo de `cors()`, para poder decir cuál de los dos fue. */
+    private static ?string $corsDenied = null;
+
     /** GET /api/booking/v1/services */
     public function services(array $params = []): void
     {
         $siteId = self::siteId();
         if (!self::cors($siteId)) {
-            Response::json(['error' => 'origin_not_allowed'], 403);
+            self::denyCors();
         }
         $rows = Database::select(
-            'SELECT id, name, description, duration_min, capacity, price_label, language
+            'SELECT id, name, description, duration_min, capacity, price_label, language, fields_json
                FROM booking_services WHERE site_id = ? AND active = 1 ORDER BY name',
             [$siteId]
         );
         // El widget es un JS estático (también embebible fuera de este sitio):
         // no puede conocer el idioma, así que idioma y textos viajan aquí.
         //
-        // En una web multi-idioma cada idioma tiene SU servicio, y el widget
-        // sabe cuál está pintando: si lo indica (`?service=N`), los textos van
-        // en el idioma de ESE servicio. Sin el parámetro, el del sitio — así
-        // los embebidos antiguos siguen funcionando igual.
+        // Precedencia, de más a menos específico:
+        //   1. `?lang=` — lo manda el calendario incrustado en una página de
+        //      PromptPress, que SÍ sabe en qué idioma se está leyendo. Es el que
+        //      manda: un calendario en una página francesa habla francés aunque
+        //      el servicio se creara en castellano.
+        //   2. el idioma del servicio pedido (`?service=N`) — en una web
+        //      multi-idioma cada idioma tiene SU servicio, y así lo aprovechan
+        //      los embebidos en webs ajenas, que no pueden mandar `lang`.
+        //   3. el idioma del sitio.
         $lang = LanguageService::codeFor($siteId);
         $wanted = (int) Request::get('service', 0);
         if ($wanted > 0) {
@@ -61,6 +69,10 @@ final class BookingApiController
                     break;
                 }
             }
+        }
+        $asked = trim((string) Request::get('lang', ''));
+        if ($asked !== '' && LanguageService::isSupported(strtolower($asked))) {
+            $lang = LanguageService::normalize($asked);
         }
         Response::json([
             'timezone' => BookingService::siteTimezone($siteId),
@@ -74,6 +86,10 @@ final class BookingApiController
                 'capacity'     => (int) $r['capacity'],
                 'price_label'  => $r['price_label'] !== null ? (string) $r['price_label'] : null,
                 'language'     => BookingService::serviceLanguage($siteId, $r),
+                // MODULOS M8 — qué se le pide al cliente en ESTE servicio. El
+                // widget lo pinta tal cual; la validación de verdad es la del
+                // servidor al crear la reserva.
+                'fields'       => BookingFields::forWidget($r, $lang),
             ], $rows),
         ]);
     }
@@ -83,7 +99,7 @@ final class BookingApiController
     {
         $siteId = self::siteId();
         if (!self::cors($siteId)) {
-            Response::json(['error' => 'origin_not_allowed'], 403);
+            self::denyCors();
         }
         $serviceId = (int) ($params['id'] ?? 0);
         $from = self::validDate((string) Request::get('from', ''));
@@ -92,6 +108,7 @@ final class BookingApiController
             Response::json(['error' => 'validation', 'detail' => 'from/to deben ser fechas Y-m-d con from <= to'], 422);
         }
         if ((new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->days >= self::MAX_RANGE_DAYS) {
+            // i18n-ignore: detalle técnico de la API pública del widget, no panel.
             Response::json(['error' => 'validation', 'detail' => 'rango máximo ' . self::MAX_RANGE_DAYS . ' días'], 422);
         }
 
@@ -115,7 +132,7 @@ final class BookingApiController
     {
         $siteId = self::siteId();
         if (!self::cors($siteId)) {
-            Response::json(['error' => 'origin_not_allowed'], 403);
+            self::denyCors();
         }
         $data = Request::isJson() ? Request::json() : Request::all();
 
@@ -193,7 +210,7 @@ final class BookingApiController
     {
         $siteId = self::siteId();
         if (!self::cors($siteId)) {
-            Response::json(['error' => 'origin_not_allowed'], 403);
+            self::denyCors();
         }
         $data = Request::isJson() ? Request::json() : Request::all();
         $bookingId = (int) ($params['id'] ?? 0);
@@ -214,7 +231,7 @@ final class BookingApiController
     {
         $siteId = self::siteId();
         if (!self::cors($siteId, true)) {
-            Response::json(['error' => 'origin_not_allowed'], 403);
+            self::denyCors();
         }
         Response::noContent();
     }
@@ -268,6 +285,7 @@ final class BookingApiController
      */
     private static function cors(int $siteId, bool $isPreflight = false): bool
     {
+        self::$corsDenied = null;
         $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
         if ($origin === '') {
             return true;
@@ -282,9 +300,15 @@ final class BookingApiController
         // El preflight no lleva headers custom: valida solo la allowlist de
         // orígenes; la key se exige en la petición real.
         if (!self::originAllowed($siteId, $origin)) {
+            self::$corsDenied = 'origin_not_allowed';
             return false;
         }
         if (!$isPreflight && !self::validApiKey($siteId)) {
+            // Se distingue de origin_not_allowed a propósito: con un solo error
+            // para los dos casos, depurar un embed en una web ajena es adivinar.
+            // No filtra nada: la lista de orígenes no es secreta y el atacante
+            // ya controla su propio origen.
+            self::$corsDenied = 'invalid_api_key';
             return false;
         }
 
@@ -294,6 +318,12 @@ final class BookingApiController
         header('Access-Control-Allow-Headers: Content-Type, X-Booking-Key');
         header('Access-Control-Max-Age: 3600');
         return true;
+    }
+
+    /** Corta la petición cross-origin explicando cuál de los dos filtros falló. */
+    private static function denyCors(): never
+    {
+        Response::json(['error' => self::$corsDenied ?? 'origin_not_allowed'], 403);
     }
 
     private static function originAllowed(int $siteId, string $origin): bool

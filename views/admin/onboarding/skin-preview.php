@@ -61,7 +61,7 @@ $disableLinksJs = "document.addEventListener('click', function(e){ var a = e.tar
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vista previa de tu estilo · <?= htmlspecialchars($brandName, ENT_QUOTES) ?></title>
+<title><?= e(__('js.onb.skin_preview_title')) ?> · <?= htmlspecialchars($brandName, ENT_QUOTES) ?></title>
 <?= $designHead ?>
 <style>
     /* Reset mínimo para que la página se vea limpia dentro del iframe. */
@@ -146,7 +146,8 @@ $disableLinksJs = "document.addEventListener('click', function(e){ var a = e.tar
 
 <footer class="pp-preview-footer">
     <strong><?= htmlspecialchars($brandName, ENT_QUOTES) ?></strong>
-    <span>© <?= date('Y') ?> · Todos los derechos reservados</span>
+    <!-- i18n-ignore: pie de la web de EJEMPLO, no del panel: idioma del sitio. -->
+        <span>© <?= date('Y') ?> · Todos los derechos reservados</span>
 </footer>
 
 <script><?= $disableLinksJs ?></script>

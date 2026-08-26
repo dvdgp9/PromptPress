@@ -28,7 +28,7 @@
     briefBtn && briefBtn.addEventListener('click', function () {
         var idea = (ideaInput.value || '').trim();
         if (!idea) {
-            setComposerError('Elige una oportunidad o describe qué página quieres crear.');
+            setComposerError(pp.t('js.studio.pick_or_describe'));
             ideaInput.focus();
             return;
         }
@@ -66,7 +66,7 @@
         var data = body.data || {};
         var items = Array.isArray(data.opportunities) ? data.opportunities : [];
         if (!items.length) {
-            renderOpportunitiesError('No he detectado oportunidades claras. Describe la página que quieres crear y preparo el plan.');
+            renderOpportunitiesError(pp.t('js.studio.no_opportunities'));
             return;
         }
 
@@ -75,7 +75,7 @@
             html += '<p class="pp-studio-summary">' + escapeHtml(data.site_summary) + '</p>';
         }
         if (body.cached) {
-            html += '<p class="pp-studio-note">Análisis guardado' + (body.cached_at ? ' · ' + escapeHtml(formatDate(body.cached_at)) : '') + '</p>';
+            html += '<p class="pp-studio-note">' + pp.t('js.studio.saved_analysis') + (body.cached_at ? ' · ' + escapeHtml(formatDate(body.cached_at)) : '') + '</p>';
         } else if (body.fallback && body.error_note) {
             html += '<p class="pp-studio-note">Sugerencias locales: ' + escapeHtml(body.error_note) + '</p>';
         } else {
@@ -145,25 +145,25 @@
             '<div class="pp-studio-brief__title">',
                 '<div>',
                     '<span>' + escapeHtml(typeLabel(brief.page_type)) + '</span>',
-                    '<h4>' + escapeHtml(brief.title || 'Nueva página') + '</h4>',
+                    '<h4>' + escapeHtml(brief.title || pp.t('js.studio.new_page')) + '</h4>',
                 '</div>',
                 '<small>' + escapeHtml(formatAiMeta(body)) + '</small>',
             '</div>',
             '<div class="pp-studio-brief__grid">',
-                metricBlock('Objetivo', brief.goal || ''),
-                metricBlock('Público', brief.audience || 'Inferido desde el sitio'),
-                metricBlock('SEO', brief.seo_intent || 'Optimizado según contexto'),
-                metricBlock('CTA', brief.primary_cta || 'Contacto'),
+                metricBlock(pp.t('js.studio.goal'), brief.goal || ''),
+                metricBlock(pp.t('js.studio.audience'), brief.audience || pp.t('js.studio.audience_inferred')),
+                metricBlock('SEO', brief.seo_intent || pp.t('js.studio.seo_default')),
+                metricBlock('CTA', brief.primary_cta || pp.t('js.studio.cta_default')),
             '</div>',
             formBlock(form),
             questionsBlock(questions),
             '<div class="pp-studio-sections">',
-                '<h5>Estructura propuesta</h5>',
+                '<h5>' + pp.t('js.studio.proposed_structure') + '</h5>',
                 sections.map(sectionRow).join(''),
             '</div>',
             '<div class="pp-studio-brief__actions">',
-                '<button type="button" class="pp-btn pp-btn--secondary" data-studio-back="opportunities">Ajustar idea</button>',
-                '<button type="button" class="pp-btn pp-btn--primary" id="pp-studio-generate-btn">Crear página completa</button>',
+                '<button type="button" class="pp-btn pp-btn--secondary" data-studio-back="opportunities">' + pp.t('js.studio.adjust_idea') + '</button>',
+                '<button type="button" class="pp-btn pp-btn--primary" id="pp-studio-generate-btn">' + pp.t('js.studio.create_full_page') + '</button>',
             '</div>'
         ].join('');
 
@@ -183,7 +183,7 @@
         startProgressPulse();
 
         postForm('/admin/pages/ai-create', {
-            title: currentBrief.title || 'Nueva página',
+            title: currentBrief.title || pp.t('js.studio.new_page'),
             page_type: currentBrief.page_type || 'landing',
             ai_page_goal: currentBrief.goal || currentIdea,
             ai_target_audience: currentBrief.audience || '',
@@ -198,9 +198,9 @@
             window.location.href = body.edit_url;
         }).catch(function (err) {
             showPanel('brief');
-            briefWrap.insertAdjacentHTML('afterbegin', '<div class="pp-alert pp-alert--error">' + escapeHtml(err.message || 'No se pudo crear la página.') + '</div>');
+            briefWrap.insertAdjacentHTML('afterbegin', '<div class="pp-alert pp-alert--error">' + escapeHtml(err.message || pp.t('js.studio.create_failed')) + '</div>');
         }).finally(function () {
-            setButtonBusy(button, false, 'Crear página completa');
+            setButtonBusy(button, false, pp.t('js.studio.create_full_page'));
         });
     }
 
@@ -257,7 +257,7 @@
         options.signal = controller.signal;
         return fetch(url, options).catch(function (err) {
             if (err && err.name === 'AbortError') {
-                throw new Error('La IA ha tardado demasiado. Puedes reintentar o usar un modelo más rápido.');
+                throw new Error(pp.t('js.studio.ai_timeout'));
             }
             throw err;
         }).finally(function () {
@@ -311,13 +311,13 @@
 
     function formBlock(form) {
         if (!form || !form.needed) {
-            return '<div class="pp-studio-form-plan"><strong>Formulario</strong><span>No parece necesario para esta página.</span></div>';
+            return '<div class="pp-studio-form-plan"><strong>' + pp.t('js.studio.form') + '</strong><span>' + pp.t('js.studio.form_not_needed') + '</span></div>';
         }
         var fields = Array.isArray(form.fields) ? form.fields : [];
         return [
             '<div class="pp-studio-form-plan">',
-                '<strong>Formulario automático</strong>',
-                '<span>' + escapeHtml(form.purpose || 'Captar mensajes desde la página.') + '</span>',
+                '<strong>' + pp.t('js.studio.auto_form') + '</strong>',
+                '<span>' + escapeHtml(form.purpose || pp.t('js.studio.form_purpose')) + '</span>',
                 '<div>',
                     fields.map(function (f) {
                         return '<em>' + escapeHtml(f.label || '') + (f.required ? ' *' : '') + '</em>';
@@ -365,20 +365,21 @@
     }
 
     function typeLabel(type) {
+        // Las claves son tipos de página/sección de la BD: no se traducen.
         return {
-            home: 'Inicio',
-            service: 'Servicio',
-            product: 'Producto',
+            home: pp.t('js.onb.type_home'),
+            service: pp.t('js.onb.type_service'),
+            product: pp.t('js.studio.type_product'),
             landing: 'Landing',
-            article: 'Artículo',
-            contact: 'Contacto',
+            article: pp.t('js.studio.type_article'),
+            contact: pp.t('js.onb.type_contact'),
             hero: 'Hero',
-            text_image: 'Texto + imagen',
-            benefits: 'Beneficios',
+            text_image: pp.t('js.studio.type_text_image'),
+            benefits: pp.t('js.studio.type_benefits'),
             faq: 'FAQ',
             cta: 'CTA',
-            form: 'Formulario'
-        }[type] || type || 'Página';
+            form: pp.t('js.studio.form')
+        }[type] || type || pp.t('js.onb.page');
     }
 
     function priorityLabel(priority) {
@@ -440,8 +441,8 @@
             var hasRequiredText = titleEl.value.trim() && goalEl.value.trim();
             submit.disabled = !(hasVisualSource && hasRequiredText);
             if (hasRequiredText && !hasVisualSource) {
-                setStatus('Sube una captura o elige una página base.', 'err');
-            } else if (hasVisualSource && status.textContent === 'Sube una captura o elige una página base.') {
+                setStatus(pp.t('js.studio.need_reference'), 'err');
+            } else if (hasVisualSource && status.textContent === pp.t('js.studio.need_reference')) {
                 setStatus('');
             }
         }
@@ -477,7 +478,7 @@
                 var f = arr[k];
                 if (OK_TYPES.indexOf(f.type) === -1) { setStatus('«' + f.name + '» no es PNG, JPG ni WebP.', 'err'); continue; }
                 if (f.size > MAX_BYTES) { setStatus('«' + f.name + '» supera los 8 MB.', 'err'); continue; }
-                if (files.length >= MAX) { setStatus('Máximo ' + MAX + ' imágenes.', 'err'); break; }
+                if (files.length >= MAX) { setStatus(pp.t('js.studio.max_images', { n: MAX }), 'err'); break; }
                 files.push(f);
                 setStatus('');
             }
@@ -534,7 +535,7 @@
             event.preventDefault();
             if (submit.disabled) return;
             setButtonBusy(submit, true, 'Generando');
-            setStatus('Generando tu página…');
+            setStatus(pp.t('js.studio.generating'));
             progress.hidden = false;
             startReferenceProgress();
 
@@ -561,12 +562,12 @@
                     return body;
                 });
             }).then(function (body) {
-                setStatus('Página generada. Abriendo el Studio…', 'ok');
+                setStatus(pp.t('js.studio.generated'), 'ok');
                 window.location.href = body.edit_url;
             }).catch(function (err) {
                 progress.hidden = true;
-                setStatus(err.message || 'No se pudo generar la página.', 'err');
-                setButtonBusy(submit, false, 'Generar página');
+                setStatus(err.message || pp.t('js.studio.generate_failed'), 'err');
+                setButtonBusy(submit, false, pp.t('js.studio.generate_page'));
                 updateSubmit();
             });
         });

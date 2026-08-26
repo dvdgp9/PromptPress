@@ -17,7 +17,7 @@ foreach ($cssVars as $var => $val) {
 }
 ?>
 
-<?php \Core\View::start('title'); ?>Diseño<?php \Core\View::end(); ?>
+<?php \Core\View::start('title'); ?><?= e(__('nav.design')) ?><?php \Core\View::end(); ?>
 
 <?php \Core\View::start('scripts'); ?>
 <?php if (!empty($googleFonts)):
@@ -41,18 +41,18 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
 <?php \Core\View::end(); ?>
 
 <div class="pp-page-header">
-    <h2>Diseño del sitio</h2>
+    <h2><?= e(__('design.title')) ?></h2>
     <div class="pp-page-header__actions" style="display:inline-flex; gap:8px;">
         <form method="POST" action="<?= e(base_url('admin/design/regenerate')) ?>"
-              onsubmit="return confirm('Esto recalculará tu diseño completo basándose en los datos de tu negocio. ¿Continuar?');"
+              onsubmit="return confirm(<?= e(json_encode(__('design.confirm_regenerate'), JSON_UNESCAPED_UNICODE)) ?>);"
               style="display:inline;">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm" title="Regenera el diseño con IA usando tu memoria del sitio">
-                ✨ Regenerar con IA
+            <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm" title="<?= e(__('design.regenerate_title')) ?>">
+                ✨ <?= e(__('design.regenerate')) ?>
             </button>
         </form>
         <form method="POST" action="<?= e(base_url('admin/design/reset')) ?>"
-              onsubmit="return confirm('¿Restablecer todo a los valores por defecto?');"
+              onsubmit="return confirm(<?= e(json_encode(__('design.confirm_reset'), JSON_UNESCAPED_UNICODE)) ?>);"
               style="display:inline;">
             <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
             <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">
@@ -64,18 +64,15 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
 </div>
 
 <p class="pp-page-intro">
-    Define la identidad visual del sitio. Los cambios se aplican en tiempo real al panel de previsualización
-    y se generarán como variables CSS para las páginas públicas.
+    <?= e(__('design.intro')) ?>
 </p>
 
 <section class="pp-logo-card" aria-labelledby="pp-design-logo-title">
     <header class="pp-logo-card__head">
         <div>
-            <h3 id="pp-design-logo-title">Logo de la empresa</h3>
+            <h3 id="pp-design-logo-title"><?= e(__('design.logo_title')) ?></h3>
             <p>
-                Puedes subir dos versiones: una para cuando el logo va sobre <strong>fondo claro</strong>
-                y otra para <strong>fondo oscuro</strong> (por ejemplo el pie de página). La IA usará
-                la que contraste con cada sección. PNG, JPG o WebP, hasta 2 MB.
+                <?= __('design.logo_help.html') ?>
             </p>
         </div>
     </header>
@@ -90,26 +87,26 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
 
             <div class="pp-logo-slot__preview">
                 <?php if ($slot['url'] !== ''): ?>
-                    <img src="<?= e($slot['url']) ?>" alt="Logo <?= e(mb_strtolower($slot['label'])) ?>">
+                    <img src="<?= e($slot['url']) ?>" alt="<?= e($slot['label']) ?>">
                 <?php else: ?>
-                    <span>Sin logo</span>
+                    <span><?= e(__('design.no_logo')) ?></span>
                 <?php endif; ?>
             </div>
 
             <?php if ($slot['missing']): ?>
-            <p class="pp-logo-slot__warning">El archivo anterior ya no está en el servidor. Vuelve a subirlo.</p>
+            <p class="pp-logo-slot__warning"><?= e(__('design.logo_missing')) ?></p>
             <?php endif; ?>
 
             <form method="POST" action="<?= e(base_url('admin/design/logo')) ?>" enctype="multipart/form-data" class="pp-logo-slot__form">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                 <input type="hidden" name="variant" value="<?= e($variant) ?>">
                 <label class="pp-logo-picker">
-                    <span>Elegir archivo</span>
+                    <span><?= e(__('design.choose_file')) ?></span>
                     <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required data-logo-file>
                 </label>
-                <span class="pp-logo-filename" data-logo-filename>Ningún archivo seleccionado</span>
+                <span class="pp-logo-filename" data-logo-filename><?= e(__('onboarding.type.no_files')) ?></span>
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-logo-submit disabled>
-                    <?= $slot['url'] !== '' ? 'Sustituir' : 'Subir' ?>
+                    <?= e($slot['url'] !== '' ? __('design.replace') : __('media.upload')) ?>
                 </button>
             </form>
 
@@ -118,15 +115,15 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                 <form method="POST" action="<?= e(base_url('admin/design/logo/primary')) ?>">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="hidden" name="variant" value="<?= e($variant) ?>">
-                    <button type="submit" class="pp-logo-link">Marcar como principal</button>
+                    <button type="submit" class="pp-logo-link"><?= e(__('design.set_primary')) ?></button>
                 </form>
                 <?php endif; ?>
                 <?php if ($slot['url'] !== '' || $slot['missing']): ?>
                 <form method="POST" action="<?= e(base_url('admin/design/logo/delete')) ?>"
-                      onsubmit="return confirm('¿Eliminar este logo?');">
+                      onsubmit="return confirm(<?= e(json_encode(__('design.confirm_delete_logo'), JSON_UNESCAPED_UNICODE)) ?>);">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="hidden" name="variant" value="<?= e($variant) ?>">
-                    <button type="submit" class="pp-logo-link pp-logo-link--danger">Eliminar</button>
+                    <button type="submit" class="pp-logo-link pp-logo-link--danger"><?= e(__('common.delete')) ?></button>
                 </form>
                 <?php endif; ?>
             </div>
@@ -135,17 +132,20 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
     </div>
 
     <p class="pp-logo-card__hint">
-        El <strong>principal</strong> es el que se usa cuando no se sabe de qué color será el fondo.
-        Si solo subes uno, se usará siempre ese.
+        <?= __('design.primary_hint.html') ?>
     </p>
 </section>
 
 <?php $flashSuccess = \Core\Session::flash('success'); $flashError = \Core\Session::flash('error'); ?>
+<?php /* DESIGN-MANDA T5 — El aviso de contraste no es un error: el color se ha
+       guardado. Va aparte para que no se confunda con un fallo de validación. */ ?>
+<?php $flashWarning = \Core\Session::flash('warning'); ?>
 <?php if ($flashSuccess): ?><div class="pp-alert pp-alert--success"><?= e($flashSuccess) ?></div><?php endif; ?>
+<?php if ($flashWarning): ?><div class="pp-alert pp-alert--warning"><?= e($flashWarning) ?></div><?php endif; ?>
 <?php if ($flashError): ?><div class="pp-alert pp-alert--error"><?= e($flashError) ?></div><?php endif; ?>
 <?php if (!empty($errors)): ?>
 <div class="pp-alert pp-alert--error">
-    <strong>Revisa los errores:</strong>
+    <strong><?= e(__('memory.check_errors')) ?></strong>
     <ul style="margin:8px 0 0 20px;">
         <?php foreach ($errors as $msg): ?><li><?= e($msg) ?></li><?php endforeach; ?>
     </ul>
@@ -186,7 +186,11 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
             // opción del desplegable con su propia tipografía.
             $customFontNames = array_column($customFonts ?? [], 'name', 'token');
 
-            $renderField = function (string $cat, array $f) use ($tokens, $errors, $fontOptions, $customFontNames) {
+            // DESIGN-MANDA T5 — `$fontRoleOwner` (del controlador): qué campo de
+            // tipografía está mandado por una familia de marca.
+            $fontRoleOwner = $fontRoleOwner ?? [];
+
+            $renderField = function (string $cat, array $f) use ($tokens, $errors, $fontOptions, $customFontNames, $fontRoleOwner) {
                 $value = $tokens[$cat][$f['key']] ?? $f['default'];
                 $errKey = $cat . '.' . $f['key'];
                 $hasErr = isset($errors[$errKey]);
@@ -209,7 +213,7 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                                    value="<?= e($value) ?>"
                                    maxlength="7"
                                    data-pp-design-sync="color"
-                                   aria-label="Hex">
+                                   aria-label="<?= e(__('design.hex')) ?>">
                         </div>
 
                     <?php elseif ($f['type'] === 'font'): ?>
@@ -254,6 +258,16 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                     <?php if (!empty($f['hint'])): ?>
                     <small class="pp-design-hint"><?= e($f['hint']) ?></small>
                     <?php endif; ?>
+                    <?php /* DESIGN-MANDA T5 — Si una tipografía de marca tiene
+                            asignado este rol, manda ella sobre el desplegable.
+                            Callarlo reproduce el mismo problema de confianza que
+                            teníamos con los colores: el campo dice una cosa y la
+                            web pinta otra. */ ?>
+                    <?php if (!empty($fontRoleOwner[$f['key']])): ?>
+                    <small class="pp-design-hint pp-design-hint--locked">
+                        <?= e(__('design.font_role_wins', ['familia' => $fontRoleOwner[$f['key']]])) ?>
+                    </small>
+                    <?php endif; ?>
                     <?php if ($hasErr): ?>
                     <small class="pp-err"><?= e($errors[$errKey]) ?></small>
                     <?php endif; ?>
@@ -274,6 +288,47 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                 <p class="pp-design-panel-hint"><?= e($def['hint']) ?></p>
                 <?php endif; ?>
 
+                <?php if ($cat === 'colors'): ?>
+                <?php /* DESIGN-MANDA T10 — Los colores de marca y la generación
+                        de paleta vivían solo en el paso 2 del onboarding, un
+                        flujo de un solo uso. Aquí son AYUDANTES: rellenan los
+                        campos de abajo, no guardan por su cuenta, para que el
+                        usuario vea y pueda retocar lo que va a guardar. */ ?>
+                <div class="pp-brandcolors" data-brand-colors
+                     data-max="<?= (int) \App\Services\BrandPaletteService::BRAND_COLORS_MAX ?>">
+                    <div class="pp-brandcolors__head">
+                        <strong><?= e(__('design.brand_colors')) ?></strong>
+                        <small><?= e(__('design.brand_colors_hint')) ?></small>
+                    </div>
+
+                    <div class="pp-brandcolors__list" data-brand-colors-list>
+                        <?php foreach ($brandColors as $hex): ?>
+                        <span class="pp-brandcolors__item">
+                            <input type="color" value="<?= e($hex) ?>" data-brand-color
+                                   aria-label="<?= e(__('onboarding.color.swatch_aria')) ?>">
+                            <button type="button" data-brand-color-remove
+                                    aria-label="<?= e(__('onboarding.color.remove_aria')) ?>">×</button>
+                        </span>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="pp-brandcolors__actions">
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-color-add>
+                            + <?= e(__('onboarding.color.add')) ?>
+                        </button>
+                        <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-brand-color-extract>
+                            <?= e(__('onboarding.color.extract')) ?>
+                        </button>
+                        <button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-palette-generate>
+                            ✨ <?= e(__('design.palette_generate')) ?>
+                        </button>
+                        <small data-brand-colors-status aria-live="polite"></small>
+                    </div>
+
+                    <div class="pp-brandcolors__proposals" data-palette-proposals hidden></div>
+                </div>
+                <?php endif; ?>
+
                 <div class="<?= $cat === 'colors' ? 'pp-color-grid' : 'pp-design-fields' ?>">
                     <?php foreach ($def['fields'] as $f): ?>
                         <?php if (isset($relocateToColors[$cat]) && in_array($f['key'], $relocateToColors[$cat], true)) continue; ?>
@@ -283,14 +338,14 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
 
                 <?php if ($cat === 'typography'): ?>
                 <p class="pp-design-fonts-pointer">
-                    ¿Tu marca tiene tipografías propias?
-                    <a href="#fonts">Súbelas aquí abajo</a> y aparecerán en estos desplegables.
+                    <?= e(__('design.own_fonts_q')) ?>
+                    <a href="#fonts"><?= e(__('design.upload_here')) ?></a> <?= e(__('design.will_appear')) ?>
                 </p>
                 <?php endif; ?>
 
                 <?php if ($cat === 'colors'): ?>
                 <div class="pp-design-shape">
-                    <h4 class="pp-design-subhead">Esquinas y forma</h4>
+                    <h4 class="pp-design-subhead"><?= e(__('design.corners')) ?></h4>
                     <div class="pp-design-fields">
                         <?php foreach ($relocateToColors as $srcCat => $keys): ?>
                             <?php foreach ($keys as $k): ?>
@@ -306,10 +361,10 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
             <?php $first = false; endforeach; ?>
 
             <div class="pp-form-actions pp-design-actions">
-                <span>Colores, tipografías, botones y espacios</span>
+                <span><?= e(__('design.tokens_help')) ?></span>
                 <button type="submit" class="pp-btn pp-btn--primary">
                     <span class="pp-icon pp-icon--check"></span>
-                    Guardar diseño
+                    <?= e(__('design.save')) ?>
                 </button>
             </div>
         </section>
@@ -317,15 +372,15 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
         <!-- Columna derecha: preview sticky -->
         <aside class="pp-design-preview-wrap">
             <div class="pp-design-preview-head">
-                <h4>Previsualización</h4>
-                <div class="pp-viewport-toggle" role="group" aria-label="Tamaño del viewport">
-                    <button type="button" class="pp-vp-btn is-active" data-viewport="desktop" title="Escritorio">
+                <h4><?= e(__('design.preview')) ?></h4>
+                <div class="pp-viewport-toggle" role="group" aria-label="<?= e(__('design.viewport_aria')) ?>">
+                    <button type="button" class="pp-vp-btn is-active" data-viewport="desktop" title="<?= e(__('chrome.desktop')) ?>">
                         <span class="pp-icon pp-icon--desktop"></span>
                     </button>
                     <button type="button" class="pp-vp-btn" data-viewport="tablet" title="Tablet">
                         <span class="pp-icon pp-icon--tablet"></span>
                     </button>
-                    <button type="button" class="pp-vp-btn" data-viewport="mobile" title="Móvil">
+                    <button type="button" class="pp-vp-btn" data-viewport="mobile" title="<?= e(__('chrome.mobile')) ?>">
                         <span class="pp-icon pp-icon--mobile"></span>
                     </button>
                 </div>
@@ -337,57 +392,57 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                 <div class="pp-design-preview" id="pp-design-preview" style="<?= e($previewInline) ?>">
                     <!-- Navbar -->
                     <header class="pp-dp-nav">
-                        <div class="pp-dp-nav__brand">Tu Marca</div>
+                        <div class="pp-dp-nav__brand"><?= e(__('design.demo.brand')) ?></div>
                         <nav class="pp-dp-nav__menu">
-                            <a href="#" class="pp-dp-nav__link">Inicio</a>
-                            <a href="#" class="pp-dp-nav__link">Servicios</a>
-                            <a href="#" class="pp-dp-nav__link">Precios</a>
-                            <a href="#" class="pp-dp-nav__link">Contacto</a>
+                            <a href="#" class="pp-dp-nav__link"><?= e(__('page_type.home')) ?></a>
+                            <a href="#" class="pp-dp-nav__link"><?= e(__('design.demo.services')) ?></a>
+                            <a href="#" class="pp-dp-nav__link"><?= e(__('design.demo.pricing')) ?></a>
+                            <a href="#" class="pp-dp-nav__link"><?= e(__('page_type.contact')) ?></a>
                         </nav>
-                        <button type="button" class="pp-dp-btn pp-dp-btn--primary pp-dp-btn--sm">Empezar</button>
+                        <button type="button" class="pp-dp-btn pp-dp-btn--primary pp-dp-btn--sm"><?= e(__('design.demo.start')) ?></button>
                     </header>
 
                     <!-- Hero -->
                     <section class="pp-dp-hero">
-                        <span class="pp-dp-badge">Novedad</span>
-                        <h1 class="pp-dp-h1">Un título que convierte visitas en clientes</h1>
+                        <span class="pp-dp-badge"><?= e(__('design.demo.new')) ?></span>
+                        <h1 class="pp-dp-h1"><?= e(__('design.demo.h1')) ?></h1>
                         <p class="pp-dp-lead">
-                            Con esta paleta y tipografía se construirán todas las páginas de tu sitio.
+                            <?= e(__('design.preview_note')) ?>
                             Ajusta los valores y observa los cambios al instante.
                         </p>
                         <div class="pp-dp-cta-group">
-                            <button type="button" class="pp-dp-btn pp-dp-btn--primary">Probar gratis</button>
-                            <button type="button" class="pp-dp-btn pp-dp-btn--secondary">Ver demo</button>
+                            <button type="button" class="pp-dp-btn pp-dp-btn--primary"><?= e(__('design.demo.try')) ?></button>
+                            <button type="button" class="pp-dp-btn pp-dp-btn--secondary"><?= e(__('design.demo.see_demo')) ?></button>
                         </div>
                     </section>
 
                     <!-- Features / benefits -->
                     <section class="pp-dp-section">
                         <div class="pp-dp-section-head">
-                            <h2 class="pp-dp-h2">Todo lo que necesitas</h2>
-                            <p class="pp-dp-lead pp-dp-lead--center">Tres razones para elegirnos.</p>
+                            <h2 class="pp-dp-h2"><?= e(__('design.demo.all_you_need')) ?></h2>
+                            <p class="pp-dp-lead pp-dp-lead--center"><?= e(__('design.demo.three_reasons')) ?></p>
                         </div>
                         <div class="pp-dp-cards">
                             <div class="pp-dp-card">
                                 <div class="pp-dp-card__icon">
                                     <span class="pp-icon pp-icon--check"></span>
                                 </div>
-                                <h3 class="pp-dp-h3">Rápido</h3>
-                                <p class="pp-dp-body">Rendimiento optimizado de serie, páginas que cargan al instante.</p>
+                                <h3 class="pp-dp-h3"><?= e(__('design.demo.fast')) ?></h3>
+                                <p class="pp-dp-body"><?= e(__('design.demo.fast_text')) ?></p>
                             </div>
                             <div class="pp-dp-card">
                                 <div class="pp-dp-card__icon" style="background: var(--pp-accent);">
                                     <span class="pp-icon pp-icon--palette"></span>
                                 </div>
-                                <h3 class="pp-dp-h3">Personalizable</h3>
-                                <p class="pp-dp-body">Controla cada color, fuente y espaciado desde un solo sitio.</p>
+                                <h3 class="pp-dp-h3"><?= e(__('design.demo.customizable')) ?></h3>
+                                <p class="pp-dp-body"><?= e(__('design.demo.custom_text')) ?></p>
                             </div>
                             <div class="pp-dp-card">
                                 <div class="pp-dp-card__icon" style="background: var(--pp-success);">
                                     <span class="pp-icon pp-icon--ai"></span>
                                 </div>
-                                <h3 class="pp-dp-h3">Con IA</h3>
-                                <p class="pp-dp-body">Genera contenido con un solo clic respetando tu estilo.</p>
+                                <h3 class="pp-dp-h3"><?= e(__('design.demo.with_ai')) ?></h3>
+                                <p class="pp-dp-body"><?= e(__('design.demo.ai_text')) ?></p>
                             </div>
                         </div>
                     </section>
@@ -395,37 +450,37 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                     <!-- FAQ -->
                     <section class="pp-dp-section pp-dp-section--alt">
                         <div class="pp-dp-section-head">
-                            <h2 class="pp-dp-h2">Preguntas frecuentes</h2>
+                            <h2 class="pp-dp-h2"><?= e(__('design.demo.faq')) ?></h2>
                         </div>
                         <div class="pp-dp-faq">
                             <details>
-                                <summary>¿Cómo funciona?</summary>
-                                <p class="pp-dp-body">Una explicación breve de cómo se usa el producto, accesible desde cualquier dispositivo.</p>
+                                <summary><?= e(__('design.demo.q1')) ?></summary>
+                                <p class="pp-dp-body"><?= e(__('design.demo.a1')) ?></p>
                             </details>
                             <details>
-                                <summary>¿Necesito conocimientos técnicos?</summary>
-                                <p class="pp-dp-body">No. Todo se configura desde la interfaz visual.</p>
+                                <summary><?= e(__('design.demo.q2')) ?></summary>
+                                <p class="pp-dp-body"><?= e(__('design.demo.a2')) ?></p>
                             </details>
                             <details>
-                                <summary>¿Puedo cancelar cuando quiera?</summary>
-                                <p class="pp-dp-body">Sí, sin permanencia ni penalizaciones.</p>
+                                <summary><?= e(__('design.demo.q3')) ?></summary>
+                                <p class="pp-dp-body"><?= e(__('design.demo.a3')) ?></p>
                             </details>
                         </div>
                     </section>
 
                     <!-- CTA band -->
                     <section class="pp-dp-cta-band">
-                        <h2 class="pp-dp-h2 pp-dp-h2--light">¿Listo para empezar?</h2>
-                        <p class="pp-dp-lead pp-dp-lead--light">Crea tu primera página en menos de 2 minutos.</p>
-                        <button type="button" class="pp-dp-btn pp-dp-btn--on-dark">Crear mi sitio</button>
+                        <h2 class="pp-dp-h2 pp-dp-h2--light"><?= e(__('design.demo.ready')) ?></h2>
+                        <p class="pp-dp-lead pp-dp-lead--light"><?= e(__('design.demo.ready_help')) ?></p>
+                        <button type="button" class="pp-dp-btn pp-dp-btn--on-dark"><?= e(__('design.demo.create_site')) ?></button>
                     </section>
 
                     <!-- Mini footer -->
                     <footer class="pp-dp-footer">
-                        <div>© 2026 Tu Marca</div>
+                        <div>© 2026 <?= e(__('design.demo.brand')) ?></div>
                         <div class="pp-dp-footer__links">
-                            <a href="#" class="pp-dp-link">Aviso legal</a>
-                            <a href="#" class="pp-dp-link">Privacidad</a>
+                            <a href="#" class="pp-dp-link"><?= e(__('design.demo.legal')) ?></a>
+                            <a href="#" class="pp-dp-link"><?= e(__('nav.privacy')) ?></a>
                         </div>
                     </footer>
                 </div>
@@ -433,68 +488,12 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
         </aside>
     </div>
 
-    <?php if (!empty($visualStyleCards)): ?>
-    <?php
-    $currentCard = null;
-    foreach ($visualStyleCards as $c) {
-        if (($c['slug'] ?? '') === $visualStyleCurrent) { $currentCard = $c; break; }
-    }
-    ?>
-    <details class="pp-design-advanced" data-visual-styles>
-        <summary class="pp-design-advanced__summary">
-            <span>
-                <strong>Estilo del sitio</strong>
-                <small>Avanzado · activo: <?= e($currentCard['label'] ?? $visualStyleCurrent) ?></small>
-            </span>
-            <span class="pp-design-advanced__chevron" aria-hidden="true">▾</span>
-        </summary>
-
-        <div class="pp-design-advanced__body">
-            <p class="pp-design-visual__desc">
-                Define la <strong>dirección visual base</strong> (tipografía, espacios y ritmo de composición).
-                Tiene <strong>efecto pleno en las páginas clásicas por secciones</strong>. En las páginas de
-                <strong>Canvas (HTML libre)</strong>, donde el diseño lo genera la IA, su influencia se limita
-                sobre todo a las <strong>fuentes por defecto</strong>. Por eso lo dejamos aquí, como ajuste
-                secundario: en la mayoría de casos no necesitas cambiarlo.
-            </p>
-
-            <ul class="pp-design-visual__grid" role="radiogroup" aria-label="Dirección visual">
-                <?php foreach ($visualStyleCards as $card): $slug = (string) $card['slug']; $isActive = $slug === $visualStyleCurrent; ?>
-                <li>
-                    <label class="pp-design-visual-card<?= $isActive ? ' is-active' : '' ?>" data-style-card="<?= e($slug) ?>">
-                        <input type="radio" name="visual_style" value="<?= e($slug) ?>" <?= $isActive ? 'checked' : '' ?>>
-                        <span class="pp-design-visual-card__check" aria-hidden="true"></span>
-                        <span class="pp-design-visual-card__thumb">
-                            <span class="pp-design-visual-card__frame-wrap">
-                                <span class="pp-design-visual-card__spacer">
-                                    <iframe class="pp-design-visual-card__frame"
-                                            data-src="<?= e($card['preview_url']) ?>"
-                                            loading="lazy"
-                                            title="Preview de <?= e($card['label']) ?>"
-                                            tabindex="-1"></iframe>
-                                </span>
-                            </span>
-                            <a class="pp-design-visual-card__open"
-                               href="<?= e($card['preview_url']) ?>"
-                               target="_blank"
-                               rel="noopener"
-                               title="Abrir preview completo"
-                               onclick="event.stopPropagation()">↗</a>
-                        </span>
-                        <span class="pp-design-visual-card__body">
-                            <strong><?= e($card['label']) ?></strong>
-                            <em><?= e($card['description']) ?></em>
-                            <small><?= e($card['heading_font']) ?> · <?= e($card['body_font']) ?></small>
-                        </span>
-                    </label>
-                </li>
-                <?php endforeach; ?>
-            </ul>
-
-            <p class="pp-design-visual__hint" data-current-label>Cambia el estilo y pulsa <strong>Guardar diseño</strong> arriba. <strong></strong></p>
-        </div>
-    </details>
-    <?php endif; ?>
+    <?php /* DESIGN-MANDA T7 — "Estilo del sitio" (dirección visual) retirado del
+           panel: no emitía nada en ningún sitio con skin, su CSS ataca clases del
+           sistema de bloques que las páginas Canvas no usan, y nunca llegaba al
+           prompt de Canvas. Los colores se editan en Colores y las tipografías y
+           radios en sus pestañas. `VisualStyleService` sigue existiendo para el
+           body class de lo ya publicado. */ ?>
 </form>
 
 <?php /* FONTS — Tipografías propias del cliente. Va fuera del <form> de diseño
@@ -503,40 +502,40 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
 <section class="pp-fonts-card" id="fonts" aria-labelledby="pp-fonts-title">
     <header class="pp-fonts-card__head">
         <div>
-            <h3 id="pp-fonts-title">Tus tipografías de marca</h3>
+            <h3 id="pp-fonts-title"><?= e(__('design.fonts_title')) ?></h3>
             <p>
-                Si tu manual de marca pide una tipografía concreta, súbela aquí y la web la usará
+                <?= e(__('design.fonts_help')) ?>
                 en lugar de las de la lista. Formatos: <strong>WOFF2, WOFF, TTF u OTF</strong>, hasta 3 MB por archivo.
             </p>
         </div>
         <?php if (!empty($customFonts)): ?>
-        <span class="pp-fonts-card__count"><?= count($customFonts) ?> tipografía<?= count($customFonts) === 1 ? '' : 's' ?></span>
+        <span class="pp-fonts-card__count"><?= e(__(count($customFonts) === 1 ? 'design.fonts_count_one' : 'design.fonts_count_other', ['n' => count($customFonts)])) ?></span>
         <?php endif; ?>
     </header>
 
     <?php foreach (($fontWeightGaps ?? []) as $gap): ?>
     <p class="pp-fonts-warn">
-        <strong><?= e($gap['family']) ?></strong> se usa en <?= e($gap['role']) ?>, pero no has subido
-        <strong><?= e(implode(', ', $gap['missing'])) ?></strong>.
-        El navegador lo imitará engordando las letras y no se verá igual que en tu manual de marca:
-        sube ese archivo o cambia el peso en la pestaña Tipografía.
+        <?= __('design.font_gap.html', [
+            'familia' => '<strong>' . e($gap['family']) . '</strong>',
+            'rol'     => e($gap['role']),
+            'pesos'   => '<strong>' . e(implode(', ', $gap['missing'])) . '</strong>',
+        ]) ?>
     </p>
     <?php endforeach; ?>
 
     <?php if (!empty($fontHeavyFiles['files'])): ?>
     <p class="pp-fonts-warn pp-fonts-warn--info">
-        Tus visitantes descargan <strong><?= e((string) $fontHeavyFiles['total']) ?></strong> de tipografías al abrir la web.
+        <?= __('design.heavy_fonts.html', ['total' => '<strong>' . e((string) $fontHeavyFiles['total']) . '</strong>']) ?>
         <?php $n = count($fontHeavyFiles['files']); ?>
-        <?= $n === 1 ? 'Este archivo pesa más de la cuenta' : 'Estos ' . $n . ' archivos pesan más de la cuenta' ?>:
+        <?= e(__($n === 1 ? 'design.heavy_one' : 'design.heavy_other', ['n' => $n])) ?>:
         <?php foreach ($fontHeavyFiles['files'] as $i => $f): ?>
             <?= $i > 0 ? ' · ' : '' ?><strong><?= e($f['name']) ?> <?= e($f['label']) ?></strong> — <?= e($f['format']) ?>, <?= e($f['size']) ?><?php endforeach; ?>.
-        Convertidos a <strong>WOFF2</strong> ocuparían una décima parte y la web dejaría de mostrar
-        un instante la letra genérica antes que la tuya. Pídele a quien te pasó la tipografía los archivos en WOFF2.
+        <?= __('design.woff2_hint.html') ?>
     </p>
     <?php endif; ?>
 
     <?php if (empty($customFonts)): ?>
-    <p class="pp-fonts-empty">Todavía no has subido ninguna. Sube el archivo de cada peso (Regular, Bold…) y nosotros los juntamos en una sola tipografía.</p>
+    <p class="pp-fonts-empty"><?= e(__('design.fonts_empty')) ?></p>
     <?php else: ?>
     <ul class="pp-fonts-list">
         <?php foreach ($customFonts as $fam): ?>
@@ -544,23 +543,23 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
             <div class="pp-fonts-family__head">
                 <div class="pp-fonts-family__id">
                     <strong style="font-family: <?= e($fam['files'] === [] ? 'inherit' : '"' . $fam['name'] . '", sans-serif') ?>"><?= e($fam['name']) ?></strong>
-                    <small><?= count($fam['files']) ?> peso<?= count($fam['files']) === 1 ? '' : 's' ?><?= $fam['role'] === 'none' ? ' · sin usar en la web' : '' ?></small>
+                    <small><?= e(__(count($fam['files']) === 1 ? 'design.weights_one' : 'design.weights_other', ['n' => count($fam['files'])])) ?><?= $fam['role'] === 'none' ? ' · ' . e(__('design.unused_on_site')) : '' ?></small>
                 </div>
                 <form method="POST" action="<?= e(base_url('admin/design/fonts/role')) ?>" class="pp-fonts-role">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
-                    <label for="pp-font-role-<?= (int) $fam['id'] ?>">Usar en</label>
+                    <label for="pp-font-role-<?= (int) $fam['id'] ?>"><?= e(__('design.use_in')) ?></label>
                     <select name="role" id="pp-font-role-<?= (int) $fam['id'] ?>" onchange="this.form.submit()">
                         <?php foreach ($customFontRoles as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $fam['role'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Aplicar</button></noscript>
+                    <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('design.apply')) ?></button></noscript>
                 </form>
             </div>
 
             <?php if ($fam['files'] === []): ?>
-            <p class="pp-fonts-family__empty">Esta tipografía no tiene archivos: añade al menos uno para poder usarla.</p>
+            <p class="pp-fonts-family__empty"><?= e(__('design.font_no_files')) ?></p>
             <?php else: ?>
             <ul class="pp-fonts-cuts">
                 <?php foreach ($fam['files'] as $file): ?>
@@ -570,23 +569,23 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                     <form method="POST" action="<?= e(base_url('admin/design/fonts/file/cut')) ?>" class="pp-fonts-cut__form">
                         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                         <input type="hidden" name="file_id" value="<?= (int) $file['id'] ?>">
-                        <select name="weight" onchange="this.form.submit()" aria-label="Peso de <?= e($file['original_name']) ?>">
+                        <select name="weight" onchange="this.form.submit()" aria-label="<?= e(__('design.weight_of', ['archivo' => $file['original_name']])) ?>">
                             <?php foreach ($customFontWeights as $w => $label): ?>
                             <option value="<?= (int) $w ?>" <?= (int) $file['weight'] === (int) $w ? 'selected' : '' ?>><?= e($label) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <select name="style" onchange="this.form.submit()" aria-label="Estilo de <?= e($file['original_name']) ?>">
-                            <option value="normal" <?= $file['style'] === 'normal' ? 'selected' : '' ?>>Normal</option>
-                            <option value="italic" <?= $file['style'] === 'italic' ? 'selected' : '' ?>>Cursiva</option>
+                        <select name="style" onchange="this.form.submit()" aria-label="<?= e(__('design.style_of', ['archivo' => $file['original_name']])) ?>">
+                            <option value="normal" <?= $file['style'] === 'normal' ? 'selected' : '' ?>><?= e(__('design.normal')) ?></option>
+                            <option value="italic" <?= $file['style'] === 'italic' ? 'selected' : '' ?>><?= e(__('design.italic')) ?></option>
                         </select>
-                        <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Aplicar</button></noscript>
+                        <noscript><button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('design.apply')) ?></button></noscript>
                     </form>
                     <span class="pp-fonts-cut__file" title="<?= e($file['original_name']) ?>"><?= e($file['original_name']) ?></span>
                     <form method="POST" action="<?= e(base_url('admin/design/fonts/file/delete')) ?>"
-                          onsubmit="return confirm('¿Eliminar este peso?');" class="pp-fonts-cut__del">
+                          onsubmit="return confirm(<?= e(json_encode(__('design.confirm_delete_weight'), JSON_UNESCAPED_UNICODE)) ?>);" class="pp-fonts-cut__del">
                         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                         <input type="hidden" name="file_id" value="<?= (int) $file['id'] ?>">
-                        <button type="submit" class="pp-fonts-x" aria-label="Eliminar <?= e($file['label']) ?>">×</button>
+                        <button type="submit" class="pp-fonts-x" aria-label="<?= e(__('design.delete_file', ['archivo' => $file['label']])) ?>">×</button>
                     </form>
                 </li>
                 <?php endforeach; ?>
@@ -598,17 +597,17 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
                     <label class="pp-fonts-picker">
-                        <span>+ Añadir otro peso</span>
+                        <span>+ <?= e(__('design.add_weight')) ?></span>
                         <input type="file" name="font_files[]" accept=".woff2,.woff,.ttf,.otf" multiple data-fonts-file>
                     </label>
                     <span class="pp-fonts-filename" data-fonts-filename></span>
-                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm" data-fonts-submit disabled>Subir</button>
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm" data-fonts-submit disabled><?= e(__('media.upload')) ?></button>
                 </form>
                 <form method="POST" action="<?= e(base_url('admin/design/fonts/delete')) ?>"
-                      onsubmit="return confirm('¿Eliminar «<?= e($fam['name']) ?>» y todos sus pesos?');">
+                      onsubmit="return confirm(<?= e(json_encode(__('design.confirm_delete_family', ['nombre' => $fam['name']]), JSON_UNESCAPED_UNICODE)) ?>);">
                     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
                     <input type="hidden" name="family_id" value="<?= (int) $fam['id'] ?>">
-                    <button type="submit" class="pp-fonts-remove">Eliminar tipografía</button>
+                    <button type="submit" class="pp-fonts-remove"><?= e(__('design.delete_font')) ?></button>
                 </form>
             </footer>
         </li>
@@ -617,37 +616,37 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
     <?php endif; ?>
 
     <form method="POST" action="<?= e(base_url('admin/design/fonts')) ?>" enctype="multipart/form-data" class="pp-fonts-new">
-        <h4>Subir una tipografía nueva</h4>
+        <h4><?= e(__('design.upload_new_font')) ?></h4>
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
         <div class="pp-fonts-new__grid">
             <label class="pp-fonts-field">
-                <span>Nombre</span>
-                <input type="text" name="family_name" maxlength="120" placeholder="Ej. Helvetica Now Display" required>
-                <small>El nombre que aparece en tu manual de marca.</small>
+                <span><?= e(__('onboarding.type.font_name')) ?></span>
+                <input type="text" name="family_name" maxlength="120" placeholder="<?= e(__('onboarding.type.heading_placeholder')) ?>" required>
+                <small><?= e(__('design.font_name_help')) ?></small>
             </label>
             <label class="pp-fonts-field">
-                <span>¿Dónde se usará?</span>
+                <span><?= e(__('design.where_used')) ?></span>
                 <select name="role">
-                    <option value="both">Títulos y textos</option>
-                    <option value="heading">Solo títulos</option>
-                    <option value="body">Solo textos</option>
-                    <option value="none">De momento, en ningún sitio</option>
+                    <option value="both"><?= e(__('js.onb.for_both')) ?></option>
+                    <option value="heading"><?= e(__('design.only_headings')) ?></option>
+                    <option value="body"><?= e(__('design.only_body')) ?></option>
+                    <option value="none"><?= e(__('design.nowhere_yet')) ?></option>
                 </select>
-                <small>Puedes cambiarlo cuando quieras.</small>
+                <small><?= e(__('design.can_change')) ?></small>
             </label>
             <label class="pp-fonts-field pp-fonts-field--file">
-                <span>Archivos</span>
+                <span><?= e(__('design.files')) ?></span>
                 <label class="pp-fonts-picker">
-                    <span>Elegir archivos</span>
+                    <span><?= e(__('design.choose_files')) ?></span>
                     <input type="file" name="font_files[]" accept=".woff2,.woff,.ttf,.otf" multiple required data-fonts-file>
                 </label>
-                <span class="pp-fonts-filename" data-fonts-filename>Ningún archivo seleccionado</span>
-                <small>Puedes seleccionar varios a la vez: detectamos el peso por el nombre (Regular, Bold, Light…) y luego puedes corregirlo.</small>
+                <span class="pp-fonts-filename" data-fonts-filename><?= e(__('onboarding.type.no_files')) ?></span>
+                <small><?= e(__('design.multi_select_hint')) ?></small>
             </label>
         </div>
         <div class="pp-fonts-new__actions">
-            <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-fonts-submit disabled>Subir tipografía</button>
-            <small class="pp-fonts-legal">Asegúrate de tener licencia de uso web (webfont) para los archivos que subas.</small>
+            <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-fonts-submit disabled><?= e(__('design.upload_font')) ?></button>
+            <small class="pp-fonts-legal"><?= e(__('design.font_license')) ?></small>
         </div>
     </form>
 </section>
@@ -663,7 +662,7 @@ document.querySelectorAll('[data-fonts-file]').forEach(function (input) {
         var submit = wrap.querySelector('[data-fonts-submit]');
         var n = input.files ? input.files.length : 0;
         if (label) {
-            label.textContent = n === 0 ? 'Ningún archivo seleccionado'
+            label.textContent = n === 0 ? pp.t('js.onb.no_file')
                 : (n === 1 ? input.files[0].name : n + ' archivos seleccionados');
         }
         if (submit) submit.disabled = n === 0;
@@ -671,79 +670,137 @@ document.querySelectorAll('[data-fonts-file]').forEach(function (input) {
 });
 </script>
 
-<?php if (!empty($visualStyleCards)): ?>
+
+<?php /* DESIGN-MANDA T10 — Editor de paleta: colores de marca, extracción del
+        logo y propuestas de IA. Todo RELLENA los campos del formulario; nada
+        guarda por su cuenta. El guardado sigue siendo el botón de siempre. */ ?>
 <script>
 (function () {
-    const root = document.querySelector('[data-visual-styles]');
-    if (!root) return;
+    const root = document.querySelector('[data-brand-colors]');
+    const form = document.getElementById('pp-design-form');
+    if (!root || !form) return;
 
-    const PREVIEW_WIDTH = 1440;
+    const csrf = <?= json_encode($csrf) ?>;
+    const urls = {
+        extract:  <?= json_encode(base_url('admin/design/extract-logo-colors')) ?>,
+        generate: <?= json_encode(base_url('admin/design/generate-palette')) ?>,
+        save:     <?= json_encode(base_url('admin/design/brand-colors')) ?>
+    };
+    const MAX = parseInt(root.dataset.max || '5', 10);
+    const list = root.querySelector('[data-brand-colors-list]');
+    const status = root.querySelector('[data-brand-colors-status]');
+    const box = root.querySelector('[data-palette-proposals]');
 
-    function fitCard(wrap) {
-        const w = wrap.clientWidth;
-        if (w <= 0) return;
-        const scale = w / PREVIEW_WIDTH;
-        const spacer = wrap.querySelector('.pp-design-visual-card__spacer');
-        const frame  = wrap.querySelector('.pp-design-visual-card__frame');
-        if (!spacer || !frame) return;
-        frame.style.transform = 'scale(' + scale.toFixed(4) + ')';
-        let h = 0;
-        try {
-            const doc = frame.contentDocument || frame.contentWindow?.document;
-            if (doc) h = Math.max(doc.body?.scrollHeight || 0, doc.documentElement?.scrollHeight || 0);
-        } catch (e) {}
-        if (h > 100) {
-            frame.style.height = h + 'px';
-            spacer.style.height = (h * scale) + 'px';
-        } else {
-            spacer.style.height = (1800 * scale) + 'px';
-        }
+    // Paleta (8 claves) => campos del formulario. Mismo mapeo que el servidor
+    // usa al guardar, en el sentido contrario.
+    const TOKEN_TO_FIELD = {
+        accent: 'colors[primary]', accent_dark: 'colors[primary_dark]',
+        accent_2: 'colors[accent]', bg: 'colors[bg]', surface: 'colors[surface]',
+        text: 'colors[text]', muted: 'colors[text_muted]', line: 'colors[border]'
+    };
+
+    function say(msg, isError) {
+        if (!status) return;
+        status.textContent = msg || '';
+        status.style.color = isError ? 'var(--pp-danger, #dc2626)' : '';
     }
 
-    function fitAll() {
-        root.querySelectorAll('.pp-design-visual-card__frame-wrap').forEach(fitCard);
-    }
-    fitAll();
-    if ('ResizeObserver' in window) {
-        const ro = new ResizeObserver(entries => entries.forEach(e => fitCard(e.target)));
-        root.querySelectorAll('.pp-design-visual-card__frame-wrap').forEach(w => ro.observe(w));
-    } else {
-        window.addEventListener('resize', fitAll);
+    function colors() {
+        return [...list.querySelectorAll('[data-brand-color]')].map(i => i.value);
     }
 
-    function loadFrame(frame) {
-        if (!frame.dataset.src) return;
-        const wrap = frame.closest('.pp-design-visual-card__frame-wrap');
-        frame.addEventListener('load', () => {
-            fitCard(wrap);
-            setTimeout(() => fitCard(wrap), 700);
-            setTimeout(() => fitCard(wrap), 1800);
+    function addSwatch(hex) {
+        if (list.querySelectorAll('[data-brand-color]').length >= MAX) return;
+        const wrap = document.createElement('span');
+        wrap.className = 'pp-brandcolors__item';
+        wrap.innerHTML = '<input type="color" data-brand-color>'
+                       + '<button type="button" data-brand-color-remove aria-label="×">×</button>';
+        wrap.querySelector('input').value = hex || '#888888';
+        list.appendChild(wrap);
+    }
+
+    function persist() {
+        const body = new URLSearchParams();
+        body.append('_csrf', csrf);
+        colors().forEach(c => body.append('brand_palette[]', c));
+        return fetch(urls.save, { method: 'POST', body, credentials: 'same-origin' });
+    }
+
+    // Rellena los campos del formulario y dispara `input` para que la
+    // previsualización en vivo se entere.
+    function applyPalette(tokens) {
+        Object.entries(TOKEN_TO_FIELD).forEach(([key, name]) => {
+            if (!tokens[key]) return;
+            form.querySelectorAll('[name="' + name + '"]').forEach(el => {
+                el.value = tokens[key];
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            });
         });
-        frame.src = frame.dataset.src;
-        frame.removeAttribute('data-src');
-    }
-    const frames = root.querySelectorAll('.pp-design-visual-card__frame');
-    if ('IntersectionObserver' in window) {
-        const io = new IntersectionObserver(entries => {
-            entries.forEach(e => { if (e.isIntersecting) { loadFrame(e.target); io.unobserve(e.target); } });
-        }, { rootMargin: '300px' });
-        frames.forEach(f => io.observe(f));
-    } else {
-        frames.forEach(loadFrame);
     }
 
-    // Sync visual de la card activa + badge "Activo" cuando el usuario marca otra.
-    const labelEl = root.querySelector('[data-current-label] strong');
-    root.addEventListener('change', function (e) {
-        if (e.target.name !== 'visual_style') return;
-        root.querySelectorAll('.pp-design-visual-card').forEach(c => c.classList.remove('is-active'));
-        const card = e.target.closest('.pp-design-visual-card');
-        if (card) card.classList.add('is-active');
-        if (labelEl) {
-            const body = card?.querySelector('.pp-design-visual-card__body strong');
-            if (body) labelEl.textContent = body.textContent + ' (sin guardar)';
+    root.addEventListener('click', function (ev) {
+        const rm = ev.target.closest('[data-brand-color-remove]');
+        if (rm) { rm.closest('.pp-brandcolors__item').remove(); persist(); return; }
+
+        if (ev.target.closest('[data-brand-color-add]')) { addSwatch('#888888'); return; }
+
+        if (ev.target.closest('[data-brand-color-extract]')) {
+            say(pp.t('js.design.extracting'));
+            const body = new URLSearchParams({ _csrf: csrf });
+            fetch(urls.extract, { method: 'POST', body, credentials: 'same-origin' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { say(d.error || pp.t('js.design.palette_error'), true); return; }
+                    list.innerHTML = '';
+                    (d.colors || []).forEach(addSwatch);
+                    persist();
+                    say('');
+                })
+                .catch(() => say(pp.t('js.design.palette_error'), true));
+            return;
+        }
+
+        if (ev.target.closest('[data-palette-generate]')) {
+            const brand = colors();
+            if (!brand.length) { say(pp.t('js.design.need_brand_color'), true); return; }
+            say(pp.t('js.design.generating'));
+            const body = new URLSearchParams();
+            body.append('_csrf', csrf);
+            brand.forEach(c => body.append('brand_palette[]', c));
+            persist();
+            fetch(urls.generate, { method: 'POST', body, credentials: 'same-origin' })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.ok) { say(d.error || pp.t('js.design.palette_error'), true); return; }
+                    renderProposals(d.palettes || []);
+                    say(d.notice || '');
+                })
+                .catch(() => say(pp.t('js.design.palette_error'), true));
         }
     });
+
+    function renderProposals(palettes) {
+        box.innerHTML = '';
+        box.hidden = palettes.length === 0;
+        palettes.forEach(p => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'pp-palette-card';
+            const swatches = ['bg', 'surface', 'text', 'accent', 'accent_2']
+                .map(k => '<i style="background:' + (p.tokens[k] || '#fff') + '"></i>').join('');
+            card.innerHTML = '<span class="pp-palette-card__sw">' + swatches + '</span>'
+                           + '<strong></strong><small></small>';
+            card.querySelector('strong').textContent = p.name || '';
+            card.querySelector('small').textContent = p.rationale || '';
+            card.addEventListener('click', function () {
+                applyPalette(p.tokens);
+                box.querySelectorAll('.pp-palette-card').forEach(c => c.classList.remove('is-active'));
+                card.classList.add('is-active');
+                say(pp.t('js.design.palette_applied'));
+            });
+            box.appendChild(card);
+        });
+    }
 })();
 </script>
-<?php endif; ?>

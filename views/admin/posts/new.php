@@ -19,12 +19,12 @@ $flashError = \Core\Session::flash('error');
 
   <header class="pp-posts-header">
     <div class="pp-posts-header__intro">
-      <span class="pp-posts-header__eyebrow">Crear entradas</span>
-      <h2 class="pp-posts-header__title">Estudio de entradas</h2>
-      <p class="pp-posts-header__desc">Cuéntale a la IA sobre qué quieres escribir y te propone varias entradas. Eliges las que te gusten y las genera todas de una vez.</p>
+      <span class="pp-posts-header__eyebrow"><?= e(__('post_new.eyebrow')) ?></span>
+      <h2 class="pp-posts-header__title"><?= e(__('post_new.title')) ?></h2>
+      <p class="pp-posts-header__desc"><?= e(__('post_new.intro')) ?></p>
     </div>
     <div class="pp-posts-header__actions">
-      <a href="<?= e(base_url('admin/posts')) ?>" class="pp-btn pp-btn--secondary">← Volver</a>
+      <a href="<?= e(base_url('admin/posts')) ?>" class="pp-btn pp-btn--secondary">← <?= e(__('common.back')) ?></a>
     </div>
   </header>
 
@@ -33,46 +33,46 @@ $flashError = \Core\Session::flash('error');
   <!-- ============ FASE 1 · IDEA ============ -->
   <section class="pp-ps-phase" data-phase="idea">
     <div class="pp-ps-hero">
-      <label class="pp-ps-hero__label" for="ps-focus">¿Sobre qué quieres escribir?</label>
+      <label class="pp-ps-hero__label" for="ps-focus"><?= e(__('post_new.about_what')) ?></label>
       <textarea id="ps-focus" class="pp-ps-hero__input" rows="2" maxlength="240"
-        placeholder="Ej. preparación de oposiciones de magisterio, errores comunes, novedades LOMLOE… (opcional)"></textarea>
-      <p class="pp-ps-hero__hint">Déjalo vacío y la IA propondrá ideas a partir de la memoria de tu negocio y tus entradas anteriores.</p>
+        placeholder="<?= e(__('post_new.focus_placeholder')) ?>"></textarea>
+      <p class="pp-ps-hero__hint"><?= e(__('post_new.focus_hint')) ?></p>
 
       <div class="pp-ps-hero__row">
         <div class="pp-ps-field">
-          <label for="ps-count">Cuántas ideas</label>
+          <label for="ps-count"><?= e(__('post_new.how_many')) ?></label>
           <select id="ps-count" class="pp-input">
-            <option value="3">3 ideas</option>
-            <option value="5" selected>5 ideas</option>
-            <option value="6">6 ideas</option>
-            <option value="8">8 ideas</option>
+            <option value="3"><?= e(__('post_new.n_ideas', ['n' => 3])) ?></option>
+            <option value="5" selected><?= e(__('post_new.n_ideas', ['n' => 5])) ?></option>
+            <option value="6"><?= e(__('post_new.n_ideas', ['n' => 6])) ?></option>
+            <option value="8"><?= e(__('post_new.n_ideas', ['n' => 8])) ?></option>
           </select>
         </div>
-        <button type="button" class="pp-btn pp-btn--primary pp-ps-hero__cta" id="ps-suggest-btn">✨ Proponer ideas</button>
+        <button type="button" class="pp-btn pp-btn--primary pp-ps-hero__cta" id="ps-suggest-btn">✨ <?= e(__('posts.suggest_ideas')) ?></button>
       </div>
       <div class="pp-ps-status" id="ps-idea-status" aria-live="polite" hidden></div>
     </div>
 
     <div class="pp-ps-secondary">
-      <span class="pp-ps-secondary__label">¿Prefieres otra vía?</span>
-      <button type="button" class="pp-ps-link" data-toggle-secondary="blank">Crear en blanco</button>
-      <button type="button" class="pp-ps-link" data-toggle-secondary="doc">Generar desde documentos</button>
+      <span class="pp-ps-secondary__label"><?= e(__('post_new.other_way')) ?></span>
+      <button type="button" class="pp-ps-link" data-toggle-secondary="blank"><?= e(__('post_new.blank')) ?></button>
+      <button type="button" class="pp-ps-link" data-toggle-secondary="doc"><?= e(__('post_new.from_docs')) ?></button>
     </div>
 
     <!-- Secundario: en blanco -->
     <form class="pp-ps-secform" id="ps-form-blank" method="POST" action="<?= e(base_url('admin/posts')) ?>" hidden>
       <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
       <div class="pp-form-group">
-        <label for="ps-blank-title" class="pp-form-label">Título de la entrada *</label>
-        <input id="ps-blank-title" type="text" name="title" required maxlength="200" class="pp-input pp-input--xl" placeholder="Ej. Cómo digitalizar un restaurante familiar en 2026" autocomplete="off">
+        <label for="ps-blank-title" class="pp-form-label"><?= e(__('post_edit.post_title')) ?> *</label>
+        <input id="ps-blank-title" type="text" name="title" required maxlength="200" class="pp-input pp-input--xl" placeholder="<?= e(__('post_new.title_placeholder')) ?>" autocomplete="off">
       </div>
       <div class="pp-form-group">
-        <label for="ps-blank-excerpt" class="pp-form-label">Resumen (opcional)</label>
-        <textarea id="ps-blank-excerpt" name="excerpt" rows="2" maxlength="155" class="pp-input" placeholder="2 frases que describan el ángulo. Si lo dejas vacío, lo generamos del contenido."></textarea>
+        <label for="ps-blank-excerpt" class="pp-form-label"><?= e(__('post_new.excerpt_optional')) ?></label>
+        <textarea id="ps-blank-excerpt" name="excerpt" rows="2" maxlength="155" class="pp-input" placeholder="<?= e(__('post_new.excerpt_placeholder')) ?>"></textarea>
       </div>
       <div class="pp-ps-secform__actions">
-        <button type="button" class="pp-btn pp-btn--secondary" data-cancel-secondary>Cancelar</button>
-        <button type="submit" class="pp-btn pp-btn--primary">Crear y empezar a escribir →</button>
+        <button type="button" class="pp-btn pp-btn--secondary" data-cancel-secondary><?= e(__('common.cancel')) ?></button>
+        <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('post_new.create_and_write')) ?> →</button>
       </div>
     </form>
 
@@ -80,18 +80,18 @@ $flashError = \Core\Session::flash('error');
     <form class="pp-ps-secform" id="ps-form-doc" method="POST" action="<?= e(base_url('admin/posts/ai-create-from-document')) ?>" enctype="multipart/form-data" hidden>
       <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
       <div class="pp-form-group">
-        <label for="ps-doc-files" class="pp-form-label">Documentos de referencia *</label>
+        <label for="ps-doc-files" class="pp-form-label"><?= e(__('post_new.ref_docs')) ?> *</label>
         <input id="ps-doc-files" type="file" name="documents[]" class="pp-input pp-input--xl" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" multiple required>
-        <small class="pp-form-help">Puedes subir hasta 5 archivos PDF, DOCX o TXT. Se guardarán en Documentos y se usarán como referencia para redactar la entrada.</small>
+        <small class="pp-form-help"><?= e(__('post_new.docs_help')) ?></small>
       </div>
       <div class="pp-form-group">
-        <label for="ps-doc-angle" class="pp-form-label">Ángulo o enfoque (opcional)</label>
-        <input id="ps-doc-angle" type="text" name="angle" maxlength="240" class="pp-input" placeholder="Ej. enfócate solo en las recomendaciones prácticas">
+        <label for="ps-doc-angle" class="pp-form-label"><?= e(__('post_new.angle')) ?></label>
+        <input id="ps-doc-angle" type="text" name="angle" maxlength="240" class="pp-input" placeholder="<?= e(__('post_new.angle_placeholder')) ?>">
       </div>
       <div class="pp-ps-status" data-doc-status aria-live="polite" hidden></div>
       <div class="pp-ps-secform__actions">
-        <button type="button" class="pp-btn pp-btn--secondary" data-cancel-secondary>Cancelar</button>
-        <button type="submit" class="pp-btn pp-btn--primary" data-doc-submit>Generar desde documentos</button>
+        <button type="button" class="pp-btn pp-btn--secondary" data-cancel-secondary><?= e(__('common.cancel')) ?></button>
+        <button type="submit" class="pp-btn pp-btn--primary" data-doc-submit><?= e(__('post_new.from_docs')) ?></button>
       </div>
     </form>
   </section>
@@ -99,9 +99,9 @@ $flashError = \Core\Session::flash('error');
   <!-- ============ FASE 2 · SUGERENCIAS ============ -->
   <section class="pp-ps-phase" data-phase="suggest" hidden>
     <div class="pp-ps-subhead">
-      <button type="button" class="pp-ps-link" id="ps-back-to-idea">← Cambiar tema</button>
-      <h3 class="pp-ps-subhead__title">Elige las que quieras crear</h3>
-      <button type="button" class="pp-ps-link" id="ps-refresh-suggest">↻ Otras ideas</button>
+      <button type="button" class="pp-ps-link" id="ps-back-to-idea">← <?= e(__('post_new.change_topic')) ?></button>
+      <h3 class="pp-ps-subhead__title"><?= e(__('post_new.pick_ideas')) ?></h3>
+      <button type="button" class="pp-ps-link" id="ps-refresh-suggest">↻ <?= e(__('posts.other_ideas')) ?></button>
     </div>
 
     <div class="pp-ps-suggest-grid" id="ps-suggest-grid"></div>
@@ -109,30 +109,30 @@ $flashError = \Core\Session::flash('error');
     <div class="pp-ps-actionbar" id="ps-suggest-actionbar" hidden>
       <div class="pp-ps-actionbar__opts">
         <div class="pp-ps-field">
-          <label for="ps-tone">Tono</label>
-          <input id="ps-tone" type="text" class="pp-input" value="profesional y cercano" maxlength="120">
+          <label for="ps-tone"><?= e(__('post_new.tone')) ?></label>
+          <input id="ps-tone" type="text" class="pp-input" value="<?= e(__('post_new.tone_default')) ?>" maxlength="120">
         </div>
         <div class="pp-ps-field">
-          <label for="ps-length">Longitud</label>
+          <label for="ps-length"><?= e(__('post_new.length')) ?></label>
           <select id="ps-length" class="pp-input">
-            <option value="corto">Corto</option>
-            <option value="medio" selected>Medio</option>
-            <option value="largo">Largo</option>
+            <option value="corto"><?= e(__('post_new.short')) ?></option>
+            <option value="medio" selected><?= e(__('post_new.medium')) ?></option>
+            <option value="largo"><?= e(__('post_new.long')) ?></option>
           </select>
         </div>
       </div>
-      <button type="button" class="pp-btn pp-btn--primary" id="ps-generate-btn" disabled>Generar <span data-sel-count>0</span> entradas</button>
+      <button type="button" class="pp-btn pp-btn--primary" id="ps-generate-btn" disabled><?= e(__('post_new.generate')) ?> <span data-sel-count>0</span> <?= e(__('nav.posts')) ?></button>
     </div>
   </section>
 
   <!-- ============ FASE 3/4 · GENERACIÓN + REVISIÓN ============ -->
   <section class="pp-ps-phase" data-phase="results" hidden>
     <div class="pp-ps-subhead">
-      <h3 class="pp-ps-subhead__title" id="ps-results-title">Generando entradas…</h3>
+      <h3 class="pp-ps-subhead__title" id="ps-results-title"><?= e(__('post_new.generating')) ?></h3>
       <div class="pp-ps-results-bar" id="ps-results-bar" hidden>
-        <button type="button" class="pp-btn pp-btn--secondary" id="ps-publish-selected">Publicar seleccionadas</button>
-        <button type="button" class="pp-ps-link" id="ps-generate-more">Generar más ideas</button>
-        <a href="<?= e(base_url('admin/posts')) ?>" class="pp-btn pp-btn--primary">Ir a Entradas →</a>
+        <button type="button" class="pp-btn pp-btn--secondary" id="ps-publish-selected"><?= e(__('post_new.publish_selected')) ?></button>
+        <button type="button" class="pp-ps-link" id="ps-generate-more"><?= e(__('post_new.more_ideas')) ?></button>
+        <a href="<?= e(base_url('admin/posts')) ?>" class="pp-btn pp-btn--primary"><?= e(__('post_new.go_to_posts')) ?> →</a>
       </div>
     </div>
     <div class="pp-ps-results" id="ps-results"></div>
@@ -185,20 +185,20 @@ $flashError = \Core\Session::flash('error');
         return;
       }
       if (files.length > 5) {
-        status.hidden = false; status.className = 'pp-ps-status is-error'; status.textContent = 'Puedes subir un máximo de 5 documentos.';
+        status.hidden = false; status.className = 'pp-ps-status is-error'; status.textContent = pp.t('js.post_new.max_docs');
         return;
       }
-      submit.disabled = true; submit.textContent = 'Generando...';
-      status.hidden = false; status.className = 'pp-ps-status is-loading'; status.textContent = 'Subiendo, leyendo documentos y redactando. 30-120s aprox.';
+      submit.disabled = true; submit.textContent = pp.t('js.post_new.generating');
+      status.hidden = false; status.className = 'pp-ps-status is-loading'; status.textContent = pp.t('js.post_new.uploading_reading');
       const fd = new FormData(docForm);
       fetch(docForm.action, { method: 'POST', credentials: 'same-origin', body: fd })
         .then(r => r.json())
         .then(d => {
-          if (!d.ok) { submit.disabled = false; submit.textContent = 'Generar desde documentos'; status.className = 'pp-ps-status is-error'; status.textContent = 'Error: ' + (d.error || 'No se pudo generar.'); return; }
-          status.className = 'pp-ps-status is-ok'; status.textContent = 'Creada. Abriendo el editor...';
+          if (!d.ok) { submit.disabled = false; submit.textContent = pp.t('js.post_new.from_docs'); status.className = 'pp-ps-status is-error'; status.textContent = pp.t('js.bank.error', { error: d.error || pp.t('js.form_edit.generate_failed') }); return; }
+          status.className = 'pp-ps-status is-ok'; status.textContent = pp.t('js.post_new.created_opening');
           setTimeout(() => { window.location = d.edit_url; }, 700);
         })
-        .catch(err => { submit.disabled = false; submit.textContent = 'Generar desde documentos'; status.className = 'pp-ps-status is-error'; status.textContent = 'Error de conexión: ' + err.message; });
+        .catch(err => { submit.disabled = false; submit.textContent = pp.t('js.post_new.from_docs'); status.className = 'pp-ps-status is-error'; status.textContent = pp.t('js.bank.connection_error', { error: err.message }); });
     });
   }
 
@@ -212,17 +212,17 @@ $flashError = \Core\Session::flash('error');
     const count = document.getElementById('ps-count').value;
     suggestBtn.disabled = true;
     ideaStatus.hidden = false; ideaStatus.className = 'pp-ps-status is-loading';
-    ideaStatus.textContent = 'Pensando ideas para tu blog…';
+    ideaStatus.textContent = pp.t('js.post_new.thinking_ideas');
     post(base + '/admin/posts/ai-suggest-related', { count, focus })
       .then(d => {
         suggestBtn.disabled = false;
-        if (!d.ok || !(d.suggestions || []).length) { ideaStatus.className = 'pp-ps-status is-error'; ideaStatus.textContent = 'Error: ' + (d.error || 'No hubo sugerencias.'); return; }
+        if (!d.ok || !(d.suggestions || []).length) { ideaStatus.className = 'pp-ps-status is-error'; ideaStatus.textContent = pp.t('js.bank.error', { error: d.error || pp.t('js.posts.no_suggestions') }); return; }
         ideaStatus.hidden = true;
         suggestions = d.suggestions.map(s => ({ ...s, selected: false }));
         renderSuggestions();
         showPhase('suggest');
       })
-      .catch(err => { suggestBtn.disabled = false; ideaStatus.className = 'pp-ps-status is-error'; ideaStatus.textContent = 'Error de conexión: ' + err.message; });
+      .catch(err => { suggestBtn.disabled = false; ideaStatus.className = 'pp-ps-status is-error'; ideaStatus.textContent = pp.t('js.bank.connection_error', { error: err.message }); });
   }
   suggestBtn.addEventListener('click', fetchSuggestions);
   document.getElementById('ps-refresh-suggest').addEventListener('click', fetchSuggestions);
@@ -283,7 +283,7 @@ $flashError = \Core\Session::flash('error');
       el.className = 'pp-ps-review is-pending';
       el.innerHTML = '<div class="pp-ps-review__head"><span class="pp-ps-review__spin" aria-hidden="true"></span>' +
         '<strong class="pp-ps-review__title">' + esc(s.title) + '</strong>' +
-        '<span class="pp-ps-review__state">En cola…</span></div>';
+        '<span class="pp-ps-review__state">' + pp.t('js.post_new.queued') + '</span></div>';
       resultsEl.appendChild(el);
       return { s, el, tone, length, done: false };
     });
@@ -309,7 +309,7 @@ $flashError = \Core\Session::flash('error');
     it.el.className = 'pp-ps-review is-error';
     it.el.innerHTML = '<div class="pp-ps-review__head"><strong class="pp-ps-review__title">' + esc(it.s.title) + '</strong>' +
       '<span class="pp-ps-review__state">⚠ ' + esc(msg) + '</span></div>' +
-      '<div class="pp-ps-review__actions"><button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-retry>Reintentar</button></div>';
+      '<div class="pp-ps-review__actions"><button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-retry>' + pp.t('js.media.retry') + '</button></div>';
     it.el.querySelector('[data-retry]').addEventListener('click', () => {
       it.el.className = 'pp-ps-review is-generating';
       it.el.innerHTML = '<div class="pp-ps-review__head"><span class="pp-ps-review__spin"></span><strong class="pp-ps-review__title">' + esc(it.s.title) + '</strong><span class="pp-ps-review__state">Generando…</span></div>';
@@ -331,14 +331,14 @@ $flashError = \Core\Session::flash('error');
       cover +
       '<div class="pp-ps-review__body">' +
         '<div class="pp-ps-review__head"><strong class="pp-ps-review__title">' + esc(p.title) + '</strong>' +
-        '<span class="pp-ps-review__badge" data-badge>Borrador</span></div>' +
+        '<span class="pp-ps-review__badge" data-badge>' + pp.t('js.post_new.draft') + '</span></div>' +
         (p.excerpt ? '<p class="pp-ps-review__excerpt">' + esc(p.excerpt) + '</p>' : '') +
         '<p class="pp-ps-review__metaline">' + (p.reading_minutes ? p.reading_minutes + ' min · ' : '') + p.block_count + ' bloques</p>' +
         '<div class="pp-ps-review__actions">' +
-          '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-read>Leer</button>' +
-          '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-publish>Publicar</button>' +
-          '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + esc(p.edit_url) + '" target="_blank" rel="noopener">Editar</a>' +
-          '<button type="button" class="pp-btn pp-btn--ghost pp-btn--sm pp-ps-review__discard" data-discard>Descartar</button>' +
+          '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-read>' + pp.t('js.post_new.read') + '</button>' +
+          '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-publish>' + pp.t('js.post_new.publish') + '</button>' +
+          '<a class="pp-btn pp-btn--secondary pp-btn--sm" href="' + esc(p.edit_url) + '" target="_blank" rel="noopener">' + pp.t('js.post_new.edit') + '</a>' +
+          '<button type="button" class="pp-btn pp-btn--ghost pp-btn--sm pp-ps-review__discard" data-discard>' + pp.t('js.post_new.discard') + '</button>' +
         '</div>' +
         '<div class="pp-ps-review__reader" hidden></div>' +
       '</div>';
@@ -349,7 +349,7 @@ $flashError = \Core\Session::flash('error');
     readBtn.addEventListener('click', () => {
       if (reader.hidden) {
         if (!reader.dataset.loaded) {
-          reader.innerHTML = '<iframe src="' + esc(p.preview_url) + '" title="Vista previa" loading="lazy"></iframe>';
+          reader.innerHTML = '<iframe src="' + esc(p.preview_url) + '" title="' + pp.t('js.post_new.preview') + '" loading="lazy"></iframe>';
           reader.dataset.loaded = '1';
         }
         reader.hidden = false; readBtn.textContent = 'Ocultar';
@@ -374,7 +374,7 @@ $flashError = \Core\Session::flash('error');
 
     // Descartar
     it.el.querySelector('[data-discard]').addEventListener('click', () => {
-      if (!confirm('¿Descartar esta entrada? Se elimina el borrador.')) return;
+      if (!confirm(pp.t('js.post_new.confirm_discard'))) return;
       post(base + '/admin/posts/' + p.page_id + '/delete', { ajax: '1' })
         .then(d => { if (d.ok) { it.discarded = true; it.el.remove(); } });
     });
@@ -383,8 +383,8 @@ $flashError = \Core\Session::flash('error');
   function finishBatch(items) {
     const ok = items.filter(it => it.post).length;
     const fail = items.length - ok;
-    resultsTitle.textContent = ok + ' entrada' + (ok === 1 ? '' : 's') + ' generada' + (ok === 1 ? '' : 's')
-      + (fail ? ' · ' + fail + ' con error' : '') + '. Revísalas y publica las que valgan.';
+    resultsTitle.textContent = pp.t(ok === 1 ? 'js.post_new.generated_one' : 'js.post_new.generated_other', { n: ok })
+      + (fail ? ' · ' + pp.t('js.post_new.with_errors', { n: fail }) : '') + '. ' + pp.t('js.post_new.review_hint');
     resultsBar.hidden = false;
   }
 

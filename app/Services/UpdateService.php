@@ -40,7 +40,7 @@ final class UpdateService
             'checked_at' => $checkedAt !== '' ? $checkedAt : null,
             'source' => 'none',
             'status' => 'idle',
-            'message' => 'Aún no se ha comprobado si hay nuevas versiones.',
+            'message' => __('upd.never_checked'),
             'changelog_url' => null,
             'download_url' => null,
             'checksum_sha256' => null,
@@ -55,7 +55,7 @@ final class UpdateService
         $decoded = json_decode($raw, true);
         if (!is_array($decoded)) {
             $base['status'] = 'error';
-            $base['message'] = 'El último resultado de actualización no es válido.';
+            $base['message'] = __('upd.bad_cached');
             return $base;
         }
 
@@ -64,7 +64,7 @@ final class UpdateService
             'has_update' => (bool) ($decoded['has_update'] ?? false),
             'source' => (string) ($decoded['source'] ?? 'remote'),
             'status' => (string) ($decoded['status'] ?? 'ok'),
-            'message' => (string) ($decoded['message'] ?? 'Comprobación completada.'),
+            'message' => (string) ($decoded['message'] ?? __('upd.check_done')),
             'changelog_url' => self::strOrNull($decoded['changelog_url'] ?? null),
             'download_url' => self::strOrNull($decoded['download_url'] ?? null),
             'checksum_sha256' => self::strOrNull($decoded['checksum_sha256'] ?? null),
@@ -84,7 +84,7 @@ final class UpdateService
                 'status' => 'ok',
                 'latest_version' => $current,
                 'has_update' => false,
-                'message' => 'Canal de updates no configurado (`updates.version_check_url`).',
+                'message' => __('upd.err.no_channel'),
                 'changelog_url' => null,
                 'download_url' => null,
                 'checksum_sha256' => null,
@@ -130,7 +130,7 @@ final class UpdateService
                 'status' => 'error',
                 'latest_version' => $current,
                 'has_update' => false,
-                'message' => $errno !== 0 ? ('No se pudo consultar updates: ' . $error) : ('Endpoint devolvió HTTP ' . $http),
+                'message' => $errno !== 0 ? __('upd.err.request', ['detalle' => $error]) : __('upd.err.http', ['status' => (string) $http]),
                 'changelog_url' => null,
                 'download_url' => null,
                 'checksum_sha256' => null,
@@ -146,7 +146,7 @@ final class UpdateService
                 'status' => 'error',
                 'latest_version' => $current,
                 'has_update' => false,
-                'message' => 'Respuesta inválida del servidor de updates.',
+                'message' => __('upd.err.bad_response'),
                 'changelog_url' => null,
                 'download_url' => null,
                 'checksum_sha256' => null,
@@ -163,7 +163,7 @@ final class UpdateService
             'status' => 'ok',
             'latest_version' => $latest,
             'has_update' => $hasUpdate,
-            'message' => (string) ($json['message'] ?? ($hasUpdate ? 'Hay una nueva versión disponible.' : 'Tu instalación está al día.')),
+            'message' => (string) ($json['message'] ?? __($hasUpdate ? 'upd.available' : 'upd.up_to_date')),
             'changelog_url' => self::strOrNull($json['changelog_url'] ?? null),
             'download_url' => self::strOrNull($json['download_url'] ?? null),
             'checksum_sha256' => self::strOrNull($json['checksum_sha256'] ?? null),

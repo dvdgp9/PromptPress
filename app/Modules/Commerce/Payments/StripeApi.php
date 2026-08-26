@@ -110,10 +110,12 @@ final class StripeApi
         curl_close($ch);
 
         if ($body === false) {
+            // i18n-ignore: excepción interna, va al log.
             throw new RuntimeException('Stripe: error de conexión (' . $curlErr . ')');
         }
         $data = json_decode((string) $body, true);
         if (!is_array($data)) {
+            // i18n-ignore: excepción interna, va al log.
             throw new RuntimeException('Stripe: respuesta no válida (HTTP ' . $status . ')');
         }
         if ($status < 200 || $status >= 300) {

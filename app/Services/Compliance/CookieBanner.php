@@ -245,6 +245,8 @@ final class CookieBanner
   // -------- UI --------
   function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+  // i18n-ignore-start: JS del banner que ve el VISITANTE; sus textos vienen de
+  // Microcopy en el idioma del sitio, no del catálogo del panel.
   function bannerHtml(){
     var policyLink = C.policyUrl ? ' <a class="pp-cb__link" href="'+escapeHtml(C.policyUrl)+'">'+escapeHtml(C.texts.configure || 'Más info')+'</a>' : '';
     return '<aside class="pp-cb" role="dialog" aria-labelledby="pp-cb-title" aria-modal="false">'
@@ -252,6 +254,7 @@ final class CookieBanner
       +   '<div class="pp-cb__text">'
       +     '<h2 id="pp-cb-title" class="pp-cb__title">'+escapeHtml(C.texts.title)+'</h2>'
       +     '<p class="pp-cb__desc">'+escapeHtml(C.texts.desc)+(C.policyUrl ? ' <a class="pp-cb__link" href="'+escapeHtml(C.policyUrl)+'">Más información</a>.' : '')+'</p>'
+  // i18n-ignore-end
       +   '</div>'
       +   '<div class="pp-cb__actions">'
       +     '<button type="button" class="pp-cb__btn pp-cb__btn--secondary" data-cb-action="configure">'+escapeHtml(C.texts.configure)+'</button>'

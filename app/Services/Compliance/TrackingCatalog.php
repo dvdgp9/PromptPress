@@ -17,6 +17,8 @@ namespace App\Services\Compliance;
 final class TrackingCatalog
 {
     /** Categorías de consentimiento, en orden de aparición en el banner. */
+    // i18n-ignore-start: castellano de respaldo. El banner público lo traduce
+    // con `Microcopy` (idioma de la WEB) y el panel con `categoriesForView()`.
     public const CATEGORIES = [
         'necessary'      => [
             'label'       => 'Necesarias',
@@ -39,11 +41,57 @@ final class TrackingCatalog
             'always_on'   => false,
         ],
     ];
+    // i18n-ignore-end
 
     /**
      * Servicios disponibles. La key es el identificador interno; el valor
      * incluye nombre humano, categoría, processor y los campos de config.
      */
+    /**
+     * Catálogo para el PANEL, con las descripciones traducidas al idioma del
+     * gestor. `services()` se queda como está: sus claves son identificadores y
+     * su castellano es el respaldo del banner público (que ya se traduce por su
+     * cuenta con `Microcopy`, en el idioma de la WEB).
+     *
+     * No se traducen `name` ni `processor`: son nombres propios de producto y
+     * de empresa.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function servicesForView(): array
+    {
+        $out = [];
+        foreach (self::services() as $key => $def) {
+            $def['short_description'] = __('tracking.' . $key . '.description');
+            foreach ((array) ($def['config_fields'] ?? []) as $field => $fieldDef) {
+                foreach (['label', 'placeholder', 'help'] as $prop) {
+                    if (isset($fieldDef[$prop]) && $fieldDef[$prop] !== '') {
+                        $def['config_fields'][$field][$prop] = __('tracking.' . $key . '.' . $field . '.' . $prop);
+                    }
+                }
+            }
+            $out[$key] = $def;
+        }
+        return $out;
+    }
+
+    /**
+     * Categorías de consentimiento para el PANEL, traducidas.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function categoriesForView(): array
+    {
+        $out = [];
+        foreach (self::CATEGORIES as $key => $def) {
+            $def['label']       = __('cookie_cat.' . $key . '.label');
+            $def['description'] = __('cookie_cat.' . $key . '.description');
+            $out[$key] = $def;
+        }
+        return $out;
+    }
+
+    // i18n-ignore-start: mismo caso que CATEGORIES — respaldo en castellano.
     public static function services(): array
     {
         return [
@@ -160,6 +208,7 @@ final class TrackingCatalog
             ],
         ];
     }
+    // i18n-ignore-end
 
     /**
      * Lee del manifest la config persistida de un servicio. Devuelve null si
@@ -240,17 +289,33 @@ final class TrackingCatalog
     }
 
     /** Ubicaciones válidas donde inyectar un snippet personalizado. */
+    // i18n-ignore-start: respaldo en castellano; el panel pinta `placementChoices()`.
     public const PLACEMENTS = [
         'head'     => 'En el <head> (carga temprana)',
         'body_end' => 'Antes de cerrar </body> (carga tardía)',
     ];
+    // i18n-ignore-end
+
+    /**
+     * Ubicaciones con la etiqueta traducida al idioma del gestor.
+     *
+     * @return array<string,string>
+     */
+    public static function placementChoices(): array
+    {
+        $out = [];
+        foreach (array_keys(self::PLACEMENTS) as $key) {
+            $out[$key] = __('placement.' . $key);
+        }
+        return $out;
+    }
 
     /** Categorías que el usuario puede elegir para un snippet personalizado. */
     public static function customCategoryChoices(): array
     {
         $out = [];
-        foreach (self::CATEGORIES as $key => $def) {
-            $out[$key] = $def['label'];
+        foreach (array_keys(self::CATEGORIES) as $key) {
+            $out[$key] = __('cookie_cat.' . $key . '.label');
         }
         return $out;
     }

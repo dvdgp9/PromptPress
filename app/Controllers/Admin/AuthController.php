@@ -38,7 +38,7 @@ class AuthController
         $password   = (string) Request::post('password', '');
 
         if ($identifier === '' || $password === '') {
-            Session::flash('login_error', 'Usuario y contraseña son obligatorios.');
+            Session::flash('login_error', __('auth.error.required'));
             Session::flash('login_identifier', $identifier);
             Response::redirect(base_url('admin/login'));
         }
@@ -47,13 +47,13 @@ class AuthController
         if ($user === null) {
             // Delay anti-bruteforce básico
             usleep(300_000);
-            Session::flash('login_error', 'Credenciales incorrectas.');
+            Session::flash('login_error', __('auth.error.invalid'));
             Session::flash('login_identifier', $identifier);
             Response::redirect(base_url('admin/login'));
         }
 
         Auth::login((int) $user['id']);
-        Session::flash('success', '¡Bienvenido, ' . $user['username'] . '!');
+        Session::flash('success', __('auth.welcome', ['nombre' => $user['username']]));
         Response::redirect(base_url('admin/'));
     }
 
@@ -64,7 +64,7 @@ class AuthController
             CSRF::check();
         }
         Auth::logout();
-        Session::flash('success', 'Sesión cerrada correctamente.');
+        Session::flash('success', __('auth.logged_out'));
         Response::redirect(base_url('admin/login'));
     }
 }

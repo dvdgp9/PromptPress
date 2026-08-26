@@ -39,11 +39,11 @@ final class CommerceAdminController
         $siteId = $this->requireSiteId();
         $name = trim((string) Request::post('name', ''));
         if ($name === '') {
-            Session::flash('error', 'Ponle un nombre al producto.');
+            Session::flash('error', __('prod.err.name_required'));
             Response::redirect(base_url('admin/commerce'));
         }
         $id = ProductStore::create($siteId, ['name' => $name, 'active' => '0']);
-        Session::flash('notice', 'Producto creado. Añade precio, imagen y detalles.');
+        Session::flash('notice', __('prod.ok.created'));
         Response::redirect(base_url('admin/commerce/products/' . $id));
     }
 
@@ -53,7 +53,7 @@ final class CommerceAdminController
         $siteId = $this->requireSiteId();
         $product = ProductStore::find($siteId, (int) ($params['id'] ?? 0));
         if ($product === null) {
-            Session::flash('error', 'Producto no encontrado.');
+            Session::flash('error', __('prod.err.not_found'));
             Response::redirect(base_url('admin/commerce'));
         }
         $this->renderEditor($siteId, $product, []);
@@ -67,7 +67,7 @@ final class CommerceAdminController
         $id = (int) ($params['id'] ?? 0);
         $existing = ProductStore::find($siteId, $id);
         if ($existing === null) {
-            Session::flash('error', 'Producto no encontrado.');
+            Session::flash('error', __('prod.err.not_found'));
             Response::redirect(base_url('admin/commerce'));
         }
 
@@ -83,10 +83,10 @@ final class CommerceAdminController
 
         $errors = [];
         if (trim((string) $fields['name']) === '') {
-            $errors[] = 'El nombre no puede estar vacío.';
+            $errors[] = __('bk.err.name_empty');
         }
         if ((int) $fields['price_cents'] <= 0 && (string) $fields['active'] === '1') {
-            $errors[] = 'Un producto activo necesita un precio mayor que 0.';
+            $errors[] = __('prod.err.price');
         }
 
         if ($errors !== []) {
@@ -96,7 +96,7 @@ final class CommerceAdminController
         }
 
         ProductStore::update($siteId, $id, $fields);
-        Session::flash('notice', 'Producto guardado.');
+        Session::flash('notice', __('prod.ok.saved'));
         Response::redirect(base_url('admin/commerce/products/' . $id));
     }
 
@@ -106,9 +106,9 @@ final class CommerceAdminController
         CSRF::check();
         $siteId = $this->requireSiteId();
         if (ProductStore::delete($siteId, (int) ($params['id'] ?? 0))) {
-            Session::flash('notice', 'Producto eliminado.');
+            Session::flash('notice', __('prod.ok.deleted'));
         } else {
-            Session::flash('error', 'No se pudo eliminar el producto.');
+            Session::flash('error', __('prod.err.delete'));
         }
         Response::redirect(base_url('admin/commerce'));
     }
@@ -136,16 +136,16 @@ final class CommerceAdminController
                       'commerce_stripe_webhook_secret_test', 'commerce_stripe_webhook_secret_live'] as $k) {
                 StripeConfig::saveSecret($siteId, $k, '');
             }
-            Session::flash('notice', 'Pago con tarjeta desactivado. Los datos de Stripe se han eliminado.');
+            Session::flash('notice', __('pay.ok.card_disabled'));
             Response::redirect(base_url('admin/commerce/pagos'));
         }
 
         $mode = (string) Request::post('stripe_mode', 'test') === 'live' ? 'live' : 'test';
         $fields = [
-            'commerce_stripe_sk_test'             => ['sk_test_', 'Clave secreta (modo pruebas)', trim((string) Request::post('sk_test', ''))],
-            'commerce_stripe_sk_live'             => ['sk_live_', 'Clave secreta (modo real)', trim((string) Request::post('sk_live', ''))],
-            'commerce_stripe_webhook_secret_test' => ['whsec_', 'Secreto del webhook (modo pruebas)', trim((string) Request::post('whsec_test', ''))],
-            'commerce_stripe_webhook_secret_live' => ['whsec_', 'Secreto del webhook (modo real)', trim((string) Request::post('whsec_live', ''))],
+            'commerce_stripe_sk_test'             => ['sk_test_', __('pay.secret_key') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('sk_test', ''))],
+            'commerce_stripe_sk_live'             => ['sk_live_', __('pay.secret_key') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('sk_live', ''))],
+            'commerce_stripe_webhook_secret_test' => ['whsec_', __('pay.webhook_secret') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('whsec_test', ''))],
+            'commerce_stripe_webhook_secret_live' => ['whsec_', __('pay.webhook_secret') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('whsec_live', ''))],
         ];
 
         $errors = [];
@@ -154,13 +154,13 @@ final class CommerceAdminController
                 continue; // en blanco = conservar la guardada
             }
             if (str_starts_with($value, 'pk_')) {
-                $errors[] = 'En «' . $label . '» has pegado una clave publicable (pk_…). Necesitamos la clave <strong>secreta</strong>, que empieza por «' . $prefix . '».';
+                $errors[] = __('pay.err.publishable.html', ['campo' => $label, 'prefijo' => $prefix]);
                 continue;
             }
             // Las claves restringidas (rk_test_/rk_live_) también valen.
             $rkPrefix = str_replace('sk_', 'rk_', $prefix);
             if (!str_starts_with($value, $prefix) && !($prefix !== 'whsec_' && str_starts_with($value, $rkPrefix))) {
-                $errors[] = 'Lo pegado en «' . $label . '» no parece correcto: debe empezar por «' . $prefix . '». Revisa que copiaste la clave adecuada.';
+                $errors[] = __('pay.err.bad_prefix', ['campo' => $label, 'prefijo' => $prefix]);
                 continue;
             }
             StripeConfig::saveSecret($siteId, $settingKey, $value);
@@ -175,9 +175,9 @@ final class CommerceAdminController
         }
 
         if ($mode === 'live' && StripeConfig::secretKey($siteId, 'live') === null) {
-            Session::flash('error', 'Has elegido el modo real pero falta la clave secreta sk_live_…: el pago con tarjeta seguirá sin ofrecerse hasta que la añadas.');
+            Session::flash('error', __('pay.err.live_no_key'));
         } else {
-            Session::flash('notice', 'Configuración de pagos guardada.');
+            Session::flash('notice', __('pay.ok.saved'));
         }
         Response::redirect(base_url('admin/commerce/pagos'));
     }
@@ -230,7 +230,7 @@ final class CommerceAdminController
         $siteId = $this->requireSiteId();
         $order = OrderStore::find($siteId, (int) ($params['id'] ?? 0));
         if ($order === null) {
-            Session::flash('error', 'Pedido no encontrado.');
+            Session::flash('error', __('order.err.not_found'));
             Response::redirect(base_url('admin/commerce/pedidos'));
         }
         View::send('admin/commerce/order', [
@@ -253,30 +253,36 @@ final class CommerceAdminController
 
         $order = OrderStore::find($siteId, $id);
         if ($order === null) {
-            Session::flash('error', 'Pedido no encontrado.');
+            Session::flash('error', __('order.err.not_found'));
             Response::redirect(base_url('admin/commerce/pedidos'));
         }
         $from = (string) $order['status'];
         if (!in_array($to, OrderStore::ADMIN_TRANSITIONS[$from] ?? [], true)) {
-            Session::flash('error', 'Ese cambio de estado no es válido para este pedido.');
+            Session::flash('error', __('order.err.bad_transition'));
             Response::redirect($detailUrl);
         }
 
         if (!OrderStore::transition($siteId, $id, $to)) {
-            Session::flash('error', 'No se pudo actualizar el pedido. Recárgalo e inténtalo de nuevo.');
+            Session::flash('error', __('order.err.update'));
             Response::redirect($detailUrl);
         }
 
+        $mail = 'failed';
         try {
-            CommerceMailer::sendStatusChange($siteId, $id, $to);
+            $mail = CommerceMailer::sendStatusChange($siteId, $id, $to);
         } catch (\Throwable) {
             // el email nunca revierte el cambio de estado
         }
 
-        $labels = ['paid' => 'pagado', 'shipped' => 'enviado', 'cancelled' => 'cancelado'];
-        Session::flash('notice', 'Pedido marcado como ' . ($labels[$to] ?? $to)
-            . '. Hemos avisado al cliente por email'
-            . ($to === 'paid' && $from === 'pending_payment' ? ' y descontado el stock' : '') . '.');
+        $labels = ['paid' => __('order.marked.paid'), 'shipped' => __('order.marked.shipped'), 'cancelled' => __('order.marked.cancelled')];
+        // El aviso cuenta lo que ha pasado de verdad: prometer un email que no
+        // ha salido (sitio sin SMTP) hace creer que el cliente ya está avisado.
+        $key = 'order.ok.status_changed';
+        if ($mail !== 'sent') {
+            $key .= $mail === 'skipped' ? '_no_mail' : '_mail_failed';
+        }
+        Session::flash('notice', __($key, ['estado' => $labels[$to] ?? $to])
+            . ($to === 'paid' && $from === 'pending_payment' ? ' ' . __('order.ok.stock_note') : ''));
         Response::redirect($detailUrl);
     }
 
@@ -288,11 +294,11 @@ final class CommerceAdminController
         $id = (int) ($params['id'] ?? 0);
         $detailUrl = base_url('admin/commerce/pedidos/' . $id);
         if (OrderStore::find($siteId, $id) === null) {
-            Session::flash('error', 'Pedido no encontrado.');
+            Session::flash('error', __('order.err.not_found'));
             Response::redirect(base_url('admin/commerce/pedidos'));
         }
         OrderStore::saveAdminNotes($siteId, $id, (string) Request::post('admin_notes', ''));
-        Session::flash('notice', 'Notas guardadas.');
+        Session::flash('notice', __('order.ok.notes_saved'));
         Response::redirect($detailUrl);
     }
 
@@ -316,7 +322,7 @@ final class CommerceAdminController
     {
         $siteId = Auth::siteId();
         if ($siteId === null) {
-            Session::flash('error', 'No hay sitio activo.');
+            Session::flash('error', __('bk.err.no_site'));
             Response::redirect(base_url('admin/'));
         }
         return $siteId;

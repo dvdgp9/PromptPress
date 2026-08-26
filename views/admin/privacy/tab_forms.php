@@ -4,9 +4,9 @@
  */
 
 $basisLabels = [
-    'legitimate_interest' => 'Interés legítimo',
-    'consent'             => 'Consentimiento',
-    'contract'            => 'Contrato',
+    'legitimate_interest' => __('privacy.basis.legitimate'),
+    'consent'             => __('privacy.basis.consent'),
+    'contract'            => __('privacy.basis.contract'),
 ];
 ?>
 
@@ -20,13 +20,13 @@ $basisLabels = [
             <line x1="8" y1="16" x2="13" y2="16"/>
         </svg>
     </div>
-    <h3>No tienes formularios en este sitio</h3>
-    <p>Cuando añadas una sección "Formulario" en cualquier página, aparecerá aquí con su finalidad y plazo de conservación. Te ayudamos a documentar lo que necesitas para cumplir la normativa.</p>
+    <h3><?= e(__('privacy.forms.empty')) ?></h3>
+    <p><?= e(__('privacy.forms.empty_help')) ?></p>
 </div>
 <?php else: ?>
 
 <div class="pp-privacy-notice pp-privacy-notice--info">
-    <strong>Estos son los formularios de tu sitio.</strong> Edita la base legal y plazo de conservación dentro de cada formulario; la nota de privacidad pública se actualiza sola.
+    <?= __('privacy.forms.intro.html') ?>
 </div>
 
 <div class="pp-privacy-forms">
@@ -36,38 +36,38 @@ $basisLabels = [
     <article class="pp-privacy-formcard">
         <header class="pp-privacy-formcard__head">
             <div>
-                <h3><?= e($f['heading'] !== '' ? $f['heading'] : 'Formulario sin título') ?></h3>
+                <h3><?= e($f['heading'] !== '' ? $f['heading'] : __('privacy.forms.untitled')) ?></h3>
                 <p class="pp-privacy-formcard__meta">
-                    en página <strong><?= e($f['page_title']) ?></strong>
-                    · <?= (int) $f['fields_count'] ?> campo<?= $f['fields_count'] === 1 ? '' : 's' ?>
+                    <?= e(__('privacy.forms.on_page')) ?> <strong><?= e($f['page_title']) ?></strong>
+                    · <?= e(__($f['fields_count'] === 1 ? 'forms.fields_one' : 'forms.fields_other', ['n' => (int) $f['fields_count']])) ?>
                     <?php if ($f['page_status'] !== 'published'): ?>
-                        · <span class="pp-privacy-formcard__badge pp-privacy-formcard__badge--draft">Borrador</span>
+                        · <span class="pp-privacy-formcard__badge pp-privacy-formcard__badge--draft"><?= e(__('status.draft')) ?></span>
                     <?php endif; ?>
                 </p>
             </div>
             <a class="pp-btn pp-btn--secondary pp-btn--sm"
                href="<?= e(base_url('admin/pages/' . (int) $f['page_id'] . '/edit#sec-' . (int) $f['section_id'])) ?>">
-                Editar formulario
+                <?= e(__('privacy.forms.edit_form')) ?>
             </a>
         </header>
 
         <dl class="pp-privacy-formcard__grid">
             <div>
-                <dt>Base legal</dt>
+                <dt><?= e(__('privacy.forms.legal_basis')) ?></dt>
                 <dd>
                     <span class="pp-privacy-formcard__chip pp-privacy-formcard__chip--<?= e($f['lawful_basis']) ?>"><?= e($basisLabel) ?></span>
                 </dd>
             </div>
             <div>
-                <dt>Conservación</dt>
+                <dt><?= e(__('privacy.forms.retention')) ?></dt>
                 <dd><?= e($f['retention_period']) ?></dd>
             </div>
             <div>
-                <dt>Marketing opt-in</dt>
+                <dt><?= e(__('privacy.forms.marketing_optin')) ?></dt>
                 <dd>
                     <?= $f['marketing_opt_in']
-                        ? '<span class="pp-privacy-formcard__chip pp-privacy-formcard__chip--marketing">Sí</span>'
-                        : '<span class="pp-privacy-formcard__chip pp-privacy-formcard__chip--off">No</span>' ?>
+                        ? '<span class="pp-privacy-formcard__chip pp-privacy-formcard__chip--marketing">' . e(__('common.yes')) . '</span>'
+                        : '<span class="pp-privacy-formcard__chip pp-privacy-formcard__chip--off">' . e(__('common.no')) . '</span>' ?>
                 </dd>
             </div>
         </dl>
@@ -76,8 +76,8 @@ $basisLabels = [
 </div>
 
 <div class="pp-privacy-summary__hint" style="margin-top: 24px;">
-    <strong>¿Cómo se aplica esto?</strong>
-    <p>Bajo cada formulario público se muestra automáticamente una nota: <em>"Tus datos se tratarán [base legal] y se conservarán durante [plazo]"</em>, con enlace a tu política de privacidad. Si activas el opt-in de marketing, aparece una casilla aparte (nunca premarcada) para que el visitante consienta por separado.</p>
+    <strong><?= e(__('privacy.forms.how')) ?></strong>
+    <p><?= __('privacy.forms.how_help.html') ?></p>
 </div>
 
 <?php endif; ?>

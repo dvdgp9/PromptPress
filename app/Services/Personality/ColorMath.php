@@ -136,6 +136,7 @@ final class ColorMath
         $n = count($hexColors);
         if ($n === 0) return '#000000';
         if ($n !== count($weights)) {
+            // i18n-ignore: excepción interna dirigida a quien programa.
             throw new \InvalidArgumentException('ColorMath::mixLab — número de pesos no coincide.');
         }
 

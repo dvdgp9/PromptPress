@@ -11,13 +11,19 @@ $cssPath = PP_ROOT . '/admin/assets/css/admin.css';
 $jsPath  = PP_ROOT . '/admin/assets/js/canvas-studio.js';
 $cssVer  = file_exists($cssPath) ? filemtime($cssPath) : PP_VERSION;
 $jsVer   = file_exists($jsPath) ? filemtime($jsPath) : PP_VERSION;
+$resourceCounts = [];
+if (!empty($publishedResources)) {
+    $available = count($publishedResources);
+    $resourceCounts = array_values(array_unique([1, min(3, $available), min(6, $available)]));
+    sort($resourceCounts);
+}
 ?>
 <!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Studio — <?= e($page['title']) ?></title>
+<title><?= e(__('cv.studio')) ?> — <?= e($page['title']) ?></title>
 <link rel="stylesheet" href="<?= e(base_url('admin/assets/css/admin.css')) ?>?v=<?= e($cssVer) ?>">
 <meta name="csrf" content="<?= e(\Core\CSRF::token()) ?>">
 <?php /* FH9 — tokens de marca disponibles en el chrome del Studio (no solo en el iframe). */ ?>
@@ -51,7 +57,10 @@ $icon = static function (string $name): string {
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
       data-publish-url="<?= e(base_url('admin/canvas/' . $pageId . '/publish')) ?>"
       data-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/section')) ?>"
+      data-structure-url="<?= e(base_url('admin/canvas/' . $pageId . '/structure')) ?>"
       data-insert-form-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-form')) ?>"
+      data-insert-booking-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-booking')) ?>"
+      data-insert-resources-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-resources')) ?>"
       data-media-url="<?= e(base_url('admin/media/library')) ?>"
       data-media-upload-url="<?= e(base_url('admin/media')) ?>"
       data-bank-search-url="<?= e(base_url('admin/media/bank/search')) ?>"
@@ -72,54 +81,54 @@ $icon = static function (string $name): string {
 
 <header class="cvstudio-top">
   <div class="cvstudio-top__zone cvstudio-top__left">
-    <a class="cvstudio-iconbtn" href="<?= e(base_url('admin/pages')) ?>" title="Volver a páginas" aria-label="Volver a páginas"><?= $icon('back') ?></a>
+    <a class="cvstudio-iconbtn" href="<?= e(base_url('admin/pages')) ?>" title="<?= e(__('cv.back_to_pages')) ?>" aria-label="<?= e(__('cv.back_to_pages')) ?>"><?= $icon('back') ?></a>
     <div class="cvstudio-title">
       <strong><?= e($page['title']) ?></strong>
       <span class="cvstudio-titlemeta">
         <span class="cvstudio-status <?= $isPublished ? 'is-live' : '' ?>" id="studio-status">
           <?= $isPublished ? 'Publicada' : 'Borrador' ?>
         </span>
-        <span class="cvstudio-saved" id="studio-saved" hidden>Guardado</span>
+        <span class="cvstudio-saved" id="studio-saved" hidden><?= e(__('js.saved')) ?></span>
       </span>
     </div>
   </div>
 
   <div class="cvstudio-top__zone cvstudio-top__center">
-    <div class="cvstudio-segment" role="group" aria-label="Tamaño de pantalla">
-      <div class="cvstudio-viewport" role="group" aria-label="Tamaño de pantalla">
-        <button type="button" class="is-active" data-vp="desktop" title="Vista ordenador" aria-label="Vista ordenador"><?= $icon('desktop') ?></button>
-        <button type="button" data-vp="mobile" title="Vista móvil" aria-label="Vista móvil"><?= $icon('mobile') ?></button>
+    <div class="cvstudio-segment" role="group" aria-label="<?= e(__('chrome.screen_size')) ?>">
+      <div class="cvstudio-viewport" role="group" aria-label="<?= e(__('chrome.screen_size')) ?>">
+        <button type="button" class="is-active" data-vp="desktop" title="<?= e(__('cv.desktop_view')) ?>" aria-label="<?= e(__('cv.desktop_view')) ?>"><?= $icon('desktop') ?></button>
+        <button type="button" data-vp="mobile" title="<?= e(__('cv.mobile_view')) ?>" aria-label="<?= e(__('cv.mobile_view')) ?>"><?= $icon('mobile') ?></button>
       </div>
     </div>
     <span class="cvstudio-divider" aria-hidden="true"></span>
-    <div class="cvstudio-undo" role="group" aria-label="Deshacer y rehacer">
-      <button type="button" class="cvstudio-icon-btn" id="studio-undo-btn" title="Deshacer (Ctrl/Cmd+Z)" disabled aria-label="Deshacer"><?= $icon('undo') ?></button>
-      <button type="button" class="cvstudio-icon-btn" id="studio-redo-btn" title="Rehacer (Ctrl/Cmd+Mayús+Z)" disabled aria-label="Rehacer"><?= $icon('redo') ?></button>
+    <div class="cvstudio-undo" role="group" aria-label="<?= e(__('cv.undo_redo')) ?>">
+      <button type="button" class="cvstudio-icon-btn" id="studio-undo-btn" title="<?= e(__('cv.undo')) ?>" disabled aria-label="Deshacer"><?= $icon('undo') ?></button>
+      <button type="button" class="cvstudio-icon-btn" id="studio-redo-btn" title="<?= e(__('cv.redo')) ?>" disabled aria-label="<?= e(__('cv.redo_short')) ?>"><?= $icon('redo') ?></button>
     </div>
   </div>
 
   <div class="cvstudio-top__zone cvstudio-top__right">
-    <button type="button" class="cvstudio-iconbtn" id="studio-history-btn" title="Historial de versiones" aria-label="Historial de versiones"><?= $icon('history') ?></button>
-    <button type="button" class="cvstudio-iconbtn" id="studio-settings-btn" title="Ajustes de la página" aria-label="Ajustes de la página"><?= $icon('settings') ?></button>
+    <button type="button" class="cvstudio-iconbtn" id="studio-history-btn" title="<?= e(__('cv.history')) ?>" aria-label="Historial de versiones"><?= $icon('history') ?></button>
+    <button type="button" class="cvstudio-iconbtn" id="studio-settings-btn" title="<?= e(__('cv.page_settings')) ?>" aria-label="Ajustes de la página"><?= $icon('settings') ?></button>
     <a class="cvstudio-iconbtn" id="studio-view-link"
        href="<?= e($isPublished ? base_url(ltrim((string) $page['slug'], '/')) : base_url('admin/canvas/' . $pageId . '/preview') . '?clean=1') ?>"
        target="_blank" rel="noopener"
-       title="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"
-       aria-label="<?= $isPublished ? 'Ver página en el sitio' : 'Previsualizar borrador' ?>"><?= $icon('external') ?></a>
+       title="<?= e($isPublished ? __('cv.view_on_site') : __('cv.preview_draft')) ?>"
+       aria-label="<?= e($isPublished ? __('cv.view_on_site') : __('cv.preview_draft')) ?>"><?= $icon('external') ?></a>
     <span class="cvstudio-divider" aria-hidden="true"></span>
     <!-- Publicar: en borrador, acción primaria llamativa. Publicada: menú discreto "⋯". -->
     <div class="cvstudio-publish" id="studio-publish" data-published="<?= $isPublished ? '1' : '0' ?>">
       <button type="button" class="cvstudio-primary-btn" id="studio-publish-btn"
-              title="Publicar la página en el sitio"<?= $isPublished ? ' hidden' : '' ?>>
-        Publicar
+              title="<?= e(__('cv.publish_title')) ?>"<?= $isPublished ? ' hidden' : '' ?>>
+        <?= e(__('pages.publish')) ?>
       </button>
       <div class="cvstudio-menu" id="studio-more"<?= $isPublished ? '' : ' hidden' ?>>
         <button type="button" class="cvstudio-iconbtn" id="studio-more-btn"
                 aria-haspopup="true" aria-expanded="false"
-                title="Más acciones" aria-label="Más acciones"><?= $icon('more') ?></button>
+                title="<?= e(__('pages.more_actions')) ?>" aria-label="<?= e(__('pages.more_actions')) ?>"><?= $icon('more') ?></button>
         <div class="cvstudio-menu__pop" id="studio-more-menu" hidden role="menu">
           <button type="button" class="cvstudio-menu__item is-danger" id="studio-unpublish-btn" role="menuitem">
-            Despublicar
+            <?= e(__('post_edit.unpublish')) ?>
           </button>
         </div>
       </div>
@@ -130,7 +139,7 @@ $icon = static function (string $name): string {
 <div class="cvstudio-main">
   <div class="cvstudio-stage">
     <div class="cvstudio-frame" id="studio-frame-wrap">
-      <iframe id="studio-iframe" src="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>" title="Vista previa de la página"></iframe>
+      <iframe id="studio-iframe" src="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>" title="<?= e(__('cv.iframe_title')) ?>"></iframe>
     </div>
 
     <!-- STUDIO-2 A3 — el chat vive flotando sobre la página, no en la barra:
@@ -138,45 +147,45 @@ $icon = static function (string $name): string {
     <div class="cvstudio-dock" id="chat-dock">
       <button type="button" class="cvstudio-dock__pill" id="chat-pill" aria-expanded="false" aria-controls="chat-panel">
         <span class="cvstudio-dock__icon" aria-hidden="true">✦</span>
-        <span class="cvstudio-dock__label" id="chat-pill-label">Pídeme un cambio</span>
+        <span class="cvstudio-dock__label" id="chat-pill-label"><?= e(__('cv.ask_change_js')) ?></span>
         <span class="cvstudio-dock__dot" id="chat-pill-dot" hidden aria-hidden="true"></span>
       </button>
 
-      <section class="cvstudio-dock__panel" id="chat-panel" aria-label="Asistente de diseño">
+      <section class="cvstudio-dock__panel" id="chat-panel" aria-label="<?= e(__('cv.design_assistant')) ?>">
         <header class="cvstudio-dock__head">
-          <strong>Cuéntame qué quieres cambiar</strong>
-          <button type="button" id="chat-minimize" title="Ocultar la conversación" aria-label="Ocultar la conversación">▾</button>
+          <strong><?= e(__('cv.tell_me')) ?></strong>
+          <button type="button" id="chat-minimize" title="<?= e(__('cv.hide_chat')) ?>" aria-label="<?= e(__('cv.hide_chat')) ?>">▾</button>
         </header>
 
         <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
           <div class="pp-chat-msg pp-chat-msg--assistant">
-            <p>Esta es tu página, en vivo.</p>
-            <p class="pp-chat-hint">Haz clic en un texto para corregirlo al momento, o en una foto para cambiarla. Para cambios de diseño, cuéntamelo aquí: si antes haces clic en una parte de la página, el cambio se aplicará solo ahí.</p>
+            <p><?= e(__('cv.live_page')) ?></p>
+            <p class="pp-chat-hint"><?= e(__('cv.intro_hint')) ?></p>
           </div>
         </div>
 
         <div class="cvstudio-chat__composer">
           <div class="cvstudio-context" id="chat-context" hidden>
-            <span>Cambiando: <strong id="chat-context-label"></strong></span>
-            <button type="button" id="chat-context-clear" title="Quitar selección — el cambio afectará a toda la página">✕</button>
+            <span><?= e(__('cv.changing')) ?>: <strong id="chat-context-label"></strong></span>
+            <button type="button" id="chat-context-clear" title="<?= e(__('cv.clear_selection')) ?>">✕</button>
           </div>
           <form id="chat-form">
             <textarea id="chat-input" rows="2" maxlength="1200"
-              placeholder="Ej.: haz esta sección como «metodología» de la página Inicio"></textarea>
-            <p class="cvstudio-insert__hint">También puedes usar una sección de otra página como referencia; sus textos solo se copian si lo pides.</p>
+              placeholder="<?= e(__('cv.chat_placeholder')) ?>"></textarea>
+            <p class="cvstudio-insert__hint"><?= e(__('cv.reference_hint')) ?></p>
             <div class="cvstudio-chat__formfoot">
               <?php if (!empty($aiModels)): ?>
-              <label class="cvstudio-model" title="Modelo de IA usado para aplicar el cambio">
+              <label class="cvstudio-model" title="<?= e(__('cv.model_title')) ?>">
                 <span class="cvstudio-model__icon" aria-hidden="true">✦</span>
-                <select id="chat-model" aria-label="Modelo de IA para este cambio">
+                <select id="chat-model" aria-label="<?= e(__('cv.model_aria')) ?>">
                   <?php foreach ($aiModels as $m): ?>
                   <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
                   <?php endforeach; ?>
                 </select>
               </label>
               <?php endif; ?>
-              <button type="submit" id="chat-send" class="cvstudio-primary-btn">Aplicar cambio</button>
-              <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden>Parar</button>
+              <button type="submit" id="chat-send" class="cvstudio-primary-btn"><?= e(__('cv.apply_change')) ?></button>
+              <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden><?= e(__('cv.stop')) ?></button>
             </div>
           </form>
         </div>
@@ -188,48 +197,139 @@ $icon = static function (string $name): string {
     <!-- FH7 — panel contextual de edición directa (se muestra al seleccionar) -->
     <div class="cvstudio-panel" id="edit-panel" hidden></div>
 
+    <!-- STUDIO-STRUCTURE S3 — la estructura permanece visible incluso cuando
+         el panel contextual está abierto: seleccionar una parte no puede hacer
+         desaparecer las acciones para moverla o eliminarla. -->
+    <div class="cvstudio-side__structure">
+      <h3 class="cvstudio-side__title"><?= e(__('cv.page_parts')) ?></h3>
+      <ul class="cvstudio-seclist" id="side-sections">
+        <li class="cvstudio-side__hint"><?= e(__('cv.loading')) ?></li>
+      </ul>
+      <div class="cvstudio-structure-status" id="structure-status" role="status" aria-live="polite" hidden></div>
+    </div>
+
     <!-- STUDIO-2 A1 — la barra nunca está vacía: sin selección explica cómo se
          edita y ofrece las partes de la página para llegar a cada una. -->
     <div class="cvstudio-side__empty" id="side-empty">
       <div class="cvstudio-side__intro">
-        <strong>Edita tu página a mano</strong>
-        <p>Toca cualquier cosa de la página: un <b>texto</b> para escribir encima, una <b>foto</b> para cambiarla, una <b>franja</b> para su fondo y su espaciado. Los controles aparecerán aquí.</p>
+        <strong><?= e(__('cv.manual_edit')) ?></strong>
+        <p><?= __('cv.manual_edit_help.html') ?></p>
       </div>
 
-      <div class="cvstudio-side__block">
-        <h3 class="cvstudio-side__title">Partes de esta página</h3>
-        <ul class="cvstudio-seclist" id="side-sections">
-          <li class="cvstudio-side__hint">Cargando…</li>
-        </ul>
-      </div>
+      <div class="cvstudio-side__block" id="studio-add-block">
+        <h3 class="cvstudio-side__title"><?= e(__('cv.add_to_page')) ?></h3>
+        <p class="cvstudio-insert-placement" id="studio-insert-placement" hidden></p>
+        <!-- STUDIO-STRUCTURE S4 — un único selector conserva el punto elegido y
+             reúne contenido básico + bloques funcionales disponibles. -->
+        <div class="cvstudio-block-picker" id="studio-block-picker">
+          <button type="button" class="cvstudio-primary-btn cvstudio-insert__btn cvstudio-block-picker__trigger"
+                  id="studio-block-picker-btn" aria-haspopup="true" aria-expanded="false"
+                  aria-controls="studio-block-picker-menu">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <?= e(__('cv.block_picker_button')) ?>
+          </button>
+          <div class="cvstudio-menu__pop cvstudio-block-picker__menu" id="studio-block-picker-menu" hidden
+               role="group" aria-label="<?= e(__('cv.block_picker_button')) ?>">
+            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_content_category')) ?></strong>
 
-      <div class="cvstudio-side__block">
-        <h3 class="cvstudio-side__title">Añadir a la página</h3>
-        <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
-        <div class="cvstudio-insert" id="studio-insert-form">
-          <button type="button" class="cvstudio-ghost-btn cvstudio-insert__btn" id="studio-insert-btn"
-                  aria-haspopup="true" aria-expanded="false">+ Formulario</button>
-          <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="menu">
-            <strong class="cvstudio-insert__title">Usar uno existente</strong>
+            <button type="button" class="cvstudio-block-option" data-section-template="text">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 6h14M5 11h10M5 16h13"/></svg></span>
+              <span><strong><?= e(__('cv.block_text')) ?></strong><small><?= e(__('cv.block_text_desc')) ?></small></span>
+            </button>
+            <button type="button" class="cvstudio-block-option" data-section-template="text_image">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m6 17 4-4 3 3 2-2 3 3"/></svg></span>
+              <span><strong><?= e(__('cv.block_text_image')) ?></strong><small><?= e(__('cv.block_text_image_desc')) ?></small></span>
+            </button>
+            <button type="button" class="cvstudio-block-option" data-section-template="cta">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 7h9M5 12h6M5 17h8M15 12h5M18 9l3 3-3 3"/></svg></span>
+              <span><strong><?= e(__('cv.block_cta')) ?></strong><small><?= e(__('cv.block_cta_desc')) ?></small></span>
+            </button>
+
+            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_functional_category')) ?></strong>
+
+            <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
+            <div class="cvstudio-insert" id="studio-insert-form">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-btn"
+                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-menu">
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/></svg></span>
+                <span><strong><?= e(__('js.studio.form')) ?></strong><small><?= e(__('cv.block_form_desc')) ?></small></span>
+              </button>
+              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="group">
+            <strong class="cvstudio-insert__title"><?= e(__('cv.use_existing')) ?></strong>
             <div id="studio-existing-forms">
-            <?php if (empty($forms)): ?><p class="cvstudio-insert__empty">Todavia no tienes formularios.</p><?php else: foreach ($forms as $f): ?>
-              <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>" role="menuitem">
-                <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= (int) $f['field_count'] ?> campos</span>
+            <?php if (empty($forms)): ?><p class="cvstudio-insert__empty"><?= e(__('forms.empty_title')) ?></p><?php else: foreach ($forms as $f): ?>
+              <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>">
+                <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= e(__('forms.fields_other', ['n' => (int) $f['field_count']])) ?></span>
               </button>
             <?php endforeach; endif; ?>
             </div>
-            <strong class="cvstudio-insert__title">Crear desde plantilla</strong>
+            <strong class="cvstudio-insert__title"><?= e(__('cv.from_template')) ?></strong>
             <?php foreach (($formTemplates ?? []) as $key => $template): ?>
-              <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>" role="menuitem">
+              <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>">
                 <?= e((string) ($template['label'] ?? $key)) ?>
                 <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
               </button>
             <?php endforeach; ?>
             <label class="cvstudio-insert__source">
-              <span>Etiqueta de origen (opcional)</span>
-              <input type="text" id="studio-form-source" maxlength="160" placeholder="Ej.: Contacto desde servicios">
+              <span><?= e(__('cv.source_label')) ?></span>
+              <input type="text" id="studio-form-source" maxlength="160" placeholder="<?= e(__('cv.source_placeholder')) ?>">
             </label>
-            <p class="cvstudio-insert__hint" id="studio-insert-hint">Selecciona una parte de la pagina para insertarlo justo despues.</p>
+            <p class="cvstudio-insert__hint" id="studio-insert-hint"><?= e(__('cv.insert_hint')) ?></p>
+              </div>
+            </div>
+
+            <?php /* MODULOS M2 — solo aparece si existe un servicio viable. */ ?>
+            <?php if (!empty($bookingServices)): ?>
+            <div class="cvstudio-insert" id="studio-insert-booking">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-booking-btn"
+                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-booking-menu">
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 3v6M16 3v6M4 11h16"/></svg></span>
+                <span><strong><?= e(__('cv.booking.button')) ?></strong><small><?= e(__('cv.block_booking_desc')) ?></small></span>
+              </button>
+              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-booking-menu" hidden role="group">
+                <button type="button" class="cvstudio-menu__item" data-booking-service="auto">
+                  <?= e(__('cv.booking.auto')) ?>
+                  <span class="cvstudio-insert__meta"><?= e($bookingServices[0]['name']) ?></span>
+                </button>
+                <strong class="cvstudio-insert__title"><?= e(__('cv.booking.pick_service')) ?></strong>
+                <?php foreach ($bookingServices as $svc): ?>
+                  <button type="button" class="cvstudio-menu__item" data-booking-service="<?= (int) $svc['id'] ?>">
+                    <?= e($svc['name']) ?>
+                    <span class="cvstudio-insert__meta"><?= (int) $svc['duration_min'] ?> min<?= $svc['price_label'] !== '' ? ' · ' . e($svc['price_label']) : '' ?></span>
+                  </button>
+                <?php endforeach; ?>
+                <p class="cvstudio-insert__hint"><?= e(__('cv.booking.insert_hint')) ?></p>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($publishedResources)): ?>
+            <div class="cvstudio-insert" id="studio-insert-resources">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-resources-btn"
+                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-resources-menu">
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
+                <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.block_resources_desc')) ?></small></span>
+              </button>
+              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-resources-menu" hidden role="group">
+                <strong class="cvstudio-insert__title"><?= e(__('cv.resources.pick_amount')) ?></strong>
+                <?php foreach ($resourceCounts as $count): ?>
+                  <button type="button" class="cvstudio-menu__item" data-resources-limit="<?= (int) $count ?>">
+                    <?= e(__('cv.resources.option', ['n' => $count])) ?>
+                    <span class="cvstudio-insert__meta"><?= e(__($count === 1 ? 'cv.resources.option_meta_one' : 'cv.resources.option_meta', ['n' => $count])) ?></span>
+                  </button>
+                <?php endforeach; ?>
+                <p class="cvstudio-insert__hint"><?= e(__('cv.resources.insert_hint')) ?></p>
+              </div>
+            </div>
+            <?php elseif (!empty($resourcesModuleEnabled) && !empty($hasPublishedResources)): ?>
+            <div class="cvstudio-insert cvstudio-insert--unavailable">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" disabled>
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
+                <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.resources.language_mismatch', ['idioma' => (string) ($resourcePageLanguage ?? '')])) ?></small></span>
+              </button>
+              <p class="cvstudio-insert__notice"><a href="<?= e(base_url('admin/resources')) ?>" target="_blank" rel="noopener"><?= e(__('cv.resources.review_languages')) ?></a></p>
+            </div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -240,10 +340,10 @@ $icon = static function (string $name): string {
 <div class="cvstudio-modal" id="history-modal" hidden>
   <div class="cvstudio-modal__panel">
     <div class="cvstudio-modal__head">
-      <strong>Historial de la página</strong>
-      <button type="button" id="history-close" title="Cerrar">✕</button>
+      <strong><?= e(__('cv.page_history')) ?></strong>
+      <button type="button" id="history-close" title="<?= e(__('common.close')) ?>">✕</button>
     </div>
-    <p class="pp-chat-hint">Cada cambio guarda una versión. Puedes volver a cualquiera.</p>
+    <p class="pp-chat-hint"><?= e(__('cv.history_hint')) ?></p>
     <ul class="cvstudio-versions" id="history-list"></ul>
   </div>
 </div>
@@ -251,26 +351,26 @@ $icon = static function (string $name): string {
 <div class="cvstudio-modal" id="settings-modal" hidden>
   <div class="cvstudio-modal__panel">
     <div class="cvstudio-modal__head">
-      <strong>Ajustes de la página</strong>
-      <button type="button" id="settings-close" title="Cerrar">✕</button>
+      <strong><?= e(__('cv.page_settings')) ?></strong>
+      <button type="button" id="settings-close" title="<?= e(__('common.close')) ?>">✕</button>
     </div>
-    <p class="pp-chat-hint">Cómo aparece tu página en Google y al compartirla. Si no rellenas algo, usamos el título de la página.</p>
+    <p class="pp-chat-hint"><?= e(__('cv.settings_hint')) ?></p>
     <?php
       // Botón "sugerir con IA" reutilizable por campo (FH8). Una sola pieza
       // para que título, descripción y URL compartan el mismo affordance.
       $aiChip = static function (string $field, string $aria): string {
           return '<button type="button" class="cvstudio-ai-chip" data-ai-field="' . e($field) . '"'
-              . ' title="Sugerir con IA" aria-label="' . e($aria) . '">'
+              . ' title="' . e(__('cv.suggest_ai')) . '" aria-label="' . e($aria) . '">'
               . '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor">'
               . '<path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zm6 11l.9 2.6L21.6 16l-2.6.9L18 19.6l-.9-2.6L14.5 16l2.6-.9L18 13z"/>'
-              . '</svg><span>Sugerir</span></button>';
+              . '</svg><span>' . e(__('cv.suggest')) . '</span></button>';
       };
     ?>
     <div class="cvstudio-panel__body cvstudio-settings">
       <div class="cvstudio-field">
         <div class="cvstudio-field__label">
-          <label for="settings-meta-title">Título para Google</label>
-          <?= $aiChip('meta_title', 'Sugerir el título con IA') ?>
+          <label for="settings-meta-title"><?= e(__('cv.google_title')) ?></label>
+          <?= $aiChip('meta_title', __('cv.suggest_title')) ?>
         </div>
         <input type="text" id="settings-meta-title" maxlength="70"
                value="<?= e((string) ($page['meta_title'] ?? '')) ?>"
@@ -279,52 +379,52 @@ $icon = static function (string $name): string {
       </div>
       <div class="cvstudio-field">
         <div class="cvstudio-field__label">
-          <label for="settings-meta-desc">Descripción para Google</label>
-          <?= $aiChip('meta_description', 'Sugerir la descripción con IA') ?>
+          <label for="settings-meta-desc"><?= e(__('cv.google_desc')) ?></label>
+          <?= $aiChip('meta_description', __('cv.suggest_desc')) ?>
         </div>
         <textarea id="settings-meta-desc" rows="3" maxlength="320"
-                  placeholder="Una o dos frases que resuman la página y enganchen."><?= e((string) ($page['meta_description'] ?? '')) ?></textarea>
+                  placeholder="<?= e(__('cv.google_desc_placeholder')) ?>"><?= e((string) ($page['meta_description'] ?? '')) ?></textarea>
         <small class="cvstudio-hint"><span data-count="settings-meta-desc">0</span> caracteres · ideal por debajo de 155</small>
       </div>
       <?php if (($page['page_type'] ?? '') !== 'home'): ?>
       <div class="cvstudio-field">
         <div class="cvstudio-field__label">
-          <label for="settings-slug">Dirección de la página (URL)</label>
-          <?= $aiChip('slug', 'Sugerir la dirección con IA') ?>
+          <label for="settings-slug"><?= e(__('cv.page_url')) ?></label>
+          <?= $aiChip('slug', __('cv.suggest_slug')) ?>
         </div>
         <input type="text" id="settings-slug" value="<?= e(ltrim((string) $page['slug'], '/')) ?>" placeholder="mi-pagina">
-        <small class="cvstudio-hint">Tu página estará en: <span id="settings-url-preview"></span></small>
-        <p class="cvstudio-warn" id="settings-slug-warn" hidden>Esta página está publicada. Si cambias la dirección, los enlaces antiguos dejarán de funcionar.</p>
+        <small class="cvstudio-hint"><?= e(__('cv.url_will_be')) ?>: <span id="settings-url-preview"></span></small>
+        <p class="cvstudio-warn" id="settings-slug-warn" hidden><?= e(__('cv.slug_warn')) ?></p>
       </div>
       <?php endif; ?>
       <details class="cvstudio-advanced">
-        <summary>Indexación avanzada</summary>
+        <summary><?= e(__('page_form.advanced_index')) ?></summary>
         <div class="cvstudio-field">
           <label class="cvstudio-check">
             <input type="checkbox" id="settings-seo-noindex" value="1" <?= (int) ($page['seo_noindex'] ?? 0) === 1 ? 'checked' : '' ?>>
-            <span>No mostrar esta página en buscadores</span>
+            <span><?= e(__('page_form.noindex')) ?></span>
           </label>
-          <small class="cvstudio-hint">Úsalo para páginas privadas, duplicadas o temporales. La página seguirá existiendo si alguien tiene el enlace.</small>
+          <small class="cvstudio-hint"><?= e(__('page_form.noindex_help')) ?></small>
         </div>
         <div class="cvstudio-field">
           <label class="cvstudio-check">
             <input type="checkbox" id="settings-seo-exclude-sitemap" value="1" <?= (int) ($page['seo_exclude_sitemap'] ?? 0) === 1 ? 'checked' : '' ?>>
-            <span>Excluir del sitemap</span>
+            <span><?= e(__('page_form.no_sitemap')) ?></span>
           </label>
-          <small class="cvstudio-hint">Normalmente conviene dejarlo desactivado.</small>
+          <small class="cvstudio-hint"><?= e(__('page_form.no_sitemap_help')) ?></small>
         </div>
         <div class="cvstudio-field">
-          <label for="settings-canonical-url">Canonical personalizada</label>
+          <label for="settings-canonical-url"><?= e(__('page_form.canonical')) ?></label>
           <input type="url" id="settings-canonical-url" maxlength="500"
                  value="<?= e((string) ($page['canonical_url'] ?? '')) ?>"
                  placeholder="https://tudominio.com/pagina-principal">
-          <small class="cvstudio-hint">Solo si esta página duplica otra URL principal.</small>
+          <small class="cvstudio-hint"><?= e(__('page_form.canonical_help')) ?></small>
         </div>
       </details>
     </div>
     <div class="cvstudio-settings__foot">
       <span class="cvstudio-settings__status" id="settings-status" hidden></span>
-      <button type="button" class="cvstudio-primary-btn" id="settings-save-btn">Guardar ajustes</button>
+      <button type="button" class="cvstudio-primary-btn" id="settings-save-btn"><?= e(__('settings.save')) ?></button>
     </div>
   </div>
 </div>
@@ -332,27 +432,27 @@ $icon = static function (string $name): string {
 <div class="cvstudio-modal" id="media-modal" hidden>
   <div class="cvstudio-modal__panel cvstudio-modal__panel--wide">
     <div class="cvstudio-modal__head">
-      <strong>Elige una imagen</strong>
-      <button type="button" id="media-close" title="Cerrar">✕</button>
+      <strong><?= e(__('cv.pick_image')) ?></strong>
+      <button type="button" id="media-close" title="<?= e(__('common.close')) ?>">✕</button>
     </div>
     <div class="cvstudio-media-bar">
       <div class="cvstudio-media-tabs" role="tablist">
-        <button type="button" class="is-active" data-media-tab="library" role="tab">Tu biblioteca</button>
+        <button type="button" class="is-active" data-media-tab="library" role="tab"><?= e(__('cv.your_library')) ?></button>
         <?php if (!empty($bankAvailable)): ?>
-        <button type="button" data-media-tab="unsplash" role="tab">Buscar en Unsplash</button>
+        <button type="button" data-media-tab="unsplash" role="tab"><?= e(__('media.search_unsplash')) ?></button>
         <?php endif; ?>
       </div>
-      <label class="cvstudio-media-upload" title="Subir una imagen desde tu equipo">
+      <label class="cvstudio-media-upload" title="<?= e(__('cv.upload_from_device')) ?>">
         <input type="file" id="media-upload-input" accept="image/*" hidden>
-        <span>⬆ Subir imagen</span>
+        <span>⬆ <?= e(__('cv.upload_image')) ?></span>
       </label>
     </div>
     <form class="cvstudio-media-search" id="media-search-form" hidden>
       <input type="search" id="media-search-input" autocomplete="off"
-             placeholder="Busca fotos: aula, estudiantes, biblioteca…">
-      <button type="submit" class="cvstudio-ghost-btn">Buscar</button>
+             placeholder="<?= e(__('cv.search_photos')) ?>">
+      <button type="submit" class="cvstudio-ghost-btn"><?= e(__('bank.search')) ?></button>
     </form>
-    <p class="pp-chat-hint" id="media-hint">Imágenes de tu biblioteca. La nueva imagen sustituirá a la que has tocado.</p>
+    <p class="pp-chat-hint" id="media-hint"><?= e(__('cv.media_hint')) ?></p>
     <div class="cvstudio-media-grid" id="media-grid"></div>
   </div>
 </div>
@@ -363,6 +463,14 @@ $icon = static function (string $name): string {
       'url' => '/' . ltrim((string) $p['slug'], '/'),
   ], $linkTargets ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 </script>
+<?php /* El Studio es standalone (sin `admin/layout`), así que tiene que traerse
+         el catálogo del navegador y `pp.t` por su cuenta: sin esto sus ~94
+         llamadas a `pp.t()` lanzaban "pp is not defined" y cortaban el script. */ ?>
+<script>window.PP_I18N = <?= json_encode(
+    \App\Services\AdminI18n::jsCatalog(),
+    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+) ?>;</script>
+<script src="<?= e(base_url('admin/assets/js/pp-i18n.js')) ?>"></script>
 <script src="<?= e(base_url('admin/assets/js/canvas-studio.js')) ?>?v=<?= e($jsVer) ?>"></script>
 </body>
 </html>

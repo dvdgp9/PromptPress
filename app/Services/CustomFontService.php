@@ -21,12 +21,20 @@ use Core\Database;
  */
 final class CustomFontService
 {
+    // Las constantes se evalúan antes de saber el idioma: guardan la clave y
+    // se resuelven en `roles()` al pintar.
     public const ROLES = [
-        'both'    => 'Títulos y textos',
-        'heading' => 'Solo títulos',
-        'body'    => 'Solo textos',
-        'none'    => 'Sin asignar',
+        'both'    => 'font.role.both',
+        'heading' => 'font.role.heading',
+        'body'    => 'font.role.body',
+        'none'    => 'font.role.none',
     ];
+
+    /** Los roles con la etiqueta ya traducida, para el panel. */
+    public static function roles(): array
+    {
+        return array_map(static fn (string $k): string => __($k), self::ROLES);
+    }
 
     /** Peso máximo por archivo. Una fuente web razonable no llega ni de lejos. */
     public const MAX_FILE_BYTES = 3 * 1024 * 1024;
@@ -144,7 +152,9 @@ final class CustomFontService
         $out = [];
         foreach (self::families($siteId) as $fam) {
             if ($fam['files'] === []) continue;
-            $out[$fam['token']] = $fam['name'] . ' (tuya)';
+            // DESIGN-MANDA T12 — El sufijo va traducido: el panel puede estar
+            // en cualquiera de los 4 idiomas y esto se pinta en el select.
+            $out[$fam['token']] = $fam['name'] . ' ' . __('design.font_own_suffix');
         }
         return $out;
     }
@@ -166,7 +176,7 @@ final class CustomFontService
     public static function ensureFamily(int $siteId, string $name, ?string $role = null): int
     {
         $name = trim($name);
-        if ($name === '') $name = 'Mi tipografía';
+        if ($name === '') $name = __('font.default_name');
         $name = mb_substr($name, 0, 120);
         $slug = self::slugFor($name);
 
@@ -237,7 +247,7 @@ final class CustomFontService
         $original = (string) ($file['name'] ?? 'fuente');
         $format = self::formatOf($original, (string) $file['tmp_name']);
         if ($format === null) {
-            return ['ok' => false, 'error' => 'El archivo no parece una fuente válida (WOFF2, WOFF, TTF u OTF).', 'id' => null, 'weight' => null, 'style' => null];
+            return ['ok' => false, 'error' => __('font.err.not_a_font'), 'id' => null, 'weight' => null, 'style' => null];
         }
 
         // Si el usuario no dice el peso, lo deducimos del nombre del archivo:
@@ -439,13 +449,13 @@ final class CustomFontService
             return 'Selecciona un archivo de fuente.';
         }
         if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-            return 'La subida no se completó. Prueba de nuevo.';
+            return __('font.err.upload_incomplete');
         }
         $size = (int) ($file['size'] ?? 0);
-        if ($size <= 0) return 'El archivo está vacío.';
+        if ($size <= 0) return __('font.err.empty_file');
         if ($size > self::MAX_FILE_BYTES) return 'Cada archivo debe pesar menos de 3 MB.';
         $tmp = (string) ($file['tmp_name'] ?? '');
-        if ($tmp === '' || !is_file($tmp)) return 'El archivo recibido no es válido.';
+        if ($tmp === '' || !is_file($tmp)) return __('font.err.bad_file');
         return null;
     }
 

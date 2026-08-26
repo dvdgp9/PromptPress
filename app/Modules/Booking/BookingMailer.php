@@ -39,83 +39,74 @@ final class BookingMailer
         [$booking, $service, $siteName, $tz] = $ctx;
 
         $lang = self::language($siteId, $booking);
-        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
         $confirmed = (string) $booking['status'] === 'confirmed';
         $when = self::humanWhen($booking, $tz, $lang);
         $cancelUrl = base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']);
 
-        $subject = $t($confirmed ? 'mail.booking.confirmed_subject' : 'mail.booking.received_subject', [
-            'service' => (string) $service['name'],
-            'when'    => $when,
-        ]);
-        $lines = [
-            $t('mail.greeting', ['name' => $booking['customer_name']]),
-            '',
-            $t($confirmed ? 'mail.booking.confirmed_intro' : 'mail.booking.received_intro'),
-            '',
-            '• ' . $t('mail.booking.field_service') . ': ' . $service['name'],
-            '• ' . $t('mail.booking.field_when') . ': ' . $when,
-            '',
-            $t('mail.booking.cancel_intro'),
-            $cancelUrl,
-            '',
-            $siteName,
-        ];
-        $msg = new MailMessage((string) $booking['customer_email'], $subject, implode("\n", $lines), '', (string) $booking['customer_name']);
+        // MODULOS M9 — el texto sale de la plantilla del servicio si el gestor la
+        // ha reescrito, y si no de la de siempre (traducida en los 6 idiomas).
+        $mail = BookingEmails::render(
+            $service,
+            $confirmed ? 'confirmed' : 'received',
+            $lang,
+            self::tokens($booking, $service, $siteName, $when, $cancelUrl, $lang)
+        );
+        $msg = new MailMessage((string) $booking['customer_email'], $mail['subject'], $mail['body'], '', (string) $booking['customer_name']);
         if ($confirmed) {
             $msg->attach(self::buildIcs($booking, $service, $siteName, $lang), 'reserva.ics', 'text/calendar; method=REQUEST');
         }
         self::deliverToCustomer($siteId, (int) $booking['id'], $msg);
 
-        // El aviso al admin va ENTERO en castellano, fecha incluida: el panel
-        // es castellano y una fecha en francés dentro de un texto español
-        // quedaba a medio camino.
-        $whenAdmin = self::humanWhen($booking, $tz);
-        self::notifyAdmin($siteId, sprintf(
-            "Nueva reserva %s\n\nServicio: %s\nFecha: %s\nCliente: %s <%s>%s%s\n\nGestión: %s",
-            $confirmed ? '(confirmada automáticamente)' : '(pendiente de confirmar)',
-            $service['name'],
-            $whenAdmin,
-            $booking['customer_name'],
-            $booking['customer_email'],
-            $booking['customer_phone'] !== null ? "\nTeléfono: " . $booking['customer_phone'] : '',
-            $booking['notes'] !== null ? "\nNotas: " . $booking['notes'] : '',
-            base_url('admin/booking/reservas')
-        ), 'Nueva reserva: ' . $service['name'] . ' — ' . $whenAdmin);
+        // El aviso al admin va entero en el idioma del PANEL (fecha incluida):
+        // lo lee quien gestiona el sitio, no el cliente. Media frase en un
+        // idioma y la fecha en otro queda peor que cualquiera de los dos.
+        $whenAdmin = self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale());
+        self::notifyAdmin($siteId, __('bk.mail.admin_new_body', [
+            'estado'   => __($confirmed ? 'bk.mail.admin_auto_confirmed' : 'bk.mail.admin_pending'),
+            'servicio' => (string) $service['name'],
+            'fecha'    => $whenAdmin,
+            'cliente'  => (string) $booking['customer_name'],
+            'email'    => (string) $booking['customer_email'],
+            'telefono' => $booking['customer_phone'] !== null ? "\n" . __('bk.mail.phone') . ': ' . $booking['customer_phone'] : '',
+            'notas'    => $booking['notes'] !== null ? "\n" . __('bk.mail.notes') . ': ' . $booking['notes'] : '',
+            // MODULOS M8 — lo que el cliente ha contestado en los campos propios
+            // del servicio: si el gestor los pidió, es que los necesita, así que
+            // van en el mismo aviso y no solo en el panel.
+            'extra'    => self::answersBlock($booking),
+            'url'      => base_url('admin/booking/reservas'),
+        ]), __('bk.mail.admin_new_subject', ['servicio' => (string) $service['name'], 'fecha' => $whenAdmin]));
     }
 
-    /** Email al cliente cuando el admin confirma o cancela. */
-    public static function sendStatusChange(int $siteId, int $bookingId, string $newStatus): void
+    /**
+     * Email al cliente cuando el admin confirma o cancela.
+     *
+     * Devuelve qué pasó con el envío ('sent', 'skipped' si el sitio no tiene
+     * email configurado, 'failed' si el envío falló) para que el panel pueda
+     * decir la verdad en el aviso: sin esto avisaba "hemos escrito al cliente"
+     * incluso en un sitio sin SMTP, donde nadie recibió nada.
+     */
+    public static function sendStatusChange(int $siteId, int $bookingId, string $newStatus): string
     {
         $ctx = self::context($siteId, $bookingId);
         if ($ctx === null) {
-            return;
+            return 'skipped';
         }
         [$booking, $service, $siteName, $tz] = $ctx;
         $lang = self::language($siteId, $booking);
-        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
         $when = self::humanWhen($booking, $tz, $lang);
-        $vars = ['service' => (string) $service['name'], 'when' => $when];
 
+        $cancelUrl = base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']);
+        $mail = BookingEmails::render(
+            $service,
+            $newStatus === 'confirmed' ? 'confirmed' : 'cancelled',
+            $lang,
+            self::tokens($booking, $service, $siteName, $when, $cancelUrl, $lang)
+        );
+        $msg = new MailMessage((string) $booking['customer_email'], $mail['subject'], $mail['body'], '', (string) $booking['customer_name']);
         if ($newStatus === 'confirmed') {
-            $subject = $t('mail.booking.confirmed_subject', $vars);
-            $body = $t('mail.greeting', ['name' => $booking['customer_name']]) . "\n\n"
-                . $t('mail.booking.confirmed_now') . "\n\n"
-                . '• ' . $t('mail.booking.field_service') . ': ' . $service['name'] . "\n"
-                . '• ' . $t('mail.booking.field_when') . ': ' . $when . "\n\n"
-                . $t('mail.booking.cancel_inline', [
-                    'url' => base_url('_booking/cancel/' . $booking['id'] . '?token=' . $booking['cancel_token']),
-                ]) . "\n\n" . $siteName;
-            $msg = new MailMessage((string) $booking['customer_email'], $subject, $body, '', (string) $booking['customer_name']);
             $msg->attach(self::buildIcs($booking, $service, $siteName, $lang), 'reserva.ics', 'text/calendar; method=REQUEST');
-        } else {
-            $subject = $t('mail.booking.cancelled_subject', $vars);
-            $body = $t('mail.greeting', ['name' => $booking['customer_name']]) . "\n\n"
-                . $t('mail.booking.cancelled_body', $vars) . "\n\n"
-                . $t('mail.booking.book_again') . "\n\n" . $siteName;
-            $msg = new MailMessage((string) $booking['customer_email'], $subject, $body, '', (string) $booking['customer_name']);
         }
-        self::deliverToCustomer($siteId, (int) $booking['id'], $msg);
+        return self::deliverToCustomer($siteId, (int) $booking['id'], $msg);
     }
 
     /** Aviso al admin cuando el CLIENTE cancela con su link. */
@@ -126,14 +117,13 @@ final class BookingMailer
             return;
         }
         [$booking, $service, , $tz] = $ctx;
-        self::notifyAdmin($siteId, sprintf(
-            "El cliente ha cancelado su reserva.\n\nServicio: %s\nFecha: %s\nCliente: %s <%s>\n\nGestión: %s",
-            $service['name'],
-            self::humanWhen($booking, $tz),
-            $booking['customer_name'],
-            $booking['customer_email'],
-            base_url('admin/booking/reservas')
-        ), 'Reserva cancelada por el cliente: ' . $service['name']);
+        self::notifyAdmin($siteId, __('bk.mail.admin_cancel_body', [
+            'servicio' => (string) $service['name'],
+            'fecha'    => self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale()),
+            'cliente'  => (string) $booking['customer_name'],
+            'email'    => (string) $booking['customer_email'],
+            'url'      => base_url('admin/booking/reservas'),
+        ]), __('bk.mail.admin_cancel_subject', ['servicio' => (string) $service['name']]));
     }
 
     /**
@@ -231,17 +221,21 @@ final class BookingMailer
     }
 
     /** Envía al cliente y refleja el resultado en email_status/email_error. */
-    private static function deliverToCustomer(int $siteId, int $bookingId, MailMessage $msg): void
+    /** @return string el email_status resultante: 'sent', 'skipped' o 'failed'. */
+    private static function deliverToCustomer(int $siteId, int $bookingId, MailMessage $msg): string
     {
         try {
             if (!MailService::isConfigured($siteId)) {
                 self::mark($bookingId, 'skipped', null);
-                return;
+                return 'skipped';
             }
             $result = MailService::send($siteId, $msg, 'booking');
-            self::mark($bookingId, $result->ok ? 'sent' : 'failed', $result->ok ? null : (string) $result->error);
+            $status = $result->ok ? 'sent' : 'failed';
+            self::mark($bookingId, $status, $result->ok ? null : (string) $result->error);
+            return $status;
         } catch (\Throwable $e) {
             self::mark($bookingId, 'failed', $e->getMessage());
+            return 'failed';
         }
     }
 
@@ -259,6 +253,42 @@ final class BookingMailer
         } catch (\Throwable) {
             // el aviso al admin nunca rompe el flujo
         }
+    }
+
+    /**
+     * Valores de los `{tokens}` de las plantillas de email.
+     *
+     * @param array<string,mixed> $booking
+     * @param array<string,mixed> $service
+     * @return array<string,string>
+     */
+    private static function tokens(array $booking, array $service, string $siteName, string $when, string $cancelUrl, string $lang): array
+    {
+        $t = static fn (string $key): string => Microcopy::t($key, $lang);
+        $detalles = '• ' . $t('mail.booking.field_service') . ': ' . (string) $service['name'] . "\n"
+                  . '• ' . $t('mail.booking.field_when') . ': ' . $when;
+        $precio = trim((string) ($service['price_label'] ?? ''));
+
+        return [
+            'cliente'    => (string) $booking['customer_name'],
+            'servicio'   => (string) $service['name'],
+            'fecha'      => $when,
+            'precio'     => $precio,
+            'sitio'      => $siteName,
+            'detalles'   => $detalles,
+            'cancelar'   => $cancelUrl,
+            'respuestas' => ltrim(self::answersBlock($booking), "\n"),
+        ];
+    }
+
+    /** Respuestas a los campos propios, como líneas "Etiqueta: valor". */
+    private static function answersBlock(array $booking): string
+    {
+        $lines = '';
+        foreach (BookingFields::answers($booking) as $ans) {
+            $lines .= "\n" . $ans['label'] . ': ' . $ans['value'];
+        }
+        return $lines;
     }
 
     private static function mark(int $bookingId, string $status, ?string $error): void

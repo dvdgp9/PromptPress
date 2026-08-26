@@ -169,6 +169,7 @@ final class PageController
         // FH1 — páginas "canvas": el cuerpo es HTML libre saneado, no secciones.
         $isCanvas = (($page['render_mode'] ?? 'sections') === 'canvas');
         $canvasHasForm = false;
+        $canvasHasResources = false;
 
         $sections = $isCanvas ? [] : Database::select(
             'SELECT id, section_type, sort_order, content, style, status
@@ -209,9 +210,10 @@ final class PageController
         }
 
         if ($isCanvas) {
-            $canvas = \App\Services\Canvas\CanvasService::renderPublic((int) $page['id'], $siteId);
+            $canvas = \App\Services\Canvas\CanvasService::renderPublic((int) $page['id'], $siteId, $lang);
             $body = $canvas['html'];
             $canvasHasForm = $canvas['has_form'];
+            $canvasHasResources = (bool) ($canvas['has_resources'] ?? false);
         } else {
             $body = SectionRenderer::renderMany($sections);
         }
@@ -261,6 +263,10 @@ final class PageController
         }
         $h .= SeoStructuredDataService::render($site, $page, $metaDesc, $postMeta);
         $h .= $designHead;
+        if ($canvasHasResources) {
+            $resourcesCss = PP_ROOT . '/public/css/resources.css';
+            $h .= '<link rel="stylesheet" href="' . e(base_url('public/css/resources.css')) . '?v=' . e((string) (@filemtime($resourcesCss) ?: PP_VERSION)) . '">';
+        }
         $bodyClasses = [VisualStyleService::bodyClass($styleSlug)];
         if ($isArticle) {
             $bodyClasses[] = ArticleTemplateService::bodyClass($articleTemplate);
@@ -392,6 +398,8 @@ final class PageController
           . BrandService::publicHeader($siteId)
           . '<div class="pp-section"><div class="container" style="text-align:center">'
           . '<h1>' . e($siteName) . '</h1>'
+          // i18n-ignore: lo ve el VISITANTE; su idioma es el del sitio y su sitio
+          // natural es Microcopy. Gap preexistente, fuera de ADMIN-I18N.
           . '<p>Aún no hay una página de inicio publicada.</p>'
           . '<p><a class="pp-btn pp-btn--primary" href="' . $adminUrl . '">Ir al panel de admin</a></p>'
           . '</div></div>'

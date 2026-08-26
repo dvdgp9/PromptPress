@@ -46,6 +46,36 @@ body.pp-install {
     padding: 1.5rem 2rem;
     background: white;
     border-bottom: 1px solid var(--pp-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Selector de idioma del instalador: aquí todavía no hay usuario ni sitio
+   de los que deducirlo, así que se elige a mano. */
+.pp-install__lang {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: auto;
+}
+.pp-install__lang-link {
+    color: var(--pp-muted);
+    text-decoration: none;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+}
+.pp-install__lang-link:hover {
+    border-color: var(--pp-border);
+}
+.pp-install__lang-link.is-current {
+    color: var(--pp-text, #111);
+    border-color: var(--pp-border);
+    font-weight: 600;
 }
 .pp-install__brand strong {
     font-size: 1.125rem;

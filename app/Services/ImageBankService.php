@@ -71,7 +71,7 @@ final class ImageBankService
     {
         $key = trim($key);
         if ($key === '') {
-            return ['ok' => false, 'error' => 'La clave está vacía.'];
+            return ['ok' => false, 'error' => __('unsplash.err.empty_key')];
         }
 
         $url = self::SEARCH_ENDPOINT . '?' . http_build_query(['query' => 'office', 'per_page' => 1]);
@@ -113,9 +113,9 @@ final class ImageBankService
             return ['ok' => true, 'error' => null];
         }
         if ($status === 401 || $status === 403) {
-            return ['ok' => false, 'error' => 'Unsplash rechazó la clave (no válida o sin permisos).'];
+            return ['ok' => false, 'error' => __('unsplash.err.rejected_key')];
         }
-        return ['ok' => false, 'error' => 'Unsplash respondió con un código inesperado (' . $status . ').'];
+        return ['ok' => false, 'error' => __('unsplash.err.unexpected_code', ['status' => (string) $status])];
     }
 
     /** Ruta del archivo de configuración del banco (gitignored). */
@@ -249,8 +249,8 @@ PHP;
     public static function searchDetailed(string $query, int $perPage = 12, string $orientation = 'landscape'): array
     {
         $query = trim($query);
-        if ($query === '') return self::searchResult(false, 'invalid_query', 'La búsqueda de imágenes está vacía.');
-        if (!self::isAvailable()) return self::searchResult(false, 'not_configured', 'Unsplash no está configurado.');
+        if ($query === '') return self::searchResult(false, 'invalid_query', __('unsplash.err.empty_query'));
+        if (!self::isAvailable()) return self::searchResult(false, 'not_configured', __('unsplash.err.not_configured'));
 
         $perPage = max(1, min(30, $perPage));
         $orientation = in_array($orientation, ['landscape', 'portrait', 'squarish'], true) ? $orientation : '';
@@ -295,13 +295,13 @@ PHP;
     {
         $remaining = isset($headers['x-ratelimit-remaining']) ? (int) $headers['x-ratelimit-remaining'] : null;
         if ($httpStatus === 0 || $networkError !== null) return self::searchResult(false, 'network_error', 'No se pudo conectar con Unsplash.', $httpStatus ?: null, $remaining);
-        if ($httpStatus === 401 || $httpStatus === 403) return self::searchResult(false, 'authentication_error', 'Unsplash rechazó la configuración de acceso.', $httpStatus, $remaining);
-        if ($httpStatus === 429) return self::searchResult(false, 'rate_limited', 'Unsplash ha alcanzado temporalmente su límite de solicitudes.', $httpStatus, $remaining);
-        if ($httpStatus >= 500) return self::searchResult(false, 'provider_error', 'Unsplash no está disponible temporalmente.', $httpStatus, $remaining);
-        if ($httpStatus < 200 || $httpStatus >= 300) return self::searchResult(false, 'http_error', 'Unsplash devolvió una respuesta inesperada.', $httpStatus, $remaining);
+        if ($httpStatus === 401 || $httpStatus === 403) return self::searchResult(false, 'authentication_error', __('unsplash.err.auth'), $httpStatus, $remaining);
+        if ($httpStatus === 429) return self::searchResult(false, 'rate_limited', __('unsplash.err.rate_limit'), $httpStatus, $remaining);
+        if ($httpStatus >= 500) return self::searchResult(false, 'provider_error', __('unsplash.err.unavailable'), $httpStatus, $remaining);
+        if ($httpStatus < 200 || $httpStatus >= 300) return self::searchResult(false, 'http_error', __('unsplash.err.unexpected'), $httpStatus, $remaining);
         $decoded = json_decode((string) $body, true);
         if (!is_array($decoded) || !isset($decoded['results']) || !is_array($decoded['results'])) {
-            return self::searchResult(false, 'invalid_response', 'Unsplash devolvió una respuesta no válida.', $httpStatus, $remaining);
+            return self::searchResult(false, 'invalid_response', __('unsplash.err.invalid_response'), $httpStatus, $remaining);
         }
         return self::searchResult(true, $decoded['results'] === [] ? 'no_results' : 'ok', null, $httpStatus, $remaining);
     }
@@ -326,6 +326,7 @@ PHP;
     public static function downloadToMedia(array $result, int $siteId, ?int $userId, ?string $alt = null): array
     {
         if (!self::isAvailable()) {
+            // i18n-ignore: excepción interna, se registra en el log.
             throw new \RuntimeException('Banco de imágenes no configurado.');
         }
         self::ensureSchema();
@@ -333,6 +334,7 @@ PHP;
         $resultId = (string) ($result['id'] ?? '');
         $imageUrl = (string) ($result['urls']['regular'] ?? '');
         if ($resultId === '' || $imageUrl === '') {
+            // i18n-ignore: excepción interna, se registra en el log.
             throw new \RuntimeException('Resultado de imagen inválido.');
         }
 
@@ -355,6 +357,7 @@ PHP;
         // Detectar mime por contenido (no por extensión — Unsplash envía sin ext fiable)
         $mime = self::detectMimeFromBinary($bin);
         if (!isset(MediaService::ALLOWED[$mime])) {
+            // i18n-ignore: excepción interna.
             throw new \RuntimeException('La imagen descargada tiene un formato no soportado: ' . $mime);
         }
         $ext = MediaService::ALLOWED[$mime];
@@ -475,6 +478,8 @@ PHP;
 
         static $stopwords = null;
         if ($stopwords === null) {
+            // i18n-ignore-start: no es interfaz, es la lista de palabras vacías
+            // del castellano para limpiar la consulta antes de buscar.
             $stopwords = array_flip([
                 'el','la','los','las','un','una','unos','unas','de','del','y','o','u','a','en',
                 'por','para','con','sin','sobre','que','como','cuando','donde','quien','este',
@@ -487,6 +492,7 @@ PHP;
                 'hasta','entre','durante','antes','después','mientras','aunque','porque',
                 'sin','tras','bajo','ante','about','your','that','this','with','from','they',
             ]);
+            // i18n-ignore-end
         }
 
         $kept = [];

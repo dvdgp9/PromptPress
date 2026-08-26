@@ -12,6 +12,9 @@ use Core\Database;
  */
 final class CanvasCrossPageReference
 {
+    // i18n-ignore-start: instrucciones para el modelo y patrones que leen lo
+    // que el usuario escribe en castellano. Nada de esto se pinta.
+
     private const HTML_BUDGET = 16000;
     private const CSS_BUDGET = 12000;
 
@@ -185,4 +188,5 @@ final class CanvasCrossPageReference
         $value = (string) preg_replace('/[^a-z0-9]+/', ' ', $value);
         return trim((string) preg_replace('/\s+/', ' ', $value));
     }
+    // i18n-ignore-end
 }

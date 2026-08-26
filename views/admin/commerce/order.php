@@ -12,10 +12,10 @@
 use App\Modules\Commerce\CommerceSettings;
 
 $statusLabels = [
-    'pending_payment' => 'Pendiente de pago',
-    'paid'            => 'Pagado',
-    'shipped'         => 'Enviado',
-    'cancelled'       => 'Cancelado',
+    'pending_payment' => __('order.status.pending'),
+    'paid'            => __('order.status.paid'),
+    'shipped'         => __('order.status.shipped'),
+    'cancelled'       => __('order.status.cancelled'),
 ];
 $statusPill = [
     'pending_payment' => ' pp-status-pill--yellow',
@@ -23,12 +23,12 @@ $statusPill = [
     'shipped'         => ' pp-status-pill--green',
     'cancelled'       => ' pp-status-pill--muted',
 ];
-$methodLabels = ['stripe' => 'Tarjeta (Stripe)', 'manual' => 'Transferencia o pago acordado'];
-$emailLabels  = ['sent' => 'Enviado', 'failed' => '⚠ Falló el envío', 'skipped' => 'Email sin configurar', 'unknown' => '—'];
+$methodLabels = ['stripe' => __('order.method.card_stripe'), 'manual' => __('order.method.transfer_agreed')];
+$emailLabels  = ['sent' => __('mail.sent'), 'failed' => '⚠ ' . __('inbox.mail.failed'), 'skipped' => __('order.email_not_configured'), 'unknown' => '—'];
 $actionLabels = [
-    'paid'      => ['Marcar como pagado', 'pp-btn--primary', ''],
-    'shipped'   => ['Marcar como enviado', 'pp-btn--primary', ''],
-    'cancelled' => ['Cancelar pedido', 'pp-btn--ghost pp-btn--danger-text', '¿Cancelar el pedido ' . ($order['order_number'] ?? '') . '? Avisaremos al cliente por email.'],
+    'paid'      => [__('order.mark_paid'), 'pp-btn--primary', ''],
+    'shipped'   => [__('order.mark_shipped'), 'pp-btn--primary', ''],
+    'cancelled' => [__('order.cancel'), 'pp-btn--ghost pp-btn--danger-text', __('order.confirm_cancel', ['pedido' => (string) ($order['order_number'] ?? '')])],
 ];
 $st = (string) $order['status'];
 $hasShipping = trim((string) ($order['ship_address'] ?? '')) !== '';
@@ -39,12 +39,12 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
 
 <div class="pp-page-header">
     <div>
-        <h2>Pedido <?= e((string) $order['order_number']) ?>
+        <h2><?= e(__('order.order')) ?> <?= e((string) $order['order_number']) ?>
             <span class="pp-status-pill<?= $statusPill[$st] ?? '' ?>"><?= e($statusLabels[$st] ?? $st) ?></span>
         </h2>
         <p class="pp-page-header__lead">
-            <a href="<?= e(base_url('admin/commerce/pedidos')) ?>">← Todos los pedidos</a>
-            · Recibido el <?= e((new DateTimeImmutable((string) $order['created_at']))->format('d/m/Y \a \l\a\s H:i')) ?>
+            <a href="<?= e(base_url('admin/commerce/pedidos')) ?>">← <?= e(__('order.all_orders')) ?></a>
+            · <?= e(__('order.received_on', ['fecha' => (new DateTimeImmutable((string) $order['created_at']))->format('d/m/Y H:i')])) ?>
         </p>
     </div>
 </div>
@@ -55,11 +55,11 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
 <?php if ($nextStates !== []): ?>
 <div class="pp-card pp-order-actions">
     <div class="pp-order-actions__label">
-        <strong>¿Qué quieres hacer con este pedido?</strong>
+        <strong><?= e(__('order.what_to_do')) ?></strong>
         <?php if ($st === 'pending_payment'): ?>
-            <span class="pp-booking-soft">Al marcarlo como pagado se descuenta el stock y se avisa al cliente.</span>
+            <span class="pp-booking-soft"><?= e(__('order.mark_paid_help')) ?></span>
         <?php elseif ($st === 'paid'): ?>
-            <span class="pp-booking-soft">Cuando lo hayas enviado, márcalo para avisar al cliente.</span>
+            <span class="pp-booking-soft"><?= e(__('order.mark_shipped_help')) ?></span>
         <?php endif; ?>
     </div>
     <div class="pp-order-actions__buttons">
@@ -77,7 +77,7 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
 
 <div class="pp-order-grid">
     <div class="pp-card pp-order-lines">
-        <h3>Artículos</h3>
+        <h3><?= e(__('order.items')) ?></h3>
         <table class="pp-table">
             <tbody>
                 <?php foreach ($order['items'] as $it): ?>
@@ -92,25 +92,25 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
             </tbody>
         </table>
         <dl class="pp-shop-totals pp-order-totals">
-            <div><dt>Subtotal</dt><dd><?= e(CommerceSettings::format((int) $order['subtotal_cents'])) ?></dd></div>
+            <div><dt><?= e(__('order.subtotal')) ?></dt><dd><?= e(CommerceSettings::format((int) $order['subtotal_cents'])) ?></dd></div>
             <?php if ((int) $order['shipping_cents'] > 0): ?>
-                <div><dt>Envío</dt><dd><?= e(CommerceSettings::format((int) $order['shipping_cents'])) ?></dd></div>
+                <div><dt><?= e(__('order.shipping')) ?></dt><dd><?= e(CommerceSettings::format((int) $order['shipping_cents'])) ?></dd></div>
             <?php endif; ?>
-            <div class="pp-shop-totals__grand"><dt>Total</dt><dd><?= e(CommerceSettings::format((int) $order['total_cents'])) ?></dd></div>
-            <div class="pp-shop-totals__tax"><dt>Incluye IVA</dt><dd><?= e(CommerceSettings::format((int) $order['tax_cents'])) ?></dd></div>
+            <div class="pp-shop-totals__grand"><dt><?= e(__('order.total')) ?></dt><dd><?= e(CommerceSettings::format((int) $order['total_cents'])) ?></dd></div>
+            <div class="pp-shop-totals__tax"><dt><?= e(__('order.includes_tax')) ?></dt><dd><?= e(CommerceSettings::format((int) $order['tax_cents'])) ?></dd></div>
         </dl>
     </div>
 
     <div class="pp-order-side">
         <div class="pp-card pp-order-block">
-            <h3>Cliente</h3>
+            <h3><?= e(__('order.customer')) ?></h3>
             <p>
                 <strong><?= e((string) $order['customer_name']) ?></strong><br>
                 <a href="mailto:<?= e((string) $order['customer_email']) ?>"><?= e((string) $order['customer_email']) ?></a>
                 <?php if ($order['customer_phone'] !== null): ?><br><?= e((string) $order['customer_phone']) ?><?php endif; ?>
             </p>
             <?php if ($hasShipping): ?>
-                <h4>Envío</h4>
+                <h4><?= e(__('order.shipping')) ?></h4>
                 <p class="pp-booking-soft">
                     <?= e((string) $order['ship_address']) ?><br>
                     <?= e(trim((string) $order['ship_postcode'] . ' ' . (string) $order['ship_city'])) ?>
@@ -118,31 +118,31 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
                 </p>
             <?php endif; ?>
             <?php if ($order['notes'] !== null && trim((string) $order['notes']) !== ''): ?>
-                <h4>Nota del cliente</h4>
+                <h4><?= e(__('order.customer_note')) ?></h4>
                 <p class="pp-booking-soft">«<?= e((string) $order['notes']) ?>»</p>
             <?php endif; ?>
         </div>
 
         <div class="pp-card pp-order-block">
-            <h3>Pago</h3>
+            <h3><?= e(__('order.payment')) ?></h3>
             <p>
                 <?= e($methodLabels[(string) $order['payment_method']] ?? (string) $order['payment_method']) ?><br>
                 <span class="pp-booking-soft">
-                    Email al cliente: <?= e($emailLabels[(string) $order['email_status']] ?? (string) $order['email_status']) ?>
+                    <?= e(__('order.email_to_customer')) ?>: <?= e($emailLabels[(string) $order['email_status']] ?? (string) $order['email_status']) ?>
                 </span>
                 <?php if ($order['payment_ref'] !== null && trim((string) $order['payment_ref']) !== ''): ?>
-                    <br><span class="pp-booking-soft">Referencia: <code><?= e((string) $order['payment_ref']) ?></code></span>
+                    <br><span class="pp-booking-soft"><?= e(__('order.reference')) ?>: <code><?= e((string) $order['payment_ref']) ?></code></span>
                 <?php endif; ?>
             </p>
         </div>
 
         <div class="pp-card pp-order-block">
-            <h3>Notas internas</h3>
-            <p class="pp-booking-soft">Solo tú las ves. Útiles para recordar detalles del envío o del cliente.</p>
+            <h3><?= e(__('order.internal_notes')) ?></h3>
+            <p class="pp-booking-soft"><?= e(__('order.notes_help')) ?></p>
             <form method="post" action="<?= e(base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/notes')) ?>">
                 <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-                <textarea name="admin_notes" rows="3" placeholder="Ej: Enviado por mensajería el martes."><?= e((string) ($order['admin_notes'] ?? '')) ?></textarea>
-                <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm">Guardar notas</button>
+                <textarea name="admin_notes" rows="3" placeholder="<?= e(__('order.notes_placeholder')) ?>"><?= e((string) ($order['admin_notes'] ?? '')) ?></textarea>
+                <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('order.save_notes')) ?></button>
             </form>
         </div>
     </div>

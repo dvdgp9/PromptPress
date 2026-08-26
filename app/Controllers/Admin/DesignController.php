@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Admin;
 
+use App\Services\BrandPaletteService;
 use App\Services\BrandService;
 use App\Services\CacheService;
 use App\Services\CustomFontService;
@@ -28,8 +29,12 @@ class DesignController
     public function index(): void
     {
         $siteId = self::requireSiteId();
+        // DESIGN-MANDA T2 — El formulario enseña los tokens EFECTIVOS (lo que la
+        // web sirve de verdad), no los crudos de `design_system`. Con `load()`
+        // el panel mostraba un color y el sitio pintaba otro, porque el skin y
+        // la paleta los pisaban después.
         $this->render([
-            'tokens' => DesignSystem::load($siteId),
+            'tokens' => DesignSystem::effective($siteId),
             'errors' => [],
         ]);
     }
@@ -62,22 +67,150 @@ class DesignController
             return;
         }
 
+        // DESIGN-MANDA T4 — La línea base se calcula ANTES de guardar nada: es
+        // la foto de lo heredado contra la que se decide qué tocó el usuario.
+        $baseline = DesignSystem::baseline($siteId);
+
         foreach ($allTokens as $cat => $tokens) {
             DesignSystem::saveCategory($siteId, $cat, $tokens);
         }
 
-        // Cierre Fase 19 — persistir dirección visual elegida (si llega).
-        $visualStyleRaw = (string) Request::post('visual_style', '');
-        if ($visualStyleRaw !== '') {
-            $normalized = VisualStyleService::normalizeSlug($visualStyleRaw);
-            VisualStyleService::saveSelectedForSite($siteId, $normalized);
-        }
+        // DESIGN-MANDA T3 — Los colores del formulario se vuelcan a la paleta a
+        // medida (`site_palette_custom`), que YA está por encima del skin en la
+        // cadena de precedencia. Sin esto el usuario guardaba un color y el skin
+        // inferido lo pisaba: el panel decía una cosa y la web pintaba otra.
+        // Mismo "único camino de escritura" que usa el paso 2 del onboarding.
+        $contrastWarnings = self::syncPaletteFromColors($siteId, (array) ($allTokens['colors'] ?? []));
+
+        // DESIGN-MANDA T4 — Y lo que no es color (tipografías, escala, radios,
+        // sombra) se guarda como override manual, que se aplica por encima del
+        // skin. Si un campo vuelve a su valor heredado, su override se borra.
+        DesignSystem::saveManualTokens(
+            $siteId,
+            DesignSystem::diffManualTokens($allTokens, $baseline)
+        );
+
+        // DESIGN-MANDA T7 — La dirección visual ya no se elige aquí: el campo
+        // `visual_style` no existe en el formulario y no se persiste.
 
         // T7.3: el design system afecta a TODAS las páginas → flush completo.
         CacheService::flush($siteId);
 
-        Session::flash('success', 'Diseño guardado.');
+        Session::flash('success', __('design.flash.saved'));
+        // DESIGN-MANDA T5 — El contraste no bloquea ni corrige a escondidas: el
+        // color es decisión del usuario. Se guarda y se avisa de qué par falla.
+        if ($contrastWarnings !== []) {
+            Session::flash('warning', __('design.contrast.warning', [
+                'pares' => implode('; ', $contrastWarnings),
+            ]));
+        }
         Response::redirect(base_url('admin/design'));
+    }
+
+    // ----------------------------------------------------------------------
+    // DESIGN-MANDA T10/T11 — Editor de paleta dentro de Diseño.
+    //
+    // Antes esto solo existía en el paso 2 del onboarding, un flujo de un solo
+    // uso: pasado el alta, no había forma de volver a derivar la paleta de la
+    // marca. La lógica vive en `BrandPaletteService`; aquí solo hay HTTP.
+    // ----------------------------------------------------------------------
+
+    /** POST /admin/design/brand-colors — guarda los colores de marca. */
+    public function saveBrandColors(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $posted = Request::post('brand_palette', []);
+        BrandPaletteService::saveBrandColors($siteId, is_array($posted) ? $posted : []);
+
+        Response::json(['ok' => true, 'colors' => BrandPaletteService::brandColors($siteId)]);
+    }
+
+    /** POST /admin/design/extract-logo-colors — colores dominantes del logo. */
+    public function extractLogoColors(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $colors = BrandPaletteService::extractFromLogos($siteId);
+        if ($colors === []) {
+            Response::json(['ok' => false, 'error' => __('onboarding.error.no_logo_colors')], 422);
+        }
+
+        Response::json(['ok' => true, 'colors' => $colors]);
+    }
+
+    /** POST /admin/design/generate-palette — propuestas de paleta con IA. */
+    public function generatePalette(): void
+    {
+        @set_time_limit(120);
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $posted = Request::post('brand_palette', []);
+        $brand = BrandPaletteService::cleanHexList(is_array($posted) ? $posted : []);
+        if ($brand === []) {
+            // Sin colores de marca declarados seguimos teniendo el principal
+            // del propio formulario.
+            $brand = BrandPaletteService::cleanHexList([Request::post('primary_color_hex', '')]);
+        }
+        if ($brand === []) {
+            Response::json(['ok' => false, 'error' => __('onboarding.error.need_brand_color')], 422);
+        }
+
+        $result = BrandPaletteService::propose($siteId, $brand);
+        if ($result['palettes'] === []) {
+            Response::json(['ok' => false, 'error' => $result['error'] ?: __('design.palette.error')], 502);
+        }
+
+        Response::json([
+            'ok'       => true,
+            'palettes' => $result['palettes'],
+            'model'    => $result['model'],
+            'fallback' => $result['fallback'],
+            'notice'   => $result['fallback'] ? __('onboarding.palette.ai_fallback') : '',
+        ]);
+    }
+
+    /**
+     * DESIGN-MANDA T3 — Vuelca los colores del formulario a `site_palette_custom`.
+     *
+     * Se guarda TAL CUAL, sin `enforceContrast()`: la paleta del onboarding la
+     * propone la IA y ahí corregir tiene sentido, pero aquí el hex lo ha elegido
+     * una persona y devolverle otro distinto sin decir nada es peor que un
+     * aviso.
+     *
+     * @param array<string,mixed> $colors
+     * @return array<int,string> avisos de contraste ya traducidos
+     */
+    private static function syncPaletteFromColors(int $siteId, array $colors): array
+    {
+        if ($colors === []) return [];
+
+        // Mapeo tokens del panel => claves de la paleta. `secondary`, `success`
+        // y `danger` no tienen equivalente: no los pisa nadie, así que viven
+        // solo en `design_system`.
+        $palette = [
+            'accent'      => (string) ($colors['primary']      ?? ''),
+            'accent_dark' => (string) ($colors['primary_dark'] ?? ''),
+            'accent_2'    => (string) ($colors['accent']       ?? ''),
+            'bg'          => (string) ($colors['bg']           ?? ''),
+            'surface'     => (string) ($colors['surface']      ?? ''),
+            'text'        => (string) ($colors['text']         ?? ''),
+            'muted'       => (string) ($colors['text_muted']   ?? ''),
+            'line'        => (string) ($colors['border']       ?? ''),
+        ];
+
+        if (!BrandPaletteService::save($siteId, $palette)) return [];
+
+        $warnings = [];
+        foreach (BrandPaletteService::contrastReport($palette) as $issue) {
+            $warnings[] = __('design.contrast.pair.' . $issue['pair'])
+                . ' (' . number_format((float) $issue['value'], 1) . ':1'
+                . ' < ' . number_format((float) $issue['min'], 1) . ':1)';
+        }
+        return $warnings;
     }
 
     public function updateLogo(): void
@@ -231,7 +364,7 @@ class DesignController
         if ($familyId <= 0) {
             $name = trim((string) Request::post('family_name', ''));
             if ($name === '') {
-                Session::flash('error', 'Ponle un nombre a la tipografía (por ejemplo, el que aparece en tu manual de marca).');
+                Session::flash('error', __('design.error.font_name_required'));
                 Response::redirect(base_url('admin/design#fonts'));
             }
             $familyId = CustomFontService::ensureFamily($siteId, $name, $role);
@@ -242,7 +375,7 @@ class DesignController
 
         $files = self::normalizeFontFiles(Request::file('font_files'));
         if ($files === []) {
-            Session::flash('error', 'Selecciona al menos un archivo de fuente (WOFF2, WOFF, TTF u OTF).');
+            Session::flash('error', __('font.err.pick_file'));
             Response::redirect(base_url('admin/design#fonts'));
         }
 
@@ -263,11 +396,11 @@ class DesignController
         }
 
         if ($ok > 0 && $problems === []) {
-            Session::flash('success', $ok === 1 ? 'Fuente añadida. Ya se está usando en tu web.' : $ok . ' archivos añadidos. Ya se están usando en tu web.');
+            Session::flash('success', __($ok === 1 ? 'design.flash.font_added_one' : 'design.flash.font_added_n', ['n' => $ok]));
         } elseif ($ok > 0) {
-            Session::flash('error', $ok . ' archivo(s) añadidos, pero hubo problemas: ' . implode(' · ', $problems));
+            Session::flash('error', __('design.error.partial_upload', ['n' => $ok, 'problemas' => implode(' · ', $problems)]));
         } else {
-            Session::flash('error', 'No se pudo añadir ninguna fuente. ' . implode(' · ', $problems));
+            Session::flash('error', __('design.error.no_font_added', ['problemas' => implode(' · ', $problems)]));
         }
         Response::redirect(base_url('admin/design#fonts'));
     }
@@ -286,10 +419,10 @@ class DesignController
         DesignSystem::syncCustomFontTokens($siteId);
         CacheService::flush($siteId);
         Session::flash('success', match (CustomFontService::normalizeRole($role)) {
-            'both'    => (string) $owned['name'] . ' se usará en títulos y textos.',
-            'heading' => (string) $owned['name'] . ' se usará en los títulos.',
-            'body'    => (string) $owned['name'] . ' se usará en los textos.',
-            default   => (string) $owned['name'] . ' ya no se usa en la web (sigue guardada).',
+            'both'    => __('design.flash.font_role_both', ['fuente' => (string) $owned['name']]),
+            'heading' => __('design.flash.font_role_heading', ['fuente' => (string) $owned['name']]),
+            'body'    => __('design.flash.font_role_body', ['fuente' => (string) $owned['name']]),
+            default   => __('design.flash.font_role_none', ['fuente' => (string) $owned['name']]),
         });
         Response::redirect(base_url('admin/design#fonts'));
     }
@@ -348,7 +481,7 @@ class DesignController
         if ($changed) DesignSystem::saveCategory($siteId, 'typography', $tokens['typography']);
 
         CacheService::flush($siteId);
-        Session::flash('success', 'Tipografía eliminada.' . ($changed ? ' Las secciones que la usaban vuelven a la fuente por defecto.' : ''));
+        Session::flash('success', __('design.flash.font_deleted') . ($changed ? ' ' . __('design.flash.font_deleted_reset') : ''));
         Response::redirect(base_url('admin/design#fonts'));
     }
 
@@ -381,13 +514,13 @@ class DesignController
     private static function validateLogoUpload(mixed $file): ?string
     {
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return 'Selecciona un archivo de logo.';
-        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) return 'La subida del logo no se completó.';
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) return __('design.error.logo_upload');
         if (($file['size'] ?? 0) <= 0 || (int) $file['size'] > 2 * 1024 * 1024) return 'El logo debe pesar menos de 2 MB.';
         $tmp = (string) ($file['tmp_name'] ?? '');
-        if ($tmp === '' || !is_uploaded_file($tmp)) return 'El archivo recibido no es una subida válida.';
+        if ($tmp === '' || !is_uploaded_file($tmp)) return __('documents.error.invalid_upload');
         $mime = (string) mime_content_type($tmp);
         if (!in_array($mime, ['image/png', 'image/jpeg', 'image/webp'], true)) return 'El logo debe ser PNG, JPG o WebP.';
-        return @getimagesize($tmp) === false ? 'El archivo no contiene una imagen válida.' : null;
+        return @getimagesize($tmp) === false ? __('design.error.not_an_image') : null;
     }
 
     private static function storeSiteSetting(int $siteId, string $key, string $value): void
@@ -408,8 +541,16 @@ class DesignController
         $siteId = self::requireSiteId();
         Database::execute('DELETE FROM design_system WHERE site_id = ?', [$siteId]);
         Database::execute('UPDATE sites SET skin_json = NULL, personality = NULL WHERE id = ?', [$siteId]);
+        DesignSystem::forgetSkin($siteId);
+        // DESIGN-MANDA T6 — "Restablecer" tiene que volver a los defaults DE
+        // VERDAD: si dejáramos la paleta a medida o los overrides manuales, el
+        // sitio seguiría pintando lo de antes y el botón mentiría.
+        // `regenerate()` NO los toca, a propósito: regenerar el skin con IA no
+        // debe pisar lo que el usuario decidió a mano.
+        DesignSystem::clearManualTokens($siteId);
+        BrandPaletteService::clear($siteId);
         CacheService::flush($siteId);
-        Session::flash('success', 'Diseño restablecido a los valores por defecto.');
+        Session::flash('success', __('design.flash.reset'));
         Response::redirect(base_url('admin/design'));
     }
 
@@ -480,11 +621,11 @@ class DesignController
             CacheService::flush($siteId);
             $sources = (array) ($result['sources_used'] ?? []);
             $sourcesNote = $sources === []
-                ? ' (sin señales suficientes: tu sitio se quedó con valores neutros).'
-                : ' Hemos usado: ' . implode(', ', $sources) . '.';
-            Session::flash('success', 'Diseño regenerado desde tus datos.' . $sourcesNote);
+                ? ' ' . __('design.flash.no_signals')
+                : ' ' . __('design.flash.sources_used', ['fuentes' => implode(', ', $sources)]);
+            Session::flash('success', __('design.flash.regenerated') . $sourcesNote);
         } catch (\Throwable $e) {
-            Session::flash('error', 'No pudimos regenerar el diseño: ' . $e->getMessage());
+            Session::flash('error', __('design.error.regenerate', ['error' => $e->getMessage()]));
         }
         Response::redirect(base_url('admin/design'));
     }
@@ -503,7 +644,10 @@ class DesignController
             $path = $key === 'dark' ? (string) $brand['logo_dark_path'] : (string) $brand['logo_path'];
             $exists = $path !== '' && is_file(PP_ROOT . '/' . ltrim($path, '/'));
             $logoSlots[$key] = [
-                'label'   => $meta['label'],
+                // ADMIN-I18N: `$meta['label']` es una clave, no texto. Diseño
+                // se traduce en una fase posterior, pero la etiqueta tiene que
+                // resolverse YA o esta pantalla enseñaría la clave en crudo.
+                'label'   => BrandService::variantLabel($key),
                 'path'    => $path,
                 'url'     => $exists ? BrandService::publicLogoUrl($siteId, $path, $key) : '',
                 'missing' => $path !== '' && !$exists,
@@ -523,21 +667,39 @@ class DesignController
             // FONTS — tipografías propias + aviso de pesos que el sitio usa y
             // el cliente no ha subido (si no, el navegador finge la negrita).
             'customFonts'      => CustomFontService::families($siteId),
-            'customFontRoles'  => CustomFontService::ROLES,
+            'customFontRoles'  => CustomFontService::roles(),
             'customFontWeights'=> CustomFontService::WEIGHT_LABELS,
             'customFontCss'    => CustomFontService::renderFontFaceCss($siteId),
             'fontWeightGaps'   => self::fontWeightGaps($siteId, $ctx['tokens']),
             'fontHeavyFiles'   => self::heavyFontFiles($siteId),
             'googleFonts'  => DesignSystem::googleFontsUsed($ctx['tokens']),
             'csrf'         => CSRF::token(),
-            // Cierre Fase 19 — dirección visual del sitio.
-            'visualStyleCurrent' => VisualStyleService::selectedForSite($siteId),
-            'visualStyleCards'   => VisualStyleService::cardsForSite($siteId),
+            // DESIGN-MANDA T10 — Colores de marca (materia prima de la paleta).
+            'brandColors'  => BrandPaletteService::brandColors($siteId),
+            // DESIGN-MANDA T5 — Tipografías de marca que mandan sobre el select.
+            'fontRoleOwner' => self::fontRoleOwners($siteId),
             'logoPath' => $ctxLogoPath,
             'logoUrl' => \App\Services\BrandService::logoUrl($siteId),
             'logoMissing' => $ctxLogoPath !== '' && !is_file(PP_ROOT . '/' . ltrim($ctxLogoPath, '/')),
         ]);
         View::send('admin/design/index', $data);
+    }
+
+    /**
+     * DESIGN-MANDA T5 — Campos de tipografía que están mandados por una familia
+     * de marca, para poder decirlo en el propio campo. Callarlo reproduce con
+     * las letras el problema que acabamos de arreglar con los colores.
+     *
+     * @return array<string,string> clave del token => nombre de la familia
+     */
+    private static function fontRoleOwners(int $siteId): array
+    {
+        $out = [];
+        foreach (['font_heading' => 'heading', 'font_body' => 'body'] as $tokenKey => $role) {
+            $fam = CustomFontService::familyForRole($siteId, $role);
+            if ($fam !== null) $out[$tokenKey] = (string) $fam['name'];
+        }
+        return $out;
     }
 
     /**
@@ -570,7 +732,7 @@ class DesignController
             $key = $family['slug'] . '|' . $role;
             $out[$key] = [
                 'family'  => (string) $family['name'],
-                'role'    => $role === 'heading' ? 'los títulos' : 'los textos y botones',
+                'role'    => $role === 'heading' ? __('design.role_headings') : __('design.role_body'),
                 'missing' => $missing,
             ];
         }

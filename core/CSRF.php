@@ -48,6 +48,7 @@ final class CSRF
             $token = $json['_csrf'] ?? null;
         }
         if (!self::validate(is_string($token) ? $token : null)) {
+            // i18n-ignore: página de error técnica, fuera del panel.
             Response::forbidden('CSRF token inválido o ausente');
         }
     }

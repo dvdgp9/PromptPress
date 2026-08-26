@@ -41,6 +41,8 @@ try {
 
     http_response_code(500);
     header('Content-Type: text/html; charset=UTF-8');
+    // i18n-ignore-start: pantalla de pánico. Salta ANTES de que exista catálogo
+    // (puede fallar el propio boot), así que va en castellano a pelo a propósito.
     echo '<!doctype html><meta charset="utf-8"><title>Error instalador PromptPress</title>';
     echo '<div style="font:14px system-ui,-apple-system,Segoe UI,sans-serif;max-width:960px;margin:40px auto;padding:24px;border:1px solid #f1b5b5;background:#fff5f5;color:#3b0a0a;border-radius:8px">';
     echo '<h1 style="margin-top:0">Error del instalador PromptPress</h1>';
@@ -51,5 +53,6 @@ try {
     echo '</pre>';
     echo '<p>También se ha intentado escribir en <code>storage/logs/php-errors.log</code>.</p>';
     echo '</div>';
+    // i18n-ignore-end
     exit;
 }

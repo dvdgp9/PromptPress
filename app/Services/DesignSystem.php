@@ -64,73 +64,88 @@ final class DesignSystem
      * Schema completo del design system.
      * Retorna array categoría => [label, icon, fields[]].
      */
+    /**
+     * Etiqueta traducida, tolerante a que la i18n no esté cargada.
+     *
+     * `schema()` mezcla datos (tipos, defaults, variables CSS) con textos de
+     * panel, y `defaults()` solo quiere lo primero. Hay contextos —renderizado
+     * público, scripts sueltos, tests— que piden los defaults sin arrancar la
+     * app entera, y ahí `__()` no existe: hacer que un DATO dependa de una
+     * traducción rompía esos caminos. Con este intermediario, el dato siempre
+     * sale; el texto solo cuando hay catálogo, que es cuando se pinta.
+     */
+    private static function label(string $key): string
+    {
+        return function_exists('__') ? __($key) : $key;
+    }
+
     public static function schema(): array
     {
         return [
             'colors' => [
-                'label' => 'Colores',
+                'label' => self::label('ds.colors.label'),
                 'icon'  => 'palette',
-                'hint'  => 'Paleta base. Todos los tokens se expondrán como variables CSS en las páginas públicas.',
+                'hint'  => self::label('ds.colors.hint'),
                 'fields' => [
-                    ['key' => 'primary',      'label' => 'Color principal',    'type' => 'color', 'default' => '#6366f1', 'css_var' => '--pp-primary',      'hint' => 'CTA, enlaces, énfasis'],
-                    ['key' => 'primary_dark', 'label' => 'Principal oscuro',   'type' => 'color', 'default' => '#4f46e5', 'css_var' => '--pp-primary-dark', 'hint' => 'Hover de CTA'],
-                    ['key' => 'secondary',    'label' => 'Secundario',         'type' => 'color', 'default' => '#64748b', 'css_var' => '--pp-secondary', 'hint' => 'Segundo color de marca'],
-                    ['key' => 'accent',       'label' => 'Acento',             'type' => 'color', 'default' => '#f59e0b', 'css_var' => '--pp-accent', 'hint' => 'El segundo color en la web: detalles, badges, subrayados — siempre menos que el principal'],
-                    ['key' => 'bg',           'label' => 'Fondo de página',    'type' => 'color', 'default' => '#ffffff', 'css_var' => '--pp-bg'],
-                    ['key' => 'surface',      'label' => 'Fondo de secciones', 'type' => 'color', 'default' => '#f9fafb', 'css_var' => '--pp-surface'],
-                    ['key' => 'text',         'label' => 'Texto principal',    'type' => 'color', 'default' => '#1f2937', 'css_var' => '--pp-text'],
-                    ['key' => 'text_muted',   'label' => 'Texto secundario',   'type' => 'color', 'default' => '#6b7280', 'css_var' => '--pp-text-muted'],
-                    ['key' => 'border',       'label' => 'Bordes',             'type' => 'color', 'default' => '#e5e7eb', 'css_var' => '--pp-border'],
-                    ['key' => 'success',      'label' => 'Éxito',              'type' => 'color', 'default' => '#10b981', 'css_var' => '--pp-success'],
-                    ['key' => 'danger',       'label' => 'Error / peligro',    'type' => 'color', 'default' => '#ef4444', 'css_var' => '--pp-danger'],
+                    ['key' => 'primary',      'label' => self::label('ds.colors.primary.label'),    'type' => 'color', 'default' => '#6366f1', 'css_var' => '--pp-primary',      'hint' => self::label('ds.colors.primary.hint')],
+                    ['key' => 'primary_dark', 'label' => self::label('ds.colors.primary_dark.label'),   'type' => 'color', 'default' => '#4f46e5', 'css_var' => '--pp-primary-dark', 'hint' => self::label('ds.colors.primary_dark.hint')],
+                    ['key' => 'secondary',    'label' => self::label('ds.colors.secondary.label'),         'type' => 'color', 'default' => '#64748b', 'css_var' => '--pp-secondary', 'hint' => self::label('ds.colors.secondary.hint')],
+                    ['key' => 'accent',       'label' => self::label('ds.colors.accent.label'),             'type' => 'color', 'default' => '#f59e0b', 'css_var' => '--pp-accent', 'hint' => self::label('ds.colors.accent.hint')],
+                    ['key' => 'bg',           'label' => self::label('ds.colors.bg.label'),    'type' => 'color', 'default' => '#ffffff', 'css_var' => '--pp-bg'],
+                    ['key' => 'surface',      'label' => self::label('ds.colors.surface.label'), 'type' => 'color', 'default' => '#f9fafb', 'css_var' => '--pp-surface'],
+                    ['key' => 'text',         'label' => self::label('ds.colors.text.label'),    'type' => 'color', 'default' => '#1f2937', 'css_var' => '--pp-text'],
+                    ['key' => 'text_muted',   'label' => self::label('ds.colors.text_muted.label'),   'type' => 'color', 'default' => '#6b7280', 'css_var' => '--pp-text-muted'],
+                    ['key' => 'border',       'label' => self::label('ds.colors.border.label'),             'type' => 'color', 'default' => '#e5e7eb', 'css_var' => '--pp-border'],
+                    ['key' => 'success',      'label' => self::label('ds.colors.success.label'),              'type' => 'color', 'default' => '#10b981', 'css_var' => '--pp-success'],
+                    ['key' => 'danger',       'label' => self::label('ds.colors.danger.label'),    'type' => 'color', 'default' => '#ef4444', 'css_var' => '--pp-danger'],
                 ],
             ],
 
             'typography' => [
-                'label' => 'Tipografía',
+                'label' => self::label('ds.typography.label'),
                 'icon'  => 'type',
-                'hint'  => 'Familias y tamaños de texto. Las Google Fonts se cargarán automáticamente.',
+                'hint'  => self::label('ds.typography.hint'),
                 'fields' => [
-                    ['key' => 'font_heading',   'label' => 'Fuente de títulos', 'type' => 'font', 'default' => 'Inter',  'css_var' => '--pp-font-heading'],
-                    ['key' => 'font_body',      'label' => 'Fuente de texto',   'type' => 'font', 'default' => 'Inter',  'css_var' => '--pp-font-body'],
-                    ['key' => 'base_size',      'label' => 'Tamaño base',       'type' => 'range', 'default' => 16, 'min' => 14, 'max' => 20, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-font-size-base'],
-                    ['key' => 'scale_ratio',    'label' => 'Escala de títulos', 'type' => 'select', 'default' => '1.25', 'css_var' => '--pp-font-scale',
+                    ['key' => 'font_heading',   'label' => self::label('ds.typography.font_heading.label'), 'type' => 'font', 'default' => 'Inter',  'css_var' => '--pp-font-heading'],
+                    ['key' => 'font_body',      'label' => self::label('ds.typography.font_body.label'),   'type' => 'font', 'default' => 'Inter',  'css_var' => '--pp-font-body'],
+                    ['key' => 'base_size',      'label' => self::label('ds.typography.base_size.label'),       'type' => 'range', 'default' => 16, 'min' => 14, 'max' => 20, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-font-size-base'],
+                    ['key' => 'scale_ratio',    'label' => self::label('ds.typography.scale_ratio.label'), 'type' => 'select', 'default' => '1.25', 'css_var' => '--pp-font-scale',
                         'options' => ['1.125' => '1.125 · Minor Second', '1.200' => '1.200 · Minor Third', '1.250' => '1.250 · Major Third', '1.333' => '1.333 · Perfect Fourth', '1.414' => '1.414 · Aug. Fourth', '1.500' => '1.500 · Perfect Fifth']],
-                    ['key' => 'line_height',    'label' => 'Interlineado',      'type' => 'range', 'default' => 1.5, 'min' => 1.2, 'max' => 2.0, 'step' => 0.1, 'unit' => '', 'css_var' => '--pp-line-height'],
-                    ['key' => 'weight_regular', 'label' => 'Peso texto',        'type' => 'select', 'default' => '400', 'css_var' => '--pp-weight-regular',
+                    ['key' => 'line_height',    'label' => self::label('ds.typography.line_height.label'),      'type' => 'range', 'default' => 1.5, 'min' => 1.2, 'max' => 2.0, 'step' => 0.1, 'unit' => '', 'css_var' => '--pp-line-height'],
+                    ['key' => 'weight_regular', 'label' => self::label('ds.typography.weight_regular.label'),        'type' => 'select', 'default' => '400', 'css_var' => '--pp-weight-regular',
                         'options' => ['300' => '300 · Light', '400' => '400 · Regular', '500' => '500 · Medium']],
-                    ['key' => 'weight_bold',    'label' => 'Peso títulos',      'type' => 'select', 'default' => '700', 'css_var' => '--pp-weight-bold',
+                    ['key' => 'weight_bold',    'label' => self::label('ds.typography.weight_bold.label'),      'type' => 'select', 'default' => '700', 'css_var' => '--pp-weight-bold',
                         'options' => ['600' => '600 · Semibold', '700' => '700 · Bold', '800' => '800 · Extrabold', '900' => '900 · Black']],
                 ],
             ],
 
             'buttons' => [
-                'label' => 'Botones',
+                'label' => self::label('ds.buttons.label'),
                 'icon'  => 'button',
-                'hint'  => 'Aspecto de los botones y CTAs.',
+                'hint'  => self::label('ds.buttons.hint'),
                 'fields' => [
-                    ['key' => 'radius',         'label' => 'Radio',          'type' => 'range', 'default' => 8, 'min' => 0, 'max' => 40, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-radius'],
-                    ['key' => 'padding_x',      'label' => 'Padding horiz.', 'type' => 'range', 'default' => 20, 'min' => 10, 'max' => 40, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-padding-x'],
-                    ['key' => 'padding_y',      'label' => 'Padding vert.',  'type' => 'range', 'default' => 10, 'min' => 6, 'max' => 24, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-padding-y'],
-                    ['key' => 'font_size',      'label' => 'Tamaño texto',   'type' => 'range', 'default' => 15, 'min' => 12, 'max' => 20, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-font-size'],
-                    ['key' => 'font_weight',    'label' => 'Peso',           'type' => 'select', 'default' => '600', 'css_var' => '--pp-btn-weight',
+                    ['key' => 'radius',         'label' => self::label('ds.buttons.radius.label'),          'type' => 'range', 'default' => 8, 'min' => 0, 'max' => 40, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-radius'],
+                    ['key' => 'padding_x',      'label' => self::label('ds.buttons.padding_x.label'), 'type' => 'range', 'default' => 20, 'min' => 10, 'max' => 40, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-padding-x'],
+                    ['key' => 'padding_y',      'label' => self::label('ds.buttons.padding_y.label'),  'type' => 'range', 'default' => 10, 'min' => 6, 'max' => 24, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-padding-y'],
+                    ['key' => 'font_size',      'label' => self::label('ds.buttons.font_size.label'),   'type' => 'range', 'default' => 15, 'min' => 12, 'max' => 20, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-btn-font-size'],
+                    ['key' => 'font_weight',    'label' => self::label('ds.buttons.font_weight.label'),           'type' => 'select', 'default' => '600', 'css_var' => '--pp-btn-weight',
                         'options' => ['400' => '400 · Regular', '500' => '500 · Medium', '600' => '600 · Semibold', '700' => '700 · Bold']],
-                    ['key' => 'text_transform', 'label' => 'Estilo texto',   'type' => 'select', 'default' => 'none', 'css_var' => '--pp-btn-text-transform',
-                        'options' => ['none' => 'Normal', 'uppercase' => 'MAYÚSCULAS', 'lowercase' => 'minúsculas']],
-                    ['key' => 'shadow',         'label' => 'Sombra',         'type' => 'select', 'default' => 'sm', 'css_var' => '--pp-btn-shadow',
-                        'options' => ['none' => 'Sin sombra', 'sm' => 'Suave', 'md' => 'Media', 'lg' => 'Pronunciada']],
+                    ['key' => 'text_transform', 'label' => self::label('ds.buttons.text_transform.label'),   'type' => 'select', 'default' => 'none', 'css_var' => '--pp-btn-text-transform',
+                        'options' => ['none' => self::label('ds.opt.text_normal'), 'uppercase' => self::label('ds.opt.text_upper'), 'lowercase' => self::label('ds.opt.text_lower')]],
+                    ['key' => 'shadow',         'label' => self::label('ds.buttons.shadow.label'),         'type' => 'select', 'default' => 'sm', 'css_var' => '--pp-btn-shadow',
+                        'options' => ['none' => self::label('ds.opt.shadow_none'), 'sm' => self::label('ds.opt.shadow_sm'), 'md' => self::label('ds.opt.shadow_md'), 'lg' => self::label('ds.opt.shadow_lg')]],
                 ],
             ],
 
             'spacing' => [
-                'label' => 'Espaciados',
+                'label' => self::label('ds.spacing.label'),
                 'icon'  => 'spacing',
-                'hint'  => 'Unidad base y ancho máximo del contenido.',
+                'hint'  => self::label('ds.spacing.hint'),
                 'fields' => [
-                    ['key' => 'unit',          'label' => 'Unidad base',      'type' => 'range', 'default' => 8, 'min' => 4, 'max' => 16, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-space-unit', 'hint' => 'Múltiplos: xs=0.5, sm=1, md=2, lg=4, xl=8'],
-                    ['key' => 'section_y',     'label' => 'Separación secciones', 'type' => 'range', 'default' => 80, 'min' => 20, 'max' => 160, 'step' => 4, 'unit' => 'px', 'css_var' => '--pp-section-y'],
-                    ['key' => 'container_max', 'label' => 'Ancho máximo',     'type' => 'range', 'default' => 1200, 'min' => 720, 'max' => 1440, 'step' => 40, 'unit' => 'px', 'css_var' => '--pp-container-max'],
-                    ['key' => 'radius_card',   'label' => 'Radio de tarjetas','type' => 'range', 'default' => 12, 'min' => 0, 'max' => 32, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-radius-card'],
+                    ['key' => 'unit',          'label' => self::label('ds.spacing.unit.label'),      'type' => 'range', 'default' => 8, 'min' => 4, 'max' => 16, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-space-unit', 'hint' => self::label('ds.spacing.unit.hint')],
+                    ['key' => 'section_y',     'label' => self::label('ds.spacing.section_y.label'), 'type' => 'range', 'default' => 80, 'min' => 20, 'max' => 160, 'step' => 4, 'unit' => 'px', 'css_var' => '--pp-section-y'],
+                    ['key' => 'container_max', 'label' => self::label('ds.spacing.container_max.label'),     'type' => 'range', 'default' => 1200, 'min' => 720, 'max' => 1440, 'step' => 40, 'unit' => 'px', 'css_var' => '--pp-container-max'],
+                    ['key' => 'radius_card',   'label' => self::label('ds.spacing.radius_card.label'),'type' => 'range', 'default' => 12, 'min' => 0, 'max' => 32, 'step' => 1, 'unit' => 'px', 'css_var' => '--pp-radius-card'],
                 ],
             ],
         ];
@@ -178,6 +193,7 @@ final class DesignSystem
     public static function saveCategory(int $siteId, string $category, array $tokens): void
     {
         if (!in_array($category, self::CATEGORIES, true)) {
+            // i18n-ignore: excepción interna, no llega a pantalla.
             throw new \InvalidArgumentException("Categoría inválida: $category");
         }
         Database::execute(
@@ -196,7 +212,7 @@ final class DesignSystem
     {
         $schema = self::schema()[$category] ?? null;
         if ($schema === null) {
-            return [[], ['_category' => 'Categoría desconocida.']];
+            return [[], ['_category' => __('ds.err.unknown_category')]];
         }
         $tokens = [];
         $errors = [];
@@ -239,19 +255,19 @@ final class DesignSystem
         switch ($f['type']) {
             case 'color':
                 if (!is_string($val) || !preg_match('/^#[0-9a-f]{6}$/i', $val)) {
-                    return 'Debe ser un color hexadecimal (#rrggbb).';
+                    return __('ds.err.color');
                 }
                 break;
             case 'range':
-                if (!is_numeric($val)) return 'Debe ser numérico.';
-                if (isset($f['min']) && $val < $f['min']) return 'Valor mínimo ' . $f['min'];
-                if (isset($f['max']) && $val > $f['max']) return 'Valor máximo ' . $f['max'];
+                if (!is_numeric($val)) return __('ds.err.numeric');
+                if (isset($f['min']) && $val < $f['min']) return __('ds.err.min', ['min' => (string) $f['min']]);
+                if (isset($f['max']) && $val > $f['max']) return __('ds.err.max', ['max' => (string) $f['max']]);
                 break;
             case 'select':
-                if (!isset($f['options'][$val])) return 'Valor no válido.';
+                if (!isset($f['options'][$val])) return __('ds.err.bad_value');
                 break;
             case 'font':
-                if (!isset(self::fontOptions($siteId)[$val])) return 'Fuente no reconocida.';
+                if (!isset(self::fontOptions($siteId)[$val])) return __('ds.err.bad_font');
                 break;
         }
         return null;
@@ -407,46 +423,80 @@ final class DesignSystem
         return $tokens;
     }
 
-    public static function renderHead(int $siteId, ?string $visualStyleSlug = null, ?string $paletteOverride = null): string
+    /**
+     * DESIGN-MANDA T1 — Tokens EFECTIVOS del sitio: los que de verdad acaban
+     * pintando la web, con la cadena de precedencia aplicada entera.
+     *
+     * Orden (de menos a más mandón):
+     *   1. defaults del schema
+     *   2. `design_system` (lo guardado en el formulario de Diseño)
+     *   3. skin inferido (`sites.skin_json`) — lo que DEDUCIMOS de la personalidad
+     *   4. paleta a medida (`site_palette_custom`) — lo que el usuario ELIGIÓ
+     *   5. overrides manuales (`design_manual_tokens`) — lo que el usuario TOCÓ
+     *      a mano en el panel para lo que no es color (T4)
+     *   6. tipografías de marca por rol — un brandbook no es una sugerencia
+     *
+     * Existe para que haya UN solo sitio donde se decide esto. Antes la cadena
+     * estaba copiada en `renderHead()` y a medias en la ruta `/design.css` (que
+     * se saltaba el skin), así que la hoja pública y el `<style>` en línea
+     * podían contar cosas distintas.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public static function effective(int $siteId): array
+    {
+        $tokens = self::applyManualTokens($siteId, self::inherited($siteId));
+        return self::applyCustomFontsToTokens($siteId, $tokens);
+    }
+
+    /**
+     * DESIGN-MANDA T4 — Los tokens HEREDADOS: la cadena sin lo que el usuario
+     * tocó a mano. Es la vara de medir para saber qué es un override de verdad.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public static function inherited(int $siteId): array
     {
         $tokens = self::load($siteId);
 
-        // D-Slice 1 (S1.7) — Si el sitio tiene `skin_json` compuesto desde el
-        // vector de personalidad, lo sobreponemos a los tokens base. El resto
-        // de variables (line_height, paddings, container_max, etc.) siguen
-        // viniendo de los defaults/diseño manual del usuario.
         $skin = self::loadSkin($siteId);
         if ($skin !== null) {
             $tokens = self::applySkinToTokens($tokens, $skin);
         }
 
-        // ONB2 O2.6 — Y si el usuario ha ELEGIDO una paleta en el paso 2, manda
-        // ella sobre el skin inferido, por el mismo motivo que las tipografías
-        // propias: lo que el usuario decide gana a lo que nosotros deducimos.
-        $tokens = self::applyCustomPaletteToTokens($siteId, $tokens);
+        return self::applyCustomPaletteToTokens($siteId, $tokens);
+    }
 
-        // FONTS — Si el cliente ha subido tipografías de marca y les ha dado un
-        // rol, mandan ellas: por encima de los tokens, del skin inferido y de la
-        // dirección visual. Un brandbook no es una sugerencia.
-        $tokens = self::applyCustomFontsToTokens($siteId, $tokens);
+    /**
+     * DESIGN-MANDA T4 — Línea base contra la que se calcula un override: lo
+     * heredado MÁS las tipografías de marca.
+     *
+     * Las tipografías de marca entran aquí a propósito. El formulario enseña el
+     * valor efectivo, así que si un brandbook manda sobre el select, el usuario
+     * ve —y reenvía— esa familia sin haberla tocado. Si la línea base no la
+     * incluyera, cada guardado inventaría un override fantasma.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public static function baseline(int $siteId): array
+    {
+        return self::applyCustomFontsToTokens($siteId, self::inherited($siteId));
+    }
 
-        $fonts  = self::renderFontsLink($tokens);
-        $styleSlug = $visualStyleSlug !== null ? VisualStyleService::normalizeSlug($visualStyleSlug) : null;
-        $styleFonts = $styleSlug !== null ? VisualStyleService::fontsLink($styleSlug) : '';
+    public static function renderHead(int $siteId, ?string $visualStyleSlug = null, ?string $paletteOverride = null): string
+    {
+        $tokens = self::effective($siteId);
+        // El skin decide si hace falta el `<style>` en línea que pisa la hoja.
+        $skin = self::loadSkin($siteId);
 
-        // FONTS — Si las fuentes propias cubren títulos Y textos, la dirección
-        // visual no va a pintar ninguna letra: pedir sus Google Fonts sería
-        // descargar dos familias que nadie llega a ver.
-        if ($styleFonts !== ''
-            && CustomFontService::familyForRole($siteId, 'heading') !== null
-            && CustomFontService::familyForRole($siteId, 'body') !== null) {
-            $styleFonts = '';
-        }
+        $fonts = self::renderFontsLink($tokens);
 
-        // Si hay skin compuesto, no aplicamos VisualStyle (entrarían en conflicto).
-        $styleCss = ($skin === null && $styleSlug !== null)
-            ? VisualStyleService::renderCss($siteId, $styleSlug, $paletteOverride)
-            : '';
+        // DESIGN-MANDA T7 — La dirección visual ya no pinta. Emitía CSS solo en
+        // sitios SIN skin, atacaba clases del sistema de bloques que las páginas
+        // Canvas no usan, y nunca llegaba al prompt de Canvas: era un tercer
+        // motor de estilo compitiendo con el skin y la paleta. Los parámetros
+        // `$visualStyleSlug` y `$paletteOverride` se mantienen en la firma
+        // porque muchas llamadas los pasan; ahora se ignoran.
 
         $cssHref = htmlspecialchars(base_url('design.css'), ENT_QUOTES, 'UTF-8');
         $cssLink = '<link rel="stylesheet" href="' . $cssHref . '">';
@@ -455,10 +505,8 @@ final class DesignSystem
         // sobreescritas. Esto garantiza prioridad sobre cualquier preset.
         $skinCss = $skin !== null ? "<style>\n" . self::renderCssVars($tokens, $siteId) . "</style>" : '';
 
-        // FONTS — Va el ÚLTIMO a propósito: la dirección visual declara sus
-        // fuentes con un selector de clase (`.pp-visual-style--x`), así que un
-        // `:root` no bastaría. Mismo peso de selector + posterior en el documento
-        // = gana este.
+        // FONTS — Va el ÚLTIMO a propósito: necesita ganar a cualquier regla
+        // anterior que declare familias tipográficas.
         $customFontCss = self::renderCustomFontCss($siteId, $tokens);
 
         // FONTS — Preload de los cortes que se ven en la primera pantalla. Va
@@ -469,10 +517,8 @@ final class DesignSystem
 
         return $preload
              . ($fonts !== '' ? $fonts . "\n" : '')
-             . ($styleFonts !== '' ? $styleFonts . "\n" : '')
              . $cssLink
              . ($skinCss !== '' ? "\n" . $skinCss : '')
-             . ($styleCss !== '' ? "\n" . $styleCss : '')
              . ($customFontCss !== '' ? "\n" . $customFontCss : '');
     }
 
@@ -547,16 +593,123 @@ final class DesignSystem
     }
 
     /**
+     * DESIGN-MANDA T4 — Overrides manuales del panel para lo que NO es color.
+     *
+     * Los colores no viajan por aquí: se vuelcan a `site_palette_custom`
+     * (T3), que ya manda sobre el skin. Dos mecanismos para el mismo dato es
+     * justo el lío del que venimos.
+     */
+    public const MANUAL_TOKENS_KEY = 'design_manual_tokens';
+
+    /** Categorías cuyos cambios manuales se guardan como override. */
+    private const MANUAL_CATEGORIES = ['typography', 'buttons', 'spacing'];
+
+    /** @return array<string,array<string,mixed>> */
+    public static function loadManualTokens(int $siteId): array
+    {
+        $row = Database::selectOne(
+            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+            [$siteId, self::MANUAL_TOKENS_KEY]
+        );
+        $decoded = json_decode((string) ($row['setting_value'] ?? ''), true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** @param array<string,array<string,mixed>> $manual */
+    public static function saveManualTokens(int $siteId, array $manual): void
+    {
+        $manual = array_filter($manual, static fn ($v) => is_array($v) && $v !== []);
+
+        if ($manual === []) {
+            self::clearManualTokens($siteId);
+            return;
+        }
+
+        Database::execute(
+            'INSERT INTO settings (site_id, setting_key, setting_value, is_encrypted)
+             VALUES (?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_encrypted = 0',
+            [$siteId, self::MANUAL_TOKENS_KEY, json_encode($manual, JSON_UNESCAPED_UNICODE)]
+        );
+    }
+
+    public static function clearManualTokens(int $siteId): void
+    {
+        Database::execute(
+            'DELETE FROM settings WHERE site_id = ? AND setting_key = ?',
+            [$siteId, self::MANUAL_TOKENS_KEY]
+        );
+    }
+
+    /**
+     * DESIGN-MANDA T4 — Calcula los overrides comparando lo enviado con la
+     * línea base heredada. Si un campo vuelve a su valor heredado, su override
+     * desaparece: la operación es idempotente y no acumula basura.
+     *
+     * @param array<string,array<string,mixed>> $submitted
+     * @return array<string,array<string,mixed>>
+     */
+    public static function diffManualTokens(array $submitted, array $baseline): array
+    {
+        $manual = [];
+        foreach (self::MANUAL_CATEGORIES as $cat) {
+            foreach ((array) ($submitted[$cat] ?? []) as $key => $value) {
+                if (!array_key_exists($key, (array) ($baseline[$cat] ?? []))) continue;
+                // Comparación laxa a propósito: el formulario devuelve strings
+                // ("10", "1.250") donde los tokens guardan int/float.
+                if ((string) $value !== (string) $baseline[$cat][$key]) {
+                    $manual[$cat][$key] = $value;
+                }
+            }
+        }
+        return $manual;
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $tokens
+     * @return array<string,array<string,mixed>>
+     */
+    private static function applyManualTokens(int $siteId, array $tokens): array
+    {
+        foreach (self::loadManualTokens($siteId) as $cat => $values) {
+            if (!in_array($cat, self::MANUAL_CATEGORIES, true) || !is_array($values)) continue;
+            $tokens[$cat] = array_merge($tokens[$cat] ?? [], $values);
+        }
+        return $tokens;
+    }
+
+    /**
+     * Skin ya leído en esta petición, por sitio. `effective()` y `renderHead()`
+     * lo piden los dos; sin memo serían dos consultas por página servida.
+     * Clave => array|null (null = el sitio no tiene skin).
+     *
+     * @var array<int,array<string,mixed>|null>
+     */
+    private static array $skinMemo = [];
+
+    /** Olvida el skin memorizado (tras regenerarlo o restablecerlo). */
+    public static function forgetSkin(?int $siteId = null): void
+    {
+        if ($siteId === null) self::$skinMemo = [];
+        else unset(self::$skinMemo[$siteId]);
+    }
+
+    /**
      * D-Slice 1 — Lee el skin compuesto del sitio (sites.skin_json).
      * Devuelve null si no existe (entonces se respeta el flujo manual actual).
      */
     public static function loadSkin(int $siteId): ?array
     {
+        if (array_key_exists($siteId, self::$skinMemo)) {
+            return self::$skinMemo[$siteId];
+        }
+        self::$skinMemo[$siteId] = null;
         try {
             $row = Database::selectOne('SELECT skin_json FROM sites WHERE id = ? LIMIT 1', [$siteId]);
             if (!$row || $row['skin_json'] === null) return null;
             $decoded = json_decode((string) $row['skin_json'], true);
-            return is_array($decoded) ? $decoded : null;
+            self::$skinMemo[$siteId] = is_array($decoded) ? $decoded : null;
+            return self::$skinMemo[$siteId];
         } catch (\Throwable $e) {
             return null;
         }
@@ -1940,6 +2093,81 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 .pp-posts-listing--v-featured-first .pp-post-card--compact .pp-post-card__media { aspect-ratio: 4/3; }
 .pp-posts-listing--v-featured-first .pp-post-card--compact .pp-post-card__title {
     font-size: 1.02rem;
+}
+
+/* ============================================================
+   MODULOS M2 — Calendario de reservas embebido en una página
+   El calendario en sí trae sus propios estilos (.ppbk, en el widget, que ya
+   lee estas mismas variables). Aquí solo se coloca dentro de la página.
+   ============================================================ */
+.pp-booking-section__heading {
+    font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+    letter-spacing: -.02em;
+    margin: 0 0 .35em;
+}
+.pp-booking-section__desc {
+    color: var(--pp-text-muted);
+    font-size: 1.05rem;
+    line-height: 1.55;
+    margin: 0 0 1.6em;
+    max-width: 52ch;
+}
+/* "Calendario solo": centrado, porque el widget tiene un ancho fijo pequeño. */
+.pp-booking-section--v-default {
+    text-align: center;
+}
+.pp-booking-section--v-default .pp-booking-section__desc {
+    margin-inline: auto;
+}
+.pp-booking-section--v-default .pp-booking-section__widget {
+    display: flex;
+    justify-content: center;
+}
+/* "Con título y texto": texto a un lado, calendario al otro. */
+.pp-booking-section--v-with-text {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: clamp(24px, 5vw, 56px);
+    align-items: center;
+}
+.pp-booking-section--v-with-text .pp-booking-section__desc {
+    margin-bottom: 0;
+}
+@media (max-width: 800px) {
+    .pp-booking-section--v-with-text {
+        grid-template-columns: 1fr;
+    }
+    .pp-booking-section--v-with-text .pp-booking-section__widget {
+        display: flex;
+        justify-content: center;
+    }
+}
+/* El contenedor del calendario, con el mismo marco que le pondrá el widget al
+   montar (.ppbk). Lo que hay dentro es un avance del calendario: se ve mientras
+   carga, en la previsualización del editor (su iframe no ejecuta scripts) y
+   para un visitante sin JavaScript. */
+.pp-booking-embed {
+    max-width: 420px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-card, 14px);
+    padding: 18px;
+    background: var(--pp-surface);
+    text-align: left;
+    box-sizing: border-box;
+}
+.pp-booking-embed__name {
+    margin: 0 0 4px;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+.pp-booking-embed__meta {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--pp-text-muted);
+}
+.pp-booking-embed__noscript {
+    color: var(--pp-text-muted);
+    font-size: .95rem;
 }
 
 /* Generic */

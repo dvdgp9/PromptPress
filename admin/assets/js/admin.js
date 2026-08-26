@@ -2,6 +2,13 @@
  * PromptPress Admin — JS principal
  * Sidebar toggle, overlays, flash messages auto-dismiss.
  */
+
+/**
+ * ADMIN-I18N — `pp.t` vive en `pp-i18n.js`, que este layout carga ANTES que
+ * este fichero: lo necesitan también las pantallas standalone (Canvas Studio),
+ * que no cargan admin.js.
+ */
+
 (function () {
     'use strict';
 
@@ -36,8 +43,13 @@
         }
     });
 
-    // Auto-dismiss flash alerts after 5s
-    var alerts = document.querySelectorAll('.pp-alert');
+    // Auto-dismiss flash alerts after 5s.
+    //
+    // Solo los mensajes de "ya está hecho": un aviso PERMANENTE (una condición
+    // del sitio que sigue ahí, como no tener el correo configurado) se marca con
+    // `data-pp-persist` y no se toca. Sin esa marca, el aviso se pintaba y a los
+    // cinco segundos desaparecía, que es peor que no ponerlo.
+    var alerts = document.querySelectorAll('.pp-alert:not([data-pp-persist])');
     alerts.forEach(function (alert) {
         setTimeout(function () {
             alert.style.opacity = '0';
@@ -80,6 +92,8 @@
         }).then(function (html) {
             var page = new DOMParser().parseFromString(html, 'text/html');
             var nextInbox = page.querySelector('.pp-inbox');
+            // i18n-ignore: se captura abajo y nunca se pinta — si la respuesta
+            // no trae bandeja, se recarga la página entera.
             if (!nextInbox) throw new Error('Respuesta de mensajes no válida.');
             inbox.replaceWith(nextInbox);
             if (pushState) window.history.pushState({ inbox: true }, '', url);

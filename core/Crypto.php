@@ -87,6 +87,7 @@ final class Crypto
         }
         $key = hex2bin($hexKey);
         if ($key === false || strlen($key) !== 32) {
+            // i18n-ignore: excepción interna de arranque.
             throw new RuntimeException('app_key inválida tras hex2bin');
         }
         return $key;
