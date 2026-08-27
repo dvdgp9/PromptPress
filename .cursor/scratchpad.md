@@ -6341,3 +6341,38 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - `FILTER_FLAG_NO_RES_RANGE` de PHP no bloquea por sí solo rangos como CGNAT
   `100.64.0.0/10`, benchmark `198.18.0.0/15` o multicast. En controles SSRF
   hace falta una denylist CIDR explícita además de fijar cURL a la IP ya validada.
+
+### AR7.1 corrección iniciada (27/08/2026, Executor)
+
+- La prueba real en producción importó 2/4 referencias, pero las dos filas
+  marcadas como éxito aparecen rotas en Medios. El flujo descarga con `tempnam`
+  y usa `rename`; ese movimiento conserva el modo restrictivo del temporal y el
+  servidor de estáticos puede no tener permiso de lectura aunque PHP sí lo tenga.
+- La corrección exigirá modo legible tras mover y tras redimensionar, validación
+  final antes de devolver éxito y rollback de fila+archivo si no se puede servir.
+  La biblioteca reparará de forma acotada los `email-*` ya importados para que
+  las dos imágenes existentes se recuperen al instalar la actualización.
+
+### AR7.1 preparada para revisión (27/08/2026, Executor)
+
+- Causa reproducida y corregida: `tempnam` crea `0600` y `rename` conservaba el
+  modo. El importador aplica y comprueba `0644` antes de guardar y después del
+  resize; valida de nuevo tamaño, MIME y dimensiones. Si la validación final o
+  la fila fallan, elimina tanto BD como archivo antes de devolver fallo.
+- Reparación retroactiva acotada: al abrir `/admin/media` o cargar la biblioteca,
+  solo los paths propios `storage/uploads/{site}/email-*` pasan por la misma
+  validación/chmod. No toca uploads normales, otros sitios ni rutas manipuladas.
+- QA real: PNG externa importada como media 479, archivo `0644`, 13.504 bytes,
+  respuesta pública `200 image/png` y preview sin errores de consola. Después se
+  forzó el mismo archivo a `0600`; abrir Medios lo reparó a `0644` y siguió
+  respondiendo 200. Fila 479 y archivo sintético eliminados (0 restos).
+- Regresión verde: importador 28 checks, composer 11/11, i18n, normalizador,
+  referencias, visión, planner, source envelope, jobs, responsive, lint PHP/JS
+  y `git diff --check`.
+
+## Lesson (AR7.1)
+
+- `is_readable()` solo prueba el usuario de PHP y puede dar un falso positivo si
+  nginx/Apache sirve estáticos con otro usuario. Un archivo destinado a URL
+  pública debe tener además el bit de lectura para otros y comprobarse tras
+  cualquier transformación que pueda recrearlo.

@@ -97,11 +97,21 @@ final class RemoteImageImporter
                 if (!@copy($tmp, $absolute)) throw new \RuntimeException('move_failed');
                 @unlink($tmp);
             }
-            return MediaService::storeFromBinary($absolute, $relative, $mime, $siteId, $userId, [
+            self::ensureWebReadable($absolute);
+            $row = MediaService::storeFromBinary($absolute, $relative, $mime, $siteId, $userId, [
                 'original_name' => 'imagen-correo.' . $ext,
                 'alt_text' => $alt,
                 'source' => 'upload',
             ]);
+            try {
+                self::ensureWebReadable($absolute);
+                self::assertStoredImage($absolute, $mime);
+                if ((int) ($row['id'] ?? 0) <= 0) throw new \RuntimeException('media_row_missing');
+            } catch (\Throwable $verificationError) {
+                if ($row !== []) MediaService::delete($row);
+                throw $verificationError;
+            }
+            return $row;
         } catch (\Throwable $e) {
             @unlink($tmp);
             @unlink($absolute);
@@ -199,6 +209,42 @@ final class RemoteImageImporter
         return true;
     }
 
+    /**
+     * Los ficheros creados por tempnam suelen nacer 0600. Tras rename ese modo
+     * se conserva y un nginx/Apache separado de PHP-FPM no puede leerlos.
+     */
+    public static function ensureWebReadable(string $path): void
+    {
+        if (!is_file($path)) throw new \RuntimeException('stored_file_missing');
+        @chmod($path, 0644);
+        clearstatcache(true, $path);
+        $permissions = @fileperms($path);
+        if ($permissions === false || ($permissions & 0004) === 0 || !is_readable($path)) {
+            throw new \RuntimeException('stored_file_not_readable');
+        }
+    }
+
+    /**
+     * Repara únicamente ficheros creados por este importador. Se usa al abrir
+     * Medios para recuperar imports AR7 ya existentes tras instalar AR7.1.
+     */
+    public static function repairStoredMedia(array $row, int $siteId): bool
+    {
+        $path = ltrim((string) ($row['path'] ?? ''), '/');
+        $mime = (string) ($row['mime_type'] ?? '');
+        $prefix = 'storage/uploads/' . $siteId . '/email-';
+        if (!str_starts_with($path, $prefix) || str_contains($path, '..') || str_contains($path, '\\')) return false;
+        if (!isset(MediaService::ALLOWED[$mime])) return false;
+        $absolute = PP_ROOT . '/' . $path;
+        try {
+            self::ensureWebReadable($absolute);
+            self::assertStoredImage($absolute, $mime);
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     private static function ipInCidr(string $ip, string $cidr): bool
     {
         [$network, $prefixRaw] = explode('/', $cidr, 2);
@@ -294,6 +340,22 @@ final class RemoteImageImporter
             }
         }
         return is_string($mime) && isset(MediaService::ALLOWED[$mime]) ? $mime : null;
+    }
+
+    private static function assertStoredImage(string $path, string $expectedMime): void
+    {
+        $size = @filesize($path);
+        if (!is_int($size) || $size <= 0 || $size > MediaService::MAX_SIZE) {
+            throw new \RuntimeException('stored_file_size_invalid');
+        }
+        if (self::detectImageMime($path) !== $expectedMime) {
+            throw new \RuntimeException('stored_file_mime_invalid');
+        }
+        $dimensions = @getimagesize($path);
+        $pixels = is_array($dimensions) ? ((int) $dimensions[0] * (int) $dimensions[1]) : 0;
+        if ($pixels <= 0 || $pixels > self::MAX_PIXELS) {
+            throw new \RuntimeException('stored_file_dimensions_invalid');
+        }
     }
 
     private static function resolveRedirectUrl(string $base, string $location): string

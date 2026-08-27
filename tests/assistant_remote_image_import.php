@@ -75,5 +75,52 @@ checkRemoteImport('candidate_batch_is_bounded_and_deduplicated',
     json_encode($candidates)
 );
 
+$permissionFixture = tempnam(sys_get_temp_dir(), 'ppa-ar71-perms-');
+if ($permissionFixture === false) {
+    checkRemoteImport('downloaded_file_becomes_web_readable', false, 'tempnam failed');
+} else {
+    file_put_contents($permissionFixture, 'fixture');
+    chmod($permissionFixture, 0600);
+    clearstatcache(true, $permissionFixture);
+    $before = fileperms($permissionFixture) & 0777;
+    $madeReadable = false;
+    try {
+        RemoteImageImporter::ensureWebReadable($permissionFixture);
+        clearstatcache(true, $permissionFixture);
+        $madeReadable = ((fileperms($permissionFixture) & 0004) !== 0);
+    } catch (Throwable $e) {
+        $madeReadable = false;
+    }
+    checkRemoteImport('downloaded_file_becomes_web_readable',
+        $before === 0600 && $madeReadable,
+        sprintf('before=%o after=%o', $before, fileperms($permissionFixture) & 0777)
+    );
+    unlink($permissionFixture);
+}
+
+$repairSiteId = 987654321;
+$repairDir = PP_STORAGE . '/uploads/' . $repairSiteId;
+if (!is_dir($repairDir)) mkdir($repairDir, 0775, true);
+$repairPath = $repairDir . '/email-ar71-fixture.png';
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true);
+file_put_contents($repairPath, $png === false ? '' : $png);
+chmod($repairPath, 0600);
+$repaired = RemoteImageImporter::repairStoredMedia([
+    'path' => 'storage/uploads/' . $repairSiteId . '/email-ar71-fixture.png',
+    'mime_type' => 'image/png',
+], $repairSiteId);
+clearstatcache(true, $repairPath);
+checkRemoteImport('existing_email_import_is_repaired_safely',
+    $repaired && ((fileperms($repairPath) & 0004) !== 0)
+);
+checkRemoteImport('repair_is_scoped_to_email_imports',
+    !RemoteImageImporter::repairStoredMedia([
+        'path' => 'storage/uploads/' . $repairSiteId . '/normal-upload.png',
+        'mime_type' => 'image/png',
+    ], $repairSiteId)
+);
+unlink($repairPath);
+rmdir($repairDir);
+
 echo $failed === 0 ? "ALL PASS\n" : "{$failed} FAILED\n";
 exit($failed === 0 ? 0 : 1);

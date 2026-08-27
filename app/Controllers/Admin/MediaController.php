@@ -34,6 +34,7 @@ class MediaController
              ORDER BY m.id DESC',
             [$siteId]
         );
+        self::repairRemoteImports($items, $siteId);
 
         $data = DashboardController::getCommonData();
         $data = array_merge($data, [
@@ -76,6 +77,7 @@ class MediaController
              LIMIT 120',
             $params
         );
+        self::repairRemoteImports($items, $siteId);
 
         $out = array_map(static function (array $m): array {
             $path = ltrim((string) $m['path'], '/');
@@ -459,6 +461,18 @@ class MediaController
     }
 
     // ======================================================================
+    /** @param array<int,array<string,mixed>> $items */
+    private static function repairRemoteImports(array $items, int $siteId): void
+    {
+        foreach ($items as $item) {
+            $path = ltrim((string) ($item['path'] ?? ''), '/');
+            if (!str_starts_with($path, 'storage/uploads/' . $siteId . '/email-')) continue;
+            if (!RemoteImageImporter::repairStoredMedia($item, $siteId)) {
+                error_log('[MediaController] remote import unreadable media_id=' . (int) ($item['id'] ?? 0));
+            }
+        }
+    }
+
     private static function findOrFail(int $id, int $siteId): array
     {
         $row = Database::selectOne(
