@@ -6376,3 +6376,14 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   nginx/Apache sirve estáticos con otro usuario. Un archivo destinado a URL
   pública debe tener además el bit de lectura para otros y comprobarse tras
   cualquier transformación que pueda recrearlo.
+
+### AR7.1 preparada para publicación (27/08/2026, Executor)
+
+- Fix versionado en `2a5fed9`. El ZIP AR7 anterior queda sustituido por
+  `deliverables/promptpress-1.1.0-assistant-rich-ar7.1.zip` para evitar instalar
+  de nuevo el paquete con el problema de permisos.
+- Paquete: 1.047 archivos de aplicación, 2,6 MB y 1.210 entradas con
+  directorios; `unzip -t` sin errores. Incluye importador/controlador/test
+  corregidos y excluye configuración, credenciales, `.cursor`, logs y uploads.
+- SHA-256:
+  `a684534af72dd2a8a19c41a5593cd68c64e7e36f0880a9e5d4eb1edb174d1554`.
