@@ -6224,6 +6224,11 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - Limpieza completada: deshechos ambos cambios y eliminadas únicamente las dos
   páginas temporales 2607/2608, jobs 7/10 y logs QA 1455–1460. Eran fixtures
   locales recuperables solo desde la copia del entorno; no se tocó contenido real.
+- Publicación técnica completada: commits `cc328e0`, `9f48c63`, `d985400` y
+  `e6d67b5` enviados a `origin/main`. ZIP final validado en
+  `deliverables/promptpress-1.1.0-assistant-rich-ar6.zip` (1.045 archivos,
+  2,6 MB, SHA-256 `463e5cc59f7b681f3ea4c6961cb4324de7891bcbd97a73668f4ede1018c37209`),
+  sin configuración local, uploads, logs, `.cursor` ni credenciales.
 
 ## Lessons (ASSISTANT-RICH)
 
