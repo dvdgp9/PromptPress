@@ -113,6 +113,31 @@ test('continue_without_images_discards_only_external_references', () => {
     assert.deepEqual(Array.from(images.keys()), ['uploaded', 'failed']);
 });
 
+test('remote_import_payload_contains_only_external_http_references', () => {
+    const images = new Map([
+        ['gmail-1', { id: 'gmail-1', kind: 'remote_url', source: 'https://mail.google.test/a', alt: 'One' }],
+        ['gmail-2', { id: 'gmail-2', kind: 'unresolved', source: 'blob:mail/2', alt: 'Two' }],
+        ['stored', { id: 'stored', kind: 'stored', mediaId: 9 }],
+        ['gmail-3', { id: 'gmail-3', kind: 'remote_url', source: 'https://mail.google.test/b', alt: '' }]
+    ]);
+    assert.deepEqual(Rich.remoteImportPayload(images, 8), [
+        { client_id: 'gmail-1', url: 'https://mail.google.test/a', alt: 'One' },
+        { client_id: 'gmail-3', url: 'https://mail.google.test/b', alt: '' }
+    ]);
+});
+
+test('remote_import_results_are_indexed_without_trusting_unknown_ids', () => {
+    const indexed = Rich.indexRemoteImportResults([
+        { client_id: 'gmail-1', ok: true, item: { id: 44, path: '/storage/uploads/1/a.png' } },
+        { client_id: 'gmail-2', ok: false, error: 'not accessible' },
+        { client_id: '', ok: true },
+        null
+    ]);
+    assert.equal(indexed.get('gmail-1').ok, true);
+    assert.equal(indexed.get('gmail-2').ok, false);
+    assert.equal(indexed.size, 2);
+});
+
 if (!process.exitCode) {
     process.stdout.write('ALL PASS (' + passed + ')\n');
 }

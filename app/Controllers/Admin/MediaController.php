@@ -5,6 +5,7 @@ namespace App\Controllers\Admin;
 use App\Services\ImageBankService;
 use App\Services\MediaLibraryService;
 use App\Services\MediaService;
+use App\Services\RemoteImageImporter;
 use Core\Auth;
 use Core\CSRF;
 use Core\Database;
@@ -166,6 +167,36 @@ class MediaController
         }
 
         Response::redirect(base_url('admin/media'));
+    }
+
+    // ----------------------------------------------------------------------
+    // POST /admin/media/import-remote — lote parcial para imágenes pegadas
+    // desde correo. Cada URL se trata como no confiable en el servicio.
+    // ----------------------------------------------------------------------
+    public function importRemote(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+        $encoded = (string) Request::post('images', '[]');
+        $decoded = json_decode($encoded, true);
+        if (!is_array($decoded)) {
+            Response::json(['ok' => false, 'error' => 'invalid_images'], 422);
+        }
+
+        $candidates = RemoteImageImporter::normalizeCandidates($decoded);
+        if ($candidates === []) {
+            Response::json(['ok' => false, 'error' => 'no_importable_images'], 422);
+        }
+
+        @set_time_limit(180);
+        $results = (new RemoteImageImporter())->importBatch($candidates, $siteId, Auth::id());
+        $imported = count(array_filter($results, static fn (array $result): bool => ($result['ok'] ?? false) === true));
+        Response::json([
+            'ok' => true,
+            'imported' => $imported,
+            'failed' => count($results) - $imported,
+            'results' => $results,
+        ]);
     }
 
     /**

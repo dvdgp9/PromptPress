@@ -106,6 +106,30 @@
         return ids;
     }
 
+    function remoteImportPayload(images, limit) {
+        if (!(images instanceof Map)) return [];
+        const max = Math.max(0, Number(limit) || 0);
+        return Array.from(images.values())
+            .filter((image) => image && image.kind === 'remote_url' && safeHref(image.source))
+            .slice(0, max)
+            .map((image) => ({
+                client_id: String(image.id || ''),
+                url: safeHref(image.source),
+                alt: String(image.alt || '')
+            }))
+            .filter((image) => image.client_id !== '');
+    }
+
+    function indexRemoteImportResults(results) {
+        const indexed = new Map();
+        Array.from(results || []).forEach((result) => {
+            if (!result || typeof result !== 'object') return;
+            const id = String(result.client_id || '');
+            if (id !== '') indexed.set(id, result);
+        });
+        return indexed;
+    }
+
     function plainTextToHtml(value) {
         const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n');
         const parts = [];
@@ -145,6 +169,7 @@
             this.t = options.t || ((key) => key);
             this.csrf = options.csrf || '';
             this.uploadUrl = options.uploadUrl || '';
+            this.remoteImportUrl = options.remoteImportUrl || '';
             this.onChooseMedia = options.onChooseMedia || function () {};
             this.images = new Map();
             this.objectUrls = new Set();
@@ -438,14 +463,23 @@
 
             const message = document.createElement('span');
             message.className = 'ppa-composer__status-message';
-            message.textContent = this.t('js.as.external_images_summary', { n: count });
+            message.textContent = this.t(count === 1 ? 'js.as.external_images_summary_one' : 'js.as.external_images_summary_other', { n: count });
             this.status.appendChild(message);
 
             const actions = document.createElement('span');
             actions.className = 'ppa-composer__status-actions';
+            const importable = remoteImportPayload(this.images, this.maxImages).length;
+            if (importable > 0 && this.remoteImportUrl) {
+                const importButton = document.createElement('button');
+                importButton.type = 'button';
+                importButton.className = 'ppa-composer__status-action ppa-composer__status-action--primary';
+                importButton.textContent = this.t(importable === 1 ? 'js.as.import_external_images_one' : 'js.as.import_external_images_other', { n: importable });
+                importButton.addEventListener('click', () => this.importExternalImages(importButton));
+                actions.appendChild(importButton);
+            }
             const continueButton = document.createElement('button');
             continueButton.type = 'button';
-            continueButton.className = 'ppa-composer__status-action ppa-composer__status-action--primary';
+            continueButton.className = 'ppa-composer__status-action';
             continueButton.textContent = this.t('js.as.continue_without_images');
             continueButton.addEventListener('click', () => this.continueWithoutExternalImages());
             actions.appendChild(continueButton);
@@ -457,6 +491,63 @@
             reviewButton.addEventListener('click', () => this.focusFirstExternalImage());
             actions.appendChild(reviewButton);
             this.status.appendChild(actions);
+        }
+
+        async importExternalImages(button) {
+            const candidates = remoteImportPayload(this.images, this.maxImages);
+            if (candidates.length === 0 || !this.remoteImportUrl) return;
+            button.disabled = true;
+            button.textContent = this.t('js.as.importing_external_images');
+            this.images.forEach((item, id) => {
+                if (item.kind === 'remote_url') this.updateFigure(id, 'uploading', this.t('js.as.image_importing'));
+            });
+            this.onChange(this.state());
+
+            const form = new FormData();
+            form.append('_csrf', this.csrf);
+            form.append('images', JSON.stringify(candidates));
+            try {
+                const response = await fetch(this.remoteImportUrl, {
+                    method: 'POST',
+                    body: form,
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const body = await response.json().catch(() => ({}));
+                if (!response.ok || !body.ok) throw new Error('batch_failed');
+                const results = indexRemoteImportResults(body.results);
+                let imported = 0;
+                candidates.forEach((candidate) => {
+                    const result = results.get(candidate.client_id);
+                    if (result && result.ok && this.useMedia(candidate.client_id, result.item)) {
+                        imported += 1;
+                        return;
+                    }
+                    const current = this.images.get(candidate.client_id);
+                    if (current) {
+                        current.kind = 'remote_url';
+                        this.updateFigure(candidate.client_id, 'remote_url', this.t('js.as.image_external_marker'));
+                    }
+                });
+                const failed = candidates.length - imported;
+                if (failed > 0) {
+                    this.setStatus(this.t('js.as.external_import_partial', { ok: imported, failed: failed }), 'warning');
+                    window.setTimeout(() => this.refreshMediaStatus(), 1800);
+                } else {
+                    this.setStatus(this.t(imported === 1 ? 'js.as.external_import_complete_one' : 'js.as.external_import_complete_other', { n: imported }), 'success');
+                }
+            } catch (error) {
+                candidates.forEach((candidate) => {
+                    const current = this.images.get(candidate.client_id);
+                    if (!current || current.kind === 'stored') return;
+                    current.kind = 'remote_url';
+                    this.updateFigure(candidate.client_id, 'remote_url', this.t('js.as.image_external_marker'));
+                });
+                this.setStatus(this.t('js.as.external_import_failed'), 'warning');
+                window.setTimeout(() => this.refreshMediaStatus(), 1800);
+            } finally {
+                this.onChange(this.state());
+            }
         }
 
         continueWithoutExternalImages() {
@@ -626,6 +717,8 @@
         plainTextToHtml: plainTextToHtml,
         normalizeMediaItem: normalizeMediaItem,
         summarizeImageStates: summarizeImageStates,
-        discardExternalImageReferences: discardExternalImageReferences
+        discardExternalImageReferences: discardExternalImageReferences,
+        remoteImportPayload: remoteImportPayload,
+        indexRemoteImportResults: indexRemoteImportResults
     };
 }));

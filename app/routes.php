@@ -255,6 +255,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/media',                    [MediaController::class, 'index']);
     $r->get('/media/library',            [MediaController::class, 'library']);
     $r->post('/media',                   [MediaController::class, 'upload']);
+    $r->post('/media/import-remote',     [MediaController::class, 'importRemote']);
     // STUDIO-2 C4b — describe por lotes las imágenes sin texto alternativo.
     // Antes de /media/{id}/*: si no, "describe-missing" entraría como un {id}.
     $r->post('/media/describe-missing',  [MediaController::class, 'describeMissing']);

@@ -584,6 +584,7 @@
             maxImageBytes: cfg.richMaxImageBytes,
             csrf: cfg.csrf,
             uploadUrl: cfg.mediaUploadUrl,
+            remoteImportUrl: cfg.remoteImportUrl,
             t: (key, vars) => pp.t(key, vars),
             onChooseMedia: openMediaPicker,
             onChange: refreshSendState

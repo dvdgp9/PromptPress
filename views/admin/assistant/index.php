@@ -26,6 +26,7 @@ window.PPA = {
     richMaxImages: <?= (int) \App\Services\AssistantContentNormalizer::DEFAULT_MAX_IMAGES ?>,
     richMaxImageBytes: <?= (int) \App\Services\AssistantContentNormalizer::DEFAULT_MAX_IMAGE_BYTES ?>,
     mediaUploadUrl: <?= json_encode(base_url('admin/media')) ?>,
+    remoteImportUrl: <?= json_encode(base_url('admin/media/import-remote')) ?>,
     mediaLibraryUrl: <?= json_encode(base_url('admin/media/library')) ?>
 };
 </script>

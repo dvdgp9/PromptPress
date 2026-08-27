@@ -6283,3 +6283,48 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - Una referencia externa procedente de un correo es un caso normal, no un error
   excepcional. Debe resumirse y ofrecer degradación explícita a texto; solo los
   fallos de una subida que sí tenía bytes deben mantener el bloqueo de error.
+
+### AR7 iniciada (27/08/2026, Executor)
+
+- El usuario confirma que el pegado desde Gmail debe ofrecer importación directa
+  en bloque. Se añadirá «Importar N imágenes» al aviso existente: el backend
+  intentará descargar cada referencia accesible, guardará los éxitos en Medios y
+  dejará únicamente los fallos para selección manual o descarte.
+- Es un cambio de red sensible: las URLs pegadas son datos no confiables. El
+  importador limitará esquema, redirects, tiempo, tamaño y tipos; bloqueará
+  credenciales, localhost, redes privadas/reservadas y DNS que resuelva a ellas.
+  No reenviará cookies del navegador ni persistirá URLs temporales de Gmail.
+- TDD: primero contratos de seguridad del importador y del lote parcial en el
+  composer; después endpoint, UI, traducciones y regresión completa del flujo.
+- Criterio de éxito de este único hito: un lote puede acabar parcialmente
+  importado sin perder el orden; cada éxito se convierte en medio verificado del
+  sitio y los fallos conservan el fallback «Elegir de Medios».
+
+### AR7 preparada para revisión (27/08/2026, Executor)
+
+- El aviso de Gmail ofrece ahora «Importar N imágenes». Envía únicamente las
+  referencias HTTP/HTTPS del lote al nuevo endpoint autenticado
+  `/admin/media/import-remote`; blobs sin bytes siguen necesitando reemplazo.
+- `RemoteImageImporter` valida URL y cada redirect, rechaza credenciales,
+  localhost, puertos no estándar y rangos privados/reservados IPv4/IPv6. La
+  descarga queda fijada a una IP pública resuelta, sin proxy/cookies, con 20 s,
+  máximo 3 redirects, 10 MB y 25 MP; solo JPEG/PNG/WebP/GIF detectados por
+  contenido entran en Medios. Las URLs temporales no se persisten.
+- El lote es parcial por diseño: cada éxito sustituye su marcador en la misma
+  posición y habilita el plan cuando ya no quedan pendientes; cada fallo conserva
+  «Elegir de Medios», «Continuar solo con el texto» y el resumen de revisión.
+  Singular/plural corregidos en ES/EN/FR/PT.
+- QA real: una PNG pública se importó, creó media 476 y habilitó «Proponer plan».
+  Segundo recorrido con una pública + `127.0.0.1` importó solo la pública, dejó
+  la privada pendiente y no produjo ninguna petición local. Consola sin errores.
+- Limpieza: medios sintéticos 476/477 y sus archivos eliminados; comprobación
+  final con 0 restos. No se propuso plan, no hubo llamada IA ni cambios de página.
+- Pruebas verdes: seguridad URL/IP 25 checks, composer 11/11, i18n completo,
+  normalizador 16/16, referencias 4/4, visión 5/5, planner 5/5, source envelope
+  7/7, contexto de jobs 9/9, responsive 7/7, lint PHP/JS y `git diff --check`.
+
+## Lesson (AR7)
+
+- `FILTER_FLAG_NO_RES_RANGE` de PHP no bloquea por sí solo rangos como CGNAT
+  `100.64.0.0/10`, benchmark `198.18.0.0/15` o multicast. En controles SSRF
+  hace falta una denylist CIDR explícita además de fijar cURL a la IP ya validada.
