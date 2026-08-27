@@ -39,6 +39,12 @@
         return 'unresolved';
     }
 
+    function isEmojiOnlyAlt(value) {
+        const text = String(value || '').trim();
+        if (text === '' || Array.from(text).length > 32) return false;
+        return /^(?:(?:\p{Regional_Indicator}{2})|(?:[#*0-9]\uFE0F?\u20E3)|(?:\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*))+$/u.test(text);
+    }
+
     function parseDataImage(value, maxBytes) {
         const match = String(value || '').match(/^data:(image\/(?:jpeg|png|gif|webp));base64,([a-z0-9+/=\s]+)$/i);
         if (!match) return null;
@@ -252,7 +258,11 @@
             if (node.nodeType !== Node.ELEMENT_NODE) return null;
             const tag = node.tagName.toLowerCase();
             if (DROP_TAGS.has(tag)) return null;
-            if (tag === 'img') return this.imageFromSource(node.getAttribute('src') || '', node.getAttribute('alt') || '', availableFiles);
+            if (tag === 'img') {
+                const alt = (node.getAttribute('alt') || '').trim();
+                if (isEmojiOnlyAlt(alt)) return document.createTextNode(alt);
+                return this.imageFromSource(node.getAttribute('src') || '', alt, availableFiles);
+            }
 
             let safe;
             if (tag === 'a') {
@@ -712,6 +722,7 @@
         Composer: Composer,
         safeHref: safeHref,
         imageSourceKind: imageSourceKind,
+        isEmojiOnlyAlt: isEmojiOnlyAlt,
         parseDataImage: parseDataImage,
         selectClipboardImages: selectClipboardImages,
         plainTextToHtml: plainTextToHtml,

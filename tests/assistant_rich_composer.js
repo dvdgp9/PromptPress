@@ -31,6 +31,15 @@ test('image_sources_are_classified_without_fetching', () => {
     assert.equal(Rich.imageSourceKind('javascript:alert(1)'), 'unresolved');
 });
 
+test('emoji_only_image_alts_are_text_not_media', () => {
+    ['✨', '🍀', '☕️', '👩🏽‍💻', '🇪🇸', '1️⃣', '✨🍀'].forEach((value) => {
+        assert.equal(Rich.isEmojiOnlyAlt(value), true, value);
+    });
+    ['', 'logo', 'Foto ✨', '😊 team', 'image.png'].forEach((value) => {
+        assert.equal(Rich.isEmojiOnlyAlt(value), false, value);
+    });
+});
+
 test('valid_data_image_is_measured_before_capture', () => {
     const parsed = Rich.parseDataImage('data:image/png;base64,aGVsbG8=', 10);
     assert.deepEqual(parsed, { mime: 'image/png', bytes: 5, base64: 'aGVsbG8=' });

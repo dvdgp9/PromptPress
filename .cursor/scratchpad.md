@@ -6387,3 +6387,26 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   corregidos y excluye configuración, credenciales, `.cursor`, logs y uploads.
 - SHA-256:
   `a684534af72dd2a8a19c41a5593cd68c64e7e36f0880a9e5d4eb1edb174d1554`.
+
+### AR7.2 filtro de emojis iniciado (27/08/2026, Executor)
+
+- La validación en producción aclara el caso: Gmail serializa ✨/🍀 como `<img>`
+  públicas y las fotografías reales como referencias privadas no descargables.
+  El usuario arrastrará las fotos directamente; el hito se limita a impedir que
+  los emojis se cuenten, importen o envíen a visión como imágenes.
+- Regla: si el `alt` completo es una secuencia emoji Unicode válida (incluyendo
+  variante, tono de piel, ZWJ, banderas o keycaps), el nodo se convierte en texto
+  en la misma posición antes de clasificar su `src`. Texto mixto o nombres de
+  archivo no se consideran emoji.
+
+### AR7.2 preparada para revisión (27/08/2026, Executor)
+
+- `isEmojiOnlyAlt()` reconoce pictogramas Unicode, variantes, modificadores,
+  secuencias ZWJ, banderas regionales y keycaps; rechaza vacío, nombres de
+  archivo y texto mixto. El saneador convierte el `<img>` en `Text` antes de
+  crear referencias o consumir el límite de imágenes.
+- QA real con HTML tipo Gmail: dos `<img alt="✨/🍀">` + dos fotografías privadas.
+  Resultado: texto `Hola ✨ gracias 🍀`, exactamente 2 markers pendientes,
+  resumen «2 imágenes», ninguna descarga/alta y consola limpia.
+- El arrastre directo no cambia: los archivos reales del clipboard siguen el
+  camino `captured` → upload → medio verificado.
