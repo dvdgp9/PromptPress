@@ -201,6 +201,18 @@
         bubble.className = 'ppa-msg__bubble ppa-msg__bubble--plan';
         msg.appendChild(bubble);
 
+        if (plan.vision && plan.vision.status && plan.vision.status !== 'not_needed') {
+            const vision = document.createElement('p');
+            vision.className = 'ppa-plan__vision ppa-plan__vision--' + plan.vision.status;
+            const visionCount = plan.vision.status === 'used'
+                ? Number(plan.vision.sent_images || 0)
+                : Number(plan.vision.ready_images || 0);
+            vision.textContent = plan.vision.status === 'used'
+                ? pp.t(visionCount === 1 ? 'js.as.vision_used_one' : 'js.as.vision_used_other', { n: visionCount, modelo: plan.vision.model || '' })
+                : pp.t(visionCount === 1 ? 'js.as.vision_unavailable_one' : 'js.as.vision_unavailable_other', { n: visionCount, modelo: plan.vision.model || '' });
+            bubble.appendChild(vision);
+        }
+
         if (plan.summary) {
             const p = document.createElement('p');
             p.className = 'ppa-plan__summary';

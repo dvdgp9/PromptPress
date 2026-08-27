@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QA · visión del Assistant</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+</head>
+<body>
+<main class="pp-admin-main">
+    <div id="ppa-media-picker" hidden><button id="ppa-media-picker-close">Cerrar</button><div id="ppa-media-picker-status"></div><div id="ppa-media-picker-grid"></div></div>
+    <div class="ppa-chat" id="ppa-chat">
+        <div class="ppa-thread" id="ppa-thread"></div>
+        <div class="ppa-composer">
+            <div id="ppa-attachment" hidden><span id="ppa-attachment-name"></span><span id="ppa-attachment-meta"></span><button id="ppa-attachment-toggle"></button><button id="ppa-attachment-remove"></button></div>
+            <pre id="ppa-attachment-preview" hidden></pre>
+            <button type="button" id="ppa-attach-btn">Adjuntar</button>
+            <button type="button" id="ppa-paste-plain">Pegar sin formato</button>
+            <input type="file" id="ppa-file-input" hidden>
+            <div class="ppa-composer__row">
+                <div class="ppa-composer__editor" id="ppa-rich-input" contenteditable="true" role="textbox" aria-label="Petición para el asistente" hidden></div>
+                <textarea id="ppa-input"></textarea>
+                <button type="button" class="pp-btn pp-btn--primary" id="ppa-send" disabled>Proponer plan</button>
+            </div>
+            <div class="ppa-composer__status" id="ppa-rich-status" hidden></div>
+        </div>
+    </div>
+</main>
+<script>
+const qaTranslations = {
+    'js.as.cat.automatic': 'Puedo hacerlo ahora', 'js.as.cat.manual': 'Disponible en la plataforma',
+    'js.as.cat.input': 'Necesito información', 'js.as.cat.development': 'Requiere desarrollo',
+    'js.as.cat.sensitive': 'Requiere revisión', 'js.as.analyzing': 'Analizando…',
+    'js.as.no_changes': 'Sin cambios', 'js.as.vision_used_one': 'La IA ha analizado 1 imagen con {modelo}.',
+    'js.as.vision_used_other': 'La IA ha analizado {n} imágenes con {modelo}.',
+    'js.as.vision_unavailable_one': 'El plan se ha basado solo en el texto: {modelo} no pudo recibir la imagen importada.',
+    'js.as.vision_unavailable_other': 'El plan se ha basado solo en el texto: {modelo} no pudo recibir las {n} imágenes importadas.'
+};
+window.pp = { t: (key, vars) => {
+    let value = qaTranslations[key] || key;
+    Object.entries(vars || {}).forEach(([name, replacement]) => { value = value.replace('{' + name + '}', replacement); });
+    return value;
+} };
+window.PPA = { csrf: 'qa', baseUrl: '/qa', studioUrl: '/admin/canvas/', maxSize: 1000, allowedExt: ['txt'], richMaxChars: 60000, richMaxImages: 8, richMaxImageBytes: 10485760 };
+window.fetch = async (url, options) => {
+    const instruction = String(options && options.body ? options.body : '');
+    const unavailable = instruction.includes('sin+vision') || instruction.includes('sin%20vision');
+    return {
+        ok: true,
+        json: async () => ({ ok: true, plan: {
+            summary: unavailable ? 'Plan basado en texto.' : 'Plan con referencia visual.',
+            items: [],
+            vision: unavailable
+                ? { status: 'unavailable', ready_images: 2, sent_images: 0, model: 'modelo-texto' }
+                : { status: 'used', ready_images: 1, sent_images: 1, model: 'google/gemini-3.7-flash' }
+        } })
+    };
+};
+</script>
+<script src="/admin/assets/js/assistant-rich-composer.js"></script>
+<script src="/admin/assets/js/assistant.js"></script>
+</body>
+</html>

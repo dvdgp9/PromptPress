@@ -6,6 +6,8 @@ namespace App\Services;
 
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
+use App\Services\AI\AIProviderCapabilities;
+use App\Services\AI\AIProviderFactory;
 use App\Services\Canvas\CanvasService;
 use Core\Database;
 
@@ -36,7 +38,7 @@ final class SiteAssistantPlanner
      * }
      * @throws \App\Services\AI\AIException
      */
-    public static function plan(int $siteId, string $requestText, string $docText = ''): array
+    public static function plan(int $siteId, string $requestText, string $docText = '', ?array $sourceBundle = null): array
     {
         $pages = self::sitePages($siteId);
 
@@ -48,22 +50,95 @@ final class SiteAssistantPlanner
 
         $capabilities = AssistantCapabilityRegistry::forSite($siteId);
 
-        $result = AIActionRunner::run(Actions::PLAN_SITE_CHANGES, [
+        $storedMedia = array_values(array_filter(
+            (array) ($sourceBundle['media'] ?? []),
+            static fn (mixed $media): bool => is_array($media) && ($media['status'] ?? '') === 'stored'
+        ));
+        $providerCapability = [
+            'provider' => '', 'model' => '', 'supports_vision' => false,
+            'status' => 'not_needed', 'reason' => 'no_images', 'source' => 'local_gate',
+        ];
+        if ($storedMedia !== []) {
+            $provider = AIProviderFactory::currentForAction($siteId, Actions::PLAN_SITE_CHANGES);
+            $providerCapability = $provider !== null
+                ? AIProviderCapabilities::forProvider($provider)
+                : array_merge($providerCapability, ['status' => 'unknown', 'reason' => 'provider_not_configured']);
+        }
+        $preparedVision = ['images' => [], 'manifest' => [], 'skipped_refs' => []];
+        if ($storedMedia !== [] && $providerCapability['supports_vision']) {
+            $preparedVision = AssistantVisionImages::prepare($sourceBundle ?? [], $siteId);
+        }
+        $visionStatus = $storedMedia === []
+            ? 'not_needed'
+            : ($providerCapability['supports_vision'] && $preparedVision['images'] !== [] ? 'used' : 'unavailable');
+        $visionContext = self::renderVisionContext(
+            $visionStatus,
+            $providerCapability,
+            $preparedVision,
+            $storedMedia
+        );
+
+        $runnerInput = [
             'request_text'   => $requestText,
             'site_map'       => self::renderSiteMap($pages),
             'capability_map' => AssistantCapabilityRegistry::renderForPrompt($capabilities),
+            'vision_context' => $visionContext,
             'document_block' => $docBlock,
-        ], $siteId);
+        ];
+        if ($visionStatus === 'used') {
+            $runnerInput['_images'] = $preparedVision['images'];
+        }
+        $result = AIActionRunner::run(Actions::PLAN_SITE_CHANGES, $runnerInput, $siteId);
 
         $data = (array) $result['data'];
-        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities);
+        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle);
+        $runnerVision = (array) ($result['meta']['vision'] ?? []);
+        if ($visionStatus === 'used' && (int) ($runnerVision['sent_images'] ?? 0) === 0) {
+            $visionStatus = 'unavailable';
+        }
 
         return [
             'summary'        => trim((string) ($data['summary'] ?? '')),
             'items'          => $items,
             'model'          => (string) ($result['model'] ?? ''),
             'estimated_cost' => $result['estimated_cost'] ?? null,
+            'vision' => [
+                'status' => $visionStatus,
+                'ready_images' => count($storedMedia),
+                'sent_images' => (int) ($runnerVision['sent_images'] ?? ($visionStatus === 'used' ? count($preparedVision['images']) : 0)),
+                'provider' => (string) ($providerCapability['provider'] ?? ''),
+                'model' => (string) ($providerCapability['model'] ?? ''),
+                'reason' => $visionStatus === 'unavailable'
+                    ? (string) ($providerCapability['reason'] ?? 'images_unavailable')
+                    : '',
+            ],
         ];
+    }
+
+    /** @param array<string,mixed> $capability @param array<string,mixed> $prepared @param array<int,array<string,mixed>> $storedMedia */
+    private static function renderVisionContext(string $status, array $capability, array $prepared, array $storedMedia): string
+    {
+        if ($status === 'not_needed') {
+            return 'No hay imágenes importadas en esta petición.';
+        }
+        if ($status === 'used') {
+            return "Se adjuntan " . count((array) $prepared['images']) . " imágenes verificadas.\n"
+                . "Cada imagen se entrega en el mismo orden que este manifiesto; cita únicamente sus media_id:\n"
+                . json_encode($prepared['manifest'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        $alts = [];
+        foreach ($storedMedia as $media) {
+            $alts[] = [
+                'ref' => (string) ($media['ref'] ?? ''),
+                'media_id' => (int) ($media['media_id'] ?? 0),
+                'alt' => mb_substr(trim((string) ($media['alt'] ?? '')), 0, 300),
+            ];
+        }
+        return "NO se ha enviado contenido visual al modelo. No afirmes haber inspeccionado imágenes.\n"
+            . "Motivo del gate: " . (string) ($capability['reason'] ?? 'capability_not_verified') . ".\n"
+            . "Solo puedes usar estas descripciones textuales; si no bastan, solicita una aclaración:\n"
+            . json_encode($alts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     // ======================================================================
@@ -149,10 +224,22 @@ final class SiteAssistantPlanner
      * @param array<int,array<string,mixed>>|null $capabilities
      * @return array<int,array<string,mixed>>
      */
-    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null): array
+    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null, ?array $sourceBundle = null): array
     {
         $capabilities ??= AssistantCapabilityRegistry::catalogForState();
         $capabilityMap = AssistantCapabilityRegistry::byId($capabilities);
+        $allowedBlocks = [];
+        foreach ((array) ($sourceBundle['blocks'] ?? []) as $block) {
+            if (is_array($block) && preg_match('/^B\d+$/', (string) ($block['id'] ?? '')) === 1) {
+                $allowedBlocks[(string) $block['id']] = true;
+            }
+        }
+        $allowedMedia = [];
+        foreach ((array) ($sourceBundle['media'] ?? []) as $media) {
+            if (is_array($media) && ($media['status'] ?? '') === 'stored' && (int) ($media['media_id'] ?? 0) > 0) {
+                $allowedMedia[(int) $media['media_id']] = true;
+            }
+        }
         $items = [];
         foreach ($rawItems as $raw) {
             if (!is_array($raw)) {
@@ -169,6 +256,8 @@ final class SiteAssistantPlanner
             $evidence    = trim((string) ($raw['evidence'] ?? ''));
             $nextAction  = trim((string) ($raw['next_action'] ?? ''));
             $requiredInputs = self::normalizeStringList($raw['required_inputs'] ?? []);
+            $sourceBlockIds = self::normalizeSourceBlockIds($raw['source_block_ids'] ?? [], $allowedBlocks);
+            $mediaIds = self::normalizeMediaIds($raw['media_ids'] ?? [], $allowedMedia);
 
             // Los modelos usan ocasionalmente sinónimos pese al vocabulario
             // cerrado del prompt. Normalizarlos evita convertir un "aplicable"
@@ -291,6 +380,8 @@ final class SiteAssistantPlanner
                 'next_action'   => $nextAction,
                 'required_inputs' => $requiredInputs,
                 'admin_path'    => (string) ($capability['admin_path'] ?? ''),
+                'source_block_ids' => $sourceBlockIds,
+                'media_ids' => $mediaIds,
             ];
         }
         return $items;
@@ -311,6 +402,33 @@ final class SiteAssistantPlanner
             if (count($out) >= 12) {
                 break;
             }
+        }
+        return $out;
+    }
+
+    /** @param array<string,bool> $allowed @return string[] */
+    private static function normalizeSourceBlockIds(mixed $value, array $allowed): array
+    {
+        if (!is_array($value)) return [];
+        $out = [];
+        foreach ($value as $id) {
+            $id = trim((string) $id);
+            if (isset($allowed[$id]) && !in_array($id, $out, true)) $out[] = $id;
+            if (count($out) >= 120) break;
+        }
+        return $out;
+    }
+
+    /** @param array<int,bool> $allowed @return int[] */
+    private static function normalizeMediaIds(mixed $value, array $allowed): array
+    {
+        if (!is_array($value)) return [];
+        $out = [];
+        foreach ($value as $id) {
+            if (!is_int($id) && !ctype_digit((string) $id)) continue;
+            $id = (int) $id;
+            if (isset($allowed[$id]) && !in_array($id, $out, true)) $out[] = $id;
+            if (count($out) >= AssistantVisionImages::MAX_IMAGES) break;
         }
         return $out;
     }

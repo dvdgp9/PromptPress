@@ -163,7 +163,7 @@ class AssistantController
 
         @set_time_limit(180);
         try {
-            $plan = SiteAssistantPlanner::plan($siteId, $requestText, $docText);
+            $plan = SiteAssistantPlanner::plan($siteId, $requestText, $docText, $normalized);
         } catch (AIException $e) {
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
             error_log('[assistant plan] error_id=' . $errorId . ' site=' . $siteId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());

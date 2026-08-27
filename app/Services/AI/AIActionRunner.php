@@ -100,15 +100,24 @@ final class AIActionRunner
 
         $built = PromptBuilder::forAction($action, $input, $siteId, $extras);
 
-        // Visión (MBv1): si el input trae imágenes, se hilan a las options para que
-        // el provider (OpenRouter/OpenAI) las adjunte en formato multimodal.
-        if (!empty($input['_images']) && is_array($input['_images'])) {
-            $built['options']['images'] = $input['_images'];
-        }
-
         $provider = AIProviderFactory::currentForAction($siteId, $action);
         if ($provider === null) {
             throw new AIException('No hay proveedor de IA configurado para este sitio.');
+        }
+
+        // Visión (MBv1): si el input trae imágenes, se hilan a las options para que
+        // el provider las adjunte únicamente tras verificar provider + modelo.
+        // Fallar cerrado evita que el planner afirme haber visto una captura
+        // cuando la API de modelos no confirmó esa modalidad.
+        if (!empty($input['_images']) && is_array($input['_images'])) {
+            $vision = AIProviderCapabilities::forProvider($provider);
+            $vision['requested_images'] = count($input['_images']);
+            $vision['sent_images'] = 0;
+            if ($vision['supports_vision']) {
+                $built['options']['images'] = array_slice($input['_images'], 0, 4);
+                $vision['sent_images'] = count($built['options']['images']);
+            }
+            $built['meta']['vision'] = $vision;
         }
 
         try {
@@ -272,6 +281,12 @@ final class AIActionRunner
             }
             if (isset($item['required_inputs']) && !is_array($item['required_inputs'])) {
                 throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "required_inputs" válido.');
+            }
+            if (isset($item['source_block_ids']) && !is_array($item['source_block_ids'])) {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "source_block_ids" válido.');
+            }
+            if (isset($item['media_ids']) && !is_array($item['media_ids'])) {
+                throw new AIException('El item #' . ($i + 1) . ' del plan no tiene "media_ids" válido.');
             }
         }
         $warnings = [];

@@ -5855,7 +5855,7 @@ mismo cambio.
 - [x] AR1 — Normalizador semántico aprobado por el usuario (26/08/2026)
 - [x] AR2 — Composer enriquecido aprobado por el usuario (26/08/2026)
 - [ ] AR3 — Implementado y probado; pendiente validación del usuario en producción
-- [ ] AR4 — Planner multimodal + capacidades por provider/modelo
+- [ ] AR4 — Implementado y probado; pendiente revisión del usuario
 - [ ] AR5 — Persistencia de referencias + ejecución fiel
 - [ ] AR6 — Regresión y QA real
 
@@ -6105,6 +6105,47 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   mueve el foco a la primera acción «Elegir de Medios».
 - AR3 sigue pendiente de revalidación en producción; no se ha hecho push, ZIP ni
   despliegue como parte de esta corrección.
+
+### AR4 iniciada (27/08/2026, Executor)
+
+- El usuario aprueba continuar y agrupar el siguiente paquete de producción tras
+  cerrar la fase y realizar una pasada conjunta de ajustes.
+- La corrección UX de Gmail queda aislada en el commit `cc328e0`.
+- Documentación oficial de OpenRouter reverificada: las imágenes viajan como
+  partes `image_url` y la capacidad autoritativa se publica en
+  `architecture.input_modalities`. El gate será explícito y conservador; un
+  fallo de descubrimiento nunca se interpretará como soporte visual.
+- Orden de implementación AR4: redacción global de `_images` en logs, gate de
+  provider/modelo, preparación acotada de hasta cuatro medios verificados,
+  referencias tipadas del plan y degradación visible sin visión.
+
+### AR4 preparada para revisión (27/08/2026, Executor)
+
+- Nuevo `AIProviderCapabilities`: OpenRouter consulta/cachea seis horas el
+  endpoint oficial del modelo y solo habilita visión si
+  `architecture.input_modalities` contiene `image`. Fallo de red, modelo ausente
+  o provider sin transporte implementado degradan a texto; Anthropic permanece
+  explícitamente deshabilitado en esta fase.
+- `AIActionRunner` aplica el gate global antes de adjuntar imágenes y
+  `AILogger::sanitizeForStorage()` redacta `_images` en éxito, fallo de provider
+  y fallo de parseo. El log conserva únicamente MIME, bytes, dimensiones,
+  `media_id` y SHA-256; nunca base64, binarios ni URLs privadas.
+- Nuevo `AssistantVisionImages`: acepta solo medios `stored` del sitio, no hace
+  red, limita a cuatro JPEG/PNG/WebP, convierte GIF a frame PNG, rechaza más de
+  10 MB/25 MP y redecodifica a un máximo de 1.600 px antes de enviar.
+- `PLAN_SITE_CHANGES` recibe manifiesto visual y devuelve
+  `source_block_ids`/`media_ids`; el backend elimina ids inventados, ajenos,
+  pendientes o repetidos. Sin visión, el prompt prohíbe afirmar que se inspeccionó
+  una imagen y exige `needs_input` cuando el alt no basta.
+- La UI muestra «La IA ha analizado N imágenes con modelo» o la degradación
+  «El plan se ha basado solo en el texto», con singular/plural en ES/EN/FR/PT.
+- Pruebas nuevas: redacción de logs 7/7, capacidades 5/5, preparación visual
+  5/5, contrato multimodal 5/5 y smoke real OpenRouter 5/5. El modelo activo
+  `google/gemini-3.7-flash` fue verificado con entrada `text + image`; devolvió
+  referencias válidas `B1/B2` y `media_id=302`. El log sintético se eliminó.
+- Regresión verde de normalizador, Medios, capacidades, planner, i18n, onboarding
+  y composer. QA visual verde para visión usada y degradación solo texto. No se
+  crearon páginas ni jobs, no se aplicaron cambios y no se tocó producción.
 
 ## Lessons (ASSISTANT-RICH)
 
