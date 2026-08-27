@@ -6410,3 +6410,14 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   resumen «2 imágenes», ninguna descarga/alta y consola limpia.
 - El arrastre directo no cambia: los archivos reales del clipboard siguen el
   camino `captured` → upload → medio verificado.
+
+### AR7.2 preparada para publicación (27/08/2026, Executor)
+
+- Filtro versionado en `d23af04`. AR7.2 sustituye los ZIP AR7/AR7.1 e incluye
+  tanto el arreglo de permisos como el tratamiento de emojis:
+  `deliverables/promptpress-1.1.0-assistant-rich-ar7.2.zip`.
+- Paquete: 1.047 archivos de aplicación, 2,6 MB, 1.210 entradas con directorios;
+  `unzip -t` verde. Composer/importador/tests presentes; configuración,
+  credenciales, `.cursor`, logs y uploads ausentes.
+- SHA-256:
+  `ca5e6afbbce71042e2daed924902742e298ffb86f88795d9d44b02fdf9efa8a0`.
