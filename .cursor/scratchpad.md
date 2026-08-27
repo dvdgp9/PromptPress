@@ -6147,6 +6147,47 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   y composer. QA visual verde para visión usada y degradación solo texto. No se
   crearon páginas ni jobs, no se aplicaron cambios y no se tocó producción.
 
+### AR5 iniciada (27/08/2026, Executor)
+
+- El usuario autoriza continuar con AR5 y mantener agrupados el siguiente push y
+  paquete de producción hasta cerrar la fase.
+- Se implementará un sobre fuente firmado y de vida corta entre `/plan` y
+  `/apply`: contiene el bundle semántico normalizado, pero el navegador no puede
+  modificarlo sin invalidar la firma. El job persistirá una copia depurada al
+  confirmarse; no se guardará HTML crudo.
+- `createJob()` volverá a validar ids de bloque, ids de medios, propiedad por
+  sitio, límites y páginas editables dentro de una transacción. Cada item llevará
+  únicamente sus referencias y `stepJob()` reconstruirá el fragmento literal y
+  las rutas actuales verificadas justo antes de editar.
+- Primero se añaden pruebas de firma/manipulación y de construcción literal del
+  contexto; después migración, integración HTTP y regresión del Assistant.
+
+### AR5 preparada para revisión (27/08/2026, Executor)
+
+- Nuevo `AssistantSourceEnvelope`: el bundle normalizado viaja comprimido con
+  HMAC-SHA256, scope de sitio y caducidad de dos horas. La firma liga también
+  los items del plan; cambiar página, instrucción o referencias después de la
+  propuesta obliga a volver a planificar. El sobre nunca contiene HTML ni rutas
+  de medios confiadas al navegador.
+- Migración `2026_08_27_assistant_source_bundle.sql` y esquema de instalación
+  añaden `source_bundle_json`, `source_block_ids_json` y `media_ids_json`.
+  Migración aplicada en desarrollo y segunda ejecución idempotente verificada.
+- `createJob()` vuelve a sanear el bundle, consulta en BD la propiedad/ruta de
+  cada medio, descarta ids inexistentes, ordena bloques como en el documento y
+  guarda job+items en una transacción. Fuentes de más de 24.000 caracteres por
+  paso se dividen solo entre bloques completos; nunca en mitad de un párrafo.
+- `stepJob()` reconstruye exclusivamente las referencias del item justo antes de
+  llamar al Canvas. El prompt delimita el material como datos no confiables,
+  exige copiar literalmente cuando se incorpora texto y enumera las rutas
+  internas verificadas de los medios autorizados.
+- Pruebas nuevas: sobre/firma 7/7 y persistencia/contexto 9/9. Regresión verde de
+  todas las suites `assistant*`, taxonomía y planificación del Assistant,
+  composer JS, referencias multimedia, Canvas runtime/settings/images/box y
+  sintaxis JS/PHP. No se hizo ninguna llamada IA ni se modificó una página; los
+  jobs sintéticos se eliminaron al terminar.
+- AR5 queda implementada y pendiente de validación del usuario. Push, ZIP y QA
+  real sobre dos páginas permanecen agrupados para la pasada conjunta acordada.
+
 ## Lessons (ASSISTANT-RICH)
 
 - “Aceptar rich text” y “mandar HTML al modelo” no son equivalentes. El valor

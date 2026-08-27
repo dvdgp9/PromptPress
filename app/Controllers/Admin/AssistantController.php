@@ -5,6 +5,7 @@ namespace App\Controllers\Admin;
 use App\Services\AI\AIException;
 use App\Services\AssistantContentNormalizer;
 use App\Services\AssistantMediaReferences;
+use App\Services\AssistantSourceEnvelope;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
 use App\Services\TextExtractor;
@@ -164,6 +165,13 @@ class AssistantController
         @set_time_limit(180);
         try {
             $plan = SiteAssistantPlanner::plan($siteId, $requestText, $docText, $normalized);
+            if ($normalized !== null) {
+                $plan['source_token'] = AssistantSourceEnvelope::issue(
+                    $siteId,
+                    $normalized,
+                    is_array($plan['items'] ?? null) ? $plan['items'] : []
+                );
+            }
         } catch (AIException $e) {
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
             error_log('[assistant plan] error_id=' . $errorId . ' site=' . $siteId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
@@ -208,7 +216,27 @@ class AssistantController
         $requestText = trim((string) Request::post('request_text', ''));
         $summary     = trim((string) Request::post('summary', ''));
 
-        $result = SiteAssistantJobs::createJob($siteId, $requestText, $summary, $items, Auth::id());
+        $source = null;
+        $sourceToken = trim((string) Request::post('source_token', ''));
+        if ($sourceToken !== '') {
+            try {
+                $source = AssistantSourceEnvelope::open($sourceToken, $siteId);
+            } catch (\InvalidArgumentException $e) {
+                Response::json(['ok' => false, 'error' => $e->getMessage()], 422);
+            }
+        } else {
+            foreach ($items as $item) {
+                if (is_array($item)
+                    && (($item['source_block_ids'] ?? []) !== [] || ($item['media_ids'] ?? []) !== [])) {
+                    Response::json([
+                        'ok' => false,
+                        'error' => 'El material confirmado ya no está disponible. Vuelve a proponer el plan.',
+                    ], 422);
+                }
+            }
+        }
+
+        $result = SiteAssistantJobs::createJob($siteId, $requestText, $summary, $items, Auth::id(), $source);
         if (!$result['ok']) {
             Response::json(['ok' => false, 'error' => (string) $result['error']], 422);
         }

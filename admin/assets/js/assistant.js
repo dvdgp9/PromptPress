@@ -455,7 +455,8 @@
                 _csrf: cfg.csrf,
                 items: JSON.stringify(applicable),
                 request_text: plan._request || '',
-                summary: plan.summary || ''
+                summary: plan.summary || '',
+                source_token: plan.source_token || ''
             });
             const res = await fetch(cfg.baseUrl + '/apply', { method: 'POST', body });
             const data = await res.json().catch(() => ({}));
