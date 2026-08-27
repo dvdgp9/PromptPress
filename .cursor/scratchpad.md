@@ -6333,8 +6333,8 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   pruebas AR7; excluye configuración, credenciales, `.cursor`, logs y uploads.
 - SHA-256:
   `55e07028301d1534f0708648e8930e428d3dca596d7eaa6f7609048507ce2036`.
-- Pendiente en este punto: push normal de los commits de AR7 a `origin/main` y
-  comprobación exacta de que el hash remoto coincide con HEAD local.
+- Push normal de AR7 completado en `origin/main`; la comprobación final confirma
+  que el hash remoto coincide exactamente con HEAD local y el árbol queda limpio.
 
 ## Lesson (AR7)
 
