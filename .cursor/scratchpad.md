@@ -6323,6 +6323,19 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   normalizador 16/16, referencias 4/4, visión 5/5, planner 5/5, source envelope
   7/7, contexto de jobs 9/9, responsive 7/7, lint PHP/JS y `git diff --check`.
 
+### AR7 preparada para publicación (27/08/2026, Executor)
+
+- Implementación versionada en `8bff515` y paquete generado mediante el
+  empaquetador oficial en
+  `deliverables/promptpress-1.1.0-assistant-rich-ar7.zip`.
+- ZIP: 1.047 archivos de aplicación, 2,6 MB, 1.210 entradas incluyendo
+  directorios; `unzip -t` sin errores. Incluye `RemoteImageImporter`, composer y
+  pruebas AR7; excluye configuración, credenciales, `.cursor`, logs y uploads.
+- SHA-256:
+  `55e07028301d1534f0708648e8930e428d3dca596d7eaa6f7609048507ce2036`.
+- Pendiente en este punto: push normal de los commits de AR7 a `origin/main` y
+  comprobación exacta de que el hash remoto coincide con HEAD local.
+
 ## Lesson (AR7)
 
 - `FILTER_FLAG_NO_RES_RANGE` de PHP no bloquea por sí solo rangos como CGNAT
