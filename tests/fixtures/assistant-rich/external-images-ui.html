@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QA · imágenes externas del Assistant</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+</head>
+<body>
+<main class="pp-admin-main">
+    <div class="ppa-composer">
+        <div class="ppa-composer__row">
+            <div class="ppa-composer__editor" id="qa-editor" contenteditable="true" role="textbox"
+                 aria-label="Petición para el asistente"></div>
+            <textarea id="qa-fallback" hidden></textarea>
+            <button type="button" class="pp-btn pp-btn--primary ppa-composer__send" id="qa-send">Proponer plan</button>
+        </div>
+        <div class="ppa-composer__status" id="qa-status" role="status" aria-live="polite" hidden></div>
+    </div>
+</main>
+<script src="/admin/assets/js/assistant-rich-composer.js"></script>
+<script>
+const qaMessages = {
+    'js.as.image_external_marker': 'Imagen externa no importada',
+    'js.as.external_images_summary': 'El correo no incluyó el archivo de {n} imágenes. Puedes analizar el texto o sustituir solo las que sean importantes.',
+    'js.as.continue_without_images': 'Continuar solo con el texto',
+    'js.as.review_images': 'Revisar imágenes',
+    'js.as.external_images_ignored': 'Se continuará solo con el texto; se omitieron {n} imágenes externas.',
+    'js.as.choose_media': 'Elegir de Medios',
+    'js.as.remove_image': 'Quitar imagen',
+    'js.as.images_blocking': 'Revisa las imágenes pendientes.',
+    'js.as.images_ready': '{n} imágenes listas en Medios.'
+};
+const qaTranslate = (key, vars) => {
+    let text = qaMessages[key] || key;
+    Object.entries(vars || {}).forEach(([name, value]) => { text = text.replace('{' + name + '}', value); });
+    return text;
+};
+const qaSend = document.getElementById('qa-send');
+const qaComposer = new window.PPARichComposer.Composer({
+    editor: document.getElementById('qa-editor'),
+    fallback: document.getElementById('qa-fallback'),
+    status: document.getElementById('qa-status'),
+    t: qaTranslate,
+    onChange: (state) => { qaSend.disabled = !state.valid || state.empty; }
+}).enhance();
+qaComposer.editor.appendChild(document.createElement('p')).textContent = 'Antes de las capturas';
+qaComposer.editor.appendChild(qaComposer.createImagePlaceholder('remote_url', 'https://ci3.googleusercontent.com/one', 'Primera'));
+qaComposer.editor.appendChild(document.createElement('p')).textContent = 'Entre ambas capturas';
+qaComposer.editor.appendChild(qaComposer.createImagePlaceholder('remote_url', 'https://lh3.googleusercontent.com/two', 'Segunda'));
+qaComposer.editor.appendChild(document.createElement('p')).textContent = 'Después de las capturas';
+qaComposer.sync();
+qaComposer.refreshMediaStatus();
+</script>
+</body>
+</html>

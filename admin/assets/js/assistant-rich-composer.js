@@ -87,6 +87,25 @@
         };
     }
 
+    function summarizeImageStates(images) {
+        const values = images instanceof Map ? Array.from(images.values()) : Array.from(images || []);
+        const external = values.filter((image) => image && (image.kind === 'remote_url' || image.kind === 'unresolved'));
+        return {
+            total: values.length,
+            stored: values.filter((image) => image && image.kind === 'stored').length,
+            external: external.length,
+            blocking: values.filter((image) => !image || image.kind !== 'stored').length,
+            externalIds: external.map((image) => String(image.id || '')).filter(Boolean)
+        };
+    }
+
+    function discardExternalImageReferences(images) {
+        if (!(images instanceof Map)) return [];
+        const ids = summarizeImageStates(images).externalIds;
+        ids.forEach((id) => images.delete(id));
+        return ids;
+    }
+
     function plainTextToHtml(value) {
         const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n');
         const parts = [];
@@ -277,7 +296,7 @@
             label.className = 'ppa-pasted-image__label';
             label.textContent = kind === 'captured'
                 ? this.t('js.as.image_pending')
-                : this.t('js.as.image_unresolved');
+                : this.t('js.as.image_external_marker');
             caption.appendChild(label);
             const actions = document.createElement('span');
             actions.className = 'ppa-pasted-image__actions';
@@ -291,6 +310,7 @@
                 this.removeImage(id);
                 figure.remove();
                 this.sync();
+                this.refreshMediaStatus();
             });
             actions.appendChild(remove);
             caption.appendChild(actions);
@@ -399,11 +419,69 @@
 
         refreshMediaStatus() {
             const state = this.state();
-            if (state.blockingImages > 0) {
+            if (state.externalImages > 0) {
+                this.showExternalImagesSummary(state.externalImages);
+            } else if (state.blockingImages > 0) {
                 this.setStatus(this.t('js.as.images_blocking'), 'warning');
             } else if (state.images > 0) {
                 this.setStatus(this.t('js.as.images_ready', { n: state.images }), 'success');
+            } else if (this.status && this.status.dataset.kind === 'warning') {
+                this.clearStatus();
             }
+        }
+
+        showExternalImagesSummary(count) {
+            if (!this.status) return;
+            this.status.replaceChildren();
+            this.status.dataset.kind = 'warning';
+            this.status.hidden = false;
+
+            const message = document.createElement('span');
+            message.className = 'ppa-composer__status-message';
+            message.textContent = this.t('js.as.external_images_summary', { n: count });
+            this.status.appendChild(message);
+
+            const actions = document.createElement('span');
+            actions.className = 'ppa-composer__status-actions';
+            const continueButton = document.createElement('button');
+            continueButton.type = 'button';
+            continueButton.className = 'ppa-composer__status-action ppa-composer__status-action--primary';
+            continueButton.textContent = this.t('js.as.continue_without_images');
+            continueButton.addEventListener('click', () => this.continueWithoutExternalImages());
+            actions.appendChild(continueButton);
+
+            const reviewButton = document.createElement('button');
+            reviewButton.type = 'button';
+            reviewButton.className = 'ppa-composer__status-action';
+            reviewButton.textContent = this.t('js.as.review_images');
+            reviewButton.addEventListener('click', () => this.focusFirstExternalImage());
+            actions.appendChild(reviewButton);
+            this.status.appendChild(actions);
+        }
+
+        continueWithoutExternalImages() {
+            const removedIds = discardExternalImageReferences(this.images);
+            removedIds.forEach((id) => {
+                const figure = this.editor.querySelector('[data-ppa-pasted-image="' + id + '"]');
+                if (figure) figure.remove();
+            });
+            this.sync();
+            const state = this.state();
+            if (state.blockingImages > 0) {
+                this.refreshMediaStatus();
+            } else {
+                this.setStatus(this.t('js.as.external_images_ignored', { n: removedIds.length }), 'info');
+            }
+        }
+
+        focusFirstExternalImage() {
+            const firstId = summarizeImageStates(this.images).externalIds[0];
+            if (!firstId) return;
+            const figure = this.editor.querySelector('[data-ppa-pasted-image="' + firstId + '"]');
+            if (!figure) return;
+            const choose = figure.querySelector('.ppa-pasted-image__choose');
+            if (choose) choose.focus();
+            if (typeof figure.scrollIntoView === 'function') figure.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
 
         removeImage(id) {
@@ -458,13 +536,14 @@
         }
 
         state() {
-            const blockingImages = Array.from(this.images.values()).filter((image) => image.kind !== 'stored').length;
+            const imageState = summarizeImageStates(this.images);
             return {
                 empty: this.getPlainText() === '' && this.images.size === 0,
-                valid: this.getPlainText().length <= this.maxChars && blockingImages === 0,
+                valid: this.getPlainText().length <= this.maxChars && imageState.blocking === 0,
                 chars: this.getPlainText().length,
                 images: this.images.size,
-                blockingImages: blockingImages
+                blockingImages: imageState.blocking,
+                externalImages: imageState.external
             };
         }
 
@@ -545,6 +624,8 @@
         parseDataImage: parseDataImage,
         selectClipboardImages: selectClipboardImages,
         plainTextToHtml: plainTextToHtml,
-        normalizeMediaItem: normalizeMediaItem
+        normalizeMediaItem: normalizeMediaItem,
+        summarizeImageStates: summarizeImageStates,
+        discardExternalImageReferences: discardExternalImageReferences
     };
 }));

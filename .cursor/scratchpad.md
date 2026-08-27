@@ -6087,6 +6087,25 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - No se ha desplegado desde este entorno. AR3 continúa pendiente únicamente de
   la validación manual que el usuario realizará en producción.
 
+### AR3 · corrección UX para imágenes externas de Gmail (27/08/2026, Executor)
+
+- La prueba en producción confirmó que Gmail entrega las imágenes del correo
+  como referencias externas, no como archivos de portapapeles. El comportamiento
+  seguro era correcto, pero repetir el mismo aviso y bloquear todo el análisis
+  obligaba al operador a resolver una incidencia normal imagen por imagen.
+- El composer muestra ahora un único resumen con el número de imágenes y dos
+  acciones: «Continuar solo con el texto» y «Revisar imágenes». Cada posición se
+  conserva como marcador breve para poder sustituir solo las imágenes relevantes.
+- Continuar descarta exclusivamente referencias `remote_url`/`unresolved`; una
+  subida real fallida sigue bloqueando y conserva «Reintentar». No se añaden
+  descargas automáticas de URLs ni se amplía la superficie SSRF.
+- Pruebas TDD del composer: 9/9. Regresión verde de normalizador, referencias de
+  Medios, capacidades, planificación e i18n. QA visual local: aviso único para
+  dos imágenes, continuar habilita «Proponer plan» sin perder el texto y revisar
+  mueve el foco a la primera acción «Elegir de Medios».
+- AR3 sigue pendiente de revalidación en producción; no se ha hecho push, ZIP ni
+  despliegue como parte de esta corrección.
+
 ## Lessons (ASSISTANT-RICH)
 
 - “Aceptar rich text” y “mandar HTML al modelo” no son equivalentes. El valor
@@ -6137,3 +6156,6 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - Nunca aceptar la ruta interna enviada junto al `media_id`: resolver siempre la
   fila por `id + site_id` y reconstruir el path desde la BD evita tanto cruces
   multisitio como sustitución de ruta manipulada.
+- Una referencia externa procedente de un correo es un caso normal, no un error
+  excepcional. Debe resumirse y ofrecer degradación explícita a texto; solo los
+  fallos de una subida que sí tenía bytes deben mantener el bloqueo de error.

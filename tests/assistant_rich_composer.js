@@ -87,6 +87,32 @@ test('media_response_requires_id_and_internal_upload_path', () => {
     assert.equal(Rich.normalizeMediaItem({id: 0, path: '/storage/uploads/1/photo.png'}), null);
 });
 
+test('external_references_are_separated_from_real_upload_failures', () => {
+    assert.deepEqual(Rich.summarizeImageStates([
+        { id: 'one', kind: 'remote_url' },
+        { id: 'two', kind: 'unresolved' },
+        { id: 'three', kind: 'stored' },
+        { id: 'four', kind: 'upload_failed' }
+    ]), {
+        total: 4,
+        stored: 1,
+        external: 2,
+        blocking: 3,
+        externalIds: ['one', 'two']
+    });
+});
+
+test('continue_without_images_discards_only_external_references', () => {
+    const images = new Map([
+        ['gmail-1', { id: 'gmail-1', kind: 'remote_url' }],
+        ['gmail-2', { id: 'gmail-2', kind: 'unresolved' }],
+        ['uploaded', { id: 'uploaded', kind: 'stored' }],
+        ['failed', { id: 'failed', kind: 'upload_failed' }]
+    ]);
+    assert.deepEqual(Rich.discardExternalImageReferences(images), ['gmail-1', 'gmail-2']);
+    assert.deepEqual(Array.from(images.keys()), ['uploaded', 'failed']);
+});
+
 if (!process.exitCode) {
     process.stdout.write('ALL PASS (' + passed + ')\n');
 }
