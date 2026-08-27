@@ -156,9 +156,9 @@ $render = CanvasService::renderPublic($pageId, $siteId);
 check('render_has_wrapper', str_contains($render['html'], 'id="pp-canvas-' . $pageId . '"'), mb_substr($render['html'], 0, 200));
 check('render_css_scoped', str_contains($render['html'], '#pp-canvas-' . $pageId . ' .hero'), mb_substr($render['html'], -300));
 
-// Anti-slop: em-dash normalizado a guion
+// El contenido confirmado conserva su tipografía literal.
 $r = CanvasSanitizer::sanitizeHtml('<section data-pp-section="h"><h1>Web rápida — y clara</h1></section>');
-check('emdash_normalized', !str_contains($r['html'], "\xE2\x80\x94") && str_contains($r['html'], 'rápida - y clara'), $r['html']);
+check('confirmed_typography_preserved', str_contains($r['html'], 'rápida — y clara'), $r['html']);
 
 // FH5 — los comportamientos declarativos pasan el sanitizado intactos
 $r = CanvasSanitizer::sanitizeHtml('<section data-pp-section="faq"><div data-pp-behavior="accordion"><details><summary>Pregunta</summary><p>Respuesta</p></details></details></div><div data-pp-behavior="reveal" data-pp-reveal-delay="2"><p>Tarjeta</p></div><span data-pp-behavior="counter">120</span></section>');

@@ -6188,6 +6188,43 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
 - AR5 queda implementada y pendiente de validación del usuario. Push, ZIP y QA
   real sobre dos páginas permanecen agrupados para la pasada conjunta acordada.
 
+### AR6 iniciada (27/08/2026, Executor)
+
+- El usuario autoriza la regresión/QA end-to-end y solicita publicar después en
+  GitHub. Se validarán primero suite, migraciones, paquete, consola, responsive,
+  ingesta/planificación y ejecución reversible; el push se hará solo tras quedar
+  verde y sin residuos de prueba.
+
+### AR6 preparada para revisión y publicación (27/08/2026, Executor)
+
+- QA real en `/admin/assistant`: pegado HTML tipo Gmail con lista, negrita,
+  cursiva e imagen remota; el aviso agrupado apareció correctamente, se sustituyó
+  la referencia desde Medios y Gemini 3.7 Flash confirmó análisis visual.
+- El plan detectó dos páginas Canvas temporales y dos secciones distintas. Se
+  aplicaron ambos items, quedaron en `draft`, cada uno creó una versión y el job
+  persistió solo `B2`/`B3`; la imagen no necesaria no se asignó a los cambios.
+- El primer recorrido descubrió una regresión real: `CanvasSanitizer` convertía
+  rayas tipográficas `—/–` en guiones ASCII, por lo que el texto no era literal
+  aunque el executor lo hubiera copiado bien. Corregido: el saneador ya no muta
+  puntuación confirmada; el anti-slop permanece responsabilidad del prompt.
+- Recorrido repetido tras el fix: los dos textos llegaron byte por byte con su
+  raya larga; ambos borradores siguieron sin publicar. `Deshacer` se validó en
+  el Studio para las dos páginas (texto ausente y `Rehacer` disponible).
+- Logs de las seis llamadas reales verificados sin base64 ni `data:image`; bundle
+  del job sin HTML crudo. Consola limpia en Assistant y en una carga nueva del
+  Studio. La emulación de viewport del navegador integrado no aplicó el override
+  solicitado (reportó 1280 px); se verificó el contrato CSS móvil a 700 px y la
+  suite del composer, pero la comprobación visual exacta a 390 px queda para la
+  prueba del ZIP en producción.
+- Regresión verde: normalizador, Medios y aislamiento, planner multimodal,
+  sobre/firma, persistencia/contexto, capacidades, Canvas sanitizer/runtime,
+  envelopes, contexto conversacional, cancelación, imágenes, editor de cajas,
+  composer JS y lint PHP/JS. La prueba destructiva del instalador de updates no
+  se ejecutó sobre el workspace; el propio constructor reabre y valida el ZIP.
+- Limpieza completada: deshechos ambos cambios y eliminadas únicamente las dos
+  páginas temporales 2607/2608, jobs 7/10 y logs QA 1455–1460. Eran fixtures
+  locales recuperables solo desde la copia del entorno; no se tocó contenido real.
+
 ## Lessons (ASSISTANT-RICH)
 
 - “Aceptar rich text” y “mandar HTML al modelo” no son equivalentes. El valor

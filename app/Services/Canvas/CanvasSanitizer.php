@@ -89,12 +89,11 @@ final class CanvasSanitizer
             if ($node instanceof \DOMText) {
                 $clean = preg_replace(self::EMOJI_REGEX, '', $node->textContent) ?? $node->textContent;
                 if ($clean !== $node->textContent) $warnings[] = 'emoji_removed';
-                // Anti-slop: la raya larga (—/–) es el tell nº1 de texto-IA.
-                // Se normaliza a guion con espacios. Determinista, no depende
-                // de que el modelo obedezca el prompt.
-                $dashed = preg_replace('/\s*[\x{2014}\x{2013}]\s*/u', ' - ', $clean) ?? $clean;
-                if ($dashed !== $clean) $warnings[] = 'emdash_normalized';
-                if ($dashed !== $node->textContent) $node->nodeValue = $dashed;
+                // Las rayas tipográficas forman parte del contenido del cliente.
+                // Normalizarlas aquí rompía la copia literal del Assistant y
+                // también textos editoriales escritos a mano. El anti-slop debe
+                // resolverse en prompts, nunca mutando texto ya confirmado.
+                if ($clean !== $node->textContent) $node->nodeValue = $clean;
                 continue;
             }
             if (!$node instanceof \DOMElement) continue;
