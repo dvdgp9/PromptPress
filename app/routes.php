@@ -203,6 +203,8 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/canvas/{id}/insert-form', [CanvasController::class, 'insertForm']); // FORMS F5
     $r->post('/canvas/{id}/insert-booking', [CanvasController::class, 'insertBooking']); // MODULOS M2
     $r->post('/canvas/{id}/insert-resources', [CanvasController::class, 'insertResources']); // RESOURCES R6
+    $r->get('/canvas/{id}/copy-sources',  [CanvasController::class, 'copySources']);  // STUDIO-UX F6
+    $r->post('/canvas/{id}/copy-section', [CanvasController::class, 'copySection']);  // STUDIO-UX F6
     $r->get('/canvas/{id}/versions',  [CanvasController::class, 'versions']);
     $r->post('/canvas/{id}/restore',  [CanvasController::class, 'restore']);
     $r->post('/canvas/{id}/undo',     [CanvasController::class, 'undo']);

@@ -97,7 +97,7 @@ try {
     );
     check_re(
         'preview usa explícitamente el idioma de la página',
-        str_contains($controller, 'CanvasService::renderPublic($pageId, $siteId, $pageLang)')
+        str_contains($controller, 'CanvasService::renderDraft($pageId, $siteId, $pageLang)')
             && str_contains($controller, "e(\$pageLang) . '\"><head>'")
     );
 

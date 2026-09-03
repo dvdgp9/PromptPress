@@ -61,6 +61,8 @@ $icon = static function (string $name): string {
       data-insert-form-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-form')) ?>"
       data-insert-booking-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-booking')) ?>"
       data-insert-resources-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-resources')) ?>"
+      data-copy-sources-url="<?= e(base_url('admin/canvas/' . $pageId . '/copy-sources')) ?>"
+      data-copy-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/copy-section')) ?>"
       data-media-url="<?= e(base_url('admin/media/library')) ?>"
       data-media-upload-url="<?= e(base_url('admin/media')) ?>"
       data-bank-search-url="<?= e(base_url('admin/media/bank/search')) ?>"
@@ -77,7 +79,8 @@ $icon = static function (string $name): string {
       data-clean-preview-url="<?= e(base_url('admin/canvas/' . $pageId . '/preview') . '?clean=1') ?>"
       data-can-undo="<?= !empty($history['can_undo']) ? '1' : '0' ?>"
       data-can-redo="<?= !empty($history['can_redo']) ? '1' : '0' ?>"
-      data-published="<?= $isPublished ? '1' : '0' ?>">
+      data-published="<?= $isPublished ? '1' : '0' ?>"
+      data-has-unpublished="<?= !empty($history['has_unpublished']) ? '1' : '0' ?>">
 
 <header class="cvstudio-top">
   <div class="cvstudio-top__zone cvstudio-top__left">
@@ -85,9 +88,7 @@ $icon = static function (string $name): string {
     <div class="cvstudio-title">
       <strong><?= e($page['title']) ?></strong>
       <span class="cvstudio-titlemeta">
-        <span class="cvstudio-status <?= $isPublished ? 'is-live' : '' ?>" id="studio-status">
-          <?= $isPublished ? 'Publicada' : 'Borrador' ?>
-        </span>
+        <span class="cvstudio-status <?= $isPublished ? 'is-live' : '' ?>" id="studio-status"></span>
         <span class="cvstudio-saved" id="studio-saved" hidden><?= e(__('js.saved')) ?></span>
       </span>
     </div>
@@ -174,16 +175,6 @@ $icon = static function (string $name): string {
               placeholder="<?= e(__('cv.chat_placeholder')) ?>"></textarea>
             <p class="cvstudio-insert__hint"><?= e(__('cv.reference_hint')) ?></p>
             <div class="cvstudio-chat__formfoot">
-              <?php if (!empty($aiModels)): ?>
-              <label class="cvstudio-model" title="<?= e(__('cv.model_title')) ?>">
-                <span class="cvstudio-model__icon" aria-hidden="true">✦</span>
-                <select id="chat-model" aria-label="<?= e(__('cv.model_aria')) ?>">
-                  <?php foreach ($aiModels as $m): ?>
-                  <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </label>
-              <?php endif; ?>
               <button type="submit" id="chat-send" class="cvstudio-primary-btn"><?= e(__('cv.apply_change')) ?></button>
               <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden><?= e(__('cv.stop')) ?></button>
             </div>
@@ -230,6 +221,32 @@ $icon = static function (string $name): string {
           </button>
           <div class="cvstudio-menu__pop cvstudio-block-picker__menu" id="studio-block-picker-menu" hidden
                role="group" aria-label="<?= e(__('cv.block_picker_button')) ?>">
+            <?php /* STUDIO-UX F8 — Lo primero es partir de algo que YA funciona en
+                     esta página; las plantillas neutras van al final porque caen
+                     desentonando dentro de una página con carácter. */ ?>
+            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_reuse_category')) ?></strong>
+
+            <div class="cvstudio-insert" id="studio-duplicate-part">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-duplicate-part-btn"
+                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-duplicate-part-menu">
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
+                <span><strong><?= e(__('cv.duplicate_part')) ?></strong><small><?= e(__('cv.duplicate_part_desc')) ?></small></span>
+              </button>
+              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-duplicate-part-menu" hidden
+                   role="group" aria-label="<?= e(__('cv.duplicate_part')) ?>"></div>
+            </div>
+
+            <?php /* STUDIO-UX F6 — copiar una parte de otra página, sin IA. */ ?>
+            <div class="cvstudio-insert" id="studio-copy-section">
+              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-copy-btn"
+                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-copy-menu">
+                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
+                <span><strong><?= e(__('cv.copy_from_page')) ?></strong><small><?= e(__('cv.copy_from_page_desc')) ?></small></span>
+              </button>
+              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-copy-menu" hidden role="group"
+                   aria-label="<?= e(__('cv.copy_from_page')) ?>"></div>
+            </div>
+
             <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_content_category')) ?></strong>
 
             <button type="button" class="cvstudio-block-option" data-section-template="text">
@@ -397,6 +414,21 @@ $icon = static function (string $name): string {
         <p class="cvstudio-warn" id="settings-slug-warn" hidden><?= e(__('cv.slug_warn')) ?></p>
       </div>
       <?php endif; ?>
+      <?php /* STUDIO-UX F7 (mitad superviviente) — El modelo se elige aquí, no
+               en la caja donde se escribe el cambio: un usuario no técnico no
+               tiene por qué decidir eso delante del composer. */ ?>
+      <?php if (!empty($aiModels)): ?>
+      <div class="cvstudio-field">
+        <label for="settings-ai-model"><?= e(__('cv.settings_model')) ?></label>
+        <select id="settings-ai-model">
+          <?php foreach ($aiModels as $m): ?>
+          <option value="<?= e((string) $m['id']) ?>"<?= !empty($m['default']) ? ' selected' : '' ?>><?= e((string) $m['label']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <small class="cvstudio-hint"><?= e(__('cv.settings_model_help')) ?></small>
+      </div>
+      <?php endif; ?>
+
       <details class="cvstudio-advanced">
         <summary><?= e(__('page_form.advanced_index')) ?></summary>
         <div class="cvstudio-field">

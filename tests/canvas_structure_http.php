@@ -180,6 +180,38 @@ try {
     ]);
     structureHttpCheck('dirección inválida devuelve 422', $status === 422 && count(CanvasService::versions($pageId)) === $versionsBeforeNoop, (string) $status);
 
+    // STUDIO-UX F1 — Duplicar sin IA: la copia entra detrás, con id propio, y
+    // es ella la que queda enfocada (es la que el usuario va a editar).
+    $versionsBeforeDup = count(CanvasService::versions($pageId));
+    [$status, $body] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'duplicate', 'section' => 'hero',
+    ]);
+    $json = structureJson($body);
+    structureHttpCheck('duplicate HTTP coloca la copia detrás del original',
+        $status === 200 && ($json['ok'] ?? false) === true
+        && array_column($json['sections'] ?? [], 'id') === ['features', 'hero', 'hero-2', 'cta'],
+        $body
+    );
+    structureHttpCheck('duplicate enfoca la copia, no el original',
+        ($json['focus_section'] ?? '') === 'hero-2' && ($json['changed_section'] ?? '') === 'hero-2',
+        $body
+    );
+    structureHttpCheck('duplicate crea una sola versión', count(CanvasService::versions($pageId)) === $versionsBeforeDup + 1);
+
+    [$status] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'duplicate', 'section' => 'missing',
+    ]);
+    structureHttpCheck('duplicate de sección obsoleta devuelve conflicto', $status === 409, (string) $status);
+
+    [$status] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'delete', 'section' => 'hero-2',
+    ]);
+    structureHttpCheck('la copia se borra sin arrastrar al original',
+        $status === 200
+        && array_column(CanvasService::listSections((string) CanvasService::get($pageId)['html']), 'id') === ['features', 'hero', 'cta'],
+        (string) $status
+    );
+
     // Los endpoints funcionales comparten posición before/after explícita.
     [$status, $body] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/insert-form', [
         '_csrf' => $csrf, 'form_id' => $formId, 'section' => 'features', 'position' => 'before',
@@ -204,6 +236,57 @@ try {
         $body
     );
     structureHttpCheck('delete conserva entidad de formulario', FormStore::find($siteId, $formId) !== null);
+
+    // STUDIO-UX C4 — Publicar por HTTP: el endpoint mueve el puntero publicado
+    // y devuelve el estado. (Esta ruta se rompió una vez por una variable mal
+    // nombrada que el test de servicio no veía: aquí se ejerce el controlador.)
+    [$status, $body] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/publish', [
+        '_csrf' => $csrf, 'publish' => '1',
+    ]);
+    $json = structureJson($body);
+    structureHttpCheck('publicar responde ok y sin cambios pendientes',
+        $status === 200 && ($json['ok'] ?? false) === true
+        && ($json['status'] ?? '') === 'published'
+        && ($json['history']['has_unpublished'] ?? true) === false,
+        $body
+    );
+    structureHttpCheck('publicar fija la versión que ve el público',
+        CanvasService::publishedVersionId($pageId) === CanvasService::historyState($pageId)['current_version_id']
+    );
+
+    $livePointer = CanvasService::publishedVersionId($pageId);
+    structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'duplicate', 'section' => 'hero',
+    ]);
+    structureHttpCheck('editar deja la página con cambios sin publicar',
+        CanvasService::hasUnpublishedChanges($pageId) === true
+        && CanvasService::publishedVersionId($pageId) === $livePointer
+    );
+
+    [$status, $body] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/publish', [
+        '_csrf' => $csrf, 'publish' => '0',
+    ]);
+    structureHttpCheck('despublicar suelta la versión viva',
+        $status === 200 && CanvasService::publishedVersionId($pageId) === 0, $body);
+
+    // STUDIO-UX F5 — Reordenar por HTTP en una sola escritura.
+    $order = array_column(CanvasService::listSections((string) CanvasService::get($pageId)['html']), 'id');
+    $reversed = array_reverse($order);
+    $versionsBeforeReorder = count(CanvasService::versions($pageId));
+    [$status, $body] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'reorder', 'order' => $reversed,
+    ]);
+    $json = structureJson($body);
+    structureHttpCheck('reorder aplica el orden completo de una vez',
+        $status === 200 && array_column($json['sections'] ?? [], 'id') === $reversed, $body);
+    structureHttpCheck('reorder crea una sola versión',
+        count(CanvasService::versions($pageId)) === $versionsBeforeReorder + 1);
+
+    [$status] = structureHttp('POST', $baseUrl . '/admin/canvas/' . $pageId . '/structure', [
+        '_csrf' => $csrf, 'action' => 'reorder', 'order' => ['hero'],
+    ]);
+    structureHttpCheck('un orden incompleto se rechaza como conflicto', $status === 409, (string) $status);
+
 } finally {
     if (is_resource($proc)) {
         proc_terminate($proc);

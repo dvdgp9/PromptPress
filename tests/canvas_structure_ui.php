@@ -53,6 +53,12 @@ structureUiCheck('acciones deterministas no necesitan abrir el chat',
     str_contains($js, 'function showStructureStatus(')
     && str_contains($js, 'function insertFormItem(')
 );
+// STUDIO-UX F1 — Duplicar vive junto a mover/eliminar, no dentro del chat.
+structureUiCheck('la fila ofrece duplicar como acción directa',
+    str_contains($js, "structureActionButton('duplicate'")
+    && str_contains($js, "duplicate: 'js.cv.duplicate_section'")
+    && str_contains($js, 'duplicate:')
+);
 
 structureUiCheck('CSS cubre filas, acciones, inserción y estados',
     str_contains($css, '.cvstudio-seclist__row')
@@ -74,6 +80,7 @@ $requiredKeys = [
     'js.cv.section_moved', 'js.cv.section_deleted', 'js.cv.undo_action',
     'js.cv.insert_before_x', 'js.cv.insert_after_x', 'js.cv.insert_at_start',
     'js.cv.insert_at_end', 'js.cv.structure_error', 'js.cv.inserting_form',
+    'js.cv.duplicate_section', 'js.cv.duplicating_section', 'js.cv.section_duplicated',
 ];
 foreach (['es', 'en', 'fr', 'pt'] as $lang) {
     /** @var array<string,string> $catalog */

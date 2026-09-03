@@ -7008,3 +7008,567 @@ el Planner puede marcar AP2R y revisar el cierre o la conveniencia de AP3.
   por qué terminó el JSON. Para diagnosticar truncado hace falta longitud + cola,
   no el prefijo.
 
+---
+
+# STUDIO-UX — Revisión de UX del Studio Live (2026-09-02, Planner)
+
+## Background and Motivation (STUDIO-UX)
+
+El usuario pide una revisión del UX del Studio ("hay muuucho margen de mejora").
+Revisión hecha a mano sobre el entorno dev (servidor 8791, página 136
+`/admin/canvas/136`, 7 secciones, 25 versiones), midiendo el layout real en el
+navegador y contrastando cada hallazgo con el código.
+
+Alcance: `views/admin/canvas/studio.php`, `admin/assets/js/canvas-studio.js`,
+`CanvasController::{studio,preview,overlayScript,publish,saveSettings}`, bloque
+CSS `cvstudio-*` de `admin/assets/css/admin.css`. El "AI Page Studio"
+(`/admin/pages/studio`) es otra cosa y solo se toca para señalar la colisión de
+nombre.
+
+## Key Challenges and Analysis (STUDIO-UX)
+
+**Lo que ya funciona y no hay que tocar:** el lienzo en vivo como superficie de
+edición; la espera honesta con segundos y motivo; "Parar" que además cancela en
+servidor; deshacer por mensaje + historial con puntero real; destello de la
+sección tocada y restauración del scroll tras recargar; controles atados a los
+tokens de marca en vez de campos libres; la lista de partes persistente con
+mover/eliminar. El núcleo conversacional está bien resuelto.
+
+**P1 — El lienzo, que es el producto, está tapado.** Medido en navegador:
+- 1440×900: panel de chat 390×415 sobre el escenario (1060×845) → tapa ~37% del
+  ancho y ~51% del alto útil de la página.
+- 1024×768: barra lateral 32,7% del iframe + chat 20,8% ≈ **54% del lienzo
+  oculto**. Por debajo de 1100px la barra pasa a `position:absolute` encima del
+  lienzo y **no hay forma de plegarla**.
+- Además el banner de cookies del render público se pinta dentro del preview
+  (`BrandService::publicFooter` vía `CanvasController::preview`) y ocupa el pie
+  de forma permanente; en vista móvil (marco 390px) se come ~40% del viewport.
+
+**P2 — Dos modelos de edición compitiendo por el mismo espacio.** Chat flotante
+(derecha, sobre el lienzo) + panel contextual (derecha, barra) + lista de partes
+(derecha, barra) + "Añadir a la página" (derecha, barra). `showSide()` los hace
+excluyentes: **al seleccionar cualquier elemento desaparece "Añadir sección"**,
+así que para insertar hay que deseleccionar primero — y Esc no funciona (P5).
+
+**P3 — Las partes de la página se llaman en slugs de IA en inglés.** La lista
+lateral, que es la navegación principal, muestra "Hero, Services, Presentation,
+Pain points, Transition, Faqs, Cta" a un usuario español no técnico:
+`sectionLabel()` solo hace `replace(/[-_]+/g,' ')` + capitalizar sobre
+`data-pp-section`. El texto humano ya está en la propia sección (su primer
+encabezado).
+
+**P4 — Editar una página publicada es editar en vivo, sin avisar.** `page_canvas`
+es lo que renderiza el público (`CanvasService::renderPublic`) y `save()`
+escribe ahí en cada cambio (texto inline, color, IA). `publish()` solo cambia
+`pages.status`. No existe separación borrador/publicado: cada retoque sale al
+aire al instante mientras el chip verde "Publicada" sugiere lo contrario.
+
+**P5 — El teclado está muerto justo en el estado más probable.** Los listeners
+de Esc (subir de ámbito) y Ctrl/Cmd+Z están en el `document` del padre, pero al
+hacer clic en la página el foco queda en el iframe. Verificado: un `keydown`
+originado en el documento del iframe **no llega al padre**. El overlay solo
+captura Esc mientras se edita texto inline. Resultado: retocas algo, quieres
+deshacer, Cmd+Z no hace nada.
+
+**P6 — La interfaz dice "Guardado" cuando no ha guardado nada.** La ✕ del
+contexto del chat llama a `clearSelection(true)` → el overlay pone
+`activeTarget=null` pero **no cierra el panel** ni avisa al padre. El panel se
+queda con controles vivos de un elemento ya no seleccionado; al pulsar un color,
+`applyToTarget` sale por `if(!el) return;` y el padre igualmente pinta
+"Guardado". Reproducido en navegador.
+
+**P7 — Una página canvas no se puede renombrar.** `/admin/pages/{id}/edit`
+redirige al Studio (PageController:1341) y `saveSettings` solo escribe
+`meta_title`, `meta_description`, `slug` y flags SEO. `pages.title` — que es la
+etiqueta del menú público (`BrandService`:212) y del listado — no es editable en
+ningún sitio. Los documentos sí tienen `/rename`; las páginas no.
+
+**P8 — "Ver esta versión" no ve: restaura.** El botón del historial llama a
+`restoreVersion()`, que mueve el puntero al instante, sin previsualización ni
+confirmación. Es reversible, pero la etiqueta promete lo contrario.
+
+**P9 — El Studio está a medio traducir.** Con el resto del panel bajo
+`__()`/`pp.t()` (ADMIN-I18N), quedan literales en español: `'Guardado'` (×12),
+`'Aplicando el cambio…'`, `'Recuperando…'`, `'No se pudo guardar'`, `'No se pudo
+recuperar ahora mismo'`, `'Ajustes guardados'`, `'Deshacer'`, `'Reintentar'`,
+`'Hecho.'`, `'Algo no ha ido bien…'`; en `colorField/cornerFields`:
+`'Principal'`, `'Texto'`, `'Apagado'`, `'Claro'`, `'Sin relleno'`, `'Color
+personalizado'`, `'Inferior derecha'`, `'Inferior izquierda'`, `'Radio de cada
+esquina (px)'`; y en la vista, `'Publicada' : 'Borrador'` (studio.php:89).
+
+**P10 — Roces menores medidos.** El menú de "Añadir sección" se abre hacia abajo
+en y=703 con 340px de alto (ventana 900): 2 de 5 opciones nacen bajo el pliegue
+y no se hace `scrollIntoView`. El contador de la meta descripción marca "158
+caracteres · ideal por debajo de 155" sin cambiar de color. El selector de
+modelo IA vive en el composer principal, delante de un usuario no técnico. La
+lista de partes no sigue el scroll del lienzo (no hay scroll-spy). Latencias
+reales medidas en `ai_logs`: `edit_canvas_section` media 6,7 s / máx 33,6 s (44
+llamadas, 2 errores); `edit_canvas_page` media 9,6 s; `compose_canvas_page`
+media 25,9 s / máx 47,8 s.
+
+## High-level Task Breakdown (STUDIO-UX)
+
+Orden por relación impacto/coste. Cada tarea es verificable sola.
+
+**Fase A — devolver el lienzo (lo que más cambia la sensación de uso)**
+- A1 — Quitar el banner de cookies (y cualquier chrome de consentimiento) del
+  preview del Studio. Éxito: `/admin/canvas/136/preview` no contiene el banner;
+  el render público sigue mostrándolo.
+- A2 — Barra lateral plegable con botón y atajo, estado recordado en
+  `localStorage`. Éxito: con la barra plegada el iframe ocupa todo el ancho a
+  1440 y a 1024; el estado sobrevive a recargar.
+- A3 — Sacar el chat de encima del lienzo: pasarlo a barra inferior anclada
+  (alto fijo ~120px, expandible) o a pestaña de la barra lateral. Éxito: a
+  1024×768 el lienzo visible pasa de ~46% a >85%.
+- A4 — Modo "solo página" (tecla, p. ej. `.`): oculta barra, chat y overlays.
+  Éxito: un clic/tecla y vuelta, sin recargar el iframe.
+
+**Fase B — un solo modelo mental**
+- B1 — La barra lateral deja de ser excluyente: partes + panel contextual +
+  "Añadir" conviven (panel como capa sobre la lista, o acordeón). Éxito: con un
+  texto seleccionado, "Añadir sección" sigue accesible sin deseleccionar.
+- B2 — Reenviar `keydown` del overlay al padre por `postMessage` (Esc, Ctrl/Cmd+Z
+  y Shift+Z). Éxito: seleccionar en la página → Cmd+Z deshace; Esc sube ámbito.
+- B3 — Deseleccionar cierra el panel de verdad: el overlay contesta
+  `element-deselected` al recibir `deselect`. Éxito: pulsar la ✕ del chat deja la
+  barra en su estado vacío.
+- B4 — `showSaved('Guardado')` solo tras persistencia confirmada (respuesta OK de
+  `/section`), nunca al emitir el `postMessage`. Éxito: sin selección, ningún
+  control pinta "Guardado".
+
+**Fase C — nombres y seguridad**
+- C1 — Etiquetas humanas de las partes: primer `h1/h2/h3` de la sección,
+  recortado; fallback al nombre del tipo traducido; el slug queda solo como
+  `title`. Éxito: la página 136 muestra "Nuestros servicios", "Preguntas
+  frecuentes"… en vez de "Services", "Faqs".
+- C2 — Renombrar la página desde "Ajustes": campo Título que escribe
+  `pages.title` (+ aviso de que cambia el menú). Éxito: cambiar el título se
+  refleja en el listado y en el menú público.
+- C3 — Historial: "Ver esta versión" → previsualización (iframe a la versión, sin
+  tocar el puntero) + botón explícito "Recuperar esta versión". Éxito: mirar una
+  versión no crea versión nueva ni cambia la página.
+- C4 — Señal de "estás editando en vivo" en páginas publicadas (chip persistente
+  junto al estado). Éxito: visible siempre en publicadas, ausente en borradores.
+  *(Nota al Planner: la separación real borrador/publicado —`published_version_id`
+  + "Publicar cambios (N)"— es un cambio de modelo de datos; se propone como
+  decisión aparte, no dentro de esta fase.)*
+
+**Fase D — acabado**
+- D1 — Pasar a `pp.t()`/`__()` los literales de P9 y añadir claves a los 4
+  idiomas. Éxito: `grep` sin literales en español en `canvas-studio.js`.
+- D2 — `scrollIntoView` del menú "Añadir sección" al abrirlo. Éxito: a 1440×900
+  se ven las 5 opciones sin scroll manual.
+- D3 — Contador SEO en ámbar al pasarse; scroll-spy en la lista de partes.
+
+## Project Status Board (STUDIO-UX)
+
+- [ ] A1 banner de cookies fuera del preview
+- [ ] A2 barra lateral plegable
+- [ ] A3 chat fuera del lienzo
+- [ ] A4 modo "solo página"
+- [ ] B1 barra no excluyente
+- [ ] B2 teclado desde el iframe
+- [ ] B3 deseleccionar cierra el panel
+- [ ] B4 "Guardado" solo si se guardó
+- [ ] C1 etiquetas humanas de las partes
+- [ ] C2 renombrar página
+- [ ] C3 historial: ver ≠ restaurar
+- [x] C4 borrador vs publicado (SUPERA al aviso: separación real)
+- [ ] D1 i18n del Studio
+- [ ] D2 menú "Añadir" dentro del pliegue
+- [ ] D3 contador SEO + scroll-spy
+
+## Executor's Feedback or Assistance Requests (STUDIO-UX)
+
+Pendiente de decisión del usuario (Planner): (a) qué fases entran y en qué orden;
+(b) A3 — chat en barra inferior anclada vs. pestaña de la barra lateral;
+(c) si se abre la separación borrador/publicado como proyecto propio (C4 solo
+avisa, no la implementa).
+
+## Lessons (STUDIO-UX)
+
+- Los listeners de teclado del Studio viven en el `document` del padre, pero el
+  foco normal del usuario está dentro del iframe: cualquier atajo nuevo hay que
+  reenviarlo por `postMessage` desde el overlay o nace muerto.
+- `applyOp()` es fire-and-forget (`postMessage`): pintar "Guardado" junto a la
+  llamada miente siempre que el overlay descarte la operación.
+- El preview del Studio reutiliza el render público entero, banner de
+  consentimiento incluido: lo que se añada al pie público aparece dentro del
+  editor salvo que se excluya explícitamente.
+
+## Key Challenges and Analysis — eje 2: funcionamiento (STUDIO-UX, 2026-09-02)
+
+Segunda pasada, pedida por el usuario: no el envoltorio, sino la mecánica de
+crear y editar. Diagnóstico en una frase: **el Studio tiene dos velocidades y
+nada en medio.**
+
+- Instantáneo y gratis: color, tamaño, alineación, negrita/cursiva de un
+  elemento entero, reescribir un texto (en plano), fondo y espaciado de sección.
+- 6,7 s de media (33,6 s de máximo), con coste y ~4,5% de fallo: **todo lo
+  demás**, incluido lo que no tiene nada de creativo — duplicar una tarjeta,
+  borrar un botón, poner una palabra en negrita, meter un enlace en una frase,
+  mover un elemento dentro de su sección.
+
+Ese hueco intermedio es donde vive la mayor parte de la edición real.
+
+**Evidencia recogida:**
+- Ops del overlay (`applyToTarget`): `size, bold, italic, align, color, fill,
+  radius, link, newtab, settext, alt, pad, reveal, bgcolor, bgdim, bgimg,
+  sliderlayout, gallery`. **Ninguna añade ni elimina nada**: son estilo y
+  atributos. No hay duplicar/eliminar/mover a nivel de elemento.
+- Acciones de estructura (`updateCanvasStructure`): `insert_template`, `move`
+  (un paso), `delete`. **No hay duplicar sección.**
+- `endEdit()` usa `contentEditable='plaintext-only'`: la edición inline es texto
+  plano. Negrita por palabra o enlace dentro de un párrafo exigen pasar por IA.
+- Una versión por clic: versiones 144→147 de la página 136 creadas a las
+  15:43:14, :15, :16 y :17 (cuatro clics del panel = cuatro versiones), y 150→152
+  a las 15:52:29/30/31. Con `MAX_VERSIONS = 25`, cuatro toques de «A+» expulsan
+  cuatro hitos reales del historial.
+- Cada `move` hace POST + `reloadPreview()` completo: subir la última sección de
+  una página de 7 son 6 recargas del iframe.
+- El modelo domina la latencia percibida: mismo `edit_canvas_section` con
+  `gemini-3-flash-preview` 2,5 s de media (20 llamadas) frente a
+  `gemini-3-flash-preview-20251217` 9,8 s (24 llamadas). El Studio deja esa
+  elección al usuario en el composer en vez de decidirla por ámbito.
+- Creación estrictamente secuencial: `ai-brief` → el usuario lee objetivo,
+  público, SEO, CTA y estructura → pulsa «Crear página completa» → *entonces*
+  arranca `compose_canvas_page` (25,9 s de media, 47,8 s de máximo). El propio
+  proyecto ya resolvió esto en el onboarding con `prepare-home` (~30 s → ~1,7 s).
+
+## High-level Task Breakdown — Fase F: fluidez de edición (STUDIO-UX)
+
+- F1 — Duplicar sección sin IA (`listSections` + `insertSectionRelative` con id
+  nuevo). Éxito: duplicar una sección de 7 partes deja 8, con id único, en un
+  round-trip y sin llamada a IA.
+- F2 — Ops de elemento: `duplicate-el`, `delete-el`, `move-el` entre hermanos.
+  Éxito: añadir una cuarta tarjeta a una rejilla de tres sin tocar el chat.
+- F3 — Texto rico mínimo en la edición inline: barra de selección con negrita,
+  cursiva y enlace (el sanitizer ya admite `<b>` y `<a>`). Éxito: poner una
+  palabra en negrita y un enlace en una frase sin IA, y que sobreviva al
+  round-trip de `normalizeEditedSectionHtml()`.
+- F4 — Coalescer micro-cambios: debounce ~1,5 s y, mientras sea la misma sección
+  y la misma sesión, actualizar la versión en vez de crear otra (respetando el
+  puntero de undo/redo). Éxito: diez clics seguidos de «A+» dejan 1 versión, y
+  «Deshacer» devuelve al estado previo a la ráfaga.
+- F5 — Reordenar arrastrando en la lista lateral, reordenando el DOM del iframe y
+  guardando una sola vez al soltar. Éxito: llevar la parte 7 a la posición 1 con
+  un gesto, una escritura y sin recarga completa.
+- F6 — Copiar una sección de otra página, literal (no vía IA). Éxito: traer una
+  sección de otra página en un round-trip, sin coste.
+- F7 — Elegir el modelo por ámbito automáticamente (elemento/sección → modelo
+  ligero; página entera → modelo fuerte) y sacar el selector a Ajustes. Éxito:
+  un cambio con ámbito de sección usa el ligero sin que el usuario elija.
+- F8 — Reordenar «Añadir a la página»: 1) duplicar una parte existente,
+  2) describir la sección (IA), 3) plantillas neutras al final. Éxito: la primera
+  opción del menú es duplicar.
+- F9 — Prefetch de composición en la creación: arrancar `ai-create` al pintar el
+  plan; si el usuario lo modifica, descartar y recomponer. Éxito: aceptar el plan
+  tal cual lleva a la página en <5 s en lugar de ~26-48 s.
+- F10 — La IA con ámbito no bloquea la edición manual de otras partes; en el
+  fallo, ofrecer «reintentar con otro modelo». Éxito: se puede cambiar un color
+  de la sección 2 mientras se aplica un cambio en la 5.
+
+## Project Status Board — Fase F (STUDIO-UX)
+
+- [x] F1 duplicar sección
+- [x] F2 duplicar/borrar/mover elemento
+- [x] F3 texto rico mínimo
+- [x] F4 coalescer micro-versiones
+- [x] F5 reordenar arrastrando
+- [x] F6 copiar sección entre páginas
+- [~] F7 modelo por ámbito — DESCARTADO por decisión de producto (ver abajo)
+- [x] F8 «Añadir» empieza por duplicar
+- [x] F9 prefetch de composición
+- [x] F10 IA no pisa la edición manual (el alcance cambió: ver abajo)
+
+## Current Status / Progress Tracking — Fase F (STUDIO-UX)
+
+**F1 — Duplicar sección (hecho, 2026-09-03).**
+- `CanvasService::duplicateSection()` + `resuffixInnerIds()`: la copia entra
+  detrás del original, con id derivado de la BASE (duplicar `services-2` da
+  `services-3`, no `services-2-2`), `data-pp-label` marcado con `(N)` para que la
+  lista no muestre dos filas idénticas, ids internos re-sufijados y `href="#…"`,
+  `for` y `aria-*` reapuntados.
+- Acción `duplicate` en `updateCanvasStructure`, con `focus_section` y
+  `changed_section` en la COPIA (es la que se va a editar).
+- Botón ⧉ en la fila de la lista lateral, junto a ↑ ↓ 🗑. Microcopia en es/en/fr/pt.
+- Riesgo descartado antes de implementar: ninguna hoja de estilo de página usa
+  `[data-pp-section=…]` (0 filas en `page_canvas`), así que la copia con id nuevo
+  conserva todo su diseño. Verificado en navegador: copia y original miden 1013 px
+  de alto y renderizan el mismo texto.
+- Tests: `tests/canvas_duplicate_section.php` (14, nuevo, escrito antes del código)
+  + 5 casos nuevos en `tests/canvas_structure_http.php` + 1 en `canvas_structure_ui.php`.
+
+**F2 — Duplicar/mover/eliminar elemento (hecho, 2026-09-03).**
+- Ops `el-duplicate`, `el-move` (prev/next) y `el-delete` en el overlay, con
+  guardas: nunca sobre una sección top-level (eso es F1), nunca dentro de un
+  embed `data-pp-placeholder` (su HTML se regenera al render y el cambio se
+  perdería), y `el-delete` no deja el contenedor vacío.
+- `reportSelection` manda `structure: {canPrev, canNext, canDelete}`; el panel
+  pinta una fila ⧉ ˄ ˅ 🗑 bajo las migas y deshabilita lo que no aplica.
+- Estas acciones NO pintan "Guardado" al emitir el `postMessage`: el aviso lo da
+  `saveSectionInline` cuando el servidor confirma (adelanto parcial de B4).
+- Bug encontrado y corregido durante la verificación en navegador: el marcador
+  visual `data-pp-edit-box` se copiaba en vez de moverse, así que quedaban dos
+  elementos marcados y `querySelector` devolvía el original. Ahora se mueve.
+- Verificado en navegador sobre la rejilla de servicios de la página 136:
+  5 tarjetas → duplicar → 6 → mover → orden correcto → duplicar → 7 → eliminar → 6,
+  y cuatro «deshacer» devuelven la página a 5 tarjetas y a sus 7966 caracteres
+  originales (puntero de versión 742, el de partida).
+- Tests: `tests/canvas_element_actions.php` (19, nuevo).
+
+**Regresión:** 20 suites relacionadas en verde (canvas_*, admin_i18n, resources_admin).
+
+**F3 — Texto rico mínimo (hecho, 2026-09-03).**
+- La edición inline pasa de `contentEditable='plaintext-only'` a `'true'`, con
+  `execCommand('styleWithCSS', false, false)` para que el formato salga como
+  `<b>`/`<i>` y no como `<span style="font-weight:…">` (verificado en BD: 0
+  ocurrencias de `font-weight` tras poner negrita).
+- Barra flotante `.pp-studio-rt` sobre la selección: negrita, cursiva, enlace y
+  «quitar enlace» (este último solo aparece dentro de un `<a>`). Atajos
+  Ctrl/Cmd+B y Ctrl/Cmd+I. `mousedown` cancelado en la barra + Range guardado y
+  restaurado: sin eso el navegador pierde la selección al pulsar y
+  `execCommand` no tiene sobre qué actuar.
+- La fila de enlace trae el selector de páginas del sitio (54 en dev) además del
+  campo libre; Enter aplica, Esc cierra solo la fila.
+- Pegado interceptado → entra como texto plano (verificado: un pegado con
+  `font-family` y color no arrastra ni estilos ni spans).
+- Enter en `<p>`/`<li>` usa `insertLineBreak` explícito: el `contenteditable`
+  por defecto metía `<div>` sueltos dentro del propio elemento.
+- `focusout` ya no cierra la edición si el foco se fue a la barra (antes habría
+  matado el flujo al escribir la URL).
+- El saneado no necesitó cambios: `CanvasSanitizer` es blacklist, así que `<b>`,
+  `<i>` y `<a href>` ya pasaban, y un `href="javascript:"` sigue perdiendo el
+  atributo (test).
+- **Decisión consciente:** negrita/cursiva NO guardan al instante; se persisten
+  al salir del elemento (`endEdit`), como el resto de la edición de texto. Guardar
+  por clic multiplicaría las versiones, que es justo lo que arregla F4.
+- Verificado en navegador sobre la página 136: doble clic en una palabra →
+  barra → negrita → `<b>preparación</b>`; enlace `/contacto` aplicado y luego
+  quitado; ambos persistidos en BD y revertidos con «deshacer» (7966 caracteres
+  y puntero 742, el estado de partida).
+- Tests: `tests/canvas_rich_text.php` (17, nuevo, escrito antes del código).
+
+**F4 — Coalescer micro-versiones (hecho, 2026-09-03).**
+- Servidor: `CanvasService::coalescableVersionId()`. Los guardados `inline` de la
+  MISMA sección dentro de `COALESCE_SECONDS` (60 s desde que arrancó la versión
+  en curso) actualizan esa versión en vez de crear otra. No se fusiona nunca un
+  cambio de IA (`chat`), de estructura (`structure`) ni de otra sección, y la
+  condición clave es que el puntero esté en la última versión: si el usuario ha
+  deshecho, se trunca la rama y el cambio abre versión nueva.
+- Cliente: cola con debounce de 700 ms (`queueSectionSave`/`flushSectionSave`).
+  Lo pendiente se vacía ANTES de deshacer/rehacer, restaurar versión, cualquier
+  acción de estructura y cualquier envío al chat — si el guardado llegase después
+  del undo reescribiría con el estado viejo lo que el undo acaba de restaurar.
+  `beforeunload` fuerza el envío con `keepalive`.
+- Estado de guardado visible y honesto: «Guardando…» (gris, se queda) →
+  «Guardado» (verde, se va). Traducido en los cuatro idiomas.
+- **Cierra P6/B4:** eliminados los 12 `showSaved('Guardado')` que se disparaban
+  al emitir el `postMessage`, antes de que el servidor supiera nada. Ahora el
+  aviso lo produce solo la respuesta del guardado.
+- **Bug real encontrado por el test:** la ventana temporal comparaba `created_at`
+  (reloj de MySQL) con `time()` (reloj de PHP). En este entorno van con 2 h de
+  diferencia, así que la resta daba −6600 y la comparación de un solo lado
+  (`> 60`) dejaba fusionar cambios de horas después sobre una versión vieja —
+  historial machacado en silencio. Arreglado evaluando la ventana DENTRO de SQL,
+  con un único reloj.
+- Verificado en navegador: cinco clics de «A+» sobre el titular de la página 136
+  → **una sola versión** creada (1071) y un único «deshacer» devuelve el titular
+  a su tamaño de hoja de estilos, sin `font-size` en línea. Página restaurada
+  (7966 caracteres, puntero 742).
+- Tests: `tests/canvas_version_coalescing.php` (23, nuevo, escrito antes del código).
+
+**Decisión de producto registrada (2026-09-03, usuario):** F4 no lleva botón
+«Guardar». El autoguardado se queda; lo que faltaba era que el estado se viera y
+que no se perdiera lo pendiente al salir. El botón que sí falta es «Publicar
+cambios», y eso es P4/C4 (separar borrador de publicado, `published_version_id`),
+pendiente de decisión.
+
+**C4 — Borrador contra publicado (hecho, 2026-09-03). Supera el alcance previsto.**
+El plan original solo pedía un AVISO de «estás editando en vivo». Con el usuario
+de acuerdo se hizo la separación real:
+- Migración `2026_09_03_canvas_published_version.php`: `page_canvas.published_version_id`
+  + backfill de las páginas ya publicadas (26 de 32 en dev), así que nadie ve
+  cambiar su web al aplicarla.
+- `renderPublic()` pasa a servir la versión PUBLICADA (con caída al estado de
+  trabajo si no hay puntero: borradores e instalaciones sin migrar).
+  `renderDraft()` es el nuevo render del estado de trabajo. Repartidos los cinco
+  puntos de render: público y auditoría SEO → `renderPublic`; preview del Studio,
+  del onboarding y del panel de páginas → `renderDraft`.
+- `markPublished()` / `clearPublished()` / `hasUnpublishedChanges()`, y
+  `historyState()` devuelve `has_unpublished` para la barra.
+- `pruneVersions()` ya no puede podar la versión que está al aire: sin ella el
+  público se quedaría sin página.
+- UI de tres estados en vez de dos: borrador → «Publicar»; publicada al día →
+  chip verde y solo el menú «⋯»; publicada CON cambios → chip ámbar «Cambios sin
+  publicar» + botón «Publicar cambios». El estado inicial lo pinta el JS
+  (`reflectPublished` al arrancar), así los tres viven en un solo sitio; de paso
+  cae el `'Publicada' : 'Borrador'` cableado de la vista (P9).
+- Verificado en navegador sobre la página 135 (publicada): tocar el titular deja
+  el chip en ámbar y **el público sigue viendo la versión antigua** (comprobado
+  con curl: sin `font-size` en el `<h1>`); «Publicar cambios» mueve el puntero
+  (316 → 1244) y entonces sí cambia el sitio. Deshacer + republicar dejó la
+  página exactamente como estaba (316/316).
+- **Bug encontrado en navegador, no por los tests:** `publish()` usaba `$pageId`
+  sin definirla (500 en la petición). El test de servicio no lo veía porque
+  llamaba a `CanvasService::markPublished()` directamente. Añadida cobertura HTTP
+  del endpoint en `canvas_structure_http.php`.
+- Tests: `tests/canvas_publish_pointer.php` (25, nuevo) + 4 casos HTTP.
+
+**F5 — Reordenar arrastrando (hecho, 2026-09-03).**
+- `CanvasService::reorderSections($html, $orderedIds)`: aplica el orden final
+  completo en una escritura. Exige EXACTAMENTE el mismo conjunto de ids (ni de
+  más, ni de menos, ni repetidos); cualquier otra cosa significa que el cliente
+  venía de un DOM viejo y se rechaza con 409 en vez de reordenar a medias.
+- Acción `reorder` en `/structure`, con el orden en `order[]`.
+- Filas `draggable` en la lista lateral: la que viaja se atenúa (`is-dragging`),
+  la de destino marca dónde va a caer (`is-drop-target`), y al soltar se guarda
+  UNA vez. Los ↑↓ se quedan: son la vía accesible y la táctil.
+- Antes, llevar la última parte de una página de siete al principio eran seis
+  viajes, seis versiones y seis recargas del iframe. Ahora: un gesto, una versión.
+- Verificado en navegador con eventos `DragEvent` reales: marcas visuales,
+  «Orden actualizado.», lista repintada desde la respuesta del servidor y **una
+  versión por arrastre**. Página 136 devuelta a su orden original.
+- Tests: `tests/canvas_reorder_sections.php` (19, nuevo) + 3 casos HTTP.
+
+**Regresión:** 27 suites en verde (`canvas_generate` omitido: hace llamadas
+reales a la IA). Un test de contrato ajeno (`resources_embed`) tuvo que
+actualizarse por el renombrado a `renderDraft`: comprobaba el literal de la
+llamada, y su intención (que el preview pase el idioma explícito) se mantiene.
+
+**F6 — Copiar una sección de otra página (hecho, 2026-09-03).**
+- `CanvasService::copySectionInto()` + `CanvasSanitizer::extractRulesForClasses()`.
+  Endpoints `GET /canvas/{id}/copy-sources` (lista páginas y sus partes) y
+  `POST /canvas/{id}/copy-section`. Opción «Traer de otra página» en el menú
+  «Añadir a la página». Cero llamadas a la IA.
+- **El riesgo era el CSS, y era real.** Las clases NO son únicas entre páginas:
+  medido en dev, `inicio`(135) y `sobre-nosotros`(137) comparten 5 selectores y
+  **4 de ellos tienen reglas distintas** — `.fgl-hero` es un hero a pantalla
+  completa en una y una banda plana en la otra. Pegar el CSS de origen tal cual
+  habría repintado la página de destino.
+- Solución: la copia viaja con sus clases renombradas con un sufijo único
+  (`fgl-hero` → `fgl-hero-c46aa0`) y solo con las reglas que le tocan, extraídas
+  del CSS de origen. Detalles que hubo que cubrir: `@media` (30 de 32 páginas los
+  usan) se conservan recursivamente; los `@keyframes` viajan solo si alguna regla
+  incluida los nombra; un selector que menciona una clase ajena NO entra (depende
+  de contexto que no viaja); y las clases del sistema `pp-*` no se renombran
+  nunca, porque son globales y romperían el runtime.
+- Verificado en navegador con el caso peligroso: copiado el hero de
+  `sobre-nosotros` dentro de `inicio`. **El hero de destino no cambió** (650 px,
+  misma clase, mismo fondo) y la copia llegó con SU diseño (banda
+  `--pp-primary-dark`, texto blanco, 122 px de padding). Los dos heros conviven
+  en la misma página con estilos distintos. Deshacer devolvió la página a su
+  estado (puntero 316/316) y el público nunca vio la copia.
+- Tests: `tests/canvas_copy_section.php` (28, nuevo, escrito antes del código).
+
+**F7 — Modelo por ámbito: DESCARTADO (decisión del usuario, 2026-09-03).**
+
+«Yo personalmente no haría modelo pequeño. Funciona bien ahora y no es problema.»
+
+No reabrir sin datos nuevos. El razonamiento, para que no se vuelva a proponer
+a ciegas:
+- La infraestructura existe y funcionaría (`Actions::tierFor()` + `AIProviderFactory`
+  ya resuelven `ai_model_light`, y siete acciones lo usan ya), así que la tentación
+  de «es barato, hagámoslo» va a reaparecer.
+- **La ganancia estaba SIN MEDIR.** La cifra que se usó para justificarla
+  (`edit_canvas_section`: 2,5 s con un modelo frente a 9,8 s con otro) compara dos
+  variantes del preview del modelo PRINCIPAL en épocas distintas, no ligero contra
+  principal. De `gemini-3.1-flash-lite` en ediciones canvas no hay ni un dato.
+- Riesgo asimétrico: un modelo lite reescribiendo HTML puede devolver peor
+  resultado y `ai_logs` no lo detectaría (solo registra errores duros, 2 de 44 en
+  ediciones de sección; «válido pero feo» no deja rastro). Se ganaría velocidad
+  perdiendo calidad, en silencio.
+- Si algún día se retoma: medir primero con ediciones reales, y solo entonces
+  enrutar por ámbito CON caída automática al principal si el ligero no valida.
+
+**Sobrevive la otra mitad de F7** (independiente del modelo): sacar el selector de
+modelo del composer del chat y llevarlo a Ajustes. Un usuario no técnico no tiene
+por qué elegir modelo en la caja donde escribe lo que quiere cambiar. Sin riesgo,
+sin depender de ninguna medición.
+
+**Efecto sobre F10:** su mitad de «reintentar con otro modelo» pierde el argumento
+del enrutado automático, pero sigue valiendo como salida manual ante un fallo. La
+mitad importante de F10 (que la IA con ámbito no bloquee la edición manual del
+resto de la página) no se ve afectada.
+
+**F8 — «Añadir a la página» empieza por reutilizar (hecho, 2026-09-03).**
+- Orden nuevo del menú: «Partir de algo que ya tienes» (duplicar una parte de
+  esta página · traer de otra página) → «Contenido» (las tres plantillas neutras)
+  → «Bloques funcionales». Antes lo primero eran las plantillas neutras, que caen
+  desentonando dentro de una página compuesta con carácter.
+- La acción `duplicate` acepta ahora `anchor` + `position` opcionales
+  (`CanvasService::sectionHtml()` para reubicar la copia). Sin eso, duplicar desde
+  «Añadir» ignoraba el punto de inserción que el usuario acababa de marcar y
+  pegaba la copia junto al original. El botón ⧉ de la fila no manda ancla, así
+  que su comportamiento no cambia.
+- Verificado en navegador: con el punto puesto después de «Transition», duplicar
+  «Hero» dejó la copia entre «Transition» y «Faqs», no junto al hero.
+
+**F9 — Componer mientras el usuario lee el plan (hecho, 2026-09-03).**
+- `compose_only` en `createReferenceCanvasPage` + `persistCanvasComposition()`
+  público: componer y persistir quedan separados. **A diferencia del prefetch del
+  onboarding, la precomposición NO crea la página**, así que cambiar de idea o
+  cerrar la pestaña no deja páginas fantasma en el listado.
+- `POST /admin/pages/ai-prepare` compone y guarda html/css contra la firma del
+  plan (`compositionSignature`: título, tipo, objetivo, público, tono, SEO, CTA,
+  secciones y modelo). `aiCreate` reutiliza la precomposición si la firma encaja,
+  y la consume (un solo uso: un segundo «Crear» no duplica la página).
+- html y css se guardan CRUDOS y en settings separados, no dentro del JSON:
+  `settings.setting_value` es TEXT (64 KB) y el escapado de JSON podía doblar el
+  tamaño de una página grande (máximo medido: 17,4 KB html+css).
+- Medido de punta a punta con HTTP real: precomponer tarda **73 s** (21 s de
+  `describe_reference_layout` + 49 s de `compose_canvas_page`); crear con la
+  precomposición lista tarda **0,02 s y cero llamadas a la IA** (769 → 769 en
+  `ai_logs`). Verificado también en navegador: el plan salió en 4 s, la
+  precomposición corrió mientras «se leía», y al pulsar «Crear página completa»
+  el Studio se abrió con la página hecha sin gastar ninguna generación.
+- **Bug propio encontrado en navegador, no por los tests:** la guarda del
+  prefetch era la propia promesa (`if (prefetchPromise) return;`) y nunca se
+  reiniciaba al terminar, así que tras la PRIMERA precomposición ninguna otra
+  volvía a dispararse en toda la sesión. La guarda pasa a ser el plan
+  (`prefetchedBrief`) y la promesa se libera en `finally`. Cubierto con test.
+- También: pulsar «Crear» mientras la precomposición sigue en marcha ESPERA a que
+  acabe en vez de lanzar una segunda generación en paralelo (doble coste y
+  carrera por quién guarda).
+- Tests: `tests/pages_compose_prefetch.php` (24, nuevo) — la parte de reutilizar
+  se prueba inyectando una composición falsa, así que la suite no gasta IA.
+
+**F10 — La IA no pisa la edición manual (hecho, 2026-09-03). El alcance cambió
+al investigarlo, y a mejor.**
+
+El plan decía «que la IA con ámbito no BLOQUEE la edición manual». Al mirarlo,
+resultó que la edición manual **ya no estaba bloqueada** (`queueSectionSave` no
+mira `busy`), así que el enunciado original no describía ningún problema real.
+El problema de verdad era peor y estaba escondido debajo:
+
+- `CanvasChatService` leía la página al empezar (`CanvasService::get`), tardaba
+  entre 7 y 34 s en volver del modelo y guardaba **la página entera** construida
+  sobre aquella foto. Como la edición manual NO está bloqueada durante ese rato,
+  cualquier retoque a mano en otra sección **desaparecía en silencio** al guardar
+  la IA. El CSS igual: se partía del `css` viejo.
+- Corregido con `CanvasService::integrateSectionEdit()`: al integrar el resultado
+  se relee el estado actual y el cambio se aplica sobre él. Si la sección ya no
+  existe (la borraron mientras tanto), `SectionGoneException` → 409 con mensaje
+  propio, en vez de resucitarla o caer en el error genérico.
+- Nota de alcance: para un cambio de PÁGINA ENTERA el modelo reescribe todo, así
+  que un retoque manual simultáneo sigue quedando sepultado. Es coherente con lo
+  que el usuario pidió, y el historial lo recupera con «deshacer». No se ha
+  tocado (6 ediciones de página frente a 44 de sección en `ai_logs`).
+- Tests: `tests/canvas_chat_concurrent_edit.php` (16, nuevo). El caso central
+  simula la carrera completa: foto → edición manual → escritura de la IA.
+
+**F7, mitad superviviente (hecha, 2026-09-03).** El selector de modelo sale del
+composer del chat y pasa a «Ajustes de la página» como «Modelo de IA para esta
+página». El chat sigue mandando el modelo elegido; lo que cambia es que un
+usuario no técnico ya no tiene que decidirlo en la caja donde escribe.
+
+## FASE F CERRADA (2026-09-03)
+
+F1-F6 y F8-F10 hechas y verificadas en navegador; F7 descartada por decisión de
+producto salvo su mitad de UI. Además se hizo C4 (borrador vs publicado), que
+estaba en la fase C.
+
+**Pendiente de las fases A, B y D** (el eje de interfaz del informe): destapar el
+lienzo (A1-A4), un solo modelo mental en la barra (B1-B3), etiquetas humanas de
+las partes y renombrar página (C1-C2), historial «ver ≠ restaurar» (C3), e i18n
+y acabado (D1-D3). B4 y P6 quedaron cerrados de paso en F4.

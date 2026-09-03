@@ -340,6 +340,123 @@ final class CanvasSanitizer
     }
 
     /** Devuelve la posición de la llave de cierre que equilibra la de $open. */
+    /**
+     * STUDIO-UX F6 — Saca del CSS de una página las reglas que afectan a un
+     * conjunto de clases, renombrándolas con un sufijo.
+     *
+     * Existe porque las clases NO son únicas entre páginas: dos páginas
+     * generadas por el modelo pueden definir `.fgl-hero` con reglas distintas.
+     * Copiar una sección pegando el CSS de origen tal cual repintaría la página
+     * de destino, así que la copia viaja con sus clases renombradas y solo con
+     * las reglas que le tocan.
+     *
+     * Las clases del sistema (`pp-*`) no se renombran nunca: son globales y
+     * renombrarlas rompería el runtime.
+     *
+     * @param string[] $classNames clases usadas por la sección copiada
+     */
+    public static function extractRulesForClasses(string $css, array $classNames, string $suffix): string
+    {
+        $classNames = array_values(array_unique(array_filter(
+            array_map('strval', $classNames),
+            static fn(string $c): bool => $c !== '' && !str_starts_with($c, 'pp-')
+        )));
+        if ($classNames === []) return '';
+
+        $kept = self::collectClassRules($css, $classNames, $suffix);
+        if ($kept === '') return '';
+
+        // Los @keyframes viajan si alguna regla incluida los nombra.
+        return trim($kept . self::keyframesUsedBy($css, $kept));
+    }
+
+    /** Recorre bloques (recursivo en @media/@supports) quedándose con lo que toca. */
+    private static function collectClassRules(string $css, array $classNames, string $suffix): string
+    {
+        $out = '';
+        $len = strlen($css);
+        $pos = 0;
+
+        while ($pos < $len) {
+            $brace = strpos($css, '{', $pos);
+            if ($brace === false) break;
+            $selector = trim(substr($css, $pos, $brace - $pos));
+            $end = self::findBlockEnd($css, $brace);
+            if ($end === -1) break;
+            $body = substr($css, $brace + 1, $end - $brace - 1);
+            $pos = $end + 1;
+            if ($selector === '') continue;
+
+            $low = strtolower($selector);
+            if (str_starts_with($low, '@media') || str_starts_with($low, '@supports')) {
+                $inner = self::collectClassRules($body, $classNames, $suffix);
+                if (trim($inner) !== '') $out .= $selector . '{' . $inner . '}' . "\n";
+                continue;
+            }
+            if (str_starts_with($low, '@')) continue;   // keyframes/font-face aparte
+
+            // Un selector entra si TODAS sus clases son de la sección: si menciona
+            // una clase ajena, la regla depende de contexto que no viaja.
+            $selectorClasses = self::classesInSelector($selector);
+            if ($selectorClasses === []) continue;
+            $foreign = array_diff($selectorClasses, $classNames);
+            $foreign = array_filter($foreign, static fn(string $c): bool => !str_starts_with($c, 'pp-'));
+            if ($foreign !== []) continue;
+
+            $out .= self::renameClassesInSelector($selector, $classNames, $suffix) . '{' . $body . '}' . "\n";
+        }
+        return $out;
+    }
+
+    /** @return string[] */
+    private static function classesInSelector(string $selector): array
+    {
+        preg_match_all('/\.(-?[_a-zA-Z][_a-zA-Z0-9-]*)/', $selector, $m);
+        return array_values(array_unique($m[1] ?? []));
+    }
+
+    /** @param string[] $classNames */
+    private static function renameClassesInSelector(string $selector, array $classNames, string $suffix): string
+    {
+        return (string) preg_replace_callback(
+            '/\.(-?[_a-zA-Z][_a-zA-Z0-9-]*)/',
+            static function (array $m) use ($classNames, $suffix): string {
+                return in_array($m[1], $classNames, true) ? '.' . $m[1] . $suffix : $m[0];
+            },
+            $selector
+        );
+    }
+
+    /** @keyframes nombrados por las reglas ya incluidas. */
+    private static function keyframesUsedBy(string $css, string $keptRules): string
+    {
+        if (!str_contains(strtolower($css), '@keyframes')) return '';
+        preg_match_all('/animation(?:-name)?\s*:([^;}]+)/i', $keptRules, $m);
+        $names = [];
+        foreach ($m[1] ?? [] as $value) {
+            foreach (preg_split('/[\s,]+/', trim($value)) ?: [] as $token) {
+                if ($token !== '' && preg_match('/^-?[_a-zA-Z][_a-zA-Z0-9-]*$/', $token)) $names[$token] = true;
+            }
+        }
+        if ($names === []) return '';
+
+        $out = '';
+        $len = strlen($css);
+        $pos = 0;
+        while ($pos < $len) {
+            $brace = strpos($css, '{', $pos);
+            if ($brace === false) break;
+            $selector = trim(substr($css, $pos, $brace - $pos));
+            $end = self::findBlockEnd($css, $brace);
+            if ($end === -1) break;
+            $body = substr($css, $brace + 1, $end - $brace - 1);
+            $pos = $end + 1;
+            if (preg_match('/^@(-[a-z]+-)?keyframes\s+(-?[_a-zA-Z][_a-zA-Z0-9-]*)/i', $selector, $km) !== 1) continue;
+            if (isset($names[$km[2]])) $out .= $selector . '{' . $body . '}' . "\n";
+        }
+        return $out;
+    }
+
     private static function findBlockEnd(string $css, int $open): int
     {
         $depth = 0;

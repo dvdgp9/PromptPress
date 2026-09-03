@@ -738,7 +738,7 @@ final class OnboardingController
         $draft = json_decode(self::loadSetting($siteId, 'onboarding_home_draft', ''), true);
         $pageId = is_array($draft) ? (int) ($draft['page_id'] ?? 0) : 0;
         if ($pageId <= 0 || !self::draftIsCanvas($pageId, $siteId)) return '';
-        $rendered = \App\Services\Canvas\CanvasService::renderPublic($pageId, $siteId);
+        $rendered = \App\Services\Canvas\CanvasService::renderDraft($pageId, $siteId);
         return (string) ($rendered['html'] ?? '');
     }
 

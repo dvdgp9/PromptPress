@@ -9632,6 +9632,8 @@ body.pp-login-page {
 .cvstudio-titlemeta{display:flex;align-items:center;gap:8px}
 .cvstudio-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:999px;background:#f3f4f6;color:#6b7280;white-space:nowrap}
 .cvstudio-status.is-live{background:#dcfce7;color:#15803d}
+/* C4 — publicada PERO con cambios por publicar: ni verde tranquilo ni error. */
+.cvstudio-status.is-pending{background:#fef3c7;color:#92400e}
 /* botón-icono unificado (volver, historial, ajustes, ver página) */
 .cvstudio-iconbtn{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;color:#4b5563;cursor:pointer;text-decoration:none;transition:background .12s ease,color .12s ease,border-color .12s ease}
 .cvstudio-iconbtn:hover{background:#f3f4f6;color:#111827}
@@ -9685,6 +9687,13 @@ body.pp-login-page {
    aparecen por contexto, pero siguen siendo alcanzables por teclado y tacto. */
 .cvstudio-seclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .cvstudio-seclist__row{display:flex;align-items:center;gap:4px;border:1px solid transparent;border-radius:9px;transition:background .16s ease,border-color .16s ease}
+/* STUDIO-UX F5 — arrastrar para reordenar. El cursor lo anuncia; la fila que
+   viaja se atenúa y la de destino enseña dónde va a caer. */
+.cvstudio-seclist__item{cursor:grab}
+.cvstudio-seclist__item:active{cursor:grabbing}
+.cvstudio-seclist__item.is-dragging{opacity:.4}
+.cvstudio-seclist__item.is-drop-target .cvstudio-seclist__row{border-color:var(--cv-accent,#111827);box-shadow:0 0 0 3px color-mix(in srgb,var(--cv-accent,#111827) 14%,transparent)}
+@media (prefers-reduced-motion:reduce){.cvstudio-seclist__item.is-dragging{opacity:.6}}
 .cvstudio-seclist__row:hover,.cvstudio-seclist__item:focus-within .cvstudio-seclist__row{background:#f3f4f6;border-color:#e5e7eb}
 .cvstudio-seclist__item.is-current .cvstudio-seclist__row{background:color-mix(in srgb,var(--cv-accent,#111827) 9%,#fff);border-color:color-mix(in srgb,var(--cv-accent,#111827) 32%,#fff)}
 .cvstudio-seclist__select{min-width:0;flex:1;display:flex;align-items:center;gap:9px;border:0;background:none;border-radius:8px;padding:8px 7px;font:inherit;font-size:.83rem;font-weight:600;color:#374151;text-align:left;cursor:pointer}
@@ -9846,6 +9855,17 @@ body.pp-login-page {
 /* Ocupa la barra entera: ya no comparte columna con el chat (STUDIO-2 A1). */
 .cvstudio-panel{flex:1 1 auto;background:#fff;padding:14px 16px;overflow-y:auto}
 .cvstudio-panel[hidden]{display:none}
+/* STUDIO-UX F2 — duplicar/mover/eliminar el elemento seleccionado, junto a las
+   migas: acciones estructurales que antes solo existían pidiéndoselas al chat. */
+.cvstudio-panel__structure{display:flex;align-items:center;gap:4px;margin:-4px 0 12px;padding-bottom:10px;border-bottom:1px solid #f0f1f3}
+.cvstudio-elaction{display:grid;place-items:center;width:30px;height:30px;flex:none;border:1px solid #e5e7eb;border-radius:7px;background:#fff;color:#4b5563;cursor:pointer;padding:0;transition:background .12s ease,color .12s ease,border-color .12s ease}
+.cvstudio-elaction:hover:not(:disabled),.cvstudio-elaction:focus-visible:not(:disabled){background:#f3f4f6;color:#111827;border-color:#d1d5db}
+.cvstudio-elaction:active:not(:disabled){transform:translateY(1px)}
+.cvstudio-elaction:disabled{opacity:.34;cursor:not-allowed}
+.cvstudio-elaction.is-danger:hover:not(:disabled),.cvstudio-elaction.is-danger:focus-visible:not(:disabled){background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+.cvstudio-elaction svg{display:block}
+@media (hover:none){.cvstudio-elaction{width:40px;height:40px}}
+@media (prefers-reduced-motion:reduce){.cvstudio-elaction{transition:none}}
 .cvstudio-panel__head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .cvstudio-panel__head strong{font-size:.92rem;color:#111827}
 .cvstudio-panel__head small{font-size:.72rem;color:#6b7280;flex:1}
@@ -9930,6 +9950,9 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 /* FH4 — edición directa: indicador de guardado + selector de imágenes */
 .cvstudio-saved{font-size:.74rem;font-weight:700;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#15803d;white-space:nowrap}
 .cvstudio-saved.is-error{background:#fef2f2;color:#b91c1c}
+/* STUDIO-UX F4 — "Guardando…" es un estado, no un aviso: se queda hasta que el
+   servidor responde, y se distingue del verde de "Guardado". */
+.cvstudio-saved.is-pending{background:#f3f4f6;color:#4b5563}
 .cvstudio-saved[hidden]{display:none}
 .cvstudio-modal__panel--wide{width:min(720px,94vw)}
 .cvstudio-media-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}

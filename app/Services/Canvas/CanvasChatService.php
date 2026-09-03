@@ -203,21 +203,25 @@ final class CanvasChatService
         // Cambio solo de estilo: el modelo deja "html" vacío y manda únicamente
         // css_append. Conservamos la sección original intacta (no reescribir el
         // HTML protege ilustraciones SVG y evita truncados en secciones grandes).
-        $newSectionHtml = trim((string) ($data['html'] ?? ''));
-        if ($newSectionHtml === '') {
-            $newHtml = $canvas['html'];
-        } else {
-            $newHtml = CanvasService::replaceSection($canvas['html'], $sectionId, $newSectionHtml);
-            if ($newHtml === null) {
-                // i18n-ignore: excepción interna.
-                throw new \RuntimeException('No se pudo integrar la sección editada.');
-            }
+        //
+        // STUDIO-UX F10 — La integración va contra el estado ACTUAL de la
+        // página, no contra la foto que se leyó antes de llamar al modelo: entre
+        // una cosa y otra pasan de 7 a 34 segundos en los que el usuario puede
+        // haber tocado otra sección a mano, y eso no puede perderse.
+        $integrated = CanvasService::integrateSectionEdit(
+            (int) $page['id'],
+            (string) $canvas['html'],
+            (string) $canvas['css'],
+            $sectionId,
+            (string) ($data['html'] ?? ''),
+            (string) ($data['css'] ?? '')
+        );
+        if ($integrated === null) {
+            // La sección ya no está: la borraron mientras la IA trabajaba.
+            throw new SectionGoneException($sectionId);
         }
 
-        $cssAppend = trim((string) ($data['css'] ?? ''));
-        $css = $canvas['css'] . ($cssAppend !== '' ? "\n/* chat */\n" . $cssAppend : '');
-
-        return ['html' => $newHtml, 'css' => $css, 'reply' => self::reply($data)];
+        return ['html' => $integrated['html'], 'css' => $integrated['css'], 'reply' => self::reply($data)];
     }
 
     /** @return array{html:string,css:string,reply:string} */

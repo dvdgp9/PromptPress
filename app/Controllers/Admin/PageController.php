@@ -3581,7 +3581,7 @@ class PageController
         // vacío para canvas).
         $isCanvas = (($page['render_mode'] ?? 'sections') === 'canvas');
         if ($isCanvas) {
-            $canvas = \App\Services\Canvas\CanvasService::renderPublic((int) $page['id'], $siteId);
+            $canvas = \App\Services\Canvas\CanvasService::renderDraft((int) $page['id'], $siteId);
             $body = $canvas['html'];
         } else {
             $sections = Database::select(

@@ -21,7 +21,8 @@
   var ctxBox = document.getElementById('chat-context');
   var ctxLabel = document.getElementById('chat-context-label');
   var ctxClear = document.getElementById('chat-context-clear');
-  var modelSelect = document.getElementById('chat-model');
+  // F7 — el selector vive en Ajustes; el chat sigue mandando lo que haya elegido.
+  var modelSelect = document.getElementById('settings-ai-model');
 
   var selectedSection = null;
   var selectedElementContext = '';
@@ -142,6 +143,21 @@
     if (d.type === 'element-deselected') { selectedElementContext = ''; selectedElementPath = ''; closePanel(); }
     if (d.type === 'ready') {
       if (d.palette) brandPalette = d.palette;
+      // STUDIO-UX F3 — el overlay vive en el iframe y no tiene catálogo de
+      // idioma ni la lista de páginas: se los pasa el panel al arrancar.
+      tellIframe({
+        type: 'studio-config',
+        labels: {
+          bold: pp.t('js.cv.rt_bold'),
+          italic: pp.t('js.cv.rt_italic'),
+          link: pp.t('js.cv.rt_link'),
+          unlink: pp.t('js.cv.rt_unlink'),
+          link_url: pp.t('js.cv.rt_link_url'),
+          link_apply: pp.t('js.cv.rt_link_apply'),
+          link_page: pp.t('js.cv.rt_link_page')
+        },
+        linkTargets: LINKS
+      });
       renderSectionList(d.sections || []);
       if (lastScrollY > 0) {
         iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'scroll-to', y: lastScrollY }, '*');
@@ -193,6 +209,7 @@
       plus: '<path d="M12 5v14M5 12h14"/>',
       up: '<path d="M6 15l6-6 6 6"/>',
       down: '<path d="M6 9l6 6 6-6"/>',
+      duplicate: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
       trash: '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/>'
     };
     return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
@@ -281,15 +298,311 @@
     button.className = 'cvstudio-seclist__action' + (action === 'delete' ? ' is-danger' : '');
     button.dataset.structureAction = action;
     button.disabled = !!disabled;
-    var text = action === 'up' ? pp.t('js.cv.move_up') : (action === 'down' ? pp.t('js.cv.move_down') : pp.t('js.cv.delete_section'));
+    var labels = {
+      up: 'js.cv.move_up',
+      down: 'js.cv.move_down',
+      duplicate: 'js.cv.duplicate_section',
+      delete: 'js.cv.delete_section'
+    };
+    var text = pp.t(labels[action] || labels.delete);
     button.title = text;
     button.setAttribute('aria-label', text + ': ' + label);
     button.innerHTML = structureIcon(action === 'delete' ? 'trash' : action);
     button.addEventListener('click', function (e) {
       e.stopPropagation();
-      updateCanvasStructure(action === 'delete' ? 'delete' : 'move', id, action === 'delete' ? '' : action, button);
+      var isMove = action === 'up' || action === 'down';
+      updateCanvasStructure(isMove ? 'move' : action, id, isMove ? action : '', button);
     });
     return button;
+  }
+
+  // ----------------------------------------------------------------
+  // STUDIO-UX F8 — Duplicar una parte de ESTA página desde "Añadir": es la
+  // forma natural de crecer una página que ya funciona, y respeta el punto de
+  // inserción que el usuario acaba de elegir.
+  // ----------------------------------------------------------------
+  (function () {
+    var wrap = document.getElementById('studio-duplicate-part');
+    if (!wrap) return;
+    var trigger = document.getElementById('studio-duplicate-part-btn');
+    var menu = document.getElementById('studio-duplicate-part-menu');
+
+    function closeMenu() {
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function render() {
+      if (!pageSections.length) {
+        menu.innerHTML = '<p class="cvstudio-insert__empty">' + esc(pp.t('js.cv.duplicate_part_empty')) + '</p>';
+        return;
+      }
+      menu.innerHTML = '<strong class="cvstudio-insert__title">' + esc(pp.t('js.cv.duplicate_part_pick')) + '</strong>'
+        + pageSections.map(function (part) {
+            return '<button type="button" class="cvstudio-menu__item" data-duplicate-part="' + esc(part.id) + '">'
+              + esc(part.label) + '</button>';
+          }).join('');
+      menu.querySelectorAll('[data-duplicate-part]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          closeMenu();
+          closeBlockPicker();
+          duplicateWithPlacement(btn.dataset.duplicatePart, btn);
+        });
+      });
+    }
+
+    function duplicateWithPlacement(sectionId, btn) {
+      if (structureBusy || busy) return;
+      var pending = flushSectionSave();
+      if (pending) { pending.then(function () { duplicateWithPlacement(sectionId, btn); }); return; }
+
+      structureBusy = true;
+      if (btn) btn.disabled = true;
+      showStructureStatus(pp.t('js.cv.duplicating_section'), 'loading');
+
+      var fd = new FormData();
+      fd.append('_csrf', csrf);
+      fd.append('action', 'duplicate');
+      fd.append('section', sectionId);
+      // El ancla viaja aparte de `section`: `section` es QUÉ se duplica y
+      // `anchor` DÓNDE va la copia.
+      if (insertPlacement && insertPlacement.anchor) {
+        fd.append('anchor', insertPlacement.anchor);
+        fd.append('position', insertPlacement.position);
+      }
+
+      fetch(body.dataset.structureUrl, { method: 'POST', body: fd })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (data) {
+          if (!data.ok) {
+            showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error');
+            return;
+          }
+          applyHistory(data.history);
+          pendingStructureFocus = String(data.focus_section || '');
+          pendingFlash = String(data.changed_section || '');
+          selectedSection = String(data.focus_section || '');
+          insertPlacement = null;
+          updateInsertionHint();
+          showStructureStatus(pp.t('js.cv.section_duplicated'), 'success');
+          renderSectionList(data.sections || []);
+          reloadPreview();
+        })
+        .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+        .finally(function () {
+          structureBusy = false;
+          if (btn && btn.isConnected) btn.disabled = false;
+        });
+    }
+
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = menu.hidden;
+      menu.hidden = !open;
+      trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) render();
+    });
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !wrap.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !menu.hidden) closeMenu();
+    });
+  })();
+
+  // ----------------------------------------------------------------
+  // STUDIO-UX F6 — Traer una parte de otra página, literal y sin IA.
+  // ----------------------------------------------------------------
+  (function () {
+    var copyWrap = document.getElementById('studio-copy-section');
+    if (!copyWrap) return;
+    var copyBtn = document.getElementById('studio-copy-btn');
+    var copyMenu = document.getElementById('studio-copy-menu');
+    var loaded = false;
+
+    function closeCopyMenu() {
+      copyMenu.hidden = true;
+      copyBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function renderPages(pages) {
+      if (!pages.length) {
+        copyMenu.innerHTML = '<p class="cvstudio-insert__empty">' + esc(pp.t('js.cv.copy_no_pages')) + '</p>';
+        return;
+      }
+      var html = '<strong class="cvstudio-insert__title">' + esc(pp.t('js.cv.copy_pick_page')) + '</strong>';
+      pages.forEach(function (page) {
+        html += '<strong class="cvstudio-insert__title">' + esc(page.title) + '</strong>';
+        page.sections.forEach(function (sec) {
+          html += '<button type="button" class="cvstudio-menu__item" data-copy-page="' + page.id
+            + '" data-copy-section="' + esc(sec.id) + '">' + esc(sec.label) + '</button>';
+        });
+      });
+      copyMenu.innerHTML = html;
+      copyMenu.querySelectorAll('[data-copy-section]').forEach(function (btn) {
+        btn.addEventListener('click', function () { copySection(btn.dataset.copyPage, btn.dataset.copySection, btn); });
+      });
+    }
+
+    function loadPages() {
+      if (loaded) return;
+      copyMenu.innerHTML = '<p class="cvstudio-insert__empty">' + esc(pp.t('js.cv.loading')) + '</p>';
+      fetch(body.dataset.copySourcesUrl, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.ok) throw new Error('nope');
+          loaded = true;
+          renderPages(data.pages || []);
+        })
+        .catch(function () {
+          copyMenu.innerHTML = '<p class="cvstudio-insert__empty">' + esc(pp.t('js.cv.structure_error')) + '</p>';
+        });
+    }
+
+    function copySection(pageId, sectionId, btn) {
+      if (structureBusy || busy) return;
+      var pendingCopy = flushSectionSave();
+      if (pendingCopy) { pendingCopy.then(function () { copySection(pageId, sectionId, btn); }); return; }
+
+      structureBusy = true;
+      if (btn) btn.disabled = true;
+      closeCopyMenu();
+      closeBlockPicker();
+      showStructureStatus(pp.t('js.cv.copying_section'), 'loading');
+
+      var fd = new FormData();
+      fd.append('_csrf', csrf);
+      fd.append('source_page', pageId);
+      fd.append('source_section', sectionId);
+      appendRequestedPlacement(fd);
+
+      fetch(body.dataset.copySectionUrl, { method: 'POST', body: fd })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (data) {
+          if (!data.ok) {
+            showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error');
+            return;
+          }
+          applyHistory(data.history);
+          pendingStructureFocus = String(data.focus_section || '');
+          pendingFlash = String(data.changed_section || '');
+          selectedSection = String(data.focus_section || '');
+          insertPlacement = null;
+          updateInsertionHint();
+          showStructureStatus(pp.t('js.cv.section_copied'), 'success');
+          renderSectionList(data.sections || []);
+          reloadPreview();
+        })
+        .catch(function () { showStructureStatus(pp.t('js.cv.structure_error'), 'error'); })
+        .finally(function () {
+          structureBusy = false;
+          if (btn && btn.isConnected) btn.disabled = false;
+        });
+    }
+
+    copyBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = copyMenu.hidden;
+      copyMenu.hidden = !open;
+      copyBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) loadPages();
+    });
+    document.addEventListener('click', function (e) {
+      if (!copyMenu.hidden && !copyWrap.contains(e.target)) closeCopyMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !copyMenu.hidden) closeCopyMenu();
+    });
+  })();
+
+  // ----------------------------------------------------------------
+  // STUDIO-UX F5 — Reordenar arrastrando: el DOM de la lista se mueve en vivo
+  // y se guarda UNA sola vez al soltar, con el orden final completo.
+  // ----------------------------------------------------------------
+  var dragId = '';
+
+  function currentOrderFromList() {
+    return Array.prototype.map.call(
+      sectionList.querySelectorAll('[data-section-item]'),
+      function (li) { return li.dataset.sectionItem; }
+    );
+  }
+
+  function clearDropMarks() {
+    sectionList.querySelectorAll('.is-drop-target').forEach(function (n) { n.classList.remove('is-drop-target'); });
+  }
+
+  function wireRowDrag(li, id) {
+    li.addEventListener('dragstart', function (e) {
+      if (structureBusy || busy) { e.preventDefault(); return; }
+      dragId = id;
+      li.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox no arranca el arrastre sin datos.
+      try { e.dataTransfer.setData('text/plain', id); } catch (err) { /* da igual */ }
+    });
+    li.addEventListener('dragend', function () {
+      dragId = '';
+      li.classList.remove('is-dragging');
+      clearDropMarks();
+    });
+    li.addEventListener('dragover', function (e) {
+      if (!dragId || dragId === id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      clearDropMarks();
+      li.classList.add('is-drop-target');
+    });
+    li.addEventListener('dragleave', function () { li.classList.remove('is-drop-target'); });
+    li.addEventListener('drop', function (e) {
+      if (!dragId || dragId === id) return;
+      e.preventDefault();
+      var before = currentOrderFromList();
+      var moving = sectionList.querySelector('[data-section-item="' + CSS.escape(dragId) + '"]');
+      if (!moving) return;
+      // Cae antes o después según de dónde venga, para que el gesto sea el que
+      // uno espera al soltar sobre una fila.
+      var movingIndex = before.indexOf(dragId);
+      var targetIndex = before.indexOf(id);
+      li.parentNode.insertBefore(moving, movingIndex < targetIndex ? li.nextSibling : li);
+      clearDropMarks();
+      commitReorder(before);
+    });
+  }
+
+  function commitReorder(previousOrder) {
+    var order = currentOrderFromList();
+    if (order.join('|') === previousOrder.join('|')) return;   // no se movió
+    if (structureBusy || busy) return;
+
+    var pendingReorder = flushSectionSave();
+    if (pendingReorder) { pendingReorder.then(function () { commitReorder(previousOrder); }); return; }
+
+    structureBusy = true;
+    showStructureStatus(pp.t('js.cv.moving_section'), 'loading');
+    var fd = new FormData();
+    fd.append('_csrf', csrf);
+    fd.append('action', 'reorder');
+    order.forEach(function (id) { fd.append('order[]', id); });
+
+    fetch(body.dataset.structureUrl, { method: 'POST', body: fd })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .then(function (data) {
+        if (!data.ok) {
+          showStructureStatus(data.error || pp.t('js.cv.structure_error'), 'error');
+          renderSectionList(pageSections);   // devolver la lista a lo que hay
+          return;
+        }
+        applyHistory(data.history);
+        showStructureStatus(pp.t('js.cv.sections_reordered'), 'success');
+        renderSectionList(data.sections || []);
+        reloadPreview();
+      })
+      .catch(function () {
+        showStructureStatus(pp.t('js.cv.structure_error'), 'error');
+        renderSectionList(pageSections);
+      })
+      .finally(function () { structureBusy = false; });
   }
 
   // El iframe manda las partes como {id, label}; se acepta también un array de
@@ -311,6 +624,11 @@
       var li = document.createElement('li');
       li.className = 'cvstudio-seclist__item';
       li.dataset.sectionItem = id;
+      // STUDIO-UX F5 — arrastrar para reordenar. Los botones ↑↓ se quedan:
+      // son la vía accesible y la de las pantallas táctiles.
+      li.draggable = true;
+      li.title = pp.t('js.cv.reorder_hint');
+      wireRowDrag(li, id);
       var row = document.createElement('div');
       row.className = 'cvstudio-seclist__row';
       var btn = document.createElement('button');
@@ -328,6 +646,7 @@
       actions.className = 'cvstudio-seclist__actions';
       actions.appendChild(structureActionButton('up', id, part.label, i === 0));
       actions.appendChild(structureActionButton('down', id, part.label, i === pageSections.length - 1));
+      actions.appendChild(structureActionButton('duplicate', id, part.label, false));
       actions.appendChild(structureActionButton('delete', id, part.label, false));
       row.appendChild(btn);
       row.appendChild(actions);
@@ -357,9 +676,15 @@
 
   function updateCanvasStructure(action, sectionId, direction, trigger) {
     if (structureBusy || busy) return;
+    var pendingStructure = flushSectionSave();
+    if (pendingStructure) {
+      pendingStructure.then(function () { updateCanvasStructure(action, sectionId, direction, trigger); });
+      return;
+    }
     structureBusy = true;
     if (trigger) trigger.disabled = true;
-    var loadingText = action === 'delete' ? pp.t('js.cv.deleting_section') : pp.t('js.cv.moving_section');
+    var loadingKeys = { delete: 'js.cv.deleting_section', duplicate: 'js.cv.duplicating_section' };
+    var loadingText = pp.t(loadingKeys[action] || 'js.cv.moving_section');
     showStructureStatus(loadingText, 'loading');
 
     var fd = new FormData();
@@ -395,7 +720,7 @@
           closePanel();
           showStructureStatus(pp.t('js.cv.section_deleted'), 'success', sectionId);
         } else {
-          showStructureStatus(pp.t('js.cv.section_moved'), 'success');
+          showStructureStatus(pp.t(action === 'duplicate' ? 'js.cv.section_duplicated' : 'js.cv.section_moved'), 'success');
         }
         renderSectionList(data.sections || []);
         reloadPreview();
@@ -613,6 +938,26 @@
       + parts.join('<i aria-hidden="true">›</i>') + '</nav>';
   }
 
+  // STUDIO-UX F2 — Acciones estructurales del elemento seleccionado. Antes,
+  // añadir una tarjeta a una rejilla o quitar un botón obligaba a pedirle al
+  // modelo que reescribiera la sección entera.
+  function elActionButton(op, val, key, icon, disabled) {
+    var text = pp.t(key);
+    return '<button type="button" class="cvstudio-elaction' + (op === 'el-delete' ? ' is-danger' : '') + '"'
+      + ' data-elop="' + op + '" data-elval="' + val + '"' + (disabled ? ' disabled' : '')
+      + ' title="' + esc(text) + '" aria-label="' + esc(text) + '">' + structureIcon(icon) + '</button>';
+  }
+
+  function elActionsRow(structure) {
+    if (!structure) return '';
+    return '<div class="cvstudio-panel__structure" role="group" aria-label="' + pp.t('js.cv.element_actions') + '">'
+      + elActionButton('el-duplicate', '', 'js.cv.duplicate_element', 'duplicate', false)
+      + elActionButton('el-move', 'prev', 'js.cv.move_element_prev', 'up', !structure.canPrev)
+      + elActionButton('el-move', 'next', 'js.cv.move_element_next', 'down', !structure.canNext)
+      + elActionButton('el-delete', '', 'js.cv.delete_element', 'trash', !structure.canDelete)
+      + '</div>';
+  }
+
   function openPanel(d) {
     var p = d.props || {};
     var titles = { text: pp.t('js.chrome.text'), box: pp.t('js.cv.box'), link: pp.t('js.cv.button_link'), image: pp.t('js.post_editor.image'), section: pp.t('js.cv.section') };
@@ -632,6 +977,7 @@
             : '<strong>' + esc(titles[d.kind] || pp.t('js.cv.element')) + '</strong><small>' + esc(d.sectionLabel || '') + '</small>')
         + '<button type="button" id="ep-close" title="' + pp.t('js.common.close') + '">✕</button>'
       + '</div>'
+      + elActionsRow(d.structure)
       + '<div class="cvstudio-panel__body">' + bodyHtml + '</div>'
       + '<p class="pp-chat-hint">' + pp.t('js.cv.complex_hint') + '</p>';
     showSide('panel');
@@ -658,6 +1004,14 @@
   var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1 };
 
   function wirePanel(kind) {
+    // Estas no pintan "Guardado" a ciegas: el overlay serializa la sección y el
+    // aviso lo da `saveSectionInline` cuando el servidor confirma.
+    panel.querySelectorAll('[data-elop]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        applyOp(btn.dataset.elop, btn.dataset.elval || '');
+      });
+    });
     panel.querySelectorAll('[data-op]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyOp(btn.dataset.op, btn.dataset.val);
@@ -666,7 +1020,6 @@
           sibs.forEach(function (b) { b.classList.remove('is-on'); });
           btn.classList.add('is-on');
         }
-        showSaved('Guardado');
       });
     });
     panel.querySelectorAll('[data-toggle]').forEach(function (btn) {
@@ -674,13 +1027,11 @@
         var on = !btn.classList.contains('is-on');
         btn.classList.toggle('is-on', on);
         applyOp(btn.dataset.toggle, on);
-        showSaved('Guardado');
       });
     });
     panel.querySelectorAll('[data-corner]').forEach(function (field) {
       field.addEventListener('change', function () {
         applyOp('corner-radius', { corner: field.dataset.corner, px: field.value });
-        showSaved('Guardado');
       });
     });
     // Marca activo el control de color elegido (swatch o picker) dentro de su grupo.
@@ -695,14 +1046,13 @@
       btn.addEventListener('click', function () {
         applyOp(btn.dataset.cop, btn.dataset.cval);
         if (btn.dataset.cval !== 'reset') markColor(btn.dataset.cop, btn); else markColor(btn.dataset.cop, null);
-        showSaved('Guardado');
       });
     });
     // Picker de color libre.
     panel.querySelectorAll('[data-cinput]').forEach(function (inp) {
       var lbl = inp.parentNode;
       inp.addEventListener('input', function () { applyOp(inp.dataset.cinput, inp.value, true); lbl.style.background = inp.value; }); // preview
-      inp.addEventListener('change', function () { applyOp(inp.dataset.cinput, inp.value); markColor(inp.dataset.cinput, lbl); lbl.style.background = inp.value; showSaved('Guardado'); });
+      inp.addEventListener('change', function () { applyOp(inp.dataset.cinput, inp.value); markColor(inp.dataset.cinput, lbl); lbl.style.background = inp.value; });
     });
 
     panel.querySelectorAll('[data-scope]').forEach(function (btn) {
@@ -718,28 +1068,28 @@
       var textIn = panel.querySelector('#ep-text');
       var newtab = panel.querySelector('#ep-newtab');
       if (pageSel) pageSel.addEventListener('change', function () {
-        if (pageSel.value) { urlIn.value = pageSel.value; applyOp('link', pageSel.value); showSaved('Guardado'); }
+        if (pageSel.value) { urlIn.value = pageSel.value; applyOp('link', pageSel.value); }
       });
-      if (urlIn) urlIn.addEventListener('change', function () { applyOp('link', urlIn.value.trim()); showSaved('Guardado'); });
-      if (textIn) textIn.addEventListener('change', function () { applyOp('settext', textIn.value); showSaved('Guardado'); });
-      if (newtab) newtab.addEventListener('change', function () { applyOp('newtab', newtab.checked); showSaved('Guardado'); });
+      if (urlIn) urlIn.addEventListener('change', function () { applyOp('link', urlIn.value.trim()); });
+      if (textIn) textIn.addEventListener('change', function () { applyOp('settext', textIn.value); });
+      if (newtab) newtab.addEventListener('change', function () { applyOp('newtab', newtab.checked); });
     }
     if (kind === 'image') {
       var altIn = panel.querySelector('#ep-alt');
       var repl = panel.querySelector('#ep-replace');
-      if (altIn) altIn.addEventListener('change', function () { applyOp('alt', altIn.value); showSaved('Guardado'); });
+      if (altIn) altIn.addEventListener('change', function () { applyOp('alt', altIn.value); });
       if (repl) repl.addEventListener('click', function () { openMediaModal(); });
     }
     if (kind === 'section') {
       var reveal = panel.querySelector('#ep-reveal');
-      if (reveal) reveal.addEventListener('change', function () { applyOp('reveal', reveal.checked); showSaved('Guardado'); });
+      if (reveal) reveal.addEventListener('change', function () { applyOp('reveal', reveal.checked); });
       var bgChange = panel.querySelector('#ep-bg-change');
       var bgRemove = panel.querySelector('#ep-bg-remove');
       var bgAdd = panel.querySelector('#ep-bg-add');
       // "Cambiar"/"Poner" marca el destino del fondo y abre la biblioteca (replace-image guarda).
       if (bgChange) bgChange.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
       if (bgAdd) bgAdd.addEventListener('click', function () { applyOp('bgimg', 'mark'); openMediaModal(); });
-      if (bgRemove) bgRemove.addEventListener('click', function () { applyOp('bgimg', 'remove'); showSaved('Guardado'); });
+      if (bgRemove) bgRemove.addEventListener('click', function () { applyOp('bgimg', 'remove'); });
       var galleryPick = panel.querySelector('#ep-gallery-pick');
       if (galleryPick) galleryPick.addEventListener('click', function () { openMediaModal(true); });
     }
@@ -801,6 +1151,11 @@
     e.preventDefault();
     var text = input.value.trim();
     if (text === '' || busy) return;
+
+    // F4 — la IA parte del HTML guardado: sin vaciar la cola, trabajaría sobre
+    // una versión anterior a lo que el usuario acaba de tocar a mano.
+    var pendingChat = flushSectionSave();
+    if (pendingChat) { pendingChat.then(function () { form.dispatchEvent(new Event('submit')); }); return; }
 
     setBusy(true);
     input.value = '';
@@ -925,10 +1280,19 @@
     if (!state) return;
     undoBtn.disabled = !state.can_undo;
     redoBtn.disabled = !state.can_redo;
+    // C4 — cada guardado dice si la página se ha separado de lo publicado.
+    if (typeof state.has_unpublished === 'boolean' && state.has_unpublished !== hasUnpublished) {
+      hasUnpublished = state.has_unpublished;
+      reflectPublished(body.dataset.published === '1');
+    }
   }
 
   function historyStep(url, label, btn) {
     if (busy) return;
+    // F4 — lo pendiente sale ANTES: si el guardado llegara después del undo,
+    // reescribiría con el estado viejo lo que el undo acaba de restaurar.
+    var pending = flushSectionSave();
+    if (pending) { pending.then(function () { historyStep(url, label, btn); }); return; }
     busy = true;
     if (btn) btn.disabled = true;
     var fd = new FormData();
@@ -976,6 +1340,8 @@
   // Restaura una versión concreta (desde el modal de historial). Mueve el
   // puntero (reversible con deshacer/rehacer hasta el siguiente cambio).
   function restoreVersion(versionId, btn) {
+    var pendingRestore = flushSectionSave();
+    if (pendingRestore) { pendingRestore.then(function () { restoreVersion(versionId, btn); }); return; }
     busy = true;
     if (btn) { btn.disabled = true; btn.textContent = 'Recuperando…'; }
     var fd = new FormData();
@@ -1001,32 +1367,79 @@
   // ----------------------------------------------------------------
   var savedPill = document.getElementById('studio-saved');
   var savedTimer = null;
-  function showSaved(text, isError) {
+  // `pending` = todavía guardando: se queda en pantalla hasta que haya
+  // respuesta. Sin esto, "Guardado" aparecía antes de que el servidor supiera
+  // nada del cambio.
+  function showSaved(text, isError, pending) {
     savedPill.textContent = text;
     savedPill.classList.toggle('is-error', !!isError);
+    savedPill.classList.toggle('is-pending', !!pending);
     savedPill.hidden = false;
     clearTimeout(savedTimer);
+    if (pending) return;
     savedTimer = setTimeout(function () { savedPill.hidden = true; }, isError ? 5000 : 2200);
   }
 
-  function saveSectionInline(sectionId, html) {
+  // STUDIO-UX F4 — Los retoques seguidos no salen a la red uno a uno: se
+  // agrupan y se manda el último estado. El servidor, además, los funde en una
+  // sola versión (CanvasService::coalescableVersionId), así que una ráfaga de
+  // clics deja UN paso de "deshacer" en vez de cinco.
+  var SAVE_DEBOUNCE_MS = 700;
+  var pendingSave = null;      // { sectionId, html }
+  var pendingTimer = null;
+  var saveInFlight = 0;
+
+  function queueSectionSave(sectionId, html) {
+    // Si cambia la sección, lo pendiente sale YA: mezclar dos secciones en un
+    // envío perdería la primera.
+    if (pendingSave && pendingSave.sectionId !== sectionId) flushSectionSave();
+    pendingSave = { sectionId: sectionId, html: html };
+    showSaved(pp.t('js.cv.saving'), false, true);
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(flushSectionSave, SAVE_DEBOUNCE_MS);
+  }
+
+  function flushSectionSave(useKeepalive) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+    if (!pendingSave) return null;
+    var job = pendingSave;
+    pendingSave = null;
+    return sendSectionSave(job.sectionId, job.html, useKeepalive);
+  }
+
+  function sendSectionSave(sectionId, html, useKeepalive) {
     var fd = new FormData();
     fd.append('_csrf', csrf);
     fd.append('section', sectionId);
     fd.append('html', html);
-    fetch(body.dataset.sectionUrl, { method: 'POST', body: fd })
+    saveInFlight++;
+    var opts = { method: 'POST', body: fd };
+    if (useKeepalive) opts.keepalive = true;   // la pestaña se está cerrando
+    return fetch(body.dataset.sectionUrl, opts)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.ok) {
-          showSaved('Guardado');
+          showSaved(pp.t('js.cv.saved'));
           applyHistory(data.history);
         } else {
-          showSaved('No se pudo guardar', true);
+          showSaved(pp.t('js.cv.save_failed'), true);
           reloadPreview(); // volver al estado real persistido
         }
       })
-      .catch(function () { showSaved(pp.t('js.cv.offline_not_saved'), true); reloadPreview(); });
+      .catch(function () { showSaved(pp.t('js.cv.offline_not_saved'), true); reloadPreview(); })
+      .finally(function () { saveInFlight--; });
   }
+
+  // Compatibilidad: el iframe sigue mandando 'section-changed' por cambio.
+  function saveSectionInline(sectionId, html) { queueSectionSave(sectionId, html); }
+
+  // Cerrar la pestaña con algo pendiente no puede perderlo.
+  window.addEventListener('beforeunload', function (e) {
+    if (!pendingSave && saveInFlight === 0) return;
+    flushSectionSave(true);
+    if (saveInFlight > 0) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   // ----------------------------------------------------------------
   // FH4 — Selector de imágenes de la biblioteca
@@ -1346,14 +1759,25 @@
   var unpublishBtn = document.getElementById('studio-unpublish-btn');
 
   // Refleja el estado publicado/borrador en toda la barra (sin recargar).
+  // STUDIO-UX C4 — Tres estados, no dos: borrador, publicada al día, y
+  // publicada CON cambios sin publicar. El tercero es el que antes no existía:
+  // se editaba en vivo y el chip verde decía que todo estaba bien.
+  var hasUnpublished = body.dataset.hasUnpublished === '1';
+
   function reflectPublished(publishing) {
     body.dataset.published = publishing ? '1' : '0';
-    // Borrador → botón primario "Publicar"; Publicada → menú discreto "⋯".
-    publishBtn.hidden = publishing;
+    var pending = publishing && hasUnpublished;
+    // Borrador → "Publicar". Publicada con cambios → "Publicar cambios".
+    // Publicada y al día → solo el menú discreto "⋯".
+    publishBtn.hidden = publishing && !pending;
+    publishBtn.textContent = pending ? pp.t('js.cv.publish_changes') : pp.t('js.cv.publish');
     moreWrap.hidden = !publishing;
     if (!publishing) closeMoreMenu();
-    statusEl.textContent = publishing ? 'Publicada' : 'Borrador';
-    statusEl.classList.toggle('is-live', publishing);
+    statusEl.textContent = pending
+      ? pp.t('js.cv.unpublished_changes')
+      : pp.t(publishing ? 'js.cv.status_published' : 'js.cv.status_draft');
+    statusEl.classList.toggle('is-live', publishing && !pending);
+    statusEl.classList.toggle('is-pending', pending);
     // "Ver página": URL pública si está publicada; preview limpio si es borrador.
     var vlink = document.getElementById('studio-view-link');
     if (vlink) {
@@ -1372,6 +1796,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.ok) return;
+        hasUnpublished = !!(data.history && data.history.has_unpublished);
         reflectPublished(publishing);
         addMsg('assistant', publishing
           ? pp.t('js.cv.now_published.html', {
@@ -1401,6 +1826,10 @@
 
   publishBtn.addEventListener('click', function () { setPublished(true, publishBtn); });
   unpublishBtn.addEventListener('click', function () { closeMoreMenu(); setPublished(false, unpublishBtn); });
+
+  // C4 — el estado inicial lo pinta el JS, no la vista: así los tres estados
+  // (borrador / publicada / publicada con cambios) viven en un solo sitio.
+  reflectPublished(body.dataset.published === '1');
 
   function appendRequestedPlacement(fd) {
     if (insertPlacement) {

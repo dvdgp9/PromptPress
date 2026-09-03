@@ -93,7 +93,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
         $pageLang = \App\Services\LanguageService::forPage($page, $siteId);
 
-        $canvas = CanvasService::renderPublic($pageId, $siteId, $pageLang);
+        $canvas = CanvasService::renderDraft($pageId, $siteId, $pageLang);
         $site = Database::selectOne('SELECT name FROM sites WHERE id = ?', [$siteId]) ?? [];
         $styleSlug = VisualStyleService::selectedForSite($siteId);
 
@@ -168,6 +168,10 @@ final class CanvasController
         @set_time_limit(240);
         try {
             $outcome = CanvasChatService::applyInstruction($siteId, $page, $instruction, $sectionId, $elementContext, 'chat', '', $requestId, $chatContext);
+        } catch (\App\Services\Canvas\SectionGoneException $e) {
+            // STUDIO-UX F10 — Borraron la sección mientras la IA trabajaba. Es un
+            // conflicto, no un fallo: la página no se toca y se dice por qué.
+            Response::json(['ok' => false, 'error' => __('canvas.err.section_gone')], 409);
         } catch (AIException $e) {
             $errorId = substr(bin2hex(random_bytes(6)), 0, 10);
             error_log('[canvas chat] error_id=' . $errorId . ' page=' . $pageId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
@@ -375,6 +379,108 @@ final class CanvasController
     }
 
     /** R6 — inserta un bloque dinámico de recursos tras la parte activa. */
+    /**
+     * STUDIO-UX F6 — Otras páginas canvas del sitio con sus partes, para poder
+     * traerse una tal cual. Solo lectura. JSON.
+     */
+    public function copySources(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+
+        $rows = Database::select(
+            "SELECT p.id, p.title, c.html
+             FROM pages p
+             JOIN page_canvas c ON c.page_id = p.id
+             WHERE p.site_id = ? AND p.id <> ? AND p.render_mode = 'canvas'
+               AND p.status <> 'trash'
+             ORDER BY p.title ASC
+             LIMIT 60",
+            [$siteId, $pageId]
+        );
+
+        $out = [];
+        foreach ($rows as $row) {
+            $sections = CanvasService::listSections((string) $row['html']);
+            if ($sections === []) continue;
+            $out[] = [
+                'id'       => (int) $row['id'],
+                'title'    => (string) $row['title'],
+                'sections' => $sections,
+            ];
+        }
+        Response::json(['ok' => true, 'pages' => $out]);
+    }
+
+    /**
+     * STUDIO-UX F6 — Trae una sección de otra página, literal. Sin IA: el chat
+     * ya sabía imitarla, pero costaba una generación entera.
+     */
+    public function copySection(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+        CSRF::check();
+
+        $sourcePageId = (int) Request::post('source_page', 0);
+        $sectionId = trim((string) Request::post('source_section', ''));
+        if ($sourcePageId <= 0 || $sectionId === '' || $sourcePageId === $pageId) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.bad_request')], 422);
+        }
+
+        // El origen tiene que ser del MISMO sitio: si no, un id válido de otro
+        // sitio dejaría copiar contenido ajeno.
+        $source = self::findCanvasPage($sourcePageId, $siteId);
+        $sourceCanvas = CanvasService::get((int) $source['id']);
+        $targetCanvas = CanvasService::get($pageId);
+        if ($sourceCanvas === null || $targetCanvas === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
+        }
+
+        $position = trim((string) Request::post('position', ''));
+        if (!in_array($position, ['before', 'after'], true)) $position = 'after';
+        $anchorId = trim((string) Request::post('section', ''));
+        if ($anchorId === '') {
+            $existing = CanvasService::listSections((string) $targetCanvas['html']);
+            $anchorId = (string) ($existing[count($existing) - 1]['id'] ?? '');
+            $position = 'after';
+        }
+
+        $copied = CanvasService::copySectionInto(
+            (string) $targetCanvas['html'],
+            (string) $targetCanvas['css'],
+            (string) $sourceCanvas['html'],
+            (string) $sourceCanvas['css'],
+            $sectionId,
+            $anchorId,
+            $position,
+            '-c' . substr(bin2hex(random_bytes(3)), 0, 5)
+        );
+        if ($copied === null) {
+            Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+        }
+
+        $saved = CanvasService::save(
+            $pageId,
+            $copied['html'],
+            $copied['css'],
+            'structure',
+            $copied['label'] . ' — ' . __('canvas.hist.copied')
+        );
+        Response::json([
+            'ok' => true,
+            'changed' => true,
+            'action' => 'copy',
+            'changed_section' => $copied['id'],
+            'focus_section' => $copied['id'],
+            'reply' => __('cv.section_copied', ['pagina' => (string) $source['title']]),
+            'history' => CanvasService::historyState($pageId),
+            'sections' => CanvasService::listSections($saved['html']),
+        ]);
+    }
+
     public function insertResources(array $params = []): void
     {
         $siteId = self::requireSiteId();
@@ -432,6 +538,35 @@ final class CanvasController
 
         $action = trim((string) Request::post('action', ''));
         $sectionId = trim((string) Request::post('section', ''));
+
+        // STUDIO-UX F5 — Reordenar arrastrando: llega el orden final completo y
+        // se aplica en una sola escritura (antes, llevar la última parte al
+        // principio eran seis viajes, seis versiones y seis recargas).
+        if ($action === 'reorder') {
+            $canvas = CanvasService::get($pageId);
+            if ($canvas === null) {
+                Response::json(['ok' => false, 'error' => __('canvas.error.no_canvas')], 404);
+            }
+            $order = Request::post('order', []);
+            $order = is_array($order) ? array_values(array_filter(array_map('strval', $order))) : [];
+            $newHtml = CanvasService::reorderSections((string) $canvas['html'], $order);
+            if ($newHtml === null) {
+                // La lista no cuadra con la página: el cliente venía de un DOM
+                // viejo. Mejor un conflicto que un reordenado a medias.
+                Response::json(['ok' => false, 'error' => __('canvas.error.part_not_found')], 409);
+            }
+            $saved = CanvasService::save($pageId, $newHtml, (string) $canvas['css'], 'structure', __('canvas.hist.reorder'));
+            Response::json([
+                'ok' => true,
+                'changed' => true,
+                'action' => $action,
+                'changed_section' => '',
+                'focus_section' => $order[0] ?? '',
+                'history' => CanvasService::historyState($pageId),
+                'sections' => CanvasService::listSections($saved['html']),
+            ]);
+        }
+
         if ($action !== 'insert_template' && $sectionId === '') {
             Response::json(['ok' => false, 'error' => __('canvas.error.missing_section')], 422);
         }
@@ -502,6 +637,7 @@ final class CanvasController
         }
 
         $focusSection = $sectionId;
+        $changedSection = $sectionId;
         if ($action === 'move') {
             $direction = trim((string) Request::post('direction', ''));
             if (!in_array($direction, ['up', 'down'], true)) {
@@ -509,6 +645,27 @@ final class CanvasController
             }
             $newHtml = CanvasService::moveSection($canvas['html'], $sectionId, $direction);
             $summary = $label . ' — ' . __('canvas.hist.change');
+        } elseif ($action === 'duplicate') {
+            // STUDIO-UX F1 — La copia se queda seleccionada: es la que el
+            // usuario va a editar, no el original.
+            $copy = CanvasService::duplicateSection($canvas['html'], $sectionId);
+            $newHtml = $copy['html'] ?? null;
+            // STUDIO-UX F8 — Desde "Añadir a la página" el usuario ya ha elegido
+            // DÓNDE. Sin esto la copia caía siempre pegada al original y se
+            // ignoraba el punto de inserción que acababa de marcar.
+            $anchor = trim((string) Request::post('anchor', ''));
+            $anchorPos = trim((string) Request::post('position', ''));
+            if ($newHtml !== null && $anchor !== '' && in_array($anchorPos, ['before', 'after'], true)) {
+                $detached = CanvasService::deleteSection($newHtml, (string) $copy['id']);
+                $fragment = CanvasService::sectionHtml($newHtml, (string) $copy['id']);
+                $placed = ($detached !== null && $fragment !== null)
+                    ? CanvasService::insertSectionRelative($detached, $fragment, $anchor, $anchorPos)
+                    : null;
+                if ($placed !== null) $newHtml = $placed;
+            }
+            $summary = $label . ' — ' . __('canvas.hist.duplicate');
+            $focusSection = (string) ($copy['id'] ?? $sectionId);
+            $changedSection = $focusSection;
         } elseif ($action === 'delete') {
             $newHtml = CanvasService::deleteSection($canvas['html'], $sectionId);
             $summary = $label . ' — ' . __('canvas.hist.change');
@@ -529,7 +686,7 @@ final class CanvasController
                 'ok' => true,
                 'changed' => false,
                 'action' => $action,
-                'changed_section' => $sectionId,
+                'changed_section' => $changedSection,
                 'focus_section' => $focusSection,
                 'history' => CanvasService::historyState($pageId),
                 'sections' => $before,
@@ -541,7 +698,7 @@ final class CanvasController
             'ok' => true,
             'changed' => true,
             'action' => $action,
-            'changed_section' => $action === 'delete' ? '' : $sectionId,
+            'changed_section' => $action === 'delete' ? '' : $changedSection,
             'focus_section' => $focusSection,
             'history' => CanvasService::historyState($pageId),
             'sections' => CanvasService::listSections($saved['html']),
@@ -699,14 +856,23 @@ final class CanvasController
     {
         $siteId = self::requireSiteId();
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
         CSRF::check();
         $publish = Request::post('publish', '1') === '1';
         Database::execute(
             "UPDATE pages SET status = ?, published_at = ?, updated_at = NOW() WHERE id = ?",
-            [$publish ? 'published' : 'draft', $publish ? date('Y-m-d H:i:s') : null, (int) $page['id']]
+            [$publish ? 'published' : 'draft', $publish ? date('Y-m-d H:i:s') : null, $pageId]
         );
+        // STUDIO-UX C4 — Publicar deja al aire el estado de trabajo ACTUAL, y
+        // vuelve a hacerlo cada vez (es también el "Publicar cambios").
+        // Despublicar suelta el puntero: la página deja de tener versión viva.
+        $publish ? CanvasService::markPublished($pageId) : CanvasService::clearPublished($pageId);
         \App\Services\CacheService::flush($siteId);
-        Response::json(['ok' => true, 'status' => $publish ? 'published' : 'draft']);
+        Response::json([
+            'ok' => true,
+            'status' => $publish ? 'published' : 'draft',
+            'history' => CanvasService::historyState($pageId),
+        ]);
     }
 
     /**
@@ -842,6 +1008,20 @@ final class CanvasController
   .pp-studio-text-hover{outline:1.5px dashed color-mix(in srgb, var(--pp-primary) 55%, transparent);outline-offset:3px;cursor:text;border-radius:2px}
   .pp-studio-box-hover{outline:2px solid color-mix(in srgb, var(--pp-primary) 65%, transparent);outline-offset:3px;cursor:pointer}
   .pp-studio-editing{outline:2px solid var(--pp-primary);outline-offset:3px;border-radius:2px;cursor:text}
+  /* STUDIO-UX F3 — barra de formato sobre la selección */
+  .pp-studio-rt{position:absolute;z-index:10000;display:flex;align-items:center;gap:2px;background:#fff;border:1px solid #e5e7eb;border-radius:9px;box-shadow:0 10px 30px rgba(17,24,39,.18);padding:4px;font:500 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;color:#374151}
+  .pp-studio-rt[hidden]{display:none}
+  .pp-studio-rt button{display:grid;place-items:center;min-width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:0 7px}
+  .pp-studio-rt button:hover{background:#f3f4f6;color:#111827}
+  .pp-studio-rt button.is-on{background:var(--pp-primary);color:var(--pp-on-primary,#fff)}
+  .pp-studio-rt button[hidden]{display:none}
+  .pp-studio-rt svg{display:block}
+  .pp-studio-rt__link{display:flex;align-items:center;gap:4px;margin-left:4px;padding-left:6px;border-left:1px solid #e5e7eb}
+  .pp-studio-rt__link[hidden]{display:none}
+  .pp-studio-rt__link select,.pp-studio-rt__link input{height:28px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#374151;font:inherit;font-size:12px;padding:0 6px;max-width:170px}
+  .pp-studio-rt__link input{min-width:150px}
+  .pp-studio-rt__link button{background:var(--pp-primary);color:var(--pp-on-primary,#fff);font-weight:600;font-size:12px}
+  .pp-studio-rt__link button:hover{background:var(--pp-primary);filter:brightness(1.08);color:var(--pp-on-primary,#fff)}
   [data-pp-section] img:not([data-pp-no-edit]):hover{outline:2.5px solid var(--pp-primary);outline-offset:2px;cursor:pointer;filter:brightness(.92)}
   [data-pp-placeholder]{cursor:pointer}
   /* STUDIO-2 B3 — destello sobre la parte que acaba de cambiar. */
@@ -1147,7 +1327,14 @@ final class CanvasController
       sectionLabel: sec ? label(sec.getAttribute('data-pp-section'), sec) : '',
       chain: activeChain.map(function(c){ return { kind: c.kind }; }),
       chainIndex: chainIndexOf(el),
-      elementPath: pathWithinSection(el)
+      elementPath: pathWithinSection(el),
+      // STUDIO-UX F2 — qué puede hacer el panel con este elemento.
+      structure: (function(){
+        if(!canRestructure(el)) return null;
+        var sibs = elementSiblings(el);
+        var i = sibs.indexOf(el);
+        return { canPrev: i > 0, canNext: i > -1 && i < sibs.length - 1, canDelete: sibs.length > 1 };
+      })()
     });
   }
 
@@ -1182,9 +1369,81 @@ final class CanvasController
     return 'var(--pp-' + v + ')';
   }
 
+  // STUDIO-UX F2 — Hermanos de elemento: base de duplicar/mover/eliminar.
+  // Solo cuentan los elementos, no los nodos de texto entre ellos.
+  function elementSiblings(el){
+    if(!el || !el.parentNode) return [];
+    return Array.prototype.filter.call(el.parentNode.children, function(n){ return n.nodeType === 1; });
+  }
+
+  // Una sección top-level se duplica desde la lista lateral (F1), no aquí; y
+  // dentro de un embed ({{form:N}} y compañía) el HTML se regenera al render,
+  // así que tocarlo se perdería en el siguiente guardado.
+  function canRestructure(el){
+    if(!el || !el.parentNode) return false;
+    if(el.hasAttribute('data-pp-section')) return false;
+    if(inEmbed(el)) return false;
+    return sectionOf(el) !== null;
+  }
+
+  // El clon no puede arrastrar los ids del original: dos elementos con el mismo
+  // id rompen anclas y asociaciones label/input.
+  function stripIds(el){
+    if(el.hasAttribute('id')) el.removeAttribute('id');
+    el.querySelectorAll('[id]').forEach(function(n){ n.removeAttribute('id'); });
+  }
+
+  function restructure(msg){
+    var el = activeTarget;
+    if(!canRestructure(el)) return true;
+    var sec = sectionOf(el);
+    var sibs = elementSiblings(el);
+    var i = sibs.indexOf(el);
+
+    if(msg.op === 'el-duplicate'){
+      var copy = el.cloneNode(true);
+      stripIds(copy);
+      copy.classList.remove('pp-studio-selected','pp-studio-hover','pp-studio-text-hover','pp-studio-box-hover','pp-studio-editing');
+      copy.removeAttribute('data-pp-edit-box');
+      copy.removeAttribute('data-pp-img-edit');
+      el.parentNode.insertBefore(copy, el.nextSibling);
+      serializeAndSave(sec);
+      // El marcador visual se MUEVE al clon (no se copia): la copia es la que
+      // se va a editar, y dejarlo en los dos marcaba dos elementos a la vez.
+      ['data-pp-edit-box','data-pp-img-edit'].forEach(function(attr){
+        if(el.hasAttribute(attr)){ el.removeAttribute(attr); copy.setAttribute(attr,'1'); }
+      });
+      copy.scrollIntoView({ block:'nearest' });
+      reportSelection(copy);
+      return true;
+    }
+
+    if(msg.op === 'el-delete'){
+      if(sibs.length < 2) return true;   // no dejamos el contenedor vacío
+      el.parentNode.removeChild(el);
+      activeTarget = null; activeChain = [];
+      serializeAndSave(sec);
+      post('element-deselected');
+      return true;
+    }
+
+    if(msg.op === 'el-move'){
+      if(msg.value === 'prev' && i > 0) el.parentNode.insertBefore(el, sibs[i - 1]);
+      else if(msg.value === 'next' && i < sibs.length - 1) el.parentNode.insertBefore(sibs[i + 1], el);
+      else return true;
+      serializeAndSave(sec);
+      el.scrollIntoView({ block:'nearest' });
+      reportSelection(el);
+      return true;
+    }
+
+    return false;
+  }
+
   function applyToTarget(msg){
     var el = activeTarget;
     if(!el) return;
+    if(msg.op === 'el-duplicate' || msg.op === 'el-delete' || msg.op === 'el-move'){ restructure(msg); return; }
     var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1, sliderlayout:1, gallery:1 };
 
     if(msg.op === 'size'){
@@ -1313,14 +1572,187 @@ final class CanvasController
     if(!msg.preview) saveTargetSection();
   }
 
+  // ---------- STUDIO-UX F3: barra de formato sobre la selección ----------
+  // Antes se editaba en `plaintext-only`: poner una palabra en negrita o un
+  // enlace dentro de una frase obligaba a pedirle a la IA que reescribiera la
+  // sección entera. Ahora es una selección y un clic.
+  var rt = null, rtLinkRow = null, rtUrl = null, rtPageSel = null, savedRange = null;
+  var studioLabels = {}, linkTargets = [];
+
+  function t(key, fallback){ return studioLabels[key] || fallback; }
+
+  function buildToolbar(){
+    if(rt) return rt;
+    rt = document.createElement('div');
+    rt.className = 'pp-studio-rt';
+    rt.setAttribute('role', 'toolbar');
+    rt.innerHTML = ''
+      + '<button type="button" data-rt="bold" title="' + t('bold','Negrita') + '"><b>B</b></button>'
+      + '<button type="button" data-rt="italic" title="' + t('italic','Cursiva') + '"><i>I</i></button>'
+      + '<button type="button" data-rt="link" title="' + t('link','Enlace') + '">'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>'
+      + '</button>'
+      + '<button type="button" data-rt="unlink" title="' + t('unlink','Quitar enlace') + '" hidden>'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 7l3 3-3 3M7 17l-3-3 3-3"/><path d="M4 4l16 16"/></svg>'
+      + '</button>'
+      + '<div class="pp-studio-rt__link" hidden>'
+        + '<select data-rt-page><option value="">' + t('link_page','Elegir una página…') + '</option></select>'
+        + '<input type="text" data-rt-url placeholder="' + t('link_url','https://… o /pagina') + '">'
+        + '<button type="button" data-rt="apply-link">' + t('link_apply','Enlazar') + '</button>'
+      + '</div>';
+    document.body.appendChild(rt);
+    rtLinkRow = rt.querySelector('.pp-studio-rt__link');
+    rtUrl = rt.querySelector('[data-rt-url]');
+    rtPageSel = rt.querySelector('[data-rt-page]');
+    fillLinkTargets();
+
+    // Sin esto el navegador quita la selección al pulsar y `execCommand` no
+    // tiene sobre qué actuar.
+    rt.addEventListener('mousedown', function(e){
+      if(e.target.closest('input,select')) return;
+      e.preventDefault();
+    });
+
+    rt.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-rt]');
+      if(!btn) return;
+      var op = btn.dataset.rt;
+      if(op === 'bold' || op === 'italic'){ exec(op); return; }
+      if(op === 'unlink'){ exec('unlink'); return; }
+      if(op === 'link'){ openLinkRow(); return; }
+      if(op === 'apply-link'){ applyLink(); return; }
+    });
+
+    rtPageSel.addEventListener('change', function(){ if(rtPageSel.value) rtUrl.value = rtPageSel.value; });
+    rtUrl.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); applyLink(); }
+      if(e.key === 'Escape'){ e.preventDefault(); closeLinkRow(); }
+    });
+    return rt;
+  }
+
+  function exec(cmd, value){
+    if(!editing) return;
+    editing.focus();
+    restoreRange();
+    document.execCommand(cmd, false, value || null);
+    positionToolbar();
+    saveRange();
+  }
+
+  function saveRange(){
+    var sel = window.getSelection();
+    if(sel && sel.rangeCount) savedRange = sel.getRangeAt(0).cloneRange();
+  }
+  function restoreRange(){
+    if(!savedRange) return;
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedRange);
+  }
+
+  function openLinkRow(){
+    saveRange();
+    rtLinkRow.hidden = false;
+    var a = currentLink();
+    rtUrl.value = a ? (a.getAttribute('href') || '') : '';
+    rtUrl.focus();
+    rtUrl.select();
+    positionToolbar();
+  }
+  function closeLinkRow(){
+    if(rtLinkRow) rtLinkRow.hidden = true;
+    if(editing){ editing.focus(); restoreRange(); }
+    positionToolbar();
+  }
+  function applyLink(){
+    var url = (rtUrl.value || '').trim();
+    if(url === ''){ closeLinkRow(); return; }
+    if(editing) editing.focus();
+    restoreRange();
+    document.execCommand('createLink', false, url);
+    closeLinkRow();
+    if(editing) serializeAndSave(sectionOf(editing));
+  }
+
+  function currentLink(){
+    var sel = window.getSelection();
+    if(!sel || !sel.anchorNode) return null;
+    var node = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode;
+    var a = node && node.closest ? node.closest('a') : null;
+    return (a && editing && editing.contains(a)) ? a : null;
+  }
+
+  function selectionInsideEditing(){
+    var sel = window.getSelection();
+    if(!editing || !sel || sel.isCollapsed || !sel.rangeCount) return false;
+    var r = sel.getRangeAt(0);
+    return editing.contains(r.commonAncestorContainer.nodeType === 1
+      ? r.commonAncestorContainer
+      : r.commonAncestorContainer.parentNode);
+  }
+
+  function positionToolbar(){
+    if(!rt || rt.hidden) return;
+    var sel = window.getSelection();
+    if(!sel || !sel.rangeCount) return;
+    var r = sel.getRangeAt(0).getBoundingClientRect();
+    if(!r.width && !r.height) return;
+    var box = rt.getBoundingClientRect();
+    var left = Math.max(8, Math.min(window.innerWidth - box.width - 8, r.left + r.width / 2 - box.width / 2));
+    var top = r.top + window.scrollY - box.height - 10;
+    if(top < window.scrollY + 4) top = r.bottom + window.scrollY + 10;
+    rt.style.left = Math.round(left + window.scrollX) + 'px';
+    rt.style.top = Math.round(top) + 'px';
+  }
+
+  function refreshToolbar(){
+    if(!editing){ hideToolbar(); return; }
+    // Con la fila de enlace abierta el foco está en el input: la selección se
+    // ha ido, pero la barra debe seguir ahí.
+    if(rt && rtLinkRow && !rtLinkRow.hidden) return;
+    if(!selectionInsideEditing()){ hideToolbar(); return; }
+    buildToolbar();
+    rt.hidden = false;
+    saveRange();
+    var unlinkBtn = rt.querySelector('[data-rt="unlink"]');
+    if(unlinkBtn) unlinkBtn.hidden = !currentLink();
+    rt.querySelector('[data-rt="bold"]').classList.toggle('is-on', document.queryCommandState('bold'));
+    rt.querySelector('[data-rt="italic"]').classList.toggle('is-on', document.queryCommandState('italic'));
+    positionToolbar();
+  }
+
+  function hideToolbar(){
+    if(!rt) return;
+    rt.hidden = true;
+    if(rtLinkRow) rtLinkRow.hidden = true;
+    savedRange = null;
+  }
+
+  document.addEventListener('selectionchange', function(){ setTimeout(refreshToolbar, 0); });
+  window.addEventListener('scroll', positionToolbar, true);
+  window.addEventListener('resize', positionToolbar);
+
+  function fillLinkTargets(){
+    if(!rtPageSel) return;
+    var opts = ['<option value="">' + t('link_page','Elegir una página…') + '</option>'];
+    linkTargets.forEach(function(p){
+      opts.push('<option value="' + p.url + '">' + p.title + '</option>');
+    });
+    rtPageSel.innerHTML = opts.join('');
+  }
+
   // ---------- Edición de texto ----------
   function startEdit(el){
     if(editing === el) return;
     endEdit(true);
     editing = el;
     editingOriginal = el.innerHTML;
-    try { el.contentEditable = 'plaintext-only'; } catch(e) { el.contentEditable = 'true'; }
-    if(el.contentEditable !== 'plaintext-only' && el.contentEditable !== 'true') el.setAttribute('contenteditable','true');
+    // F3 — `true`, no `plaintext-only`: el texto admite negrita, cursiva y
+    // enlaces. El pegado y el Enter se controlan más abajo para que el
+    // navegador no meta spans con estilo ni divs sueltos.
+    el.contentEditable = 'true';
+    try { document.execCommand('styleWithCSS', false, false); } catch(e) { /* navegadores viejos */ }
     el.classList.add('pp-studio-editing');
     var sec = sectionOf(el);
     if(sec) selectSection(sec, false, true);
@@ -1330,6 +1762,7 @@ final class CanvasController
   }
   function endEdit(commit){
     if(!editing) return;
+    hideToolbar();
     var el = editing; editing = null;
     el.removeAttribute('contenteditable');
     el.classList.remove('pp-studio-editing');
@@ -1344,6 +1777,7 @@ final class CanvasController
   // mousedown (no click) para que el navegador coloque el cursor donde tocas.
   document.addEventListener('mousedown', function(e){
     var t = e.target;
+    if(rt && !rt.hidden && rt.contains(t)) return;                // barra de formato
     if(editing && (editing === t || editing.contains(t))) return; // seguir editando
     if(t.closest && !inEmbed(t)){
       var txt = t.closest(EDITABLE);
@@ -1399,11 +1833,43 @@ final class CanvasController
 
   document.addEventListener('keydown', function(e){
     if(!editing) return;
-    if(e.key === 'Escape'){ e.preventDefault(); endEdit(false); }
-    if(e.key === 'Enter' && editing.tagName !== 'P' && editing.tagName !== 'LI'){ e.preventDefault(); endEdit(true); }
+    if(e.key === 'Escape'){
+      // Con la fila de enlace abierta, Esc solo la cierra.
+      if(rt && rtLinkRow && !rtLinkRow.hidden){ e.preventDefault(); closeLinkRow(); return; }
+      e.preventDefault(); endEdit(false); return;
+    }
+    // F3 — atajos de toda la vida sobre la selección.
+    if((e.metaKey || e.ctrlKey) && !e.altKey){
+      var k = e.key.toLowerCase();
+      if(k === 'b'){ e.preventDefault(); exec('bold'); return; }
+      if(k === 'i'){ e.preventDefault(); exec('italic'); return; }
+    }
+    if(e.key === 'Enter'){
+      if(editing.tagName !== 'P' && editing.tagName !== 'LI'){ e.preventDefault(); endEdit(true); return; }
+      // En párrafos y listas, salto de línea explícito: el `contenteditable`
+      // por defecto mete <div> sueltos dentro del propio elemento.
+      e.preventDefault();
+      if(!document.execCommand('insertLineBreak')) document.execCommand('insertHTML', false, '<br>');
+    }
   });
+
+  // Pegar desde Word/Docs/una web arrastra spans, estilos y fuentes: entra
+  // como texto plano y el formato lo pone el usuario con la barra.
+  document.addEventListener('paste', function(e){
+    if(!editing) return;
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text/plain') || '';
+    document.execCommand('insertText', false, text);
+  });
+
   document.addEventListener('focusout', function(e){
-    if(editing && e.target === editing) setTimeout(function(){ if(editing && document.activeElement !== editing) endEdit(true); }, 0);
+    if(editing && e.target === editing) setTimeout(function(){
+      if(!editing) return;
+      // El foco puede haberse ido a la barra de formato: eso no cierra la edición.
+      if(document.activeElement === editing) return;
+      if(rt && !rt.hidden && rt.contains(document.activeElement)) return;
+      endEdit(true);
+    }, 0);
   });
 
   // ---------- Hover ----------
@@ -1425,6 +1891,14 @@ final class CanvasController
   window.addEventListener('message', function(e){
     var d = e.data || {};
     if(d.source !== 'pp-studio-parent') return;
+    if(d.type === 'studio-config'){
+      // F3 — el overlay no tiene catálogo propio: microcopia y destinos de
+      // enlace llegan del panel, que sí sabe el idioma del usuario.
+      if(d.labels) studioLabels = d.labels;
+      if(Array.isArray(d.linkTargets)) linkTargets = d.linkTargets;
+      if(rt){ rt.remove(); rt = null; }   // se reconstruye con las etiquetas buenas
+      return;
+    }
     if(d.type === 'apply'){ applyToTarget(d); return; }
     if(d.type === 'select-scope'){ selectScope(d.index); return; }
     if(d.type === 'deselect' && selected){ selected.classList.remove('pp-studio-selected'); selected = null; activeTarget = null; activeChain = []; }

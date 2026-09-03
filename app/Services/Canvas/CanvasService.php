@@ -31,6 +31,12 @@ final class CanvasService
 {
     private const MAX_VERSIONS = 25;
 
+    /** F4 — Solo se agrupan los retoques manuales; la IA y la estructura no. */
+    private const COALESCE_ORIGIN = 'inline';
+
+    /** F4 — Ventana desde que empieza la versión en curso (segundos). */
+    private const COALESCE_SECONDS = 60;
+
     /** @return array{html:string,css:string}|null */
     public static function get(int $pageId): ?array
     {
@@ -63,11 +69,27 @@ final class CanvasService
             Database::execute('DELETE FROM page_versions WHERE page_id = ? AND id > ?', [$pageId, $pointer]);
         }
 
-        Database::execute(
-            'INSERT INTO page_versions (page_id, html, css, origin, summary) VALUES (?, ?, ?, ?, ?)',
-            [$pageId, $clean['html'], $cleanCss, mb_substr($origin, 0, 20), mb_substr($summary, 0, 255)]
-        );
-        $newVersionId = (int) Database::lastInsertId();
+        $origin = mb_substr($origin, 0, 20);
+        $summary = mb_substr($summary, 0, 255);
+
+        // STUDIO-UX F4 — Los retoques seguidos de una misma sección actualizan
+        // la versión en curso en vez de abrir otra. Sin esto, cinco clics en
+        // "A+" eran cinco versiones: el historial (25) se llenaba de píxeles y
+        // "Deshacer" dejaba de significar "deshaz lo que acabo de hacer".
+        $mergeId = self::coalescableVersionId($pageId, $origin, $summary, $pointer);
+        if ($mergeId > 0) {
+            Database::execute(
+                'UPDATE page_versions SET html = ?, css = ? WHERE id = ?',
+                [$clean['html'], $cleanCss, $mergeId]
+            );
+            $newVersionId = $mergeId;
+        } else {
+            Database::execute(
+                'INSERT INTO page_versions (page_id, html, css, origin, summary) VALUES (?, ?, ?, ?, ?)',
+                [$pageId, $clean['html'], $cleanCss, $origin, $summary]
+            );
+            $newVersionId = (int) Database::lastInsertId();
+        }
 
         Database::execute(
             'INSERT INTO page_canvas (page_id, html, css, current_version_id) VALUES (?, ?, ?, ?)
@@ -102,6 +124,92 @@ final class CanvasService
             },
             $html
         ) ?? $html;
+    }
+
+    /**
+     * STUDIO-UX F4 — ¿Hay una versión "en curso" en la que quepa este cambio?
+     *
+     * Solo se fusionan los retoques manuales (`inline`) de la MISMA sección
+     * hechos dentro de la ventana: un cambio de IA, uno de estructura o el de
+     * otra sección son pasos distintos y merecen su versión. La condición clave
+     * es que el puntero esté en la última versión: si el usuario ha deshecho, la
+     * rama se trunca y el cambio abre versión nueva en vez de reescribir una
+     * versión que ya no es "la actual".
+     */
+    private static function coalescableVersionId(int $pageId, string $origin, string $summary, int $pointer): int
+    {
+        if ($origin !== self::COALESCE_ORIGIN || $pointer <= 0) return 0;
+
+        // La ventana se evalúa DENTRO de SQL a propósito: comparar `created_at`
+        // (reloj de MySQL) con `time()` (reloj de PHP) daba diferencias negativas
+        // en cuanto las dos zonas horarias no coincidían, y una comparación de un
+        // solo lado dejaba fusionar cambios de horas después sobre una versión
+        // vieja. Con un único reloj el sesgo desaparece.
+        $window = (int) self::COALESCE_SECONDS;
+        $last = Database::selectOne(
+            'SELECT id, origin, summary,
+                    (created_at > DATE_SUB(NOW(), INTERVAL ' . $window . ' SECOND)) AS is_fresh
+             FROM page_versions WHERE page_id = ? ORDER BY id DESC LIMIT 1',
+            [$pageId]
+        );
+        if (!$last || (int) $last['id'] !== $pointer) return 0;
+        if ((string) $last['origin'] !== $origin || (string) $last['summary'] !== $summary) return 0;
+        if ((int) $last['is_fresh'] !== 1) return 0;
+
+        return $pointer;
+    }
+
+    /**
+     * STUDIO-UX C4 — Contenido de la versión publicada, o null si la página no
+     * tiene ninguna fijada (borrador, o anterior a la migración).
+     *
+     * @return array{html:string,css:string}|null
+     */
+    private static function publishedSource(int $pageId): ?array
+    {
+        $row = Database::selectOne(
+            'SELECT v.html, v.css
+             FROM page_canvas c
+             JOIN page_versions v ON v.id = c.published_version_id AND v.page_id = c.page_id
+             WHERE c.page_id = ?',
+            [$pageId]
+        );
+        return $row ? ['html' => (string) $row['html'], 'css' => (string) $row['css']] : null;
+    }
+
+    /** Versión que está al aire ahora mismo (0 si no hay). */
+    public static function publishedVersionId(int $pageId): int
+    {
+        $row = Database::selectOne('SELECT published_version_id FROM page_canvas WHERE page_id = ?', [$pageId]);
+        return (int) ($row['published_version_id'] ?? 0);
+    }
+
+    /** Deja al aire el estado de trabajo actual. */
+    public static function markPublished(int $pageId): void
+    {
+        Database::execute(
+            'UPDATE page_canvas SET published_version_id = current_version_id WHERE page_id = ?',
+            [$pageId]
+        );
+        self::invalidateCache($pageId);
+    }
+
+    /** Retira la página del aire (despublicar). */
+    public static function clearPublished(int $pageId): void
+    {
+        Database::execute('UPDATE page_canvas SET published_version_id = NULL WHERE page_id = ?', [$pageId]);
+        self::invalidateCache($pageId);
+    }
+
+    /**
+     * ¿El estado de trabajo se ha movido respecto a lo que ve el público?
+     * Sin versión publicada no hay nada "pendiente": la página no está al aire.
+     */
+    public static function hasUnpublishedChanges(int $pageId): bool
+    {
+        $published = self::publishedVersionId($pageId);
+        if ($published <= 0) return false;
+        return self::currentVersionId($pageId) !== $published;
     }
 
     /** Puntero de versión actual (o la última si el puntero está sin fijar). */
@@ -144,6 +252,8 @@ final class CanvasService
             'can_undo' => (int) ($prev['id'] ?? 0) > 0,
             'can_redo' => (int) ($next['id'] ?? 0) > 0,
             'current_version_id' => $current,
+            // C4 — la barra del Studio necesita saber si hay algo por publicar.
+            'has_unpublished' => self::hasUnpublishedChanges($pageId),
         ];
     }
 
@@ -207,7 +317,27 @@ final class CanvasService
      */
     public static function renderPublic(int $pageId, int $siteId, ?string $lang = null): array
     {
-        $canvas = self::get($pageId);
+        // STUDIO-UX C4 — el público lee la versión PUBLICADA. Sin puntero
+        // (borradores, o instalaciones anteriores a la migración) se cae al
+        // estado de trabajo, que es lo que hacía siempre hasta ahora.
+        return self::renderCanvas($pageId, $siteId, $lang, self::publishedSource($pageId) ?? self::get($pageId));
+    }
+
+    /**
+     * STUDIO-UX C4 — Render del ESTADO DE TRABAJO: lo que el Studio edita y lo
+     * que enseñan las previsualizaciones del panel. No es lo que ve el público
+     * mientras haya cambios sin publicar.
+     *
+     * @return array{html:string,has_form:bool,has_resources:bool}
+     */
+    public static function renderDraft(int $pageId, int $siteId, ?string $lang = null): array
+    {
+        return self::renderCanvas($pageId, $siteId, $lang, self::get($pageId));
+    }
+
+    /** @param array{html:string,css:string}|null $canvas */
+    private static function renderCanvas(int $pageId, int $siteId, ?string $lang, ?array $canvas): array
+    {
         if ($canvas === null) {
             return ['html' => '<!-- canvas empty -->', 'has_form' => false, 'has_resources' => false];
         }
@@ -720,6 +850,198 @@ final class CanvasService
     }
 
     /**
+     * STUDIO-UX F6 — Copia una sección de OTRA página, literal y sin IA.
+     *
+     * El chat ya sabía imitar una sección de otra página, pero reescribiéndola
+     * con el modelo (6,7 s de media y con coste). Copiar es leer e insertar.
+     *
+     * Lo delicado es el CSS: las clases no son únicas entre páginas (en dev,
+     * `inicio` y `sobre-nosotros` definen `.fgl-hero` con reglas distintas), así
+     * que la copia viaja con sus clases renombradas y solo con las reglas que le
+     * tocan. Así la página de destino no cambia de aspecto por recibir algo.
+     *
+     * @return array{html:string,css:string,id:string,label:string}|null
+     */
+    public static function copySectionInto(
+        string $targetHtml,
+        string $targetCss,
+        string $sourceHtml,
+        string $sourceCss,
+        string $sectionId,
+        string $anchorId,
+        string $position,
+        string $suffix
+    ): ?array {
+        if ($sectionId === '' || $suffix === '') return null;
+        if (!in_array($position, ['before', 'after'], true)) return null;
+
+        [$sourceDoc, $sourceRoot] = self::domFromHtml($sourceHtml);
+        if (!$sourceRoot) return null;
+
+        $source = null;
+        foreach (self::topLevelSections($sourceRoot) as $section) {
+            if ($section->getAttribute('data-pp-section') === $sectionId) { $source = $section; break; }
+        }
+        if ($source === null) return null;
+
+        // Id libre en el DESTINO (la copia convive con las secciones de allí).
+        [, $targetRoot] = self::domFromHtml($targetHtml);
+        if (!$targetRoot) return null;
+        $taken = [];
+        foreach (self::topLevelSections($targetRoot) as $section) {
+            $taken[$section->getAttribute('data-pp-section')] = true;
+        }
+        $base = (string) preg_replace('/-\d+$/', '', $sectionId);
+        if ($base === '') $base = $sectionId;
+        $newId = $base;
+        $n = 2;
+        while (isset($taken[$newId])) { $newId = $base . '-' . $n; $n++; }
+
+        /** @var \DOMElement $clone */
+        $clone = $source->cloneNode(true);
+        $clone->setAttribute('data-pp-section', $newId);
+        self::resuffixInnerIds($clone, $suffix);
+
+        $classes = self::renameClassesInTree($clone, $suffix);
+        $extraCss = CanvasSanitizer::extractRulesForClasses($sourceCss, $classes, $suffix);
+
+        $fragment = $sourceDoc->saveHTML($clone);
+        if ($fragment === false) return null;
+
+        $newHtml = self::insertSectionRelative($targetHtml, $fragment, $anchorId, $position);
+        if ($newHtml === null) return null;
+
+        $label = trim($clone->getAttribute('data-pp-label'));
+        return [
+            'html'  => $newHtml,
+            'css'   => trim($targetCss . "\n" . $extraCss),
+            'id'    => $newId,
+            'label' => $label !== '' ? $label : ucfirst(str_replace(['-', '_'], ' ', $newId)),
+        ];
+    }
+
+    /**
+     * Renombra las clases del árbol copiado (menos las del sistema `pp-*`, que
+     * son globales) y devuelve los nombres ORIGINALES para poder buscar sus
+     * reglas en el CSS de origen.
+     *
+     * @return string[]
+     */
+    private static function renameClassesInTree(\DOMElement $root, string $suffix): array
+    {
+        $seen = [];
+        $elements = array_merge([$root], iterator_to_array($root->getElementsByTagName('*')));
+        foreach ($elements as $el) {
+            if (!$el instanceof \DOMElement) continue;
+            $value = trim($el->getAttribute('class'));
+            if ($value === '') continue;
+            $out = [];
+            foreach (preg_split('/\s+/', $value) ?: [] as $class) {
+                if ($class === '') continue;
+                if (str_starts_with($class, 'pp-')) { $out[] = $class; continue; }
+                $seen[$class] = true;
+                $out[] = $class . $suffix;
+            }
+            $el->setAttribute('class', implode(' ', $out));
+        }
+        return array_keys($seen);
+    }
+
+    /**
+     * STUDIO-UX F10 — Integra un cambio de sección sobre el ESTADO ACTUAL de la
+     * página, no sobre la foto que se leyó al empezar.
+     *
+     * El chat lee la página, tarda entre 7 y 34 s en volver del modelo y guarda
+     * la página entera. Como la edición manual no está bloqueada durante ese
+     * rato, construir el resultado sobre la foto vieja borraba en silencio lo
+     * que el usuario hubiera tocado a mano en otra sección.
+     *
+     * Devuelve null si la sección ya no existe (la borraron mientras tanto):
+     * mejor un conflicto explícito que resucitarla.
+     *
+     * @return array{html:string,css:string}|null
+     */
+    public static function integrateSectionEdit(
+        int $pageId,
+        string $snapshotHtml,
+        string $snapshotCss,
+        string $sectionId,
+        string $newSectionHtml,
+        string $cssAppend
+    ): ?array {
+        $current = self::get($pageId);
+        $baseHtml = $current['html'] ?? $snapshotHtml;
+        $baseCss  = $current['css'] ?? $snapshotCss;
+
+        $newSectionHtml = trim($newSectionHtml);
+        if ($newSectionHtml === '') {
+            // Cambio solo de estilo: la sección se queda como está AHORA.
+            $html = $baseHtml;
+        } else {
+            $html = self::replaceSection($baseHtml, $sectionId, $newSectionHtml);
+            if ($html === null) return null;
+        }
+
+        $cssAppend = trim($cssAppend);
+        return [
+            'html' => $html,
+            'css'  => $baseCss . ($cssAppend !== '' ? "\n/* chat */\n" . $cssAppend : ''),
+        ];
+    }
+
+    /** Devuelve el HTML de UNA sección top-level, o null si no está. */
+    public static function sectionHtml(string $pageHtml, string $sectionId): ?string
+    {
+        if ($sectionId === '') return null;
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        if (!$root) return null;
+        foreach (self::topLevelSections($root) as $section) {
+            if ($section->getAttribute('data-pp-section') !== $sectionId) continue;
+            $html = $doc->saveHTML($section);
+            return $html === false ? null : $html;
+        }
+        return null;
+    }
+
+    /**
+     * STUDIO-UX F5 — Aplica un orden completo de secciones de una sola vez.
+     *
+     * El orden recibido tiene que ser EXACTAMENTE el mismo conjunto de ids que
+     * ya hay en la página: ni de más, ni de menos, ni repetidos. Cualquier otra
+     * cosa significa que el cliente trabajaba sobre un DOM viejo, y en ese caso
+     * se rechaza (409) en vez de reordenar a medias y perder una sección.
+     *
+     * @param string[] $orderedIds
+     */
+    public static function reorderSections(string $pageHtml, array $orderedIds): ?string
+    {
+        $orderedIds = array_values(array_map('strval', $orderedIds));
+        if ($orderedIds === []) return null;
+        if (count(array_unique($orderedIds)) !== count($orderedIds)) return null;
+
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        if (!$root) return null;
+
+        $sections = self::topLevelSections($root);
+        $byId = [];
+        foreach ($sections as $section) {
+            $byId[$section->getAttribute('data-pp-section')] = $section;
+        }
+        if (count($byId) !== count($orderedIds)) return null;
+        foreach ($orderedIds as $id) {
+            if (!isset($byId[$id])) return null;
+        }
+
+        // Reinsertar en orden al final del root: cada `appendChild` mueve el
+        // nodo, así que al terminar la lista queda exactamente como se pidió.
+        foreach ($orderedIds as $id) {
+            $root->appendChild($byId[$id]);
+        }
+
+        return self::serializeCanvasRoot($doc, $root);
+    }
+
+    /**
      * Mueve una sección top-level un solo puesto. En un extremo devuelve el
      * mismo HTML normalizado (no-op válido); dirección/id inválidos dan null.
      */
@@ -747,6 +1069,99 @@ final class CanvasService
         }
 
         return self::serializeCanvasRoot($doc, $root);
+    }
+
+    /**
+     * STUDIO-UX F1 — Duplica una sección top-level y deja la copia justo
+     * detrás del original. Sin IA: duplicar es la forma natural de hacer
+     * crecer una página que ya funciona, y pedirle al modelo que reescriba la
+     * sección entera para eso costaba entre 7 y 34 segundos.
+     *
+     * El id nuevo parte de la BASE del original (sin sufijo numérico), así que
+     * duplicar una copia da "services-3" y no "services-2-2".
+     *
+     * @return array{html:string,id:string,label:string}|null
+     */
+    public static function duplicateSection(string $pageHtml, string $sectionId): ?array
+    {
+        if ($sectionId === '') return null;
+        [$doc, $root] = self::domFromHtml($pageHtml);
+        if (!$root) return null;
+
+        $source = null;
+        $taken = [];
+        foreach (self::topLevelSections($root) as $section) {
+            $id = $section->getAttribute('data-pp-section');
+            $taken[$id] = true;
+            if ($id === $sectionId) $source = $section;
+        }
+        if ($source === null) return null;
+
+        $base = (string) preg_replace('/-\d+$/', '', $sectionId);
+        if ($base === '') $base = $sectionId;
+        $n = 2;
+        while (isset($taken[$base . '-' . $n])) $n++;
+        $newId = $base . '-' . $n;
+
+        /** @var \DOMElement $clone */
+        $clone = $source->cloneNode(true);
+        $clone->setAttribute('data-pp-section', $newId);
+
+        // Sin marcar la etiqueta, "Partes de esta página" mostraría dos filas
+        // idénticas ("Calendario: Consulta inicial" dos veces) y no habría forma
+        // de saber cuál es cuál.
+        $label = trim($clone->getAttribute('data-pp-label'));
+        if ($label !== '') {
+            $label .= ' (' . $n . ')';
+            $clone->setAttribute('data-pp-label', $label);
+        }
+
+        self::resuffixInnerIds($clone, '-' . $n);
+        $source->parentNode->insertBefore($clone, $source->nextSibling);
+
+        return [
+            'html'  => self::serializeCanvasRoot($doc, $root),
+            'id'    => $newId,
+            'label' => $label !== '' ? $label : ucfirst(str_replace(['-', '_'], ' ', $newId)),
+        ];
+    }
+
+    /**
+     * Re-sufija los ids internos de una sección clonada y las referencias que
+     * apuntan a ellos. Dos elementos con el mismo id en el documento rompen los
+     * anclas y los `details`/`label` asociados.
+     */
+    private static function resuffixInnerIds(\DOMElement $section, string $suffix): void
+    {
+        $map = [];
+        $elements = array_merge([$section], iterator_to_array($section->getElementsByTagName('*')));
+        foreach ($elements as $el) {
+            if (!$el instanceof \DOMElement) continue;
+            $id = trim($el->getAttribute('id'));
+            if ($id === '') continue;
+            $map[$id] = $id . $suffix;
+            $el->setAttribute('id', $id . $suffix);
+        }
+        if ($map === []) return;
+
+        foreach ($elements as $el) {
+            if (!$el instanceof \DOMElement) continue;
+
+            $href = $el->getAttribute('href');
+            if ($href !== '' && $href[0] === '#' && isset($map[substr($href, 1)])) {
+                $el->setAttribute('href', '#' . $map[substr($href, 1)]);
+            }
+
+            foreach (['for', 'aria-labelledby', 'aria-describedby', 'aria-controls'] as $attr) {
+                $value = trim($el->getAttribute($attr));
+                if ($value === '') continue;
+                $refs = preg_split('/\s+/', $value) ?: [];
+                $el->setAttribute($attr, implode(' ', array_map(
+                    static fn(string $ref): string => $map[$ref] ?? $ref,
+                    $refs
+                )));
+            }
+        }
     }
 
     /** @return array<int,\DOMElement> */
@@ -996,9 +1411,11 @@ final class CanvasService
         );
         $ids = array_map(static fn(array $r) => (int) $r['id'], $rows);
         $stale = array_slice($ids, self::MAX_VERSIONS);
-        // Nunca podar la versión a la que apunta el puntero (deshacer profundo).
-        $pointer = self::currentVersionId($pageId);
-        $stale = array_values(array_filter($stale, static fn(int $id) => $id !== $pointer));
+        // Nunca podar la versión a la que apunta el puntero (deshacer profundo)
+        // NI la que está al aire (C4): sin ella el público se quedaría sin
+        // página, que es el peor fallo posible de todo el módulo.
+        $protected = [self::currentVersionId($pageId), self::publishedVersionId($pageId)];
+        $stale = array_values(array_filter($stale, static fn(int $id) => !in_array($id, $protected, true)));
         if ($stale !== []) {
             Database::execute(
                 'DELETE FROM page_versions WHERE page_id = ? AND id IN (' . implode(',', array_fill(0, count($stale), '?')) . ')',
