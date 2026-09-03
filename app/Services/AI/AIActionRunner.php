@@ -121,7 +121,13 @@ final class AIActionRunner
         }
 
         try {
-            $resp = $provider->chat($built['messages'], $built['options']);
+            $responses = self::chatWithPlannerRetry(
+                $provider,
+                $action,
+                $built['messages'],
+                $built['options']
+            );
+            $resp = $responses[count($responses) - 1];
         } catch (AIException $e) {
             AILogger::logError(
                 $siteId,
@@ -133,6 +139,17 @@ final class AIActionRunner
                 ['input' => $input]
             );
             throw $e;
+        }
+
+        $attempts = count($responses);
+        $tokensInTotal = array_sum(array_map(static fn (AIResponse $r): int => $r->tokensIn, $responses));
+        $tokensOutTotal = array_sum(array_map(static fn (AIResponse $r): int => $r->tokensOut, $responses));
+        $latencyTotal = array_sum(array_map(static fn (AIResponse $r): int => $r->latencyMs, $responses));
+        if ($attempts > 1) {
+            $built['meta']['planner_retry'] = [
+                'attempts' => $attempts,
+                'finish_reasons' => array_map(static fn (AIResponse $r): ?string => $r->finishReason, $responses),
+            ];
         }
 
         $outputType = (string) ($def['output'] ?? 'text');
@@ -152,8 +169,15 @@ final class AIActionRunner
                 $resp->model,
                 $action,
                 'Parse/validate: ' . $e->getMessage(),
-                $resp->latencyMs,
-                ['input' => $input, 'raw_content' => $resp->content]
+                $latencyTotal,
+                [
+                    'input' => $input,
+                    'raw_content' => $resp->content,
+                    'attempts' => $attempts,
+                    'finish_reasons' => array_map(static fn (AIResponse $r): ?string => $r->finishReason, $responses),
+                    'tokens_input' => $tokensInTotal,
+                    'tokens_output' => $tokensOutTotal,
+                ]
             );
             throw $e;
         }
@@ -163,9 +187,9 @@ final class AIActionRunner
             $resp->provider,
             $resp->model,
             $action,
-            $resp->tokensIn,
-            $resp->tokensOut,
-            $resp->latencyMs,
+            $tokensInTotal,
+            $tokensOutTotal,
+            $latencyTotal,
             ['input' => $input, 'meta' => $built['meta']],
             ['data' => $data, 'warnings' => $warnings],
         );
@@ -178,12 +202,73 @@ final class AIActionRunner
             'warnings'   => $warnings,
             'provider'   => $resp->provider,
             'model'      => $resp->model,
-            'tokens_in'  => $resp->tokensIn,
-            'tokens_out' => $resp->tokensOut,
-            'estimated_cost' => AIPricing::costFor($resp->model, $resp->tokensIn, $resp->tokensOut),
-            'latency_ms' => $resp->latencyMs,
+            'tokens_in'  => $tokensInTotal,
+            'tokens_out' => $tokensOutTotal,
+            'estimated_cost' => AIPricing::costFor($resp->model, $tokensInTotal, $tokensOutTotal),
+            'latency_ms' => $latencyTotal,
             'meta'       => $built['meta'],
         ];
+    }
+
+    /**
+     * BUG-ASST-PLAN — Gemini puede agotar la completion con JSON a medio
+     * escribir. Solo el planner repite, una vez y con presupuesto doblado.
+     * Devuelve todas las respuestas para contabilizar coste y latencia reales.
+     *
+     * @param array<int,array{role:string,content:mixed}> $messages
+     * @param array<string,mixed> $options
+     * @return array<int,AIResponse>
+     */
+    private static function chatWithPlannerRetry(
+        AIProviderInterface $provider,
+        string $action,
+        array $messages,
+        array $options
+    ): array {
+        $responses = [$provider->chat($messages, $options)];
+        $first = $responses[0];
+
+        if ($action !== Actions::PLAN_SITE_CHANGES || !self::isTruncatedPlannerResponse($first)) {
+            return $responses;
+        }
+
+        $retryOptions = $options;
+        $initialBudget = max(1, (int) ($options['max_tokens'] ?? 8000));
+        $retryOptions['max_tokens'] = max(16000, $initialBudget * 2);
+        if ($provider->getName() === 'openrouter') {
+            $retryOptions['reasoning_effort'] = 'low';
+        }
+        $responses[] = $provider->chat($messages, $retryOptions);
+
+        return $responses;
+    }
+
+    /**
+     * Reintenta por señal explícita del provider. Si no existe finish reason,
+     * usa un fallback cerrado: JSON que empieza como objeto/lista, no parsea y
+     * termina sin su delimitador raíz. Un `stop` explícito nunca se repite.
+     */
+    private static function isTruncatedPlannerResponse(AIResponse $response): bool
+    {
+        $finish = strtolower(trim((string) ($response->finishReason ?? '')));
+        if (in_array($finish, ['length', 'max_tokens', 'max_output_tokens'], true)) {
+            return true;
+        }
+        if ($finish !== '') {
+            return false;
+        }
+
+        $raw = trim($response->content);
+        if ($raw === '' || !in_array($raw[0], ['{', '['], true)) {
+            return false;
+        }
+        try {
+            self::parseJsonStrict($raw);
+            return false;
+        } catch (AIException) {
+            $last = substr($raw, -1);
+            return !in_array($last, ['}', ']'], true);
+        }
     }
 
     // ======================================================================

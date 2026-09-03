@@ -6663,3 +6663,348 @@ ningún bloqueo técnico pendiente.
   limpieza. Antes de repetirla hay que auditar residuos por identificadores y
   timestamps y borrarlos solo tras confirmar las claves foráneas.
 
+---
+
+# BUG-ASST-PLAN — El Assistant no genera ningún plan (Planner, 30/08/2026)
+
+## Background and Motivation (BUG-ASST-PLAN)
+
+El usuario informa de una regresión total del Assistant central: tanto una
+petición enriquecida y larga como una instrucción mínima («Cambia esta palabra
+en el inicio») terminan en «No he podido generar el plan. Prueba a formular la
+petición de otra forma». El objetivo es recuperar la planificación sin rebajar
+los gates que impiden que la IA ejecute capacidades no registradas y conseguir
+que un fallo futuro deje una pista útil para soporte.
+
+Este bloque es únicamente de planificación. No se ha modificado la
+implementación ni se ha hecho una nueva llamada de pago al proveedor.
+
+## Key Challenges and Analysis (BUG-ASST-PLAN)
+
+- El texto exacto procede de `AssistantController::plan()`: cualquier
+  `AIException` cuyo HTTP status no sea 401/403/429/5xx cae en
+  `asst.err.rephrase`. Incluye respuestas JSON con forma inesperada, validación
+  demasiado estricta, fallo de red con status 0 y otros errores internos. La UI
+  muestra el texto recibido pero ignora el `error_id`; por ello el mensaje no
+  identifica la causa real.
+- Texto plano, contenido enriquecido y documento convergen en
+  `SiteAssistantPlanner::plan()` y `AIActionRunner::run()`. Que fallen tanto la
+  frase corta como el contenido largo hace improbable que el compositor sea la
+  causa común; el borde proveedor → parseo → validación es el primer candidato.
+- Hay evidencia local del mismo síntoma en `ai_logs` 1447/1448: Gemini devolvió
+  un plan semánticamente correcto envuelto como lista de un elemento
+  (`[{"summary":...,"items":[...]}]`) y el runner lo registró como
+  `Parse/validate: El plan no contiene un array "items"`. El código actual ya
+  contiene un unwrap para ese caso y los logs 1449/1450/1451 terminaron bien.
+  Por eso hay que comprobar primero si la instalación afectada ejecuta ese
+  código o si el modelo ha cambiado a una forma nueva; no se debe adivinar el
+  parche sin la fila real del fallo.
+- Existe una contradicción adicional en el código actual: `validateSitePlan()`
+  exige `capability_id` y `category` antes de llegar a
+  `SiteAssistantPlanner::normalizeItems()`, aunque este último contiene
+  compatibilidad explícita para completar ambos campos desde el registro de
+  capacidades. Una omisión recuperable del modelo se convierte así en un 502
+  antes de aplicar el gate determinista de seguridad.
+- Los tests actuales cubren prompt, aliases, normalización semántica y referencias
+  multimodales, pero no el contrato completo desde una respuesta cruda del
+  proveedor hasta el JSON del endpoint, ni el mapeo de cada clase de error al
+  mensaje de interfaz. Hoy están verdes y, por sí solos, no detectan la
+  regresión reportada.
+- No hace falta tocar base de datos, páginas ni jobs para corregir la fase de
+  planificación. `ai_logs` se consultará en solo lectura y las pruebas usarán
+  fixtures sin red. Si durante la ejecución se decide cambiar el contrato de una
+  API externa o adoptar structured outputs específicos del proveedor, antes se
+  pedirá al usuario `@web` y se documentará esa API en un `.md`; no es necesario
+  para la solución local y compatible propuesta aquí.
+
+## High-level Task Breakdown (BUG-ASST-PLAN)
+
+### AP1 — Capturar la causa exacta y convertirla en una fixture de regresión
+
+- Repetir una sola petición corta en la instalación afectada y localizar su fila
+  `plan_site_changes` mediante el `error_id`, timestamp o último id.
+- Registrar únicamente provider, model, status, `error_message`, `duration_ms` y
+  la forma de `raw_content`, redactando contenido sensible; comprobar también
+  versión/commit desplegado para saber si incluye el unwrap de lista singleton.
+- Crear primero una prueba fallida con esa respuesta cruda exacta. Añadir casos
+  de contrato ya conocidos: objeto canónico, lista singleton, envelope
+  recuperable, item legacy sin `capability_id/category` y JSON realmente roto.
+- **Éxito:** la fixture reproduce el fallo actual sin red y señala una única
+  frontera responsable (parseo, validación, proveedor/configuración o
+  despliegue). No se avanza a AP2 hasta que el usuario confirme este hito.
+
+### AP2 — Normalización segura antes de la validación estricta (SUPERADO; no ejecutar)
+
+El diagnóstico real de AP1 demuestra que esta propuesta no resuelve la
+incidencia: el raw termina a mitad del primer item. Se conserva como registro de
+la hipótesis inicial, pero queda sustituida por AP2R.
+
+- Separar el pipeline en tres pasos explícitos: parsear JSON, desenvolver solo
+  formas inequívocas y normalizar con el registro del sitio, y finalmente
+  validar el plan normalizado.
+- Aceptar únicamente envelopes demostrados por fixtures; no buscar recursivamente
+  cualquier `items`, porque podría interpretar como plan datos no destinados a
+  ello.
+- Permitir que falten campos inferibles como `capability_id/category` y hacer que
+  el registro interno los derive. El registro debe seguir mandando sobre el
+  modelo: solo `mode=automatic` + handler real + página Canvas válida puede
+  acabar como `automatable_now/aplicar`.
+- Rechazar JSON truncado, múltiples planes incompatibles, tipos incorrectos y
+  cualquier intento de elevar una capacidad manual/no disponible.
+- **Éxito:** la fixture de AP1 y los casos recuperables devuelven un plan; los
+  casos inseguros siguen fallando; los tests demuestran que relajar la forma no
+  relaja permisos. Solicitar verificación del usuario antes de AP3.
+
+### AP2R — Presupuesto de salida + reintento acotado ante truncado
+
+- Documentar el contrato actual de OpenRouter Chat Completions y Gemini thinking
+  antes de tocar código: `cursor/openrouter-planner-output-api.md` y
+  `cursor/gemini-planner-thinking-api.md`.
+- TDD sobre la fixture real: proveedor fake devuelve primero JSON truncado con
+  `finish_reason=length` y después un plan válido. El runner debe llamar dos
+  veces como máximo; un JSON malformado con `finish_reason=stop` no se repite.
+- Subir el presupuesto inicial de `PLAN_SITE_CHANGES` de 2.500 a 8.000 tokens y
+  pedir reasoning `low` únicamente a OpenRouter. En el payload OpenRouter usar
+  `max_completion_tokens`, manteniendo el contrato interno `max_tokens` para no
+  alterar los otros providers.
+- Antes de parsear, si `finish_reason=length`, repetir una sola vez con 16.000
+  tokens. Fallback cuando no haya finish reason: repetir solo si el raw termina
+  inequívocamente incompleto; nunca cerrar llaves ni fabricar contenido.
+- Contabilizar en el resultado exitoso tokens y latencia de ambos intentos y
+  guardar en meta que hubo retry. Si el segundo intento falla, conservar raw,
+  finish reasons y nº de intentos en el log diagnóstico.
+- No usar Response Healing: OpenRouter documenta que no repara truncados por
+  límite. JSON Schema queda fuera de este parche; asegura forma solo cuando la
+  generación termina y exigiría gates por provider/model.
+- **Éxito:** la fixture fuerza exactamente dos llamadas y acaba en plan válido;
+  el camino normal hace una; nunca hay tercer intento; suites del Assistant en
+  verde; smoke real corto + enriquecido genera plan sin aplicar páginas.
+
+### AP3 — Diagnóstico útil sin exponer datos técnicos o sensibles
+
+- Extraer una clasificación interna de errores del planner: configuración,
+  límite/rate, indisponibilidad, red/timeout, respuesta malformada y error
+  interno. Mantener detalles y `raw_content` solo en logs redaccionados.
+- Devolver y mostrar el `error_id` ya generado, junto a un mensaje accionable.
+  «Reformular» se reservará para una petición verdaderamente ambigua, no para
+  un fallo técnico del proveedor o del parser.
+- Añadir tests del mapeo para status 0, 401/403, 429, 5xx y parse/validate; el
+  frontend debe conservar el código de soporte cuando el backend lo envía.
+- **Éxito:** cada clase de fallo produce el mensaje correcto y un id correlable,
+  sin API keys, prompts ni respuesta cruda en pantalla. Solicitar verificación
+  del usuario antes de AP4.
+
+### AP4 — Regresión del flujo real y cierre
+
+- Ejecutar las suites unitarias del Assistant y una prueba HTTP del endpoint con
+  fixtures, sin aplicar jobs ni editar páginas.
+- Después, con aprobación para consumir el proveedor configurado, verificar en
+  la UI una instrucción corta y un contenido enriquecido largo. Ambos deben
+  mostrar plan; no se pulsa «Aplicar».
+- Revisar `ai_logs`, consola y red: una fila success por intento, respuesta 200,
+  plan renderizado y ausencia de errores PHP/JS. Confirmar también que un fallo
+  simulado presenta su `error_id`.
+- **Éxito:** ambos caminos generan plan de forma consistente y el caso negativo
+  es diagnosticable. El Planner hará la revisión final y declarará el cierre
+  solo tras la comprobación manual del usuario.
+
+## Project Status Board (BUG-ASST-PLAN)
+
+- [x] AP1 — Capturar causa exacta + fixture TDD reproducible
+- [ ] AP2R — Presupuesto + reasoning bajo + un retry por truncado
+- [ ] AP3 — Taxonomía de errores + `error_id` visible
+- [ ] AP4 — Regresión offline + verificación real corta/enriquecida
+
+## Current Status / Progress Tracking (BUG-ASST-PLAN)
+
+- Inspección de solo lectura completada el 30/08/2026.
+- `php tests/site_assistant_section_planning.php`: ALL PASS.
+- `php tests/assistant_multimodal_planner.php`: ALL PASS.
+- Lint PHP de Controller, Planner, Runner y Actions: sin errores.
+- Evidencia histórica local: fallos 1447/1448 por wrapper lista; éxitos
+  1449/1450/1451 después del normalizador. Esto demuestra la clase de problema,
+  pero no prueba todavía que la ejecución reportada hoy tenga exactamente la
+  misma forma ni que producción contenga el commit correspondiente.
+- Próximo hito ejecutable: AP1 solamente, según la regla de un paso por ciclo.
+
+### AP1 completado (30/08/2026, Executor; confirmado por continuidad del usuario)
+
+- Reproducción controlada ejecutada directamente contra el mismo pipeline
+  `SiteAssistantPlanner` con «Cambia esta palabra en el inicio», sin crear job ni
+  aplicar cambios. Resultado: **success**, `ai_logs.id=1464`, OpenRouter,
+  `google/gemini-3.7-flash`, 7.772 ms, un item ambiguo correcto solicitando la
+  palabra original y el reemplazo.
+- El checkout local está en `a791ad2` y contiene `83654f1`, commit que añadió
+  `normalizeActionData()` y el unwrap de lista singleton. El paquete entregable
+  `promptpress-1.1.1.zip` también contiene ese normalizador antes de
+  `validateSitePlan()`.
+- Conclusión acotada: el fallo reportado no se reproduce en este runtime y no se
+  debe atribuir al wrapper singleton ya corregido. La causa exacta está en la
+  instalación donde el usuario ve el error (despliegue/OPcache diferente,
+  configuración/modelo distinto o una nueva forma de respuesta). No se ha
+  creado una fixture especulativa.
+- AP1 sigue abierto: falta correlacionar una fila fallida real de esa instalación.
+- Evidencia recibida de la instalación afectada: dos fallos consecutivos el
+  30/08/2026 a las 15:07:27 y 15:09:30, ambos con OpenRouter +
+  `google/gemini-3.7-flash`, 0/0 tokens, coste 0 y duraciones de 15.691 ms y
+  17.013 ms. En este pipeline, una duración conservada junto a 0/0 identifica
+  la rama posterior a recibir la respuesta (`parse/validate`); los errores HTTP
+  del provider se registran sin latencia porque `AIActionRunner` no recibe la
+  `AIResponse`. Quedan descartados como causa común la API key, el rate limit y
+  la longitud de la petición. Falta el `error_message`/shape exacto para fijar la
+  fixture.
+- Captura del tooltip recibida: `Parse/validate: No se pudo parsear JSON de la
+  respuesta del modelo`, seguida de un objeto que empieza correctamente por
+  `summary` e `items`. Esto confirma `AIActionRunner::parseJsonStrict()` como
+  frontera única. El final visible en `"cap...` NO es todavía el final probado
+  de la respuesta: `parseJsonStrict()` limita deliberadamente el preview del
+  error a los primeros 300 caracteres (`mb_substr($raw, 0, 300)`). Para separar
+  truncado por límite de salida de un error sintáctico posterior solo faltan
+  `CHAR_LENGTH` y los últimos 500 caracteres de `request_data.raw_content`.
+- Raw completo recibido y confirmado: **366 caracteres**; termina literalmente
+  en `"category": "needs_input",` sin cerrar el primer item, `items` ni el
+  objeto raíz. Causa única de esta incidencia: **salida del modelo truncada en
+  mitad del JSON**. No es wrapper, alias, coma decorativa ni JSON enriquecido
+  mal normalizado.
+- Fixture exacta añadida en
+  `tests/fixtures/assistant-plan-truncated-gemini.txt` y reproducer offline en
+  `tests/assistant_planner_truncated_response.php`. Resultado: 5/5 PASS; confirma
+  presencia, final a mitad de item, `JSON_ERROR_SYNTAX`, mismo `AIException` del
+  parser y descarte explícito del wrapper-lista histórico. Lint PHP y
+  `git diff --check`, limpios.
+- **AP1 ejecutado con sus criterios técnicos cumplidos; pendiente confirmación
+  manual del usuario antes de marcar el checkbox y pasar a otra tarea.**
+
+### Replanificación AP2R (30/08/2026, Planner)
+
+- El usuario pidió continuar explícitamente Planner → Executor; AP1 queda
+  confirmado y marcado.
+- Investigación oficial completada. OpenRouter recomienda
+  `max_completion_tokens`, expone `finish_reason`, cuenta reasoning como salida
+  y permite `reasoning.effort`; para Gemini 3 lo traduce a `thinkingLevel`.
+  Google confirma que el consumo real del thinking lo decide el modelo y
+  recomienda bajarlo cuando hay que reservar salida visible.
+- Structured Outputs no recupera bytes ausentes y Response Healing declara que
+  no puede reparar truncados por `max_tokens`. Se adopta AP2R, sin autocierre de
+  JSON y sin retry genérico.
+- Referencias creadas:
+  `cursor/openrouter-planner-output-api.md` y
+  `cursor/gemini-planner-thinking-api.md`.
+- Siguiente y única tarea de Executor: AP2R.
+
+### AP2R implementado localmente (30/08/2026, Executor)
+
+- TDD rojo inicial: el test de la fixture pasó de sus 5 checks diagnósticos a
+  **4 FAIL nuevos** (presupuesto seguía en 2.500, no existía hook OpenRouter ni
+  retry). Tras implementar, `tests/assistant_planner_truncated_response.php`
+  termina **12/12 PASS**.
+- `PLAN_SITE_CHANGES`: presupuesto inicial 8.000 y
+  `reasoning_effort=low`. El resto de acciones no cambia.
+- `OpenAIProvider` ganó un hook neutro `applyProviderOptions()`;
+  `OpenRouterProvider` es el único que convierte `max_tokens` interno en
+  `max_completion_tokens` y emite `reasoning: {effort: low}`. Test explícito
+  confirma que el payload OpenAI directo conserva `max_tokens` y no recibe
+  opciones OpenRouter.
+- `AIActionRunner::chatWithPlannerRetry()` hace una llamada normal y solo repite
+  `PLAN_SITE_CHANGES` si `finish_reason` es `length|max_tokens|max_output_tokens`.
+  Sin finish reason, el fallback exige JSON que no parsea y termina sin cerrar
+  el delimitador raíz. `stop` explícito nunca repite y el helper nunca hace una
+  tercera llamada.
+- Retry: presupuesto 16.000, reasoning low en OpenRouter. El parser sigue
+  fallando cerrado: no completa llaves, items ni texto ausente.
+- Si hubo dos intentos, el resultado y el log success suman tokens y latencia de
+  ambos; meta registra `planner_retry.attempts` y sus finish reasons. Un fallo
+  final conserva intentos, finish reasons y tokens en el contexto diagnóstico.
+- Regresión verde: `site_assistant_capabilities`,
+  `site_assistant_section_planning`, `assistant_multimodal_planner`,
+  `ai_provider_capabilities`, `ai_logger_redaction`,
+  `gemini_37_configuration`, `assistant_content_normalizer` y
+  `assistant_source_envelope`; lint PHP y `git diff --check`, limpios.
+- Smoke real post-fix, sin aplicar jobs: texto corto → success (`ai_logs` 1465,
+  4.187 in / 219 out, 3.757 ms); contenido enriquecido equivalente al fallo →
+  success (`ai_logs` 1466, 4.255 in / 215 out, 2.778 ms). Ambos usaron
+  `google/gemini-3.7-flash`, devolvieron un item y no necesitaron retry.
+- **AP2R implementado y verificado localmente; checkbox pendiente hasta probar
+  el código desplegado en la instalación afectada.** No se inicia AP3.
+
+### Entregable 1.1.2 preparado (30/08/2026, Executor)
+
+- TDD de versión: `tests/admin_navigation_responsive.php` falló primero porque
+  esperaba 1.1.2 mientras `PP_VERSION` seguía en 1.1.1; después de actualizar
+  `config/constants.php`, terminó 31/31 PASS.
+- Regresión completa apta para ejecución local: 105 suites PHP, 0 fallos. Se
+  excluyeron únicamente cuatro pruebas que requieren servicios externos o
+  despliegan un ZIP sobre una instalación real.
+- Calidad estática: 383 archivos PHP y 28 archivos JavaScript sin errores de
+  sintaxis; `git diff --check` limpio. El lint i18n no detectó claves ausentes y
+  conserva 37 avisos de claves posiblemente no usadas ya existentes.
+- Paquete generado en `deliverables/promptpress-1.1.2.zip`: 1.053 archivos,
+  2.753.728 bytes y versión interna 1.1.2.
+- Auditoría del ZIP: `unzip -t` sin errores; contiene el presupuesto/retry de
+  Planner y la navegación administrativa preparada en el mismo checkout; no
+  contiene `.git`, `.cursor`, `cursor`, `deliverables`, configuración privada
+  ni almacenamiento de runtime.
+- SHA-256:
+  `ca732a541a44842b3e838a25ba8344eadc0353e0426fd8f3c091fc3af54f4992`.
+- **Hito de Executor completado:** el entregable 1.1.2 está listo para la prueba
+  manual de actualización. AP2R permanece abierto hasta comprobar el Planner
+  desplegado; no se inicia AP3.
+
+## Executor's Feedback or Assistance Requests (BUG-ASST-PLAN)
+
+Para AP1 hace falta una única reproducción en la instalación que muestra el
+fallo y acceso de solo lectura a su fila reciente de `ai_logs`, o alternativamente
+que el usuario facilite `error_id`, provider, model, error_message y duration_ms
+desde «Uso de IA». No se necesitan credenciales ni el contenido completo de la
+petición. Tras convertir esa evidencia en fixture, el Executor debe detenerse y
+pedir al usuario que confirme el hito antes de implementar AP2.
+
+**Solicitud actual del Executor:** abrir en la instalación afectada
+«Asistente IA → Uso de IA», localizar el último registro
+`plan_site_changes` fallido y facilitar solamente proveedor, modelo, error y
+duración. Si esa pantalla permite ver el detalle técnico, basta con copiar la
+línea `Parse/validate: ...` o `HTTP ...`; no hace falta compartir el prompt, la
+API key ni el contenido enriquecido.
+
+En la tabla actual, el detalle está en el atributo `title` del badge rojo
+**error**: aparece al dejar el cursor encima. Con copiar ese tooltip de uno de
+los dos registros basta para el siguiente paso.
+
+El tooltip ya fue recibido y permitió aislar el parser, pero no expone el final
+del raw. Consulta de solo lectura mínima para cerrar AP1 sin compartir la
+petición completa:
+
+```sql
+SELECT id,
+       CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(request_data, '$.raw_content'))) AS raw_chars,
+       RIGHT(JSON_UNQUOTE(JSON_EXTRACT(request_data, '$.raw_content')), 500) AS raw_tail
+FROM ai_logs
+WHERE action_type = 'plan_site_changes' AND status = 'error'
+ORDER BY id DESC
+LIMIT 1;
+```
+
+**AP1 confirmado y cerrado.** La investigación externa y el rediseño ya se han
+completado en AP2R; no queda asistencia pendiente para que el Executor empiece
+esa tarea.
+
+**Solicitud actual del Executor:** desplegar este parche en la instalación que
+produjo los dos truncados y repetir una petición corta y el pegado enriquecido.
+No pulsar «Aplicar»; basta confirmar que aparece el plan. Tras esa comprobación,
+el Planner puede marcar AP2R y revisar el cierre o la conveniencia de AP3.
+
+## Lessons (BUG-ASST-PLAN)
+
+- Un mensaje de «reformula la petición» no debe agrupar errores de red, formato y
+  validación: induce al usuario a cambiar un texto que quizá ya era correcto.
+- Cuando existe un normalizador semántico determinista y más seguro que la salida
+  del modelo, el validador previo no debe rechazar campos que ese normalizador
+  está diseñado para completar.
+- Los contratos de salida de modelos necesitan fixtures de respuestas crudas
+  reales. Probar solo el prompt y métodos posteriores deja sin cubrir la frontera
+  más inestable del sistema.
+- El `error_message` del parser incluye solo los primeros 300 caracteres del raw;
+  una captura del tooltip confirma la frontera, pero no permite afirmar dónde ni
+  por qué terminó el JSON. Para diagnosticar truncado hace falta longitud + cola,
+  no el prefijo.
+

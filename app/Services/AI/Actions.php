@@ -1252,7 +1252,12 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.3,
-                    'max_tokens'      => 2500,
+                    // Gemini 3 usa parte de la salida para thinking. Reservar
+                    // margen suficiente para que el JSON operativo no termine
+                    // a mitad y pedir reasoning bajo en providers que lo
+                    // soportan (OpenRouter lo traduce a thinkingLevel=low).
+                    'max_tokens'      => 8000,
+                    'reasoning_effort'=> 'low',
                     'timeout'         => 90,
                 ],
             ],

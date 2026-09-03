@@ -1,0 +1,6 @@
+{
+  "summary": "Se ha recibido una solicitud para modificar el título H1 principal por «Retrouve toi meme». Sin embargo, existen múltiples páginas de inicio en el sitio («Accueil», «Home» y «New Home»), por lo que se requiere confirmar en cuál de ellas debe aplicarse.",
+  "items": [
+    {
+      "capability_id": "pages.canvas.edit",
+      "category": "needs_input",

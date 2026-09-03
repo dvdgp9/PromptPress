@@ -36,6 +36,7 @@ class OpenAIProvider extends BaseProvider
         if (($options['response_format'] ?? null) === 'json') {
             $payload['response_format'] = ['type' => 'json_object'];
         }
+        $payload = $this->applyProviderOptions($payload, $options);
 
         $timeout = (int) ($options['timeout'] ?? 60);
         [$status, $body,, $latency] = $this->httpPostJson(
@@ -132,6 +133,19 @@ class OpenAIProvider extends BaseProvider
     protected function buildHeaders(): array
     {
         return ['Authorization' => 'Bearer ' . $this->apiKey];
+    }
+
+    /**
+     * Hook para extensiones OpenAI-compatible con parámetros propios. El
+     * provider OpenAI base conserva el payload estándar sin cambios.
+     *
+     * @param array<string,mixed> $payload
+     * @param array<string,mixed> $options
+     * @return array<string,mixed>
+     */
+    protected function applyProviderOptions(array $payload, array $options): array
+    {
+        return $payload;
     }
 
     protected function extractError(array $decoded): string

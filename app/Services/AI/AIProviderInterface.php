@@ -20,6 +20,7 @@ interface AIProviderInterface
      *        Lista de mensajes. Roles soportados: 'system', 'user', 'assistant'.
      * @param array<string,mixed> $options
      *        Opcionales: 'temperature' (float), 'max_tokens' (int),
+     *        'reasoning_effort' (string; solo providers compatibles),
      *        'response_format' ('text'|'json'), 'timeout' (int segundos),
      *        'images' (lista ya validada; solo si el gate confirma visión).
      *
