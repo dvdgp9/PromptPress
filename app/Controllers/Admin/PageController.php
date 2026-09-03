@@ -522,6 +522,183 @@ class PageController
 
     // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
     // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
+    // ==================================================================
+    // STUDIO-UX F9 — Precomposición: componer mientras el usuario lee el plan.
+    //
+    // Antes el flujo era estrictamente secuencial (plan → leer → pulsar →
+    // 26-48 s de composición). Ahora la composición arranca al pintar el plan y,
+    // si al confirmar sigue siendo válida, la creación es instantánea.
+    //
+    // A diferencia del prefetch del onboarding, aquí NO se crea la página hasta
+    // que el usuario confirma: cambiar de idea no deja páginas fantasma.
+    // ==================================================================
+
+    private const COMPOSE_META = 'studio_compose_meta';
+    private const COMPOSE_HTML = 'studio_compose_html';
+    private const COMPOSE_CSS  = 'studio_compose_css';
+
+    /**
+     * Identifica UNA composición concreta. Si el usuario cambia el plan (o el
+     * modelo), la firma cambia y lo precompuesto deja de servir.
+     *
+     * @param array<string,mixed> $brief
+     */
+    public static function compositionSignature(array $brief, string $model): string
+    {
+        $parts = [
+            (string) ($brief['title'] ?? ''),
+            (string) ($brief['page_type'] ?? ''),
+            (string) ($brief['goal'] ?? ''),
+            (string) ($brief['audience'] ?? ''),
+            (string) ($brief['tone'] ?? ''),
+            (string) ($brief['seo_intent'] ?? ''),
+            (string) ($brief['primary_cta'] ?? ''),
+            (string) ($brief['extra_context'] ?? ''),
+            json_encode($brief['sections'] ?? [], JSON_UNESCAPED_UNICODE) ?: '',
+            $model,
+        ];
+        return sha1(implode('|', $parts));
+    }
+
+    /**
+     * El html y el css se guardan CRUDOS y por separado, no dentro del JSON:
+     * `settings.setting_value` es TEXT (64 KB) y el escapado de JSON podía
+     * llegar a doblar el tamaño de una página grande.
+     *
+     * @param array<string,mixed> $meta
+     */
+    public static function storeComposition(int $siteId, string $signature, string $html, string $css, array $meta): void
+    {
+        $meta['signature'] = $signature;
+        $meta['created_at'] = date('Y-m-d H:i:s');
+        self::writeSetting($siteId, self::COMPOSE_META, (string) json_encode($meta, JSON_UNESCAPED_UNICODE));
+        self::writeSetting($siteId, self::COMPOSE_HTML, $html);
+        self::writeSetting($siteId, self::COMPOSE_CSS, $css);
+    }
+
+    /**
+     * Devuelve la precomposición SOLO si es la de esta firma.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function readComposition(int $siteId, string $signature): ?array
+    {
+        if ($signature === '') return null;
+        $meta = json_decode(self::readSetting($siteId, self::COMPOSE_META), true);
+        if (!is_array($meta) || (string) ($meta['signature'] ?? '') !== $signature) return null;
+        $html = self::readSetting($siteId, self::COMPOSE_HTML);
+        if (trim($html) === '') return null;
+        $meta['html'] = $html;
+        $meta['css'] = self::readSetting($siteId, self::COMPOSE_CSS);
+        return $meta;
+    }
+
+    public static function clearComposition(int $siteId): void
+    {
+        Database::execute(
+            'DELETE FROM settings WHERE site_id = ? AND setting_key IN (?, ?, ?)',
+            [$siteId, self::COMPOSE_META, self::COMPOSE_HTML, self::COMPOSE_CSS]
+        );
+    }
+
+    /**
+     * Persiste una precomposición y la retira: es de un solo uso, para que un
+     * segundo "Crear" no genere dos páginas iguales.
+     *
+     * @param array<string,mixed> $composition
+     * @return array<string,mixed>
+     */
+    public static function persistComposition(int $siteId, array $composition, int $parentId = 0): array
+    {
+        $created = OnboardingController::persistCanvasComposition($siteId, $composition, $parentId);
+        self::clearComposition($siteId);
+        return $created;
+    }
+
+    private static function readSetting(int $siteId, string $key): string
+    {
+        $row = Database::selectOne(
+            'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+            [$siteId, $key]
+        );
+        return (string) ($row['setting_value'] ?? '');
+    }
+
+    private static function writeSetting(int $siteId, string $key, string $value): void
+    {
+        Database::execute(
+            'INSERT INTO settings (site_id, setting_key, setting_value, is_encrypted)
+             VALUES (?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), is_encrypted = 0',
+            [$siteId, $key, $value]
+        );
+    }
+
+    /**
+     * STUDIO-UX F9 — Compone la página en segundo plano mientras el usuario lee
+     * el plan. No crea nada: guarda html/css contra la firma del plan. JSON.
+     */
+    public function aiPrepare(array $params = []): void
+    {
+        @set_time_limit(300);
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $brief = self::decodePostedBrief((string) Request::post('ai_brief_json', ''));
+        $model = trim((string) Request::post('ai_model', ''));
+        if ($brief === []) {
+            Response::json(['ok' => true, 'ready' => false]);
+        }
+
+        $pageType = (string) ($brief['page_type'] ?? 'landing');
+        if (!self::isCanvasMarketingType($pageType)) {
+            // Artículos y legales siguen el flujo clásico: no hay nada que
+            // precomponer y fingir que sí solo gastaría una llamada.
+            Response::json(['ok' => true, 'ready' => false]);
+        }
+
+        $signature = self::compositionSignature($brief, $model);
+        if (self::readComposition($siteId, $signature) !== null) {
+            Response::json(['ok' => true, 'ready' => true, 'reused' => true]);
+        }
+
+        // El plan ha cambiado: lo anterior ya no sirve.
+        self::clearComposition($siteId);
+        if ($model !== '') AIProviderFactory::setModelOverride($model);
+
+        $title = trim((string) ($brief['title'] ?? ''));
+        $goal  = trim((string) ($brief['goal'] ?? ''));
+        if ($title === '' || $goal === '') {
+            Response::json(['ok' => true, 'ready' => false]);
+        }
+
+        Session::close();   // la composición es larga: no bloquear la sesión
+        try {
+            $composed = OnboardingController::generateCanvasPageForPanel(
+                $siteId,
+                $title,
+                $pageType,
+                $goal,
+                self::briefToContext($brief),
+                0,
+                ['compose_only' => true]
+            );
+            if (empty($composed['composed'])) {
+                Response::json(['ok' => true, 'ready' => false]);
+            }
+            self::storeComposition($siteId, $signature, (string) $composed['html'], (string) $composed['css'], [
+                'title'     => (string) $composed['title'],
+                'page_type' => (string) $composed['page_type'],
+                'goal'      => (string) $composed['goal'],
+            ]);
+            Response::json(['ok' => true, 'ready' => true]);
+        } catch (\Throwable $e) {
+            // Best-effort: si falla, "Crear" genera como siempre.
+            error_log('[aiPrepare] site=' . $siteId . ' ' . get_class($e) . ': ' . $e->getMessage());
+            Response::json(['ok' => true, 'ready' => false]);
+        }
+    }
+
     public function aiCreate(array $params = []): void
     {
         CSRF::check();
@@ -578,6 +755,24 @@ class PageController
         // estructurado clásico (más abajo). Si el canvas falla, degradamos a
         // bloques para no romper la creación.
         if (self::isCanvasMarketingType($pageType)) {
+            // STUDIO-UX F9 — Si la precomposición que arrancó al pintar el plan
+            // sigue siendo la de ESTE plan, la página sale al instante y sin
+            // gastar otra generación.
+            $prepared = $brief !== [] ? self::readComposition($siteId, self::compositionSignature($brief, $chosenModel)) : null;
+            if ($prepared !== null) {
+                $result = self::persistComposition($siteId, $prepared, $parentId);
+                Session::flash('success', __('page_ctrl.generated_studio'));
+                Response::json([
+                    'ok' => true,
+                    'page_id' => $result['id'],
+                    'edit_url' => $result['edit_url'],
+                    'sections_count' => $result['sections_count'],
+                    'ai_usage' => self::emptyAiUsage(),
+                    'image_warning' => null,
+                    'prefetched' => true,
+                ]);
+            }
+
             try {
                 $canvasContext = trim(
                     ($audience !== '' ? "Público objetivo: {$audience}\n" : '')

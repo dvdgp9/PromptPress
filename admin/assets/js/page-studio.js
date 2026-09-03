@@ -168,11 +168,49 @@
         ].join('');
 
         briefWrap.querySelectorAll('[data-studio-back]').forEach(function (btn) {
-            btn.addEventListener('click', function () { showPanel('opportunities'); });
+            btn.addEventListener('click', function () {
+                // Vuelve a la idea: el siguiente plan disparará su propia
+                // precomposición (la promesa en curso, si la hay, se deja
+                // terminar; su resultado quedará descartado por firma).
+                prefetchedBrief = '';
+                showPanel('opportunities');
+            });
         });
         var generateBtn = document.getElementById('pp-studio-generate-btn');
         generateBtn && generateBtn.addEventListener('click', function () {
             generatePage(generateBtn);
+        });
+
+        // STUDIO-UX F9 — El usuario tarda medio minuto largo en leer el plan;
+        // la composición tarda 26-48 s. Se solapan: empezamos a componer ahora,
+        // en segundo plano, y si acepta el plan tal cual la página ya está
+        // hecha. No se crea nada hasta que confirme.
+        prefetchComposition(brief);
+    }
+
+    // Promesa de la precomposición EN CURSO (null cuando no hay ninguna): si el
+    // usuario pulsa "Crear" antes de que termine, se espera a que acabe en vez
+    // de lanzar una segunda generación en paralelo, que costaría el doble.
+    var prefetchPromise = null;
+    // Plan ya precompuesto, para no volver a pedir lo mismo. Va aparte de la
+    // promesa: si se usara la promesa como guarda, al resolverse la primera
+    // precomposición ninguna otra volvería a dispararse en toda la sesión.
+    var prefetchedBrief = '';
+
+    function prefetchComposition(brief) {
+        if (!brief) return;
+        var payload = JSON.stringify(brief);
+        if (prefetchPromise || payload === prefetchedBrief) return;
+        prefetchedBrief = payload;
+        prefetchPromise = postForm('/admin/pages/ai-prepare', {
+            ai_brief_json: payload
+        }, 300000).catch(function () {
+            // Best-effort: si falla, "Crear" genera como siempre. Y se olvida,
+            // para que un fallo de red no bloquee el siguiente intento.
+            prefetchedBrief = '';
+            return { ok: true, ready: false };
+        }).finally(function () {
+            prefetchPromise = null;
         });
     }
 
@@ -182,6 +220,13 @@
         setButtonBusy(button, true, 'Creando');
         startProgressPulse();
 
+        // F9 — si la precomposición sigue en marcha, esperarla: al terminar, la
+        // creación la reutiliza y es instantánea.
+        var ready = prefetchPromise || Promise.resolve(null);
+        ready.then(function () { requestCreate(button); });
+    }
+
+    function requestCreate(button) {
         postForm('/admin/pages/ai-create', {
             title: currentBrief.title || pp.t('js.studio.new_page'),
             page_type: currentBrief.page_type || 'landing',

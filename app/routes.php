@@ -169,6 +169,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/pages/architecture/analyze', [PageController::class, 'architectureAnalyze']);
     $r->post('/pages/ai-opportunities', [PageController::class, 'aiOpportunities']);
     $r->post('/pages/ai-brief',      [PageController::class, 'aiBrief']);
+    $r->post('/pages/ai-prepare',    [PageController::class, 'aiPrepare']);  // STUDIO-UX F9
     $r->post('/pages/ai-create',     [PageController::class, 'aiCreate']);
     $r->post('/pages/ai-from-reference', [PageController::class, 'aiCreateFromReference']); // D-MB: recrear desde captura
     // I18N-FULL T5.5 — OJO: van ANTES de `/pages/{id}`, que si no captura

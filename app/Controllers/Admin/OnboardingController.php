@@ -2279,6 +2279,48 @@ final class OnboardingController
             'reference_images' => $referenceImages,
         ], 2);
 
+        // STUDIO-UX F9 — En modo `compose_only` se devuelve la composición SIN
+        // crear la página. Así el Studio puede ir componiendo mientras el
+        // usuario lee el plan y, si cambia de idea o cierra la pestaña, no
+        // queda ninguna página fantasma en el listado.
+        if (!empty($options['compose_only'])) {
+            return [
+                'composed'       => true,
+                'html'           => $generated['html'],
+                'css'            => $generated['css'],
+                'title'          => $title,
+                'page_type'      => $type,
+                'goal'           => $goal,
+                'sections_count' => max(1, substr_count($generated['html'], 'data-pp-section')),
+                'template'       => 'canvas-reference',
+            ];
+        }
+
+        return self::persistCanvasComposition($siteId, [
+            'title'     => $title,
+            'page_type' => $type,
+            'goal'      => $goal,
+            'html'      => $generated['html'],
+            'css'       => $generated['css'],
+        ], $parentId);
+    }
+
+    /**
+     * STUDIO-UX F9 — Persiste una composición canvas como página borrador.
+     * Es la segunda mitad de `createReferenceCanvasPage()`, extraída para poder
+     * componer antes y guardar después.
+     *
+     * @param array<string,mixed> $composition
+     * @return array{id:int,title:string,edit_url:string,sections_count:int,template:string}
+     */
+    public static function persistCanvasComposition(int $siteId, array $composition, int $parentId = 0): array
+    {
+        $title = trim((string) ($composition['title'] ?? ''));
+        $type  = (string) ($composition['page_type'] ?? 'landing');
+        $goal  = (string) ($composition['goal'] ?? '');
+        $html  = (string) ($composition['html'] ?? '');
+        $css   = (string) ($composition['css'] ?? '');
+
         $slug = self::uniqueSlug($siteId, slugify($title));
         $now = date('Y-m-d H:i:s');
         Database::execute(
@@ -2288,13 +2330,13 @@ final class OnboardingController
             [$siteId, $title, $slug, $type, LanguageService::primaryFor($siteId), $parentId > 0 ? $parentId : null, $title, mb_substr($goal, 0, 155), self::nextOrder($siteId), Auth::id(), $now, $now]
         );
         $pageId = (int) Database::lastInsertId();
-        \App\Services\Canvas\CanvasService::save($pageId, $generated['html'], $generated['css'], 'generate');
+        \App\Services\Canvas\CanvasService::save($pageId, $html, $css, 'generate');
 
         return [
             'id' => $pageId,
             'title' => $title,
             'edit_url' => base_url('admin/pages/' . $pageId . '/edit'),
-            'sections_count' => max(1, substr_count($generated['html'], 'data-pp-section')),
+            'sections_count' => max(1, substr_count($html, 'data-pp-section')),
             'template' => 'canvas-reference',
         ];
     }
