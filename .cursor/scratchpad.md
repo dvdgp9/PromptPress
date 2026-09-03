@@ -6421,3 +6421,245 @@ hito del Executor, AR4 no empieza hasta recibir el resultado de esa prueba.
   credenciales, `.cursor`, logs y uploads ausentes.
 - SHA-256:
   `ca5e6afbbce71042e2daed924902742e298ffb86f88795d9d44b02fdf9efa8a0`.
+
+---
+
+# ADMIN-NAV — Simplificación de la barra lateral (Planner, 30/08/2026)
+
+## Background and Motivation (ADMIN-NAV)
+
+La navegación del panel ha crecido hasta 17 accesos base y 21 cuando están
+activos Analítica, Reservas, Tienda y Recursos. Todos se presentan al mismo
+nivel y con el mismo peso visual. En la instalación de desarrollo están activos
+los cuatro módulos, por lo que la barra necesita scroll en alturas habituales y
+mezcla tareas cotidianas (Páginas, Mensajes, Reservas) con configuración poco
+frecuente (Uso de IA, Privacidad, Módulos, Ajustes).
+
+El objetivo no es eliminar funciones, sino reducir decisiones simultáneas para
+usuarios no técnicos y hacer predecible dónde encontrar cada tarea. La barra
+debe seguir permitiendo llegar a cualquier pantalla en un máximo de dos acciones.
+
+## Key Challenges and Analysis (ADMIN-NAV)
+
+- La solución debe funcionar con combinaciones distintas de módulos activos sin
+  dejar grupos vacíos ni cambiar de sitio los accesos de forma inesperada.
+- Páginas como Recursos nacen como módulo técnico, pero para el usuario son
+  contenido; la arquitectura debe responder al modelo mental del usuario, no al
+  del código.
+- El estado activo debe seguir visible aunque el usuario haya cerrado grupos en
+  otra sesión. Ocultar la pantalla actual dentro de un acordeón cerrado sería
+  desorientador.
+- El colapso actual por doble clic en el logo es invisible y difícil de descubrir.
+  Si se conserva, necesita un control explícito y nombres accesibles.
+- En móvil no puede depender de hover ni crear un segundo panel: los grupos se
+  despliegan dentro del mismo drawer y solo una hoja de destino cierra el menú.
+
+## Propuesta de arquitectura (ADMIN-NAV)
+
+La barra pasa de una lista plana a un acceso directo y seis grupos. Solo queda
+abierto el grupo de la pantalla actual; el usuario puede abrir otro y la barra
+recuerda su elección. En reposo se ven siete decisiones, no veintiuna:
+
+1. **Inicio** → Escritorio.
+2. **Asistente IA** → Asistente, Conocimiento, Documentos, Uso de IA.
+3. **Contenido** → Páginas, Entradas, Medios, Formularios y Recursos cuando esté
+   activo.
+4. **Clientes y ventas** → Mensajes, Reservas y Tienda; los dos últimos solo si
+   sus módulos están activos.
+5. **Apariencia** → Diseño, Cabecera y pie.
+6. **Visibilidad** → Analítica cuando esté activa, SEO y Marketing.
+7. **Configuración** → Privacidad, Módulos y Ajustes.
+
+Decisiones de interacción recomendadas:
+
+- Los encabezados de grupo son botones con chevron; no son enlaces ambiguos.
+- Al navegar, el grupo de la ruta activa se abre siempre y el destino mantiene
+  el indicador de selección actual.
+- Solo un grupo abierto a la vez para que la barra nunca vuelva a crecer hasta
+  el estado plano actual. Inicio permanece siempre visible.
+- El logo sigue llevando a Inicio. El doble clic secreto se sustituye por un
+  botón visible «Contraer menú» en el pie; en modo compacto cada icono expone
+  tooltip y nombre accesible.
+- En móvil se conserva el drawer actual: los grupos se abren en línea, Escape y
+  el overlay lo cierran, y elegir un destino también lo cierra.
+- Sin badges ni contadores en esta primera versión: serían útiles solo con una
+  definición consistente de “pendiente” para Mensajes, Reservas y Tienda.
+
+## High-level Task Breakdown (ADMIN-NAV)
+
+### N1 — Modelo de navegación y tests de composición
+
+- Extraer la lista y su agrupación a un builder PHP reutilizable por el layout.
+- Componerla según módulos activos y ruta actual, sin consultar entidades ni
+  duplicar reglas en la vista.
+- Probar grupos, orden, rutas activas, combinaciones de módulos y ausencia de
+  grupos vacíos.
+- **Éxito:** el modelo devuelve exactamente un destino activo, todos los accesos
+  actuales siguen presentes y cada combinación de módulos es determinista.
+
+### N2 — Acordeón accesible en escritorio
+
+- Renderizar Inicio y los seis grupos con `button`, `aria-expanded` y
+  `aria-controls`; usar listas semánticas para los destinos.
+- Abrir el grupo activo en servidor para evitar saltos al cargar; JS solo maneja
+  la interacción posterior y la preferencia local.
+- Añadir foco visible, estados hover/active y animación solo con transformación/
+  opacidad, respetando reduced-motion.
+- **Éxito:** cualquier pantalla está a dos acciones como máximo y teclado,
+  lector de pantalla y navegación sin JS conservan acceso completo.
+
+### N3 — Modo compacto explícito y móvil
+
+- Reemplazar el doble clic del logo por un botón visible de contraer/expandir.
+- Definir tooltips/flyout accesible para los grupos en compacto o, si la prueba
+  de usabilidad no resulta clara, limitar el compacto a ocultar etiquetas sin
+  esconder la estructura activa.
+- En móvil verificar drawer, acordeones, scroll, foco, overlay y cierre al elegir
+  destino a 390 px.
+- **Éxito:** no hay controles secretos, hover obligatorio, overflow ni destinos
+  inaccesibles en compacto o móvil.
+
+### N4 — i18n, regresión y QA real
+
+- Añadir nombres y ayudas en es/en/fr/pt; cambiar «Header y pie» por «Cabecera y
+  pie» en castellano sin alterar la ruta.
+- Ejecutar lint i18n, suites de layout/módulos/rutas y regresión admin relevante.
+- Recorrer con los cuatro módulos activos: Inicio, cada grupo, ruta activa,
+  recarga, compacto y móvil; confirmar consola limpia.
+- **Éxito:** las 21 pantallas siguen alcanzables, la barra nunca muestra más de
+  un grupo desplegado y no hay regresiones de permisos, rutas o módulos.
+
+## Project Status Board (ADMIN-NAV)
+
+- [x] N1 — Modelo de navegación y tests de composición
+- [x] N2 — Acordeón accesible en escritorio
+- [x] N3 — Modo compacto explícito y móvil
+- [x] N4 — i18n, regresión y QA real
+
+## Executor's Feedback or Assistance Requests (ADMIN-NAV)
+
+N4 ejecutada y paquete 1.1.1 generado. Las 21 rutas, los cuatro idiomas, los
+cuatro módulos activos, el acordeón, el compacto y el drawer móvil han quedado
+validados. El Executor solicita al Planner la comprobación final formal; no hay
+ningún bloqueo técnico pendiente.
+
+## Current Status / Progress Tracking (ADMIN-NAV)
+
+### N1 completada (30/08/2026, Executor)
+
+- Nuevo `AdminNavigation`: modelo puro, sin sesión ni BD, que recibe la ruta y
+  los módulos activos y devuelve Inicio + los seis grupos aprobados.
+- El catálogo conserva los 17 destinos base y añade únicamente Analítica,
+  Reservas, Tienda y Recursos cuando corresponde. Recursos vive en Contenido,
+  aunque técnicamente sea un módulo; Reservas/Tienda en Clientes y ventas y
+  Analítica en Visibilidad.
+- La coincidencia por segmento evita cruces entre `/admin/forms` y
+  `/admin/formularios`; Inicio solo se activa en `/admin` y cada grupo conoce si
+  contiene la ruta activa.
+- El layout ya consume el builder y dejó de definir rutas, iconos y reglas de
+  activación por duplicado. Un adaptador mantiene temporalmente el orden y HTML
+  planos hasta N2, evitando entregar una interfaz intermedia.
+- TDD: `tests/admin_navigation.php` empezó fallando por clase ausente y termina
+  con **27/27 PASS**. Regresión: `resources_admin`, `modules_registry` y
+  `admin_i18n`, todo en verde; lint PHP y `git diff --check`, limpios.
+
+### N2 completada (30/08/2026, Executor)
+
+- El layout renderiza listas semánticas y encabezados de grupo como botones con
+  `aria-expanded` y `aria-controls`. El enlace activo lleva `aria-current` y el
+  grupo que lo contiene llega abierto desde PHP, antes de ejecutar JS.
+- El acordeón permite un solo grupo abierto y recuerda la última elección para
+  Inicio/rutas sin grupo; al recargar una ruta interna, el grupo activo gana
+  siempre a esa preferencia.
+- La degradación sin JS no deja botones inertes: la clase `no-js` oculta los
+  toggles y muestra todos los destinos. Todo el CSS vive en `admin.css`.
+- La jerarquía visual reduce la barra a siete decisiones en reposo; hijos más
+  compactos, foco visible, chevron, feedback táctil y revelado solo con
+  `transform`/`opacity`, desactivado con reduced-motion.
+- Las etiquetas de grupo se añadieron ya en es/en/fr/pt porque N2 las renderiza;
+  N4 conserva la auditoría i18n final y el cambio de «Header y pie».
+- QA visual local de solo lectura con los cuatro módulos activos: Contenido
+  llegó abierto en Páginas, abrir Asistente cerró Contenido y una recarga volvió
+  a priorizar la ruta activa. Jerarquía y espaciado correctos; consola limpia.
+  La fixture y el servidor temporal se retiraron al terminar.
+- TDD: `admin_navigation_ui` **43/43 PASS** y `admin_navigation` **27/27 PASS**;
+  regresiones `resources_admin`, `modules_registry`, `admin_i18n`, lint i18n,
+  PHP/JS y `git diff --check`, todo en verde.
+
+### N3 completada (30/08/2026, Executor)
+
+- El doble clic secreto del logo desaparece. Un botón visible en el pie permite
+  contraer o expandir, conserva la preferencia local y sincroniza su etiqueta y
+  `aria-expanded` en los cuatro idiomas.
+- En compacto, cada icono conserva su nombre real dentro del control y muestra
+  una ayuda visual decorativa en hover o foco. No se exige hover: teclado y
+  lector de pantalla siguen teniendo acceso directo a cada nombre y destino.
+- El drawer móvil usa un ancho seguro, objetivos mínimos de 44 px, mueve el foco
+  al destino activo al abrir y contempla cierre por Escape, overlay o elección
+  de destino con retorno al botón de menú.
+- La preferencia compacta de escritorio queda neutralizada en móvil: recupera
+  anchura, etiquetas, indentación y geometría de cheurones, sin bloquear la
+  entrada del drawer.
+- QA visual local a 390×844: jerarquía, scroll, foco, overlay y acordeón
+  correctos; consola limpia. También se revisaron el compacto de escritorio y
+  sus ayudas. La fixture, pestaña, viewport y servidor temporales se retiraron.
+- TDD: `admin_navigation_responsive` **29/29 PASS**; se mantienen
+  `admin_navigation_ui` **43/43 PASS** y `admin_navigation` **27/27 PASS**.
+  Regresiones `resources_admin`, `modules_registry`, `admin_i18n`, lint PHP/JS,
+  `git diff --check` y lint i18n sin errores nuevos. El lint i18n conserva sus
+  37 avisos heredados ya conocidos.
+
+### N4 ejecutada (30/08/2026, Executor)
+
+- La etiqueta española `nav.chrome` pasa de «Header y pie» a «Cabecera y pie»
+  sin cambiar su ruta. El contrato se añadió primero al test y falló antes de la
+  corrección; la versión se fijó del mismo modo en **1.1.1**.
+- QA real de solo lectura con Analítica, Reservas, Tienda y Recursos activos:
+  recorrido de las **21 rutas**, 21 destinos presentes, exactamente uno activo
+  y nunca más de un grupo desplegado. Recargar vuelve a abrir el grupo de la
+  ruta, incluso tras elegir otro manualmente.
+- Se recorrieron es/en/fr/pt y los cuatro catálogos mostraron seis grupos y su
+  etiqueta correcta de Cabecera/pie. Revisión visual final en compacto de
+  escritorio y drawer a 390×844: jerarquía, foco, overlay, ancho, scroll y
+  versión correctos. Fixture, pestaña, viewport y servidor fueron retirados.
+- Regresión: **104 suites locales en verde**. Se excluyeron deliberadamente los
+  diagnósticos con IA/bancos externos y `update_from_zip`, que despliega sobre
+  la instalación real. Lint PHP/JS y `git diff --check`, limpios; lint i18n sin
+  errores nuevos y con sus 37 avisos heredados.
+- Una suite heredada de QA real creó una página publicada y, al interrumpir una
+  segunda suite HTTP, quedaron dos páginas/formulario/sitio temporales. Se
+  identificaron por id, slug, título y timestamp, se revisaron sus FKs y se
+  eliminaron en transacciones exactas; `site_languages_model` volvió a verde y
+  la base quedó sin esos residuos.
+- Paquete final: `deliverables/promptpress-1.1.1.zip`, **1.051 archivos**, 2,6 MB.
+  `unzip -t`, fingerprint del actualizador, versión interna y exclusión de
+  secretos/datos, correctos. SHA-256:
+  `8c4914b9ed3fb29ecda3fcdc81af582c9f67cfea3612ecc96b42764e494feb27`.
+
+## Lessons (ADMIN-NAV)
+
+- Centralizar navegación exige actualizar tests que inspeccionaban la ubicación
+  literal de una ruta en la vista. El contrato útil no es «este texto está en el
+  layout», sino «el destino aparece únicamente cuando el módulo está activo».
+- Separar modelo y render permite introducir una arquitectura nueva sin dejar
+  al usuario a mitad de camino: N1 alimenta la lista antigua con un adaptador y
+  N2 podrá cambiar solo la presentación.
+- Un acordeón de navegación no puede depender de JS para existir. Marcar el
+  documento inicialmente como `no-js`, ocultar los toggles y mostrar las listas
+  completas ofrece un fallback real sin duplicar enlaces ni usar CSS inline.
+- La preferencia recordada es secundaria frente a la ruta: si ambas compiten,
+  abrir el grupo guardado ocultaría la pantalla actual y rompería la orientación.
+- El texto generado mediante CSS puede participar en el nombre accesible y
+  duplicarlo. Las ayudas del compacto deben existir como nodos decorativos con
+  `aria-hidden`, mientras el texto real permanece dentro del control.
+- Una clase persistida para escritorio no se neutraliza sola al cambiar de
+  breakpoint. En móvil hay que restaurar explícitamente transform, anchura,
+  etiquetas, sangría y geometría de los cheurones.
+- Una carpeta `tests/` puede mezclar contratos aislados con scripts de «QA real»
+  que llaman servicios externos y escriben datos. La regresión automática debe
+  mantener una lista explícita de suites seguras; no basta con ejecutar todos
+  los PHP por nombre.
+- Si se interrumpe una prueba HTTP con `finally`, PHP puede no alcanzar su
+  limpieza. Antes de repetirla hay que auditar residuos por identificadores y
+  timestamps y borrarlos solo tras confirmar las claves foráneas.
+

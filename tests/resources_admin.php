@@ -18,6 +18,7 @@ require_once PP_ROOT . '/vendor/autoload.php';
 
 use App\Modules\ModuleRegistry;
 use App\Modules\Resources\ResourceAdminController;
+use App\Services\AdminNavigation;
 use Core\Database;
 
 $failed = 0;
@@ -85,8 +86,15 @@ check_ra('existen listado y editor', is_file($index) && is_file($edit));
 check_ra('editor tiene JS aislado para interacción progresiva', is_file($js));
 
 $layout = (string) file_get_contents(PP_ROOT . '/views/admin/layout.php');
-check_ra('navegación de Recursos depende de isEnabled',
-    preg_match('/isEnabled\(\$navSiteId, \'resources\'\).*?admin\/resources/s', $layout) === 1
+$navKeysOff = array_column(AdminNavigation::flatten(AdminNavigation::build('/admin/resources')), 'key');
+$navKeysOn = array_column(AdminNavigation::flatten(AdminNavigation::build('/admin/resources', ['resources'])), 'key');
+check_ra('layout resuelve módulos activos antes de construir navegación',
+    str_contains($layout, 'ModuleRegistry::isEnabled')
+    && str_contains($layout, 'AdminNavigation::build')
+);
+check_ra('navegación de Recursos depende del módulo activo',
+    !in_array('resources', $navKeysOff, true)
+    && in_array('resources', $navKeysOn, true)
 );
 
 if ($original === null) {

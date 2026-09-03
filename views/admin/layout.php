@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="<?= e(\App\Services\AdminI18n::htmlLang()) ?>">
+<html class="no-js" lang="<?= e(\App\Services\AdminI18n::htmlLang()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e(\Core\View::section('title', __('layout.title_fallback'))) ?> — PromptPress</title>
+    <script>document.documentElement.classList.remove('no-js');</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..900&family=Geist+Mono:wght@400..700&display=swap">
@@ -29,65 +30,82 @@
         <nav class="pp-sidebar__nav">
             <?php
             $currentPath = \Core\Request::path();
-            $navItems = [
-                ['url' => 'admin/',           'icon' => 'dashboard', 'label' => __('nav.dashboard'),     'match' => '/admin'],
-                ['url' => 'admin/assistant',  'icon' => 'ai',        'label' => __('nav.assistant'),      'match' => '/admin/assistant'],
-                ['url' => 'admin/pages',      'icon' => 'pages',     'label' => __('nav.pages'),        'match' => '/admin/pages'],
-                ['url' => 'admin/posts',      'icon' => 'posts',     'label' => __('nav.posts'),       'match' => '/admin/posts'],
-                ['url' => 'admin/media',      'icon' => 'media',     'label' => __('nav.media'),         'match' => '/admin/media'],
-                ['url' => 'admin/formularios','icon' => 'forms',     'label' => __('nav.forms'),    'match' => '/admin/formularios'],
-                ['url' => 'admin/forms',      'icon' => 'messages',  'label' => __('nav.messages'),       'match' => '/admin/forms'],
-                ['url' => 'admin/memory',     'icon' => 'memory',    'label' => __('nav.knowledge'),   'match' => '/admin/memory'],
-                ['url' => 'admin/documents',  'icon' => 'documents', 'label' => __('nav.documents'),     'match' => '/admin/documents'],
-                ['url' => 'admin/design',     'icon' => 'design',    'label' => __('nav.design'),         'match' => '/admin/design'],
-                ['url' => 'admin/chrome',     'icon' => 'chrome',    'label' => __('nav.chrome'),   'match' => '/admin/chrome'],
-                ['url' => 'admin/seo',        'icon' => 'seo',       'label' => __('nav.seo'),            'match' => '/admin/seo'],
-                ['url' => 'admin/marketing',  'icon' => 'marketing', 'label' => __('nav.marketing'),      'match' => '/admin/marketing'],
-                ['url' => 'admin/ai/usage',   'icon' => 'ai',        'label' => __('nav.ai'),             'match' => '/admin/ai'],
-                ['url' => 'admin/privacy',    'icon' => 'privacy',   'label' => __('nav.privacy'),     'match' => '/admin/privacy'],
-                ['url' => 'admin/modules',    'icon' => 'settings',  'label' => __('nav.modules'),        'match' => '/admin/modules'],
-                ['url' => 'admin/settings',   'icon' => 'settings',  'label' => __('nav.settings'),        'match' => '/admin/settings'],
-            ];
-            // FEAT-3 — entradas de módulos activables (solo si están activos).
             $navSiteId = \Core\Auth::siteId();
-            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'resources')) {
-                array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/resources', 'icon' => 'resources', 'label' => __('nav.resources'), 'match' => '/admin/resources'],
-                ]);
+            $enabledNavModules = [];
+            if ($navSiteId !== null) {
+                foreach (array_keys(\App\Modules\ModuleRegistry::MODULES) as $moduleKey) {
+                    if (\App\Modules\ModuleRegistry::isEnabled($navSiteId, $moduleKey)) {
+                        $enabledNavModules[] = $moduleKey;
+                    }
+                }
             }
-            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'commerce')) {
-                array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/commerce', 'icon' => 'commerce', 'label' => __('nav.shop'), 'match' => '/admin/commerce'],
-                ]);
-            }
-            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'booking')) {
-                array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/booking', 'icon' => 'booking', 'label' => __('nav.bookings'), 'match' => '/admin/booking'],
-                ]);
-            }
-            if ($navSiteId !== null && \App\Modules\ModuleRegistry::isEnabled($navSiteId, 'analytics')) {
-                array_splice($navItems, 13, 0, [
-                    ['url' => 'admin/analytics', 'icon' => 'analytics', 'label' => __('nav.analytics'), 'match' => '/admin/analytics'],
-                ]);
-            }
-            foreach ($navItems as $item):
-                // Match por segmento: '/admin/forms' NO debe activar '/admin/formularios'
-                // (el carácter tras el prefijo ha de ser '/' o el fin de la ruta).
-                $m = $item['match'];
-                $segmentMatch = $currentPath === $m
-                    || str_starts_with($currentPath, $m . '/');
-                $isActive = ($m === '/admin' && ($currentPath === '/admin' || $currentPath === '/admin/'))
-                    || ($m !== '/admin' && $segmentMatch);
-                $activeClass = $isActive ? ' is-active' : '';
+
+            $navigation = \App\Services\AdminNavigation::build($currentPath, $enabledNavModules);
             ?>
-            <a href="<?= e(base_url($item['url'])) ?>" class="pp-nav-item<?= $activeClass ?>">
-                <span class="pp-nav-item__icon pp-icon--<?= $item['icon'] ?>"></span>
-                <span class="pp-nav-item__label"><?= e($item['label']) ?></span>
-            </a>
+            <ul class="pp-nav-list">
+            <?php foreach ($navigation as $navEntry): ?>
+                <?php if (($navEntry['type'] ?? '') === 'link'):
+                    $activeClass = !empty($navEntry['active']) ? ' is-active' : '';
+                ?>
+                <li class="pp-nav-list__item">
+                    <a href="<?= e(base_url($navEntry['url'])) ?>"
+                       class="pp-nav-item pp-nav-item--root<?= $activeClass ?>"
+                       <?= !empty($navEntry['active']) ? 'aria-current="page"' : '' ?>>
+                        <span class="pp-nav-item__icon pp-icon--<?= e($navEntry['icon']) ?>" aria-hidden="true"></span>
+                        <span class="pp-nav-item__label"><?= e(__($navEntry['label_key'])) ?></span>
+                        <span class="pp-nav-visual-tooltip" aria-hidden="true"><?= e(__($navEntry['label_key'])) ?></span>
+                    </a>
+                </li>
+                <?php else:
+                    $groupOpen = !empty($navEntry['active']);
+                    $groupPanelId = 'pp-nav-group-' . (string) $navEntry['key'];
+                ?>
+                <li class="pp-nav-group<?= $groupOpen ? ' is-active' : '' ?>" data-pp-nav-group="<?= e($navEntry['key']) ?>">
+                    <button type="button"
+                            class="pp-nav-group__toggle"
+                            data-pp-nav-group-toggle
+                            data-pp-nav-group-active="<?= $groupOpen ? '1' : '0' ?>"
+                            aria-expanded="<?= $groupOpen ? 'true' : 'false' ?>"
+                            aria-controls="<?= e($groupPanelId) ?>">
+                        <span class="pp-nav-item__icon pp-icon--<?= e($navEntry['icon']) ?>" aria-hidden="true"></span>
+                        <span class="pp-nav-group__label"><?= e(__($navEntry['label_key'])) ?></span>
+                        <span class="pp-nav-group__chevron" aria-hidden="true"></span>
+                        <span class="pp-nav-visual-tooltip" aria-hidden="true"><?= e(__($navEntry['label_key'])) ?></span>
+                    </button>
+                    <ul id="<?= e($groupPanelId) ?>" class="pp-nav-group__items"<?= $groupOpen ? '' : ' hidden' ?>>
+                        <?php foreach ($navEntry['items'] as $item):
+                            $activeClass = !empty($item['active']) ? ' is-active' : '';
+                        ?>
+                        <li>
+                            <a href="<?= e(base_url($item['url'])) ?>"
+                               class="pp-nav-item pp-nav-item--child<?= $activeClass ?>"
+                               <?= !empty($item['active']) ? 'aria-current="page"' : '' ?>>
+                                <span class="pp-nav-item__icon pp-icon--<?= e($item['icon']) ?>" aria-hidden="true"></span>
+                                <span class="pp-nav-item__label"><?= e(__($item['label_key'])) ?></span>
+                                <span class="pp-nav-visual-tooltip" aria-hidden="true"><?= e(__($item['label_key'])) ?></span>
+                            </a>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </li>
+                <?php endif; ?>
             <?php endforeach; ?>
+            </ul>
         </nav>
 
         <div class="pp-sidebar__footer">
+            <button type="button"
+                    class="pp-sidebar__collapse"
+                    id="pp-sidebar-collapse"
+                    aria-controls="pp-sidebar"
+                    aria-expanded="true"
+                    aria-label="<?= e(__('nav.collapse')) ?>"
+                    data-label-expand="<?= e(__('nav.expand')) ?>"
+                    data-label-collapse="<?= e(__('nav.collapse')) ?>">
+                <span class="pp-sidebar__collapse-icon" aria-hidden="true"></span>
+                <span class="pp-sidebar__collapse-label"><?= e(__('nav.collapse')) ?></span>
+                <span class="pp-nav-visual-tooltip" aria-hidden="true"><?= e(__('nav.collapse')) ?></span>
+            </button>
             <span class="pp-sidebar__version">v<?= e(PP_VERSION) ?></span>
         </div>
     </aside>
@@ -97,7 +115,9 @@
 
         <!-- Topbar -->
         <header class="pp-topbar">
-            <button class="pp-topbar__toggle" id="pp-sidebar-toggle" type="button" aria-label="<?= e(__('common.menu')) ?>">
+            <button class="pp-topbar__toggle" id="pp-sidebar-toggle" type="button"
+                    aria-label="<?= e(__('common.menu')) ?>"
+                    aria-controls="pp-sidebar" aria-expanded="false">
                 <span class="pp-hamburger"></span>
             </button>
 
