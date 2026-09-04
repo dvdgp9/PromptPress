@@ -484,7 +484,14 @@ final class BrandService
      * Renderiza solo las páginas con `page_type='legal'` que estén `published`.
      * Si no hay ninguna, devuelve un footer mínimo (©/marca) sin enlaces.
      */
-    public static function publicFooter(int $siteId, ?array $config = null, ?string $lang = null): string
+    /**
+     * Pie público del sitio.
+     *
+     * `$withConsent = false` lo pide el preview del Studio: dentro del editor no
+     * hay a quién pedirle consentimiento y el banner se comía el pie del iframe
+     * (en marco móvil, ~40% del alto). Lo demás del pie es idéntico al público.
+     */
+    public static function publicFooter(int $siteId, ?array $config = null, ?string $lang = null, bool $withConsent = true): string
     {
         self::$lang = $lang !== null ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
         $config = ChromeService::localized($config ?? ChromeService::load($siteId), self::$lang);
@@ -513,12 +520,16 @@ final class BrandService
 
         // Banner de cookies (E-GDPR G4): el JS se inyecta siempre (gestiona también
         // click-to-load de vídeos), pero el banner UI solo aparece si hay tracking activo.
-        $manifest = ComplianceService::manifest($siteId);
-        $needsBanner = TrackingCatalog::needsBanner($manifest);
-        $reopenLink = $needsBanner
-            ? '<a class="pp-site-footer__link" href="#" data-cb-reopen>' . self::aria('cookies.reopen') . '</a>'
-            : '';
-        $bannerHtml = CookieBanner::render($manifest, self::$lang);
+        // STUDIO-UX A1 — salvo en los previews del editor, que no lo llevan.
+        $reopenLink = '';
+        $bannerHtml = '';
+        if ($withConsent) {
+            $manifest = ComplianceService::manifest($siteId);
+            $reopenLink = TrackingCatalog::needsBanner($manifest)
+                ? '<a class="pp-site-footer__link" href="#" data-cb-reopen>' . self::aria('cookies.reopen') . '</a>'
+                : '';
+            $bannerHtml = CookieBanner::render($manifest, self::$lang);
+        }
 
         // D-MB2 R4 — footer "de agencia": banda oscura con marca + tagline,
         // navegación principal y enlaces legales; barra inferior con ©.

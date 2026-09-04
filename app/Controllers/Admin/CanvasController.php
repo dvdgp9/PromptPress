@@ -107,9 +107,12 @@ final class CanvasController
             $h .= '<link rel="stylesheet" href="' . e(base_url('public/css/resources.css')) . '?v=' . e((string) (@filemtime($resourcesCss) ?: PP_VERSION)) . '">';
         }
         $h .= '</head><body class="' . e(VisualStyleService::bodyClass($styleSlug)) . '">';
-        $h .= BrandService::publicHeader($siteId);
+        $h .= BrandService::publicHeader($siteId, null, $pageLang);
         $h .= '<main>' . $canvas['html'] . '</main>';
-        $h .= BrandService::publicFooter($siteId);
+        // STUDIO-UX A1 — sin chrome de consentimiento: el banner tapaba el pie del
+        // lienzo en todas las sesiones de edición, y aquí no hay visitante al que
+        // preguntarle nada.
+        $h .= BrandService::publicFooter($siteId, null, $pageLang, false);
         $h .= '<script src="' . e(base_url('public/js/pp-ux.js')) . '" defer></script>';
         // ?clean=1 → vista limpia para "Ver página" cuando es borrador (sin el
         // overlay de selección/edición, que solo tiene sentido en el iframe).

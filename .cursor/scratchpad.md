@@ -7117,9 +7117,20 @@ Orden por relación impacto/coste. Cada tarea es verificable sola.
 - A2 — Barra lateral plegable con botón y atajo, estado recordado en
   `localStorage`. Éxito: con la barra plegada el iframe ocupa todo el ancho a
   1440 y a 1024; el estado sobrevive a recargar.
-- A3 — Sacar el chat de encima del lienzo: pasarlo a barra inferior anclada
-  (alto fijo ~120px, expandible) o a pestaña de la barra lateral. Éxito: a
-  1024×768 el lienzo visible pasa de ~46% a >85%.
+- A3 — *(SUPERADA por A3′, decisión del usuario 04/09/2026. Se mantiene el
+  enunciado original para no perder el registro.)* Sacar el chat de encima del
+  lienzo: pasarlo a barra inferior anclada (alto fijo ~120px, expandible) o a
+  pestaña de la barra lateral. Éxito: a 1024×768 el lienzo visible pasa de ~46%
+  a >85%.
+- A3′ — El chat se queda donde está (flotante sobre el escenario), pero **solo
+  ocupa cuando lo pides**. El informe exageraba: el dock YA se pliega a píldora
+  con estado recordado (`DOCK_KEY`); lo que molesta es que arranca desplegado y
+  se queda abierto. Tres cambios: (1) arranca plegado salvo conversación en
+  curso; (2) desplegado se ancla a la columna de la barra lateral, no al lienzo;
+  (3) el fin de un cambio se anuncia en la píldora (`chat-pill-dot`, hoy
+  infrautilizado) para no tener que dejarlo abierto esperando. Éxito: al abrir el
+  Studio el lienzo no tiene nada encima, y con el chat desplegado el ancho de
+  lienzo tapado es 0 con la barra visible. Depende de A2, así que va detrás.
 - A4 — Modo "solo página" (tecla, p. ej. `.`): oculta barra, chat y overlays.
   Éxito: un clic/tecla y vuelta, sin recargar el iframe.
 
@@ -7162,14 +7173,14 @@ Orden por relación impacto/coste. Cada tarea es verificable sola.
 
 ## Project Status Board (STUDIO-UX)
 
-- [ ] A1 banner de cookies fuera del preview
+- [x] A1 banner de cookies fuera del preview
 - [ ] A2 barra lateral plegable
-- [ ] A3 chat fuera del lienzo
+- [ ] A3′ el chat solo ocupa cuando lo pides (SUSTITUYE a A3)
 - [ ] A4 modo "solo página"
 - [ ] B1 barra no excluyente
 - [ ] B2 teclado desde el iframe
 - [ ] B3 deseleccionar cierra el panel
-- [ ] B4 "Guardado" solo si se guardó
+- [x] B4 "Guardado" solo si se guardó (cerrado de paso en F4)
 - [ ] C1 etiquetas humanas de las partes
 - [ ] C2 renombrar página
 - [ ] C3 historial: ver ≠ restaurar
@@ -7572,3 +7583,40 @@ estaba en la fase C.
 lienzo (A1-A4), un solo modelo mental en la barra (B1-B3), etiquetas humanas de
 las partes y renombrar página (C1-C2), historial «ver ≠ restaurar» (C3), e i18n
 y acabado (D1-D3). B4 y P6 quedaron cerrados de paso en F4.
+
+---
+
+## Current Status / Progress Tracking — Fase A (STUDIO-UX)
+
+Orden acordado con el usuario (04/09/2026): **A1 → A2 → A4 → A3′**. A3 se
+reescribe como A3′ (ver breakdown): el chat no se muda, se pliega.
+
+Antes de empezar se cerró la deuda de git: el trabajo de ADMIN-NAV,
+BUG-ASST-PLAN y toda la Fase F estaba sin commitear (28 archivos, ~3.900
+líneas). Repartido en cuatro commits (`1f0e20e`, `d702d38`, `5c26b79`,
+`34c24df`) tras pasar en verde las 17 suites implicadas. No se pudo bajar a
+un commit por tarea F1…F10: hay hunks que fusionan tareas (uno de 298 líneas en
+`canvas-studio.js` cubre F1, F5, F6 y F8; los bloques de `lang/admin/*.php`
+mezclan claves de cinco tareas; `copySectionInto` (F6) e `integrateSectionEdit`
+(F10) son métodos contiguos en `CanvasService`).
+
+**A1 — El preview del Studio ya no lleva chrome de consentimiento (04/09/2026).**
+- `BrandService::publicFooter()` acepta `$withConsent` (por defecto `true`, el
+  público no cambia). En `false` no monta ni el banner, ni `PP_COOKIE_CONFIG`,
+  ni el JS de consent, ni el enlace «Configurar cookies» del pie.
+- `CanvasController::preview()` lo pide así. De paso, el preview pasa el idioma
+  de la página a `publicHeader`/`publicFooter`: antes montaba cabecera y pie en
+  el idioma por defecto del sitio aunque la página fuese de otro idioma.
+- Riesgo descartado antes de tocar: el JS del banner también gestiona el
+  click-to-load de vídeos, pero esos placeholders (`pp-video-cta`) solo los
+  genera `SectionRenderer` (páginas clásicas); el canvas no los produce, así que
+  quitar el módulo entero del preview no deja ningún vídeo muerto.
+- Tests: `tests/canvas_preview_consent.php` (11, nuevo, escrito antes del
+  código; comprueba además que el pie del editor es el mismo que el público
+  menos el consentimiento). En verde `chrome_config`, `site_language_chrome` y
+  `site_language_chrome_i18n`.
+- Verificado en navegador: `/admin/canvas/136/preview` no tiene
+  `#pp-cookie-banner-root`, ni `window.PP_COOKIE_CONFIG`, ni `[data-cb-reopen]`,
+  y sí `.pp-site-footer`; la home pública sigue mostrando el banner (`.pp-cb`
+  visible) y su enlace para reabrirlo.
+
