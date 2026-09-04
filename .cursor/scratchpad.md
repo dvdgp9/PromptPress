@@ -7206,6 +7206,12 @@ avisa, no la implementa).
 - El preview del Studio reutiliza el render público entero, banner de
   consentimiento incluido: lo que se añada al pie público aparece dentro del
   editor salvo que se excluya explícitamente.
+- (A3′, 04/09/2026) La respuesta del chat se pinta DENTRO del `.then()`, y
+  `setBusy(false)` llega después, en el `.finally()`. Cualquier aviso que mire
+  `busy` en ese momento nace muerto: el primer intento del aviso de la píldora
+  se borraba solo y el test de contrato no lo veía, porque el orden solo se
+  aprecia ejecutándolo. Los avisos se limpian al EMPEZAR el cambio siguiente,
+  no consultando `busy` al pintarlos.
 
 ## Key Challenges and Analysis — eje 2: funcionamiento (STUDIO-UX, 2026-09-02)
 
@@ -7620,3 +7626,72 @@ mezclan claves de cinco tareas; `copySectionInto` (F6) e `integrateSectionEdit`
   y sí `.pp-site-footer`; la home pública sigue mostrando el banner (`.pp-cb`
   visible) y su enlace para reabrirlo.
 
+**A2 — La barra lateral se pliega (04/09/2026).** **A4 — Modo «solo la página»
+(04/09/2026).** Van juntos porque comparten la pieza que faltaba: el teclado.
+- Botón ⬓ (plegar barra, «B») y botón ⤢ («solo la página», «.») en la barra
+  superior, con `aria-expanded`/`aria-pressed` y etiqueta que dice siempre la
+  acción disponible. Estado de la barra en `localStorage`
+  (`pp-studio-side-open`).
+- **El teclado tenía que resolverse aquí, no en B2.** El atajo lo pide el
+  enunciado de A4 («un clic/tecla») y P5 ya había medido que los listeners del
+  padre no ven nada cuando el foco está dentro del iframe. El overlay reenvía
+  ahora las teclas SUELTAS al padre (`post('key')`), y solo fuera de cualquier
+  escritura —incluidos los formularios de la propia página— y nunca mientras se
+  edita texto inline. Los atajos con modificador (deshacer) siguen siendo B2.
+- «Solo la página» no recarga el iframe: es una clase en el padre más un aviso
+  al overlay (`chrome`), que se calla (`html.pp-studio-chromeless`) y suelta lo
+  que tuviera seleccionado — dejar una sección seleccionada con el marco oculto
+  habría mandado el siguiente cambio a un sitio invisible. Esc también sale.
+- Medido en navegador (1440×900): el lienzo pasa de **1028 px a 1408 px** con la
+  barra plegada (el escenario entero). A 1024×768: de 992 px con barra a 992 px
+  de 1024 sin ella y el chat de vuelta a su esquina. El estado sobrevive a
+  recargar (se comprobó tras recarga: `is-side-hidden` puesto y el botón ya
+  diciendo «Mostrar el panel»). En «solo la página»: marco 1024 px, padding 0,
+  barra y chat a 0, `pp-studio-chromeless` puesto dentro del iframe y **la marca
+  inyectada en `contentWindow` sobrevive** → no hubo recarga. Esc devuelve todo.
+- Tests: `tests/canvas_studio_canvas_room.php` (15, nuevo, escrito antes del
+  código). En verde `admin_i18n`, `canvas_structure_ui`, `canvas_rich_text`,
+  `canvas_element_actions`, `canvas_preview_consent`.
+- Microcopia nueva en es/en/fr/pt (`js.cv.hide_panel`, `js.cv.show_panel`,
+  `js.cv.canvas_only`, `js.cv.canvas_only_exit`), con el atajo en la etiqueta.
+
+**A3′ — El chat solo ocupa cuando lo pides (04/09/2026).**
+- El dock sale del escenario y pasa a colgar de `.cvstudio-main` (escenario +
+  barra), así que la esquina de referencia ya no es la del lienzo sino la de la
+  columna derecha. El panel se estrecha a 356 px para caber dentro de los 380 px
+  de la barra lateral.
+- Arranca **plegado** (`DOCK_KEY` por defecto `'0'`): antes se abría solo y se
+  quedaba abierto toda la sesión. Si el usuario lo abre, se recuerda.
+- Con el chat plegado la píldora ya enseñaba un punto al llegar respuesta; ahora
+  además lo dice con palabras («Cambio aplicado», 6 s) para no tener que dejar
+  el panel abierto solo para enterarse de que terminó.
+- Bajo 1100 px desaparece la regla que apartaba el chat de la barra: ahí la
+  barra ya está encima del lienzo, así que las dos cosas comparten la misma
+  columna derecha.
+- Medido en navegador con `localStorage` limpio (usuario nuevo): a 1440×900 el
+  Studio abre con el lienzo entero (1028 px) y **nada encima**; al desplegar el
+  chat, su borde izquierdo cae en 1072 y el escenario acaba en 1060 → **0 px de
+  lienzo tapados** (antes: 390×415 encima de la página). A 1024×768 el panel
+  ocupa 672-1012 (12 px sobre un lienzo que a ese ancho ya comparte con la
+  barra) y en móvil (375) cabe entero. «Solo la página» sigue dando 1440 px de
+  lienzo y sin recargar el iframe con el marcado nuevo.
+- Tests: `canvas_studio_canvas_room.php` ampliado a 19 comprobaciones.
+- Microcopia nueva en los 4 idiomas: `js.cv.change_ready`.
+- El aviso de la píldora costó dos intentos: el primero se borraba solo (ver
+  Lessons). Comprobado ya con un cambio REAL de IA sobre la página 136, con un
+  `MutationObserver` sobre la etiqueta: la secuencia grabada fue «Aplicando el
+  cambio…» → «Cambio aplicado» (6 s) → «Pídeme un cambio», con el punto puesto y
+  el chat plegado. La página se dejó como estaba con «Deshacer».
+
+## Project Status Board — Fase A (STUDIO-UX)
+
+- [x] A1 banner de cookies fuera del preview
+- [x] A2 barra lateral plegable
+- [x] A3′ el chat solo ocupa cuando lo pides
+- [x] A4 modo "solo página"
+
+Pendiente de las fases B, C y D: B1 (barra no excluyente), B2 (teclado con
+modificador desde el iframe — el canal de reenvío ya existe, solo hay que
+añadirle Esc y Ctrl/Cmd+Z), B3 (deseleccionar cierra el panel), C1 (etiquetas
+humanas de las partes), C2 (renombrar página), C3 (historial: ver ≠ restaurar),
+D1-D3 (i18n y acabado).

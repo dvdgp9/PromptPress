@@ -42,6 +42,9 @@ $icon = static function (string $name): string {
         'more'     => '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
         'desktop'  => '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
         'mobile'   => '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+        // STUDIO-UX A2/A4 — plegar la barra y ver solo la página.
+        'panel'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
+        'expand'   => '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>',
     ];
     $p = $paths[$name] ?? '';
     return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
@@ -109,6 +112,15 @@ $icon = static function (string $name): string {
   </div>
 
   <div class="cvstudio-top__zone cvstudio-top__right">
+    <!-- STUDIO-UX A2/A4 — el lienzo es el producto: se puede plegar la barra
+         lateral (botón o «B») y quedarse solo con la página (botón o «.»). -->
+    <button type="button" class="cvstudio-iconbtn" id="studio-side-toggle"
+            aria-expanded="true" aria-controls="studio-side"
+            title="<?= e(__('js.cv.hide_panel')) ?>" aria-label="<?= e(__('js.cv.hide_panel')) ?>"><?= $icon('panel') ?></button>
+    <button type="button" class="cvstudio-iconbtn" id="studio-canvas-only"
+            aria-pressed="false"
+            title="<?= e(__('js.cv.canvas_only')) ?>" aria-label="<?= e(__('js.cv.canvas_only')) ?>"><?= $icon('expand') ?></button>
+    <span class="cvstudio-divider" aria-hidden="true"></span>
     <button type="button" class="cvstudio-iconbtn" id="studio-history-btn" title="<?= e(__('cv.history')) ?>" aria-label="Historial de versiones"><?= $icon('history') ?></button>
     <button type="button" class="cvstudio-iconbtn" id="studio-settings-btn" title="<?= e(__('cv.page_settings')) ?>" aria-label="Ajustes de la página"><?= $icon('settings') ?></button>
     <a class="cvstudio-iconbtn" id="studio-view-link"
@@ -142,49 +154,50 @@ $icon = static function (string $name): string {
     <div class="cvstudio-frame" id="studio-frame-wrap">
       <iframe id="studio-iframe" src="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>" title="<?= e(__('cv.iframe_title')) ?>"></iframe>
     </div>
-
-    <!-- STUDIO-2 A3 — el chat vive flotando sobre la página, no en la barra:
-         así la barra lateral queda entera para la edición manual. -->
-    <div class="cvstudio-dock" id="chat-dock">
-      <button type="button" class="cvstudio-dock__pill" id="chat-pill" aria-expanded="false" aria-controls="chat-panel">
-        <span class="cvstudio-dock__icon" aria-hidden="true">✦</span>
-        <span class="cvstudio-dock__label" id="chat-pill-label"><?= e(__('cv.ask_change_js')) ?></span>
-        <span class="cvstudio-dock__dot" id="chat-pill-dot" hidden aria-hidden="true"></span>
-      </button>
-
-      <section class="cvstudio-dock__panel" id="chat-panel" aria-label="<?= e(__('cv.design_assistant')) ?>">
-        <header class="cvstudio-dock__head">
-          <strong><?= e(__('cv.tell_me')) ?></strong>
-          <button type="button" id="chat-minimize" title="<?= e(__('cv.hide_chat')) ?>" aria-label="<?= e(__('cv.hide_chat')) ?>">▾</button>
-        </header>
-
-        <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
-          <div class="pp-chat-msg pp-chat-msg--assistant">
-            <p><?= e(__('cv.live_page')) ?></p>
-            <p class="pp-chat-hint"><?= e(__('cv.intro_hint')) ?></p>
-          </div>
-        </div>
-
-        <div class="cvstudio-chat__composer">
-          <div class="cvstudio-context" id="chat-context" hidden>
-            <span><?= e(__('cv.changing')) ?>: <strong id="chat-context-label"></strong></span>
-            <button type="button" id="chat-context-clear" title="<?= e(__('cv.clear_selection')) ?>">✕</button>
-          </div>
-          <form id="chat-form">
-            <textarea id="chat-input" rows="2" maxlength="1200"
-              placeholder="<?= e(__('cv.chat_placeholder')) ?>"></textarea>
-            <p class="cvstudio-insert__hint"><?= e(__('cv.reference_hint')) ?></p>
-            <div class="cvstudio-chat__formfoot">
-              <button type="submit" id="chat-send" class="cvstudio-primary-btn"><?= e(__('cv.apply_change')) ?></button>
-              <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden><?= e(__('cv.stop')) ?></button>
-            </div>
-          </form>
-        </div>
-      </section>
-    </div>
   </div>
 
-  <aside class="cvstudio-side">
+  <!-- STUDIO-UX A3′ — el chat no se muda de sitio, deja de estorbar: cuelga de
+     la columna derecha (encima de la barra lateral, no del lienzo) y arranca
+     plegado en su píldora. Desplegarlo no le quita ni un píxel a la página. -->
+  <div class="cvstudio-dock" id="chat-dock">
+    <button type="button" class="cvstudio-dock__pill" id="chat-pill" aria-expanded="false" aria-controls="chat-panel">
+      <span class="cvstudio-dock__icon" aria-hidden="true">✦</span>
+      <span class="cvstudio-dock__label" id="chat-pill-label"><?= e(__('cv.ask_change_js')) ?></span>
+      <span class="cvstudio-dock__dot" id="chat-pill-dot" hidden aria-hidden="true"></span>
+    </button>
+
+    <section class="cvstudio-dock__panel" id="chat-panel" aria-label="<?= e(__('cv.design_assistant')) ?>">
+      <header class="cvstudio-dock__head">
+        <strong><?= e(__('cv.tell_me')) ?></strong>
+        <button type="button" id="chat-minimize" title="<?= e(__('cv.hide_chat')) ?>" aria-label="<?= e(__('cv.hide_chat')) ?>">▾</button>
+      </header>
+
+      <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
+        <div class="pp-chat-msg pp-chat-msg--assistant">
+          <p><?= e(__('cv.live_page')) ?></p>
+          <p class="pp-chat-hint"><?= e(__('cv.intro_hint')) ?></p>
+        </div>
+      </div>
+
+      <div class="cvstudio-chat__composer">
+        <div class="cvstudio-context" id="chat-context" hidden>
+          <span><?= e(__('cv.changing')) ?>: <strong id="chat-context-label"></strong></span>
+          <button type="button" id="chat-context-clear" title="<?= e(__('cv.clear_selection')) ?>">✕</button>
+        </div>
+        <form id="chat-form">
+          <textarea id="chat-input" rows="2" maxlength="1200"
+            placeholder="<?= e(__('cv.chat_placeholder')) ?>"></textarea>
+          <p class="cvstudio-insert__hint"><?= e(__('cv.reference_hint')) ?></p>
+          <div class="cvstudio-chat__formfoot">
+            <button type="submit" id="chat-send" class="cvstudio-primary-btn"><?= e(__('cv.apply_change')) ?></button>
+            <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden><?= e(__('cv.stop')) ?></button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <aside class="cvstudio-side" id="studio-side">
     <!-- FH7 — panel contextual de edición directa (se muestra al seleccionar) -->
     <div class="cvstudio-panel" id="edit-panel" hidden></div>
 

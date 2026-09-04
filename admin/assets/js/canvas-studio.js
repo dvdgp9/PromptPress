@@ -46,6 +46,11 @@
   var chatPillDot = document.getElementById('chat-pill-dot');
   var chatMinimize = document.getElementById('chat-minimize');
   var DOCK_KEY = 'pp-studio-chat-open';
+  // A3′ — aviso efímero en la píldora («Cambio aplicado»). Es una capa por
+  // encima del texto normal: `refreshPill` lo respeta mientras dure, salvo que
+  // el chat se abra o arranque otro cambio, que es cuando ya sobra.
+  var pillNotice = '';
+  var pillNoticeTimer = null;
 
   function pillText() {
     if (busy) return pp.t('js.cv.applying');
@@ -54,8 +59,19 @@
   }
 
   function refreshPill() {
-    chatPillLabel.textContent = pillText();
+    // El aviso solo estorba si el chat está abierto (ahí ya se lee la respuesta).
+    // Ojo con `busy`: la respuesta se pinta ANTES de que `setBusy(false)` llegue,
+    // así que mirar `busy` aquí borraba el aviso justo al nacer.
+    if (dockIsOpen()) pillNotice = '';
+    chatPillLabel.textContent = pillNotice || pillText();
     chatPill.title = pp.t('js.cv.open_chat');
+  }
+
+  function showPillNotice(text) {
+    pillNotice = text;
+    clearTimeout(pillNoticeTimer);
+    pillNoticeTimer = setTimeout(function () { pillNotice = ''; refreshPill(); }, 6000);
+    refreshPill();
   }
 
   function setDock(open, remember) {
@@ -73,13 +89,80 @@
 
   function dockIsOpen() { return dock.classList.contains('is-open'); }
 
-  // Abierto la primera vez (así se ve de qué va); después, lo que eligió el usuario.
-  var dockPref = '1';
-  try { dockPref = localStorage.getItem(DOCK_KEY) || '1'; } catch (e) { /* modo privado */ }
-  setDock(dockPref !== '0', false);
+  // STUDIO-UX A3′ — Arranca PLEGADO. Antes se abría solo y se quedaba abierto
+  // toda la sesión: 390×415 de panel sobre una página que es el producto. La
+  // píldora dice de qué va y basta un clic (o la tecla) para abrirlo.
+  var dockPref = '0';
+  try { dockPref = localStorage.getItem(DOCK_KEY) || '0'; } catch (e) { /* modo privado */ }
+  setDock(dockPref === '1', false);
 
   chatPill.addEventListener('click', function () { setDock(true); input.focus(); });
   chatMinimize.addEventListener('click', function () { setDock(false); });
+
+  // ----------------------------------------------------------------
+  // STUDIO-UX A2/A4 — Sitio para el lienzo.
+  // A2: la barra lateral se pliega (botón o «B») y el estado se recuerda.
+  // A4: modo "solo página" (botón o «.»): ni barra, ni chat, ni marcas de
+  // edición dentro del iframe. Ninguno de los dos recarga el preview.
+  // ----------------------------------------------------------------
+  var SIDE_KEY = 'pp-studio-side-open';
+  var sideToggle = document.getElementById('studio-side-toggle');
+  var canvasOnlyBtn = document.getElementById('studio-canvas-only');
+
+  function labelButton(btn, text) {
+    if (!btn) return;
+    btn.title = text;
+    btn.setAttribute('aria-label', text);
+  }
+
+  function sideIsOpen() { return !document.body.classList.contains('is-side-hidden'); }
+
+  function setSide(open, remember) {
+    document.body.classList.toggle('is-side-hidden', !open);
+    if (sideToggle) sideToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    labelButton(sideToggle, pp.t(open ? 'js.cv.hide_panel' : 'js.cv.show_panel'));
+    if (remember !== false) {
+      try { localStorage.setItem(SIDE_KEY, open ? '1' : '0'); } catch (e) { /* modo privado */ }
+    }
+  }
+
+  var sidePref = '1';
+  try { sidePref = localStorage.getItem(SIDE_KEY) || '1'; } catch (e) { /* modo privado */ }
+  setSide(sidePref !== '0', false);
+  if (sideToggle) sideToggle.addEventListener('click', function () { setSide(!sideIsOpen()); });
+
+  function canvasOnlyIsOn() { return document.body.classList.contains('is-canvas-only'); }
+
+  function setCanvasOnly(on) {
+    document.body.classList.toggle('is-canvas-only', on);
+    if (canvasOnlyBtn) canvasOnlyBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    labelButton(canvasOnlyBtn, pp.t(on ? 'js.cv.canvas_only_exit' : 'js.cv.canvas_only'));
+    // El overlay sigue vivo dentro del iframe: se le pide que calle, no que se vaya.
+    tellIframe({ type: 'chrome', on: !on });
+  }
+
+  labelButton(canvasOnlyBtn, pp.t('js.cv.canvas_only'));
+  if (canvasOnlyBtn) canvasOnlyBtn.addEventListener('click', function () { setCanvasOnly(!canvasOnlyIsOn()); });
+
+  // Un solo sitio para los atajos: los del padre y los que reenvía el overlay
+  // desde dentro del lienzo (P5 — allí es donde está el foco casi siempre).
+  function studioShortcut(key) {
+    if (key === 'b' || key === 'B') { setSide(!sideIsOpen()); return true; }
+    if (key === '.') { setCanvasOnly(!canvasOnlyIsOn()); return true; }
+    if (key === 'Escape' && canvasOnlyIsOn()) { setCanvasOnly(false); return true; }
+    return false;
+  }
+
+  function typingTarget(t) {
+    if (!t) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') || t.isContentEditable === true;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typingTarget(e.target)) return;
+    if (studioShortcut(e.key)) e.preventDefault();
+  });
 
   // ----------------------------------------------------------------
   // Mensajes del chat
@@ -90,8 +173,13 @@
     div.innerHTML = html;
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
-    // Con el chat plegado, un punto avisa de que hay respuesta esperando.
-    if (kind.indexOf('assistant') === 0 && dock && !dockIsOpen()) chatPillDot.hidden = false;
+    // A3′ — Con el chat plegado, la píldora es el único canal de vuelta: además
+    // del punto, dice en palabras que ya hay respuesta. Así no hace falta dejar
+    // el panel abierto solo para enterarse de que el cambio terminó.
+    if (kind.indexOf('assistant') === 0 && dock && !dockIsOpen()) {
+      chatPillDot.hidden = false;
+      showPillNotice(pp.t('js.cv.change_ready'));
+    }
     return div;
   }
   function esc(s) {
@@ -132,6 +220,9 @@
       if (!d.editing && dockIsOpen() && !suppressChatFocusOnce) input.focus();
       suppressChatFocusOnce = false;
     }
+    // A2/A4 — tecla pulsada DENTRO del lienzo: el overlay la reenvía porque el
+    // foco del usuario vive ahí y estos listeners están en el padre.
+    if (d.type === 'key') { studioShortcut(d.key); return; }
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
     if (d.type === 'image-clicked') openMediaModal();
@@ -1141,6 +1232,8 @@
   }
 
   function setBusy(on) {
+    // Empieza otro cambio: el aviso del anterior ya no interesa.
+    if (on) { pillNotice = ''; clearTimeout(pillNoticeTimer); }
     busy = on;
     sendBtn.disabled = on;
     if (cancelBtn) cancelBtn.hidden = !on;

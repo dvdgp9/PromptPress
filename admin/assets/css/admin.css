@@ -9666,14 +9666,25 @@ body.pp-login-page {
 .cvstudio-insert__empty{padding:10px;font-size:.82rem;color:#6b7280}
 .cvstudio-insert .cvstudio-menu__item{justify-content:flex-start;gap:8px}
 
-.cvstudio-main{flex:1;display:flex;min-height:0}
+/* STUDIO-UX A3′ — el chat cuelga de la columna derecha, no del escenario: por
+   eso el ancla es `main` (escenario + barra) y no el lienzo. */
+.cvstudio-main{flex:1;display:flex;min-height:0;position:relative}
 .cvstudio-stage{flex:1;position:relative;display:flex;align-items:stretch;justify-content:center;padding:16px;min-width:0}
 .cvstudio-frame{flex:1;max-width:100%;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(17,24,39,.08),0 8px 24px rgba(17,24,39,.06);overflow:hidden;transition:max-width .25s ease;margin:0 auto}
 .cvstudio-frame.is-mobile{max-width:390px}
 .cvstudio-frame iframe{display:block;width:100%;height:100%;border:0}
 
 /* STUDIO-2 A1 — barra lateral: solo edición manual, con sitio para crecer. */
-.cvstudio-side{width:380px;flex:none;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e5e7eb;overflow-y:auto}
+.cvstudio-side{width:380px;flex:none;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e5e7eb;overflow-y:auto;padding-bottom:64px}
+/* STUDIO-UX A2 — plegable: bajo 1100px la barra se pone ENCIMA del lienzo y
+   antes no había forma de quitarla (54% del lienzo oculto a 1024×768). */
+.cvstudio-body.is-side-hidden .cvstudio-side{display:none}
+/* STUDIO-UX A4 — modo "solo página": la página sin nada delante, sin recargar
+   el iframe. El marco pierde el aire y las esquinas: se ve lo que verá el visitante. */
+.cvstudio-body.is-canvas-only .cvstudio-side,
+.cvstudio-body.is-canvas-only .cvstudio-dock{display:none}
+.cvstudio-body.is-canvas-only .cvstudio-stage{padding:0}
+.cvstudio-body.is-canvas-only .cvstudio-frame{border-radius:0;box-shadow:none}
 .cvstudio-side__empty{padding:18px 16px;display:flex;flex-direction:column;gap:20px}
 .cvstudio-side__structure{flex:none;padding:16px 14px 12px;border-bottom:1px solid #e5e7eb;background:#fff}
 /* `hidden` no gana a `display:flex`: sin esto, panel y ayuda se pintan a la vez. */
@@ -9741,14 +9752,14 @@ body.pp-login-page {
 }
 
 /* STUDIO-2 A3 — el chat, flotando sobre el lienzo. */
-.cvstudio-dock{position:absolute;right:26px;bottom:22px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
+.cvstudio-dock{position:absolute;right:12px;bottom:12px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
 .cvstudio-dock > *{pointer-events:auto}
 .cvstudio-dock__pill{display:inline-flex;align-items:center;gap:9px;max-width:340px;border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:999px;padding:11px 18px;font:inherit;font-size:.85rem;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(17,24,39,.14);transition:transform .12s ease,box-shadow .12s ease}
 .cvstudio-dock__pill:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(17,24,39,.18)}
 .cvstudio-dock__icon{color:var(--cv-accent,#6366f1);font-size:.95rem;flex:none}
 .cvstudio-dock__label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cvstudio-dock__dot{width:8px;height:8px;flex:none;border-radius:50%;background:var(--cv-accent,#6366f1)}
-.cvstudio-dock__panel{width:min(390px,calc(100vw - 60px));max-height:min(560px,72dvh);display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 48px rgba(17,24,39,.22);overflow:hidden}
+.cvstudio-dock__panel{width:min(356px,calc(100vw - 24px));max-height:min(560px,72dvh);display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 48px rgba(17,24,39,.22);overflow:hidden}
 .cvstudio-dock__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid #e5e7eb;background:#fafafa}
 .cvstudio-dock__head strong{font-size:.86rem;color:#111827}
 .cvstudio-dock__head button{border:0;background:transparent;font-size:1rem;line-height:1;color:#6b7280;cursor:pointer;padding:2px 6px;border-radius:6px}
@@ -9832,9 +9843,9 @@ body.pp-login-page {
 @media (max-width:1100px){
   .cvstudio-side{position:absolute;top:0;right:0;bottom:0;width:min(340px,86vw);z-index:45;box-shadow:-12px 0 32px rgba(17,24,39,.12)}
   .cvstudio-main{position:relative}
-  /* La barra se superpone al lienzo: el chat se aparta para no quedar debajo. */
-  .cvstudio-dock{right:calc(min(340px,86vw) + 16px);bottom:16px}
-  .cvstudio-dock__panel{width:min(360px,calc(100vw - min(340px,86vw) - 34px))}
+  /* A3′ — aquí la barra ya está ENCIMA del lienzo, así que el chat se queda en
+     la misma esquina: una sola columna derecha, esté la barra o no. */
+  .cvstudio-dock__panel{width:min(340px,calc(100vw - 24px))}
 }
 @media (max-width:640px){.cvstudio-side{width:100%;bottom:56px}.cvstudio-dock{right:16px;bottom:8px;z-index:46}.cvstudio-dock__panel{width:min(360px,calc(100vw - 32px))}}
 

@@ -912,6 +912,13 @@ return [
     'js.cv.deleting_section' => 'Eliminando la sección…',
     'js.cv.section_moved' => 'Sección movida.',
     'js.cv.section_deleted' => 'Sección eliminada.',
+    // STUDIO-UX A3′ — la píldora del chat avisa sola cuando el cambio ya está.
+    'js.cv.change_ready' => 'Cambio aplicado',
+    // STUDIO-UX A2/A4 — plegar la barra lateral y ver solo la página.
+    'js.cv.hide_panel' => 'Ocultar el panel (B)',
+    'js.cv.show_panel' => 'Mostrar el panel (B)',
+    'js.cv.canvas_only' => 'Ver solo la página (.)',
+    'js.cv.canvas_only_exit' => 'Salir de ver solo la página (.)',
     'js.cv.duplicate_section' => 'Duplicar sección',
     'js.cv.duplicating_section' => 'Duplicando la sección…',
     'js.cv.section_duplicated' => 'Sección duplicada.',
