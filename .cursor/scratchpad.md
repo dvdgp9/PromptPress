@@ -7732,4 +7732,21 @@ elemento que nadie tiene cogido.
   «Añadir» sigue accesible con un elemento seleccionado, que Cmd+Z deshace desde
   dentro del lienzo y que la ✕ del chat deja la barra en su estado vacío.
 
+### Paquete 1.2.0 generado (04/09/2026, Executor)
 
+`deliverables/promptpress-1.2.0-20260904-0644.zip` — 1067 archivos, 2,7 MB,
+`unzip -t` en verde. SHA-256:
+`e016fc1da34df3e8b23beb3548925567331c3fb6a5ca6cf139aefe2dea5ece85`.
+
+- Versión subida de 1.1.2 a **1.2.0**: desde 1.1.2 entran la Fase F entera
+  (edición estructural sin IA, borrador/publicado, precomposición), la Fase A
+  (lienzo destapado) y la Fase B (un solo modelo mental en la barra).
+- Comprobado que el paquete no lleva `config/config.php`, `config/image_bank.php`,
+  `.cursor/`, `storage/uploads/` ni `iaia-analytics/`.
+- Lleva las 4 migraciones, incluida `2026_09_03_canvas_published_version.php`
+  (C4). `UpdateInstallerService` corre el `Migrator` después de desplegar, así
+  que la instalación de destino se pone al día sola.
+- **Aviso al Planner:** la Fase B va dentro con sus tests en verde pero SIN la
+  comprobación en navegador (el pane perdió la sesión de admin). Si algo va a
+  fallar en producción, es de ahí: «Añadir» siempre visible, Cmd+Z desde dentro
+  del lienzo y la ✕ del chat cerrando el panel.
