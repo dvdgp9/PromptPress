@@ -7177,9 +7177,9 @@ Orden por relación impacto/coste. Cada tarea es verificable sola.
 - [ ] A2 barra lateral plegable
 - [ ] A3′ el chat solo ocupa cuando lo pides (SUSTITUYE a A3)
 - [ ] A4 modo "solo página"
-- [ ] B1 barra no excluyente
-- [ ] B2 teclado desde el iframe
-- [ ] B3 deseleccionar cierra el panel
+- [~] B1 barra no excluyente (hecho; falta verlo en navegador)
+- [~] B2 teclado desde el iframe (hecho; falta verlo en navegador)
+- [~] B3 deseleccionar cierra el panel (hecho; falta verlo en navegador)
 - [x] B4 "Guardado" solo si se guardó (cerrado de paso en F4)
 - [ ] C1 etiquetas humanas de las partes
 - [ ] C2 renombrar página
@@ -7695,3 +7695,41 @@ modificador desde el iframe — el canal de reenvío ya existe, solo hay que
 añadirle Esc y Ctrl/Cmd+Z), B3 (deseleccionar cierra el panel), C1 (etiquetas
 humanas de las partes), C2 (renombrar página), C3 (historial: ver ≠ restaurar),
 D1-D3 (i18n y acabado).
+
+---
+
+## Current Status / Progress Tracking — Fase B (STUDIO-UX)
+
+**B1 — La barra deja de ser excluyente (04/09/2026).** «Añadir a la página»
+sale de `#side-empty` y cuelga directamente del `<aside>`: ahora conviven panel
+contextual + lista de partes + añadir. Antes, seleccionar cualquier cosa hacía
+desaparecer el bloque de insertar y había que deseleccionar primero — con Esc
+muerto (P5), que es lo que arregla B2. `showSide()` ya solo decide entre panel y
+explicación; el bloque suelto pone su propio aire y un filete de separación.
+
+**B2 — Los atajos con modificador llegan desde dentro del lienzo (04/09/2026).**
+El canal ya existía de A2/A4 (el overlay reenvía las teclas sueltas); aquí se le
+añaden `Ctrl/Cmd+Z` y `Shift+Z`, con `preventDefault` en el iframe para que el
+navegador no intente deshacer por su cuenta.
+- Los dos listeners sueltos del padre (Esc → subir ámbito, Cmd+Z → deshacer) se
+  funden en `studioShortcut(key, mods)`: un único sitio, mismo comportamiento se
+  pulse en el panel o dentro de la página. Esc primero sale de «solo la página»
+  y, si no, sube un nivel de ámbito.
+- **Efecto lateral bueno:** el listener viejo de Cmd+Z no miraba dónde estaba el
+  foco, así que deshacer mientras escribías en el chat deshacía la PÁGINA en vez
+  del texto. Ahora escribir tiene su deshacer de siempre.
+
+**B3 — Deseleccionar cierra el panel de verdad (04/09/2026).** El overlay
+contesta `element-deselected` cada vez que recibe `deselect`, en lugar de
+limpiar solo su lado. Cierra P6 por el otro extremo: B4 ya evitaba el «Guardado»
+mentiroso, y esto evita que el panel siga abierto con los controles de un
+elemento que nadie tiene cogido.
+
+- Tests: `tests/canvas_studio_scope.php` (11, nuevo, escrito antes del código).
+  Regresión de canvas/admin/pages: **35 suites en verde**.
+- **Pendiente: comprobación en navegador.** El pane perdió la sesión de admin y
+  la vuelta a entrar la tiene que hacer el usuario. Falta ver con los ojos: que
+  «Añadir» sigue accesible con un elemento seleccionado, que Cmd+Z deshace desde
+  dentro del lienzo y que la ✕ del chat deja la barra en su estado vacío.
+
+

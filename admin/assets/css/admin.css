@@ -9686,6 +9686,9 @@ body.pp-login-page {
 .cvstudio-body.is-canvas-only .cvstudio-stage{padding:0}
 .cvstudio-body.is-canvas-only .cvstudio-frame{border-radius:0;box-shadow:none}
 .cvstudio-side__empty{padding:18px 16px;display:flex;flex-direction:column;gap:20px}
+/* STUDIO-UX B1 — «Añadir a la página» ya no vive dentro del estado vacío, así
+   que pone su propio aire y se separa de la lista de partes. */
+.cvstudio-side>.cvstudio-side__block{padding:16px 16px 20px;border-top:1px solid #e5e7eb}
 .cvstudio-side__structure{flex:none;padding:16px 14px 12px;border-bottom:1px solid #e5e7eb;background:#fff}
 /* `hidden` no gana a `display:flex`: sin esto, panel y ayuda se pintan a la vez. */
 .cvstudio-side__empty[hidden],.cvstudio-panel[hidden]{display:none}

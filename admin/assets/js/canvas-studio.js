@@ -146,10 +146,25 @@
 
   // Un solo sitio para los atajos: los del padre y los que reenvía el overlay
   // desde dentro del lienzo (P5 — allí es donde está el foco casi siempre).
-  function studioShortcut(key) {
-    if (key === 'b' || key === 'B') { setSide(!sideIsOpen()); return true; }
+  // `mods` viaja igual por las dos vías para que se comporten idénticamente.
+  function studioShortcut(key, mods) {
+    mods = mods || {};
+    var k = String(key || '').toLowerCase();
+    // B2 — deshacer/rehacer, también desde dentro de la página.
+    if (mods.mod && !mods.alt && k === 'z') {
+      if (mods.shift) { if (!redoBtn.disabled) doRedo(); }
+      else if (!undoBtn.disabled) doUndo(undoBtn);
+      return true;
+    }
+    if (mods.mod || mods.alt) return false;
+    if (k === 'b') { setSide(!sideIsOpen()); return true; }
     if (key === '.') { setCanvasOnly(!canvasOnlyIsOn()); return true; }
-    if (key === 'Escape' && canvasOnlyIsOn()) { setCanvasOnly(false); return true; }
+    if (key === 'Escape') {
+      // Primero se sale de "solo la página"; si no, Esc sube un nivel de ámbito
+      // (elemento → bloque → sección → página).
+      if (canvasOnlyIsOn()) { setCanvasOnly(false); return true; }
+      return climbScope();
+    }
     return false;
   }
 
@@ -159,9 +174,10 @@
   }
 
   document.addEventListener('keydown', function (e) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (typingTarget(e.target)) return;
-    if (studioShortcut(e.key)) e.preventDefault();
+    if (studioShortcut(e.key, { mod: e.metaKey || e.ctrlKey, shift: e.shiftKey, alt: e.altKey })) {
+      e.preventDefault();
+    }
   });
 
   // ----------------------------------------------------------------
@@ -222,7 +238,7 @@
     }
     // A2/A4 — tecla pulsada DENTRO del lienzo: el overlay la reenvía porque el
     // foco del usuario vive ahí y estos listeners están en el padre.
-    if (d.type === 'key') { studioShortcut(d.key); return; }
+    if (d.type === 'key') { studioShortcut(d.key, d.mods); return; }
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
     if (d.type === 'image-clicked') openMediaModal();
@@ -1414,21 +1430,10 @@
   // Estado inicial de los botones (lo pinta el servidor en data-can-*).
   applyHistory({ can_undo: body.dataset.canUndo === '1', can_redo: body.dataset.canRedo === '1' });
 
-  // Esc sube un nivel de ámbito (elemento → bloque → sección → página).
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape' || panel.hidden) return;
-    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '')) return;
-    if (climbScope()) e.preventDefault();
-  });
-
-  // Atajos de teclado (cuando el foco NO está editando texto en el iframe).
-  document.addEventListener('keydown', function (e) {
-    var mod = e.metaKey || e.ctrlKey;
-    if (!mod || e.key.toLowerCase() !== 'z') return;
-    e.preventDefault();
-    if (e.shiftKey) { if (!redoBtn.disabled) doRedo(); }
-    else { if (!undoBtn.disabled) doUndo(undoBtn); }
-  });
+  // B2 — Esc y Ctrl/Cmd+Z viven ahora en `studioShortcut`, un único sitio para
+  // los atajos: así hacen lo mismo se pulsen en el panel o dentro del lienzo.
+  // De paso, escribir en el chat vuelve a tener su deshacer de siempre: antes
+  // Ctrl/Cmd+Z en el composer deshacía la PÁGINA en vez del texto.
 
   // Restaura una versión concreta (desde el modal de historial). Mueve el
   // puntero (reversible con deshacer/rehacer hasta el siguiente cambio).

@@ -1873,10 +1873,13 @@ final class CanvasController
   // con modificador (deshacer) son cosa de B2.
   document.addEventListener('keydown', function(e){
     if(editing) return;
-    if(e.metaKey || e.ctrlKey || e.altKey) return;
     var t = e.target;
     if(t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') || t.isContentEditable === true)) return;
-    post('key', {key: e.key});
+    var mod = e.metaKey || e.ctrlKey;
+    // B2 — Solo lo que el Studio sabe atender: teclas sueltas y deshacer/rehacer.
+    if(mod && e.key.toLowerCase() !== 'z') return;
+    post('key', {key: e.key, mods: {mod: mod, shift: e.shiftKey, alt: e.altKey}});
+    if(mod) e.preventDefault();   // que el navegador no deshaga por su cuenta
   });
 
   // Pegar desde Word/Docs/una web arrastra spans, estilos y fuentes: entra
@@ -1944,7 +1947,17 @@ final class CanvasController
     }
     if(d.type === 'apply'){ applyToTarget(d); return; }
     if(d.type === 'select-scope'){ selectScope(d.index); return; }
-    if(d.type === 'deselect' && selected){ selected.classList.remove('pp-studio-selected'); selected = null; activeTarget = null; activeChain = []; }
+    if(d.type === 'deselect'){
+      // STUDIO-UX B3 — Contestar SIEMPRE. Antes esto solo limpiaba lo de aquí y
+      // el panel del padre se quedaba abierto con los controles de un elemento
+      // que ya nadie tenía cogido: pulsar un color no hacía nada y la interfaz
+      // igualmente decía «Guardado» (P6).
+      if(selected) selected.classList.remove('pp-studio-selected');
+      selected = null; activeTarget = null; activeChain = [];
+      hideTag();
+      post('element-deselected');
+      return;
+    }
     if(d.type === 'scroll-to' && d.y != null){ window.scrollTo(0, d.y); }
     if(d.type === 'select' && d.id){
       var el = document.querySelector('[data-pp-section="'+d.id+'"]');

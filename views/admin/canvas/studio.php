@@ -219,148 +219,151 @@ $icon = static function (string $name): string {
         <strong><?= e(__('cv.manual_edit')) ?></strong>
         <p><?= __('cv.manual_edit_help.html') ?></p>
       </div>
+    </div>
 
-      <div class="cvstudio-side__block" id="studio-add-block">
-        <h3 class="cvstudio-side__title"><?= e(__('cv.add_to_page')) ?></h3>
-        <p class="cvstudio-insert-placement" id="studio-insert-placement" hidden></p>
-        <!-- STUDIO-STRUCTURE S4 — un único selector conserva el punto elegido y
-             reúne contenido básico + bloques funcionales disponibles. -->
-        <div class="cvstudio-block-picker" id="studio-block-picker">
-          <button type="button" class="cvstudio-primary-btn cvstudio-insert__btn cvstudio-block-picker__trigger"
-                  id="studio-block-picker-btn" aria-haspopup="true" aria-expanded="false"
-                  aria-controls="studio-block-picker-menu">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <?= e(__('cv.block_picker_button')) ?>
-          </button>
-          <div class="cvstudio-menu__pop cvstudio-block-picker__menu" id="studio-block-picker-menu" hidden
-               role="group" aria-label="<?= e(__('cv.block_picker_button')) ?>">
-            <?php /* STUDIO-UX F8 — Lo primero es partir de algo que YA funciona en
-                     esta página; las plantillas neutras van al final porque caen
-                     desentonando dentro de una página con carácter. */ ?>
-            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_reuse_category')) ?></strong>
+    <!-- STUDIO-UX B1 — «Añadir a la página» cuelga de la barra, no del estado
+         vacío: antes, seleccionar cualquier cosa lo hacía desaparecer y para
+         insertar había que deseleccionar primero (y Esc no funcionaba). -->
+    <div class="cvstudio-side__block" id="studio-add-block">
+      <h3 class="cvstudio-side__title"><?= e(__('cv.add_to_page')) ?></h3>
+      <p class="cvstudio-insert-placement" id="studio-insert-placement" hidden></p>
+      <!-- STUDIO-STRUCTURE S4 — un único selector conserva el punto elegido y
+           reúne contenido básico + bloques funcionales disponibles. -->
+      <div class="cvstudio-block-picker" id="studio-block-picker">
+        <button type="button" class="cvstudio-primary-btn cvstudio-insert__btn cvstudio-block-picker__trigger"
+                id="studio-block-picker-btn" aria-haspopup="true" aria-expanded="false"
+                aria-controls="studio-block-picker-menu">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <?= e(__('cv.block_picker_button')) ?>
+        </button>
+        <div class="cvstudio-menu__pop cvstudio-block-picker__menu" id="studio-block-picker-menu" hidden
+             role="group" aria-label="<?= e(__('cv.block_picker_button')) ?>">
+          <?php /* STUDIO-UX F8 — Lo primero es partir de algo que YA funciona en
+                   esta página; las plantillas neutras van al final porque caen
+                   desentonando dentro de una página con carácter. */ ?>
+          <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_reuse_category')) ?></strong>
 
-            <div class="cvstudio-insert" id="studio-duplicate-part">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-duplicate-part-btn"
-                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-duplicate-part-menu">
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
-                <span><strong><?= e(__('cv.duplicate_part')) ?></strong><small><?= e(__('cv.duplicate_part_desc')) ?></small></span>
-              </button>
-              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-duplicate-part-menu" hidden
-                   role="group" aria-label="<?= e(__('cv.duplicate_part')) ?>"></div>
-            </div>
-
-            <?php /* STUDIO-UX F6 — copiar una parte de otra página, sin IA. */ ?>
-            <div class="cvstudio-insert" id="studio-copy-section">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-copy-btn"
-                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-copy-menu">
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
-                <span><strong><?= e(__('cv.copy_from_page')) ?></strong><small><?= e(__('cv.copy_from_page_desc')) ?></small></span>
-              </button>
-              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-copy-menu" hidden role="group"
-                   aria-label="<?= e(__('cv.copy_from_page')) ?>"></div>
-            </div>
-
-            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_content_category')) ?></strong>
-
-            <button type="button" class="cvstudio-block-option" data-section-template="text">
-              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 6h14M5 11h10M5 16h13"/></svg></span>
-              <span><strong><?= e(__('cv.block_text')) ?></strong><small><?= e(__('cv.block_text_desc')) ?></small></span>
+          <div class="cvstudio-insert" id="studio-duplicate-part">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-duplicate-part-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="studio-duplicate-part-menu">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
+              <span><strong><?= e(__('cv.duplicate_part')) ?></strong><small><?= e(__('cv.duplicate_part_desc')) ?></small></span>
             </button>
-            <button type="button" class="cvstudio-block-option" data-section-template="text_image">
-              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m6 17 4-4 3 3 2-2 3 3"/></svg></span>
-              <span><strong><?= e(__('cv.block_text_image')) ?></strong><small><?= e(__('cv.block_text_image_desc')) ?></small></span>
-            </button>
-            <button type="button" class="cvstudio-block-option" data-section-template="cta">
-              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 7h9M5 12h6M5 17h8M15 12h5M18 9l3 3-3 3"/></svg></span>
-              <span><strong><?= e(__('cv.block_cta')) ?></strong><small><?= e(__('cv.block_cta_desc')) ?></small></span>
-            </button>
-
-            <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_functional_category')) ?></strong>
-
-            <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
-            <div class="cvstudio-insert" id="studio-insert-form">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-btn"
-                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-menu">
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/></svg></span>
-                <span><strong><?= e(__('js.studio.form')) ?></strong><small><?= e(__('cv.block_form_desc')) ?></small></span>
-              </button>
-              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="group">
-            <strong class="cvstudio-insert__title"><?= e(__('cv.use_existing')) ?></strong>
-            <div id="studio-existing-forms">
-            <?php if (empty($forms)): ?><p class="cvstudio-insert__empty"><?= e(__('forms.empty_title')) ?></p><?php else: foreach ($forms as $f): ?>
-              <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>">
-                <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= e(__('forms.fields_other', ['n' => (int) $f['field_count']])) ?></span>
-              </button>
-            <?php endforeach; endif; ?>
-            </div>
-            <strong class="cvstudio-insert__title"><?= e(__('cv.from_template')) ?></strong>
-            <?php foreach (($formTemplates ?? []) as $key => $template): ?>
-              <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>">
-                <?= e((string) ($template['label'] ?? $key)) ?>
-                <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
-              </button>
-            <?php endforeach; ?>
-            <label class="cvstudio-insert__source">
-              <span><?= e(__('cv.source_label')) ?></span>
-              <input type="text" id="studio-form-source" maxlength="160" placeholder="<?= e(__('cv.source_placeholder')) ?>">
-            </label>
-            <p class="cvstudio-insert__hint" id="studio-insert-hint"><?= e(__('cv.insert_hint')) ?></p>
-              </div>
-            </div>
-
-            <?php /* MODULOS M2 — solo aparece si existe un servicio viable. */ ?>
-            <?php if (!empty($bookingServices)): ?>
-            <div class="cvstudio-insert" id="studio-insert-booking">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-booking-btn"
-                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-booking-menu">
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 3v6M16 3v6M4 11h16"/></svg></span>
-                <span><strong><?= e(__('cv.booking.button')) ?></strong><small><?= e(__('cv.block_booking_desc')) ?></small></span>
-              </button>
-              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-booking-menu" hidden role="group">
-                <button type="button" class="cvstudio-menu__item" data-booking-service="auto">
-                  <?= e(__('cv.booking.auto')) ?>
-                  <span class="cvstudio-insert__meta"><?= e($bookingServices[0]['name']) ?></span>
-                </button>
-                <strong class="cvstudio-insert__title"><?= e(__('cv.booking.pick_service')) ?></strong>
-                <?php foreach ($bookingServices as $svc): ?>
-                  <button type="button" class="cvstudio-menu__item" data-booking-service="<?= (int) $svc['id'] ?>">
-                    <?= e($svc['name']) ?>
-                    <span class="cvstudio-insert__meta"><?= (int) $svc['duration_min'] ?> min<?= $svc['price_label'] !== '' ? ' · ' . e($svc['price_label']) : '' ?></span>
-                  </button>
-                <?php endforeach; ?>
-                <p class="cvstudio-insert__hint"><?= e(__('cv.booking.insert_hint')) ?></p>
-              </div>
-            </div>
-            <?php endif; ?>
-
-            <?php if (!empty($publishedResources)): ?>
-            <div class="cvstudio-insert" id="studio-insert-resources">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-resources-btn"
-                      aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-resources-menu">
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
-                <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.block_resources_desc')) ?></small></span>
-              </button>
-              <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-resources-menu" hidden role="group">
-                <strong class="cvstudio-insert__title"><?= e(__('cv.resources.pick_amount')) ?></strong>
-                <?php foreach ($resourceCounts as $count): ?>
-                  <button type="button" class="cvstudio-menu__item" data-resources-limit="<?= (int) $count ?>">
-                    <?= e(__('cv.resources.option', ['n' => $count])) ?>
-                    <span class="cvstudio-insert__meta"><?= e(__($count === 1 ? 'cv.resources.option_meta_one' : 'cv.resources.option_meta', ['n' => $count])) ?></span>
-                  </button>
-                <?php endforeach; ?>
-                <p class="cvstudio-insert__hint"><?= e(__('cv.resources.insert_hint')) ?></p>
-              </div>
-            </div>
-            <?php elseif (!empty($resourcesModuleEnabled) && !empty($hasPublishedResources)): ?>
-            <div class="cvstudio-insert cvstudio-insert--unavailable">
-              <button type="button" class="cvstudio-block-option cvstudio-insert__btn" disabled>
-                <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
-                <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.resources.language_mismatch', ['idioma' => (string) ($resourcePageLanguage ?? '')])) ?></small></span>
-              </button>
-              <p class="cvstudio-insert__notice"><a href="<?= e(base_url('admin/resources')) ?>" target="_blank" rel="noopener"><?= e(__('cv.resources.review_languages')) ?></a></p>
-            </div>
-            <?php endif; ?>
+            <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-duplicate-part-menu" hidden
+                 role="group" aria-label="<?= e(__('cv.duplicate_part')) ?>"></div>
           </div>
+
+          <?php /* STUDIO-UX F6 — copiar una parte de otra página, sin IA. */ ?>
+          <div class="cvstudio-insert" id="studio-copy-section">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-copy-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="studio-copy-menu">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></span>
+              <span><strong><?= e(__('cv.copy_from_page')) ?></strong><small><?= e(__('cv.copy_from_page_desc')) ?></small></span>
+            </button>
+            <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-copy-menu" hidden role="group"
+                 aria-label="<?= e(__('cv.copy_from_page')) ?>"></div>
+          </div>
+
+          <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_content_category')) ?></strong>
+
+          <button type="button" class="cvstudio-block-option" data-section-template="text">
+            <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 6h14M5 11h10M5 16h13"/></svg></span>
+            <span><strong><?= e(__('cv.block_text')) ?></strong><small><?= e(__('cv.block_text_desc')) ?></small></span>
+          </button>
+          <button type="button" class="cvstudio-block-option" data-section-template="text_image">
+            <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m6 17 4-4 3 3 2-2 3 3"/></svg></span>
+            <span><strong><?= e(__('cv.block_text_image')) ?></strong><small><?= e(__('cv.block_text_image_desc')) ?></small></span>
+          </button>
+          <button type="button" class="cvstudio-block-option" data-section-template="cta">
+            <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 7h9M5 12h6M5 17h8M15 12h5M18 9l3 3-3 3"/></svg></span>
+            <span><strong><?= e(__('cv.block_cta')) ?></strong><small><?= e(__('cv.block_cta_desc')) ?></small></span>
+          </button>
+
+          <strong class="cvstudio-block-picker__category"><?= e(__('cv.block_functional_category')) ?></strong>
+
+          <!-- FORMS-R T3 — elegir uno existente o crearlo desde plantilla. -->
+          <div class="cvstudio-insert" id="studio-insert-form">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-menu">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/></svg></span>
+              <span><strong><?= e(__('js.studio.form')) ?></strong><small><?= e(__('cv.block_form_desc')) ?></small></span>
+            </button>
+            <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-menu" hidden role="group">
+          <strong class="cvstudio-insert__title"><?= e(__('cv.use_existing')) ?></strong>
+          <div id="studio-existing-forms">
+          <?php if (empty($forms)): ?><p class="cvstudio-insert__empty"><?= e(__('forms.empty_title')) ?></p><?php else: foreach ($forms as $f): ?>
+            <button type="button" class="cvstudio-menu__item" data-form-id="<?= (int) $f['id'] ?>">
+              <?= e($f['heading']) ?> <span class="cvstudio-insert__meta"><?= e(__('forms.fields_other', ['n' => (int) $f['field_count']])) ?></span>
+            </button>
+          <?php endforeach; endif; ?>
+          </div>
+          <strong class="cvstudio-insert__title"><?= e(__('cv.from_template')) ?></strong>
+          <?php foreach (($formTemplates ?? []) as $key => $template): ?>
+            <button type="button" class="cvstudio-menu__item" data-form-template="<?= e((string) $key) ?>">
+              <?= e((string) ($template['label'] ?? $key)) ?>
+              <span class="cvstudio-insert__meta"><?= e((string) ($template['description'] ?? '')) ?></span>
+            </button>
+          <?php endforeach; ?>
+          <label class="cvstudio-insert__source">
+            <span><?= e(__('cv.source_label')) ?></span>
+            <input type="text" id="studio-form-source" maxlength="160" placeholder="<?= e(__('cv.source_placeholder')) ?>">
+          </label>
+          <p class="cvstudio-insert__hint" id="studio-insert-hint"><?= e(__('cv.insert_hint')) ?></p>
+            </div>
+          </div>
+
+          <?php /* MODULOS M2 — solo aparece si existe un servicio viable. */ ?>
+          <?php if (!empty($bookingServices)): ?>
+          <div class="cvstudio-insert" id="studio-insert-booking">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-booking-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-booking-menu">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 3v6M16 3v6M4 11h16"/></svg></span>
+              <span><strong><?= e(__('cv.booking.button')) ?></strong><small><?= e(__('cv.block_booking_desc')) ?></small></span>
+            </button>
+            <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-booking-menu" hidden role="group">
+              <button type="button" class="cvstudio-menu__item" data-booking-service="auto">
+                <?= e(__('cv.booking.auto')) ?>
+                <span class="cvstudio-insert__meta"><?= e($bookingServices[0]['name']) ?></span>
+              </button>
+              <strong class="cvstudio-insert__title"><?= e(__('cv.booking.pick_service')) ?></strong>
+              <?php foreach ($bookingServices as $svc): ?>
+                <button type="button" class="cvstudio-menu__item" data-booking-service="<?= (int) $svc['id'] ?>">
+                  <?= e($svc['name']) ?>
+                  <span class="cvstudio-insert__meta"><?= (int) $svc['duration_min'] ?> min<?= $svc['price_label'] !== '' ? ' · ' . e($svc['price_label']) : '' ?></span>
+                </button>
+              <?php endforeach; ?>
+              <p class="cvstudio-insert__hint"><?= e(__('cv.booking.insert_hint')) ?></p>
+            </div>
+          </div>
+          <?php endif; ?>
+
+          <?php if (!empty($publishedResources)): ?>
+          <div class="cvstudio-insert" id="studio-insert-resources">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" id="studio-insert-resources-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-controls="studio-insert-resources-menu">
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
+              <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.block_resources_desc')) ?></small></span>
+            </button>
+            <div class="cvstudio-menu__pop cvstudio-insert__pop" id="studio-insert-resources-menu" hidden role="group">
+              <strong class="cvstudio-insert__title"><?= e(__('cv.resources.pick_amount')) ?></strong>
+              <?php foreach ($resourceCounts as $count): ?>
+                <button type="button" class="cvstudio-menu__item" data-resources-limit="<?= (int) $count ?>">
+                  <?= e(__('cv.resources.option', ['n' => $count])) ?>
+                  <span class="cvstudio-insert__meta"><?= e(__($count === 1 ? 'cv.resources.option_meta_one' : 'cv.resources.option_meta', ['n' => $count])) ?></span>
+                </button>
+              <?php endforeach; ?>
+              <p class="cvstudio-insert__hint"><?= e(__('cv.resources.insert_hint')) ?></p>
+            </div>
+          </div>
+          <?php elseif (!empty($resourcesModuleEnabled) && !empty($hasPublishedResources)): ?>
+          <div class="cvstudio-insert cvstudio-insert--unavailable">
+            <button type="button" class="cvstudio-block-option cvstudio-insert__btn" disabled>
+              <span class="cvstudio-block-option__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg></span>
+              <span><strong><?= e(__('cv.resources.button')) ?></strong><small><?= e(__('cv.resources.language_mismatch', ['idioma' => (string) ($resourcePageLanguage ?? '')])) ?></small></span>
+            </button>
+            <p class="cvstudio-insert__notice"><a href="<?= e(base_url('admin/resources')) ?>" target="_blank" rel="noopener"><?= e(__('cv.resources.review_languages')) ?></a></p>
+          </div>
+          <?php endif; ?>
         </div>
       </div>
     </div>
