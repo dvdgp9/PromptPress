@@ -42,8 +42,7 @@ $icon = static function (string $name): string {
         'more'     => '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
         'desktop'  => '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
         'mobile'   => '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
-        // STUDIO-UX A2/A4 — plegar la barra y ver solo la página.
-        'panel'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
+        // STUDIO-UX A2 — ampliar el lienzo (barra y chat fuera).
         'expand'   => '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>',
     ];
     $p = $paths[$name] ?? '';
@@ -112,14 +111,12 @@ $icon = static function (string $name): string {
   </div>
 
   <div class="cvstudio-top__zone cvstudio-top__right">
-    <!-- STUDIO-UX A2/A4 — el lienzo es el producto: se puede plegar la barra
-         lateral (botón o «B») y quedarse solo con la página (botón o «.»). -->
-    <button type="button" class="cvstudio-iconbtn" id="studio-side-toggle"
-            aria-expanded="true" aria-controls="studio-side"
-            title="<?= e(__('js.cv.hide_panel')) ?>" aria-label="<?= e(__('js.cv.hide_panel')) ?>"><?= $icon('panel') ?></button>
-    <button type="button" class="cvstudio-iconbtn" id="studio-canvas-only"
+    <!-- STUDIO-UX A2 — El lienzo es el producto: un solo control (botón, «.» o
+         Esc) aparta barra y chat. La página sigue siendo editable; la vista de
+         visitante ya la da «Ver página», aquí al lado. -->
+    <button type="button" class="cvstudio-iconbtn" id="studio-canvas-wide"
             aria-pressed="false"
-            title="<?= e(__('js.cv.canvas_only')) ?>" aria-label="<?= e(__('js.cv.canvas_only')) ?>"><?= $icon('expand') ?></button>
+            title="<?= e(__('js.cv.canvas_wide')) ?>" aria-label="<?= e(__('js.cv.canvas_wide')) ?>"><?= $icon('expand') ?></button>
     <span class="cvstudio-divider" aria-hidden="true"></span>
     <button type="button" class="cvstudio-iconbtn" id="studio-history-btn" title="<?= e(__('cv.history')) ?>" aria-label="Historial de versiones"><?= $icon('history') ?></button>
     <button type="button" class="cvstudio-iconbtn" id="studio-settings-btn" title="<?= e(__('cv.page_settings')) ?>" aria-label="Ajustes de la página"><?= $icon('settings') ?></button>

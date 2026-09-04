@@ -1027,16 +1027,6 @@ final class CanvasController
   .pp-studio-rt__link button:hover{background:var(--pp-primary);filter:brightness(1.08);color:var(--pp-on-primary,#fff)}
   [data-pp-section] img:not([data-pp-no-edit]):hover{outline:2.5px solid var(--pp-primary);outline-offset:2px;cursor:pointer;filter:brightness(.92)}
   [data-pp-placeholder]{cursor:pointer}
-  /* STUDIO-UX A4 — modo "solo página": el overlay sigue vivo (para volver sin
-     recargar), pero no pinta nada: ni marcos, ni etiqueta, ni barra de formato. */
-  html.pp-studio-chromeless [data-pp-section].pp-studio-hover,
-  html.pp-studio-chromeless [data-pp-section].pp-studio-selected,
-  html.pp-studio-chromeless .pp-studio-text-hover,
-  html.pp-studio-chromeless .pp-studio-box-hover,
-  html.pp-studio-chromeless .pp-studio-editing{outline:none}
-  html.pp-studio-chromeless [data-pp-section] img:not([data-pp-no-edit]):hover{outline:none;filter:none;cursor:default}
-  html.pp-studio-chromeless .pp-studio-tag,
-  html.pp-studio-chromeless .pp-studio-rt{display:none}
   /* STUDIO-2 B3 — destello sobre la parte que acaba de cambiar. */
   @keyframes pp-studio-flash{0%{box-shadow:inset 0 0 0 3px var(--pp-primary,#111827)}60%{box-shadow:inset 0 0 0 3px var(--pp-primary,#111827)}100%{box-shadow:inset 0 0 0 3px transparent}}
   .pp-studio-flash{animation:pp-studio-flash 1.8s ease-out}
@@ -1926,23 +1916,6 @@ final class CanvasController
       if(d.labels) studioLabels = d.labels;
       if(Array.isArray(d.linkTargets)) linkTargets = d.linkTargets;
       if(rt){ rt.remove(); rt = null; }   // se reconstruye con las etiquetas buenas
-      return;
-    }
-    if(d.type === 'chrome'){
-      // STUDIO-UX A4 — Entrar en "solo página" suelta lo que hubiera cogido:
-      // dejar una sección seleccionada con el marco oculto es peor que nada,
-      // porque el siguiente cambio iría a un sitio que no se ve.
-      var quiet = d.on === false;
-      document.documentElement.classList.toggle('pp-studio-chromeless', quiet);
-      if(quiet){
-        if(editing) endEdit(true);
-        hideTag();
-        if(selected){
-          selected.classList.remove('pp-studio-selected');
-          selected = null; activeTarget = null; activeChain = [];
-          post('section-deselected');
-        }
-      }
       return;
     }
     if(d.type === 'apply'){ applyToTarget(d); return; }

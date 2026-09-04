@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// STUDIO-UX A2/A4 — Devolverle sitio al lienzo. Contrato de integración: el
+// STUDIO-UX A2/A3′ — Devolverle sitio al lienzo. Contrato de integración: el
 // comportamiento fino se comprueba en navegador (anchos reales a 1440 y 1024),
 // pero las piezas que lo sostienen no pueden desaparecer en una refactorización.
 
@@ -24,21 +24,30 @@ $js   = (string) file_get_contents(PP_ROOT . '/admin/assets/js/canvas-studio.js'
 $css  = (string) file_get_contents(PP_ROOT . '/admin/assets/css/admin.css');
 $overlay = (string) file_get_contents(PP_ROOT . '/app/Controllers/Admin/CanvasController.php');
 
-// --- A2: la barra lateral se pliega ------------------------------------------
+// --- A2: un solo control para apartar barra y chat ----------------------------
+// Plegar la barra y "ver solo la página" hacían casi lo mismo (decisión del
+// usuario, 04/09/2026): queda uno, y la página sigue EDITABLE dentro de él.
 canvasRoomCheck('la barra lateral es direccionable', str_contains($view, 'id="studio-side"'));
 canvasRoomCheck(
-    'hay botón de plegado atado a la barra',
-    str_contains($view, 'id="studio-side-toggle"')
-        && str_contains($view, 'aria-controls="studio-side"')
-        && str_contains($view, 'aria-expanded=')
+    'hay un único control de lienzo ancho',
+    str_contains($view, 'id="studio-canvas-wide"')
+        && str_contains($view, 'aria-pressed="false"')
+        && !str_contains($view, 'id="studio-side-toggle"')
 );
 canvasRoomCheck(
-    'plegada, la barra no ocupa ancho',
-    str_contains($css, '.cvstudio-body.is-side-hidden .cvstudio-side{display:none}')
+    'ancho: ni barra ni chat, y sin marco',
+    str_contains($css, '.cvstudio-body.is-canvas-wide .cvstudio-side,')
+        && str_contains($css, '.cvstudio-body.is-canvas-wide .cvstudio-dock{display:none}')
+        && str_contains($css, '.cvstudio-body.is-canvas-wide .cvstudio-stage{padding:0}')
 );
 canvasRoomCheck(
-    'el estado de la barra se recuerda',
-    str_contains($js, "SIDE_KEY = 'pp-studio-side-open'") && str_contains($js, 'localStorage.setItem(SIDE_KEY')
+    'el estado se recuerda',
+    str_contains($js, "WIDE_KEY = 'pp-studio-canvas-wide'") && str_contains($js, 'localStorage.setItem(WIDE_KEY')
+);
+canvasRoomCheck(
+    'el lienzo ancho no apaga la edición',
+    !str_contains($js, "type: 'chrome'") && !str_contains($overlay, 'pp-studio-chromeless'),
+    'el modo silencioso del overlay se retiró al fusionar los dos modos'
 );
 
 // --- A3′: el chat solo ocupa cuando lo pides ---------------------------------
@@ -69,14 +78,13 @@ canvasRoomCheck(
     str_contains($js, "pp.t('js.cv.change_ready')") && str_contains($js, 'showPillNotice(')
 );
 
-// --- A4: modo solo página -----------------------------------------------------
 canvasRoomCheck(
-    'hay modo solo página',
-    str_contains($css, '.cvstudio-body.is-canvas-only') && str_contains($js, 'is-canvas-only')
+    'el lienzo ancho no recarga el iframe',
+    !preg_match('~function setCanvasWide\([^)]*\)\s*\{[^}]*reloadPreview~s', $js)
 );
 canvasRoomCheck(
-    'el modo solo página no recarga el iframe',
-    !str_contains($js, 'setCanvasOnly') || !preg_match('~function setCanvasOnly\([^)]*\)\s*\{[^}]*reloadPreview~s', $js)
+    'Esc devuelve el panel antes de subir de ámbito',
+    (bool) preg_match("~if \(canvasIsWide\(\)\) \{ setCanvasWide\(false\); return true; \}~", $js)
 );
 
 // --- El teclado tiene que llegar desde dentro del lienzo ----------------------
@@ -105,10 +113,12 @@ canvasRoomCheck(
 foreach (['es', 'en', 'fr', 'pt'] as $lang) {
     $file = (string) file_get_contents(PP_ROOT . '/lang/admin/' . $lang . '.php');
     canvasRoomCheck(
-        'claves de plegado en ' . $lang,
-        str_contains($file, "'js.cv.hide_panel'") && str_contains($file, "'js.cv.show_panel'")
-            && str_contains($file, "'js.cv.canvas_only'") && str_contains($file, "'js.cv.canvas_only_exit'")
+        'microcopia del lienzo ancho en ' . $lang,
+        str_contains($file, "'js.cv.canvas_wide'") && str_contains($file, "'js.cv.canvas_wide_exit'")
             && str_contains($file, "'js.cv.change_ready'")
+            // Las claves de los dos modos viejos no pueden quedarse huérfanas.
+            && !str_contains($file, "'js.cv.hide_panel'")
+            && !str_contains($file, "'js.cv.canvas_only'")
     );
 }
 

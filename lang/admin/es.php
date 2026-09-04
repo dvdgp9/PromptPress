@@ -914,11 +914,9 @@ return [
     'js.cv.section_deleted' => 'Sección eliminada.',
     // STUDIO-UX A3′ — la píldora del chat avisa sola cuando el cambio ya está.
     'js.cv.change_ready' => 'Cambio aplicado',
-    // STUDIO-UX A2/A4 — plegar la barra lateral y ver solo la página.
-    'js.cv.hide_panel' => 'Ocultar el panel (B)',
-    'js.cv.show_panel' => 'Mostrar el panel (B)',
-    'js.cv.canvas_only' => 'Ver solo la página (.)',
-    'js.cv.canvas_only_exit' => 'Salir de ver solo la página (.)',
+    // STUDIO-UX A2 — un solo control para apartar barra y chat.
+    'js.cv.canvas_wide' => 'Ampliar el lienzo (.)',
+    'js.cv.canvas_wide_exit' => 'Volver al panel completo (.)',
     'js.cv.duplicate_section' => 'Duplicar sección',
     'js.cv.duplicating_section' => 'Duplicando la sección…',
     'js.cv.section_duplicated' => 'Sección duplicada.',

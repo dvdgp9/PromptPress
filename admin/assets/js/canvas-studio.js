@@ -100,49 +100,33 @@
   chatMinimize.addEventListener('click', function () { setDock(false); });
 
   // ----------------------------------------------------------------
-  // STUDIO-UX A2/A4 — Sitio para el lienzo.
-  // A2: la barra lateral se pliega (botón o «B») y el estado se recuerda.
-  // A4: modo "solo página" (botón o «.»): ni barra, ni chat, ni marcas de
-  // edición dentro del iframe. Ninguno de los dos recarga el preview.
+  // STUDIO-UX A2 — Sitio para el lienzo.
+  // Un solo control (botón, «.» o Esc): aparta barra lateral y chat y deja la
+  // página entera, EDITABLE (los marcos y la edición inline siguen vivos). No
+  // recarga el iframe. La vista de visitante ya la da «Ver página».
   // ----------------------------------------------------------------
-  var SIDE_KEY = 'pp-studio-side-open';
-  var sideToggle = document.getElementById('studio-side-toggle');
-  var canvasOnlyBtn = document.getElementById('studio-canvas-only');
+  var WIDE_KEY = 'pp-studio-canvas-wide';
+  var wideBtn = document.getElementById('studio-canvas-wide');
 
-  function labelButton(btn, text) {
-    if (!btn) return;
-    btn.title = text;
-    btn.setAttribute('aria-label', text);
-  }
+  function canvasIsWide() { return document.body.classList.contains('is-canvas-wide'); }
 
-  function sideIsOpen() { return !document.body.classList.contains('is-side-hidden'); }
-
-  function setSide(open, remember) {
-    document.body.classList.toggle('is-side-hidden', !open);
-    if (sideToggle) sideToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    labelButton(sideToggle, pp.t(open ? 'js.cv.hide_panel' : 'js.cv.show_panel'));
+  function setCanvasWide(on, remember) {
+    document.body.classList.toggle('is-canvas-wide', on);
+    if (wideBtn) {
+      wideBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      var text = pp.t(on ? 'js.cv.canvas_wide_exit' : 'js.cv.canvas_wide');
+      wideBtn.title = text;
+      wideBtn.setAttribute('aria-label', text);
+    }
     if (remember !== false) {
-      try { localStorage.setItem(SIDE_KEY, open ? '1' : '0'); } catch (e) { /* modo privado */ }
+      try { localStorage.setItem(WIDE_KEY, on ? '1' : '0'); } catch (e) { /* modo privado */ }
     }
   }
 
-  var sidePref = '1';
-  try { sidePref = localStorage.getItem(SIDE_KEY) || '1'; } catch (e) { /* modo privado */ }
-  setSide(sidePref !== '0', false);
-  if (sideToggle) sideToggle.addEventListener('click', function () { setSide(!sideIsOpen()); });
-
-  function canvasOnlyIsOn() { return document.body.classList.contains('is-canvas-only'); }
-
-  function setCanvasOnly(on) {
-    document.body.classList.toggle('is-canvas-only', on);
-    if (canvasOnlyBtn) canvasOnlyBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    labelButton(canvasOnlyBtn, pp.t(on ? 'js.cv.canvas_only_exit' : 'js.cv.canvas_only'));
-    // El overlay sigue vivo dentro del iframe: se le pide que calle, no que se vaya.
-    tellIframe({ type: 'chrome', on: !on });
-  }
-
-  labelButton(canvasOnlyBtn, pp.t('js.cv.canvas_only'));
-  if (canvasOnlyBtn) canvasOnlyBtn.addEventListener('click', function () { setCanvasOnly(!canvasOnlyIsOn()); });
+  var widePref = '0';
+  try { widePref = localStorage.getItem(WIDE_KEY) || '0'; } catch (e) { /* modo privado */ }
+  setCanvasWide(widePref === '1', false);
+  if (wideBtn) wideBtn.addEventListener('click', function () { setCanvasWide(!canvasIsWide()); });
 
   // Un solo sitio para los atajos: los del padre y los que reenvía el overlay
   // desde dentro del lienzo (P5 — allí es donde está el foco casi siempre).
@@ -157,12 +141,11 @@
       return true;
     }
     if (mods.mod || mods.alt) return false;
-    if (k === 'b') { setSide(!sideIsOpen()); return true; }
-    if (key === '.') { setCanvasOnly(!canvasOnlyIsOn()); return true; }
+    if (key === '.') { setCanvasWide(!canvasIsWide()); return true; }
     if (key === 'Escape') {
-      // Primero se sale de "solo la página"; si no, Esc sube un nivel de ámbito
+      // Primero se recupera el panel; si ya está, Esc sube un nivel de ámbito
       // (elemento → bloque → sección → página).
-      if (canvasOnlyIsOn()) { setCanvasOnly(false); return true; }
+      if (canvasIsWide()) { setCanvasWide(false); return true; }
       return climbScope();
     }
     return false;

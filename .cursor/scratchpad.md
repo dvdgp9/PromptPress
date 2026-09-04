@@ -7131,8 +7131,16 @@ Orden por relación impacto/coste. Cada tarea es verificable sola.
   infrautilizado) para no tener que dejarlo abierto esperando. Éxito: al abrir el
   Studio el lienzo no tiene nada encima, y con el chat desplegado el ancho de
   lienzo tapado es 0 con la barra visible. Depende de A2, así que va detrás.
-- A4 — Modo "solo página" (tecla, p. ej. `.`): oculta barra, chat y overlays.
-  Éxito: un clic/tecla y vuelta, sin recargar el iframe.
+- A4 — *(FUSIONADA con A2 el 04/09/2026, decisión del usuario: «son
+  prácticamente iguales, dejaría uno solo».)* Modo "solo página" (tecla, p. ej.
+  `.`): oculta barra, chat y overlays. Éxito: un clic/tecla y vuelta, sin
+  recargar el iframe.
+- A2+A4 — **Lienzo ancho**: un único control (botón, `.` o Esc) que aparta barra
+  lateral y chat, con el estado recordado, y **deja la página editable** (marcos
+  y edición inline siguen vivos). Se retira el modo silencioso del overlay
+  (`pp-studio-chromeless`): la vista de visitante ya la da «Ver página», que
+  abre el preview limpio. Éxito: un clic/tecla da el ancho completo del
+  escenario, vuelve igual, y sin recargar el iframe.
 
 **Fase B — un solo modelo mental**
 - B1 — La barra lateral deja de ser excluyente: partes + panel contextual +
@@ -7686,9 +7694,8 @@ mezclan claves de cinco tareas; `copySectionInto` (F6) e `integrateSectionEdit`
 ## Project Status Board — Fase A (STUDIO-UX)
 
 - [x] A1 banner de cookies fuera del preview
-- [x] A2 barra lateral plegable
+- [x] A2+A4 lienzo ancho (un solo control; fusionadas el 04/09/2026)
 - [x] A3′ el chat solo ocupa cuando lo pides
-- [x] A4 modo "solo página"
 
 Pendiente de las fases B, C y D: B1 (barra no excluyente), B2 (teclado con
 modificador desde el iframe — el canal de reenvío ya existe, solo hay que
@@ -7750,3 +7757,32 @@ elemento que nadie tiene cogido.
   comprobación en navegador (el pane perdió la sesión de admin). Si algo va a
   fallar en producción, es de ahí: «Añadir» siempre visible, Cmd+Z desde dentro
   del lienzo y la ✕ del chat cerrando el panel.
+
+### A2 y A4 fusionadas (04/09/2026, Executor, a petición del usuario)
+
+«Las opciones solo página y barra lateral plegable son prácticamente iguales.
+Yo dejaría uno solo.» Tenía razón: la única diferencia real era que "solo
+página" además escondía el chat y apagaba los marcos de selección.
+
+Queda **un control**: «Ampliar el lienzo» (botón, `.` o Esc), que aparta barra y
+chat y deja la página editable. Fuera: el botón de plegar barra, la tecla `B`,
+la clase `is-side-hidden`, el mensaje `chrome` del overlay, el CSS
+`pp-studio-chromeless` y las claves `js.cv.hide_panel`/`show_panel`/
+`canvas_only`/`canvas_only_exit` (sustituidas por `canvas_wide`/`canvas_wide_exit`
+en los 4 idiomas). El estado se recuerda en `pp-studio-canvas-wide`.
+
+Por qué no se pierde nada al quitar el modo silencioso: la vista de visitante ya
+existía en «Ver página» (`?clean=1`), en la misma barra superior.
+
+Tests en verde: `canvas_studio_canvas_room.php` (20), `canvas_studio_scope.php`
+(11), `admin_i18n`. **Sigue pendiente la comprobación en navegador** (de esto y
+de la Fase B): el pane perdió la sesión de admin.
+
+### Sobre "el botón de guardar" (pregunta del usuario, 04/09/2026)
+
+No hace falta: **C4 ya lo resolvió en la Fase F**. Los retoques se guardan al
+instante en el BORRADOR; el público lee `published_version_id`; con cambios
+pendientes el chip pasa a ámbar «Cambios sin publicar» y el botón a «Publicar
+cambios». El usuario no lo veía porque su instalación va por 1.1.x: llega con el
+paquete 1.2.0. Se propuso cambiar «Guardado» por «Guardado en el borrador» y el
+usuario prefirió dejarlo como está.
