@@ -127,5 +127,57 @@ richCheck('el estado de edición no se persiste, el formato sí',
     $dirtyClean
 );
 
+// ---------------------------------------------------------------------------
+// TXT-EDIT — Qué se puede editar a mano
+// ---------------------------------------------------------------------------
+// El usuario encontró textos intocables: los sobretítulos («CONTACT &
+// RÉSERVATIONS», «PREMIER CONTACT») y los chips. La causa era una lista blanca
+// de ETIQUETAS (`h1..h6,p,li,blockquote,figcaption,a`): la IA maqueta con las
+// que le parecen, así que un sobretítulo en `<div>` o un chip en `<span>` se
+// quedaban fuera y había que pedirle el cambio al modelo.
+//
+// La lista de etiquetas nunca iba a estar completa, así que ahora se mira QUÉ
+// es el elemento. Estas comprobaciones son sobre el fuente del overlay (vive
+// como JS embebido y no se puede ejecutar aquí); el comportamiento se verificó
+// en el navegador, elemento por elemento.
+
+$overlay = (string) file_get_contents(PP_ROOT . '/app/Controllers/Admin/CanvasController.php');
+
+richCheck('la decisión ya no es una lista de etiquetas',
+    str_contains($overlay, 'function isTextish(el)') && str_contains($overlay, 'function editableFrom(el)'), '');
+
+// El atajo de siempre se conserva a propósito: tocando un <span> dentro de un
+// <h2> hay que editar el H2 entero, no el span.
+richCheck('las etiquetas de siempre siguen mandando cuando existen',
+    str_contains($overlay, "var EDITABLE = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,a'")
+    && str_contains($overlay, "var quick = el.closest(EDITABLE);"), '');
+
+// Los tres sitios que decidían con `closest(EDITABLE)`: empezar a editar, la
+// guarda del clic y el resaltado al pasar por encima. Si uno se queda atrás, el
+// texto se edita pero no se ilumina (o al revés), que es peor que no poder.
+richCheck('los tres caminos preguntan lo mismo',
+    substr_count($overlay, 'editableFrom(') >= 4, (string) substr_count($overlay, 'editableFrom('));
+
+// Una fila de chips NO es una frase: editarla entera fundiría las piezas.
+richCheck('una fila de piezas no se edita como un solo texto',
+    str_contains($overlay, 'if(kids.length > 1 && !hasOwnText(el)) return false;'), '');
+
+// Media, controles y contenedores de página no son texto por mucha letra que
+// lleven dentro: hacerlos editables dejaría reescribir la maqueta sin querer.
+foreach (['img', 'input', 'button', 'table', 'section', 'ul'] as $tag) {
+    richCheck("«{$tag}» sigue sin ser texto editable",
+        (bool) preg_match('/var NOT_TEXT = \'[^\']*\b' . preg_quote($tag, '/') . '\b/', $overlay), '');
+}
+// Y el formato en línea sí puede vivir dentro de un texto.
+foreach (['strong', 'span', 'svg', 'br'] as $tag) {
+    richCheck("«{$tag}» puede ir dentro de un texto",
+        (bool) preg_match('/var INLINE_OK = \'[^\']*\b' . preg_quote($tag, '/') . '\b/', $overlay), '');
+}
+
+// Si se edita como texto, el panel tiene que ofrecer tamaño, color y
+// alineación — no los controles de una caja cualquiera.
+richCheck('el panel trata como texto lo que ahora se edita como texto',
+    str_contains($overlay, "if(isTextish(el)) return 'text';"), '');
+
 echo $failed === 0 ? "\nOK\n" : "\n{$failed} FALLOS\n";
 exit($failed === 0 ? 0 : 1);

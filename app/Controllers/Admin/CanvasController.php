@@ -1034,7 +1034,72 @@ final class CanvasController
 </style>
 <script>
 (function(){
+  // Etiquetas que son texto sin discusión. Se conservan como atajo: cuando el
+  // clic cae dentro de un <h2> o un <p>, se edita ESE, no el <span> de dentro.
   var EDITABLE = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,a';
+
+  // Lo que puede vivir DENTRO de un texto sin que deje de ser un texto: formato
+  // en línea e iconos. Un <p> o un <div> que solo contenga esto sigue siendo
+  // una frase que se edita entera.
+  var INLINE_OK = 'a,abbr,b,br,code,em,i,mark,s,small,span,strong,sub,sup,time,u,svg,path,g,use,circle,rect,line,polyline,polygon';
+
+  // Lo que NO es texto por mucho que lleve letras dentro: media, controles,
+  // listas y contenedores de página.
+  var NOT_TEXT = 'img,picture,video,audio,iframe,canvas,input,textarea,select,button,form,label,ul,ol,dl,table,section,header,footer,nav,main,article,aside,figure';
+
+  /** ¿Tiene texto propio, no solo texto de sus hijos? */
+  function hasOwnText(el){
+    for(var n = el.firstChild; n; n = n.nextSibling){
+      if(n.nodeType === 3 && n.nodeValue.trim() !== '') return true;
+    }
+    return false;
+  }
+
+  /**
+   * ¿Este elemento es "un texto" que se puede editar a mano?
+   *
+   * Antes esto era una lista de etiquetas, y por eso había textos intocables:
+   * un sobretítulo escrito como `<span class="eyebrow">CONTACT & RÉSERVATIONS</span>`
+   * o un chip como `<div class="badge">Nuevo</div>` no estaban en la lista, así
+   * que el clic no hacía nada y había que pedirle el cambio a la IA. La IA
+   * maqueta con las etiquetas que le parecen, así que la lista nunca iba a
+   * estar completa: mejor mirar QUÉ es el elemento y no cómo se llama.
+   */
+  function isTextish(el){
+    if(!el || el.nodeType !== 1 || !el.matches) return false;
+    if(el.hasAttribute('data-pp-section')) return false;
+    if(el.matches(NOT_TEXT)) return false;
+    if((el.textContent || '').trim() === '') return false;
+    var kids = el.children;
+    for(var i = 0; i < kids.length; i++){
+      if(!kids[i].matches(INLINE_OK)) return false;
+    }
+    // Varios hijos y ni una letra propia = una FILA de cosas (una tira de
+    // chips, por ejemplo), no una frase. Editarla entera fundiría las piezas en
+    // un solo bloque de texto.
+    if(kids.length > 1 && !hasOwnText(el)) return false;
+    return true;
+  }
+
+  /**
+   * Qué hay que editar cuando se toca `el`: el texto de siempre si lo hay y,
+   * si no, el envoltorio de texto más EXTERNO que siga siéndolo. Lo de "más
+   * externo" importa: en `<div class="chip"><span>Nuevo</span></div>` se edita
+   * el chip entero, no el span de dentro.
+   */
+  function editableFrom(el){
+    if(!el || !el.closest) return null;
+    if(inEmbed(el)) return null;
+    var sec = sectionOf(el);
+    if(!sec) return null;
+    var quick = el.closest(EDITABLE);
+    if(quick && sectionOf(quick)) return quick;
+    var best = null;
+    for(var cur = el; cur && cur !== sec; cur = cur.parentElement){
+      if(isTextish(cur)) best = cur;
+    }
+    return best;
+  }
   var selected = null, tag = null, editing = null, editingOriginal = '', activeTarget = null;
 
   // Igual que en el servidor: si la sección trae `data-pp-label` (los bloques
@@ -1145,6 +1210,10 @@ final class CanvasController
     if(el.tagName === 'A' || el.tagName === 'BUTTON') return 'link';
     if(el.matches && el.matches('[data-pp-edit-box]')) return 'box';
     if(el.matches && el.matches('h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,span')) return 'text';
+    // Un sobretítulo en <div> o un chip son texto aunque no estén en la lista:
+    // si se pueden editar a mano, el panel tiene que ofrecer tamaño, color y
+    // alineación, no los controles de una caja cualquiera.
+    if(isTextish(el)) return 'text';
     if(el.matches && el.matches('[data-pp-section]')) return 'section';
     return null;
   }
@@ -1894,8 +1963,9 @@ final class CanvasController
     if(rt && !rt.hidden && rt.contains(t)) return;                // barra de formato
     if(editing && (editing === t || editing.contains(t))) return; // seguir editando
     if(t.closest && !inEmbed(t)){
-      var txt = t.closest(EDITABLE);
-      if(txt && sectionOf(txt) && txt.tagName !== 'A'){ startEdit(txt); return; }
+      var txt = editableFrom(t);
+      // Los enlaces se editan desde el `click` (hay que frenar la navegación).
+      if(txt && txt.tagName !== 'A'){ startEdit(txt); return; }
     }
     if(editing) endEdit(true);
   });
@@ -1938,7 +2008,7 @@ final class CanvasController
     var s = sectionOf(t);
     if(!s) return;
     e.preventDefault(); e.stopPropagation();
-    if(t.closest(EDITABLE) && !inEmbed(t)) return; // ya en edición por mousedown
+    if(editableFrom(t)) return; // ya en edición por mousedown
     var wasSelected = (selected === s);
     selectSection(s, true);
     if(!wasSelected) reportSelection(s); // recién seleccionada → panel de sección
@@ -2011,8 +2081,8 @@ final class CanvasController
     if(!s){ hideTag(); return; }
     s.classList.add('pp-studio-hover'); showTag(s);
     if(!inEmbed(e.target)){
-      var txt = e.target.closest(EDITABLE);
-      if(txt && txt !== editing && sectionOf(txt)) txt.classList.add('pp-studio-text-hover');
+      var txt = editableFrom(e.target);
+      if(txt && txt !== editing) txt.classList.add('pp-studio-text-hover');
       else { var box = visualBoxFrom(e.target); if(box) box.classList.add('pp-studio-box-hover'); }
     }
   });

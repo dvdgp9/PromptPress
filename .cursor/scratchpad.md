@@ -8166,3 +8166,69 @@ Y el circuito entero, contra esa release real:
 
 Nota: el `.zip` de la release NO es byte a byte el que se generó en local (lo
 arma CI por su cuenta), y da igual: cada uno viaja con su propio `.sha256`.
+
+---
+
+## TXT-EDIT — Todos los textos editables a mano (06/09/2026)
+
+### Background and Motivation
+
+Usuario, con capturas: «Hay una serie de elementos de texto que no se pueden
+editar a mano: Contact & Réservations (ni ningún sobretítulo de la web, como
+premier contact o accompagnement complet) y los chips superiores. Revisa que
+todos los elementos con texto sean editables a mano.»
+
+### Key Challenges and Analysis
+
+La causa era una **lista blanca de etiquetas** en el overlay:
+`EDITABLE = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,a'`. Un sobretítulo
+escrito como `<div class="eyebrow">` o `<span class="eyebrow">`, o un chip como
+`<span class="badge">`, no estaban en la lista: el clic no hacía nada y el único
+camino era pedirle el cambio a la IA.
+
+Lo importante: **esa lista nunca iba a estar completa**. La maqueta la escribe
+el modelo, que usa las etiquetas que le parecen. Ampliarla a `div,span` sin más
+tampoco valía: `closest('div')` desde cualquier clic encontraría el envoltorio
+de la sección y dejaría editar la maqueta entera como si fuera una frase.
+
+Así que se pasa de preguntar **cómo se llama** el elemento a preguntar **qué
+es** (`isTextish`): tiene texto, todos sus hijos son formato en línea o iconos,
+y no es media, control ni contenedor de página. Con una regla extra que salió de
+pensar en los chips: si tiene varios hijos y ninguna letra propia, es una FILA
+de piezas, no una frase — editarla entera las fundiría en un bloque.
+
+`editableFrom()` se queda con el envoltorio de texto **más externo**, para que en
+`<div class="chip"><span>Nuevo</span></div>` se edite el chip y no el span; y
+conserva el atajo de las etiquetas de siempre, para que tocar un `<span>` dentro
+de un `<h2>` siga editando el H2 entero.
+
+### Project Status Board
+
+- [x] TXT-EDIT Sustituir la lista de etiquetas por «esto es un texto»
+
+### Current Status / Progress Tracking (06/09/2026, Executor)
+
+**Comprobado en el Studio, caso por caso** (página de pruebas con los 18
+supuestos, disparando `mousedown` de verdad y mirando quién acaba en edición):
+
+| toco… | edita | |
+|---|---|---|
+| sobretítulo en `<p>` | ese `<p>` | seguía funcionando |
+| sobretítulo en `<div>` | ese `<div>` | **arreglado** |
+| sobretítulo en `<span>` | ese `<span>` | **arreglado** |
+| `<span>` dentro de un `<h2>` | el `<h2>` entero | sin cambios, a propósito |
+| un chip de una fila de chips | ESE chip | **arreglado**, y no la fila |
+| chip con icono + texto | el chip | **arreglado** |
+| el `<svg>` del icono | el chip que lo contiene | |
+| tarjeta con `<h3>` + `<p>` | nada | correcto: no es una frase |
+| `<ul>`, `<img>`, `<figure>`, hueco vacío | nada | correcto |
+| `<li>`, `<figcaption>` | ellos mismos | |
+
+Y de punta a punta: editar un sobretítulo en `<div>`, cerrar y recargar → el
+texto nuevo está en BD, sin `contenteditable` ni clases del Studio coladas. El
+panel de ese elemento ofrece Tamaño / Estilo / Alineación / Color del texto, no
+los controles de una caja.
+
+- Tests: `tests/canvas_rich_text.php` sube a 18 comprobaciones (guardan que no
+  se vuelva a una lista de etiquetas y que media y contenedores sigan fuera).
+  Regresión de `canvas_*` en verde.
