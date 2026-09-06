@@ -8120,3 +8120,33 @@ tiempo usando.
 - `array_is_list()` es de PHP 8.1 y `composer.json` admite 8.0: en un hosting
   viejo habría sido un fatal. Para distinguir una lista de un objeto en un JSON
   decodificado basta `array_key_exists(0, $x)`.
+
+### UPD-GH-5 — Publicar sin tocar nada (06/09/2026)
+
+Usuario: «Hay que automatizar todo, sí, yo no quiero hacer nada a mano.»
+
+`.github/workflows/release.yml`: en cada push a `main` lee `PP_VERSION` de
+`config/constants.php` y, **si esa versión no está publicada todavía**, arma el
+paquete y crea la release con el `.zip` y su `.sha256`. Si la versión no ha
+cambiado, se para en el segundo paso: un push normal no republica nada.
+
+Por qué así y no por etiquetas: crear un tag es otra tarea a mano. La versión ya
+vive en el código y subirla es parte de commitear, así que publicar pasa a ser
+consecuencia de lo que ya se hacía. El único gesto que queda es subir
+`PP_VERSION`, que es una línea de código, no un trámite.
+
+- **Lint antes de publicar**: `php -l` sobre todo el árbol (menos `vendor/` e
+  `iaia-analytics/`). Un paquete que no compila es peor que no publicar: la
+  instalación de destino se lo tragaría entero y se quedaría con un 500. Probado
+  en local con el comando exacto de CI: 4,6 s.
+- **El zip se arma en `$RUNNER_TEMP`**, fuera del repo: el script empaqueta el
+  árbol entero y un zip escrito dentro acabaría metiéndose a sí mismo.
+- **`concurrency`** para que dos pushes seguidos no armen la misma release a la
+  vez, y `workflow_dispatch` para relanzarlo a mano si algo falla.
+- **Requisito de una sola vez, y NO lo puedo hacer yo**: Settings → Actions →
+  General → Workflow permissions → «Read and write permissions». GitHub le da al
+  token permiso de solo lectura por defecto en repos nuevos y el último paso
+  fallaría con un 403.
+- Ojo a la consecuencia: a partir de ahora, **un push a `main` con la versión
+  subida publica al mundo** y todas las instalaciones ofrecen la actualización.
+  Es lo pedido, pero conviene tenerlo presente antes de subir `PP_VERSION`.

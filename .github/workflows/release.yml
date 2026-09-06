@@ -1,0 +1,113 @@
+name: Publicar release
+
+# UPD-GH — Publicar deja de ser una tarea aparte y pasa a ser consecuencia de
+# commitear: en cuanto llega a `main` un commit que sube `PP_VERSION`, esto arma
+# el paquete y crea la release con el `.zip` y su `.sha256`. Las instalaciones
+# la ven en Ajustes → Actualizaciones sin que nadie toque un archivo.
+#
+# Si el commit NO cambia la versión no pasa nada: la release ya existe y el
+# flujo se para en el segundo paso. Por eso un push normal no republica.
+#
+# Requisito de una sola vez en el repo: Settings → Actions → General → Workflow
+# permissions → "Read and write permissions". Sin eso, GitHub le da al token
+# permiso de solo lectura y el último paso falla con un 403.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # para relanzarlo a mano si algo salió mal
+
+permissions:
+  contents: write           # crear la release y subirle los assets
+
+# Dos pushes seguidos no pueden armar la misma release a la vez.
+concurrency:
+  group: publicar-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Traer el código
+        uses: actions/checkout@v4
+        with:
+          # `--generate-notes` compara con la release anterior; con un checkout
+          # superficial no tendría historial que contar.
+          fetch-depth: 0
+
+      - name: Leer la versión del paquete
+        id: version
+        run: |
+          VERSION=$(sed -n "s/.*define('PP_VERSION', *'\([^']*\)').*/\1/p" config/constants.php | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "::error file=config/constants.php::No se pudo leer PP_VERSION"
+            exit 1
+          fi
+          echo "Versión declarada: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: ¿Esta versión ya está publicada?
+        id: comprobar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "La release v${{ steps.version.outputs.version }} ya existe: no hay nada que publicar."
+            echo "publicar=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "publicar=si" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A partir de aquí solo se trabaja si hay versión nueva.
+
+      - name: PHP con ZipArchive
+        if: steps.comprobar.outputs.publicar == 'si'
+        run: |
+          if ! php -r 'exit(class_exists("ZipArchive") ? 0 : 1);' 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq php-cli php-zip
+          fi
+          php -v
+
+      # Un paquete que no compila es peor que no publicar: la instalación de
+      # destino se lo tragaría entero y se quedaría con un 500.
+      - name: Comprobar sintaxis de todo el PHP
+        if: steps.comprobar.outputs.publicar == 'si'
+        run: |
+          find . \( -path ./vendor -o -path ./iaia-analytics \) -prune -o \
+                 -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Armar el paquete
+        id: paquete
+        if: steps.comprobar.outputs.publicar == 'si'
+        run: |
+          # Fuera del repo a propósito: el script empaqueta el árbol entero y un
+          # zip escrito dentro acabaría metiéndose a sí mismo.
+          OUT="$RUNNER_TEMP/promptpress-${{ steps.version.outputs.version }}.zip"
+          php scripts/build_package.php --out="$OUT"
+          echo "zip=$OUT" >> "$GITHUB_OUTPUT"
+
+      # El `.sha256` lo escribe `build_package.php` al lado del zip; sin él la
+      # actualización se instalaría igual, pero dejaría de comprobarse que la
+      # descarga llegó entera.
+      - name: Publicar la release
+        if: steps.comprobar.outputs.publicar == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="${{ steps.paquete.outputs.zip }}"
+          gh release create "v${{ steps.version.outputs.version }}" \
+            "$ZIP" "$ZIP.sha256" \
+            --target "${{ github.sha }}" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes
+          echo "### Publicada v${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Las instalaciones ya la ven en Ajustes → Actualizaciones." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sin cambios de versión
+        if: steps.comprobar.outputs.publicar == 'no'
+        run: |
+          echo "### Nada que publicar" >> "$GITHUB_STEP_SUMMARY"
+          echo "v${{ steps.version.outputs.version }} ya está publicada. Sube PP_VERSION en config/constants.php para lanzar una nueva." >> "$GITHUB_STEP_SUMMARY"
