@@ -253,6 +253,10 @@ final class BookingApiController
             'ph_name', 'ph_email', 'ph_phone', 'ph_notes', 'book_at',
             'sent_title', 'registered', 'slot_taken', 'too_many', 'failed',
             'network', 'load_failed', 'service_unavailable', 'local_time',
+            // RSV-UI — rótulos del calendario mensual.
+            'pick_day', 'pick_time', 'pick_data', 'pick_day_first', 'no_day_slots',
+            'part_morning', 'part_afternoon', 'part_evening',
+            'month_prev', 'month_next', 'chosen', 'change_choice',
         ];
         $out = [];
         foreach ($keys as $key) {

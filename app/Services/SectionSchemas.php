@@ -563,6 +563,12 @@ final class SectionSchemas
                     ['key' => 'days', 'label' => 'Días de agenda a mostrar', 'type' => 'select', 'default' => '14',
                         'options' => ['7' => '7 días', '14' => '14 días', '21' => '21 días', '31' => '31 días'],
                         'help'    => 'Cuánto futuro ve el visitante de una vez. La ventana máxima real la manda el servicio.'],
+                    // RSV-UI — el calendario ya no está condenado a la tarjeta de
+                    // 420px: a "ancho" y "completo" reparte el mes y las horas en
+                    // dos columnas, que es donde de verdad se lee bien.
+                    ['key' => 'width', 'label' => 'Ancho del calendario', 'type' => 'select', 'default' => 'card',
+                        'options' => ['card' => 'Tarjeta (estrecho)', 'wide' => 'Ancho', 'full' => 'Todo el ancho'],
+                        'help'    => 'En "Ancho" y "Todo el ancho" el calendario y las horas van en dos columnas.'],
                 ],
             ],
 

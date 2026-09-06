@@ -1203,6 +1203,64 @@ final class Microcopy
             'es' => 'Horario local: {tz}', 'en' => 'Local time: {tz}', 'ca' => 'Horari local: {tz}',
             'gl' => 'Horario local: {tz}', 'fr' => 'Heure locale : {tz}', 'pt' => 'Hora local: {tz}',
         ],
+        // RSV-UI — Rótulos del calendario mensual: los tres pasos, las franjas
+        // horarias, la navegación entre meses y el resumen de la cita elegida.
+        // Los sirve la API igual que el resto de `booking.*`: el widget es
+        // estático y puede vivir en una web ajena, así que no traduce nada.
+        'booking.pick_day' => [
+            'es' => 'Elige el día', 'en' => 'Pick a day', 'ca' => 'Tria el dia',
+            'gl' => 'Escolle o día', 'fr' => 'Choisissez le jour', 'pt' => 'Escolha o dia',
+        ],
+        'booking.pick_time' => [
+            'es' => 'Elige la hora', 'en' => 'Pick a time', 'ca' => 'Tria l’hora',
+            'gl' => 'Escolle a hora', 'fr' => 'Choisissez l’heure', 'pt' => 'Escolha a hora',
+        ],
+        'booking.pick_data' => [
+            'es' => 'Tus datos', 'en' => 'Your details', 'ca' => 'Les teves dades',
+            'gl' => 'Os teus datos', 'fr' => 'Vos coordonnées', 'pt' => 'Os seus dados',
+        ],
+        'booking.pick_day_first' => [
+            'es' => 'Elige un día del calendario para ver las horas libres.',
+            'en' => 'Pick a day on the calendar to see the free times.',
+            'ca' => 'Tria un dia del calendari per veure les hores lliures.',
+            'gl' => 'Escolle un día do calendario para ver as horas libres.',
+            'fr' => 'Choisissez un jour dans le calendrier pour voir les créneaux libres.',
+            'pt' => 'Escolha um dia no calendário para ver os horários livres.',
+        ],
+        'booking.no_day_slots' => [
+            'es' => 'Este día ya no tiene horas libres.', 'en' => 'No times left on this day.',
+            'ca' => 'Aquest dia ja no té hores lliures.', 'gl' => 'Este día xa non ten horas libres.',
+            'fr' => 'Plus aucun créneau ce jour-là.', 'pt' => 'Este dia já não tem horários livres.',
+        ],
+        'booking.part_morning' => [
+            'es' => 'Mañana', 'en' => 'Morning', 'ca' => 'Matí',
+            'gl' => 'Mañá', 'fr' => 'Matin', 'pt' => 'Manhã',
+        ],
+        'booking.part_afternoon' => [
+            'es' => 'Tarde', 'en' => 'Afternoon', 'ca' => 'Tarda',
+            'gl' => 'Tarde', 'fr' => 'Après-midi', 'pt' => 'Tarde',
+        ],
+        'booking.part_evening' => [
+            'es' => 'Noche', 'en' => 'Evening', 'ca' => 'Nit',
+            'gl' => 'Noite', 'fr' => 'Soir', 'pt' => 'Noite',
+        ],
+        'booking.month_prev' => [
+            'es' => 'Mes anterior', 'en' => 'Previous month', 'ca' => 'Mes anterior',
+            'gl' => 'Mes anterior', 'fr' => 'Mois précédent', 'pt' => 'Mês anterior',
+        ],
+        'booking.month_next' => [
+            'es' => 'Mes siguiente', 'en' => 'Next month', 'ca' => 'Mes següent',
+            'gl' => 'Mes seguinte', 'fr' => 'Mois suivant', 'pt' => 'Mês seguinte',
+        ],
+        'booking.chosen' => [
+            'es' => '{date} a las {time}', 'en' => '{date} at {time}', 'ca' => '{date} a les {time}',
+            'gl' => '{date} ás {time}', 'fr' => '{date} à {time}', 'pt' => '{date} às {time}',
+        ],
+        'booking.change_choice' => [
+            'es' => 'Cambiar', 'en' => 'Change', 'ca' => 'Canviar',
+            'gl' => 'Cambiar', 'fr' => 'Modifier', 'pt' => 'Alterar',
+        ],
+
         // MODULOS M2 — alternativa del calendario embebido en la propia web
         // cuando el visitante navega sin JavaScript. No la sirve la API: se
         // pinta en el servidor dentro del <noscript>.

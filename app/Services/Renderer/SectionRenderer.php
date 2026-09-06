@@ -959,6 +959,8 @@ final class SectionRenderer
         $embed = \App\Modules\Booking\BookingEmbedRenderer::render(self::$siteId, [
             'service_id' => self::str($c, 'service_id'),
             'days'       => self::str($c, 'days', (string) \App\Modules\Booking\BookingEmbedRenderer::DEFAULT_DAYS),
+            // RSV-UI — ancho de la tarjeta del calendario dentro de la sección.
+            'width'      => self::str($c, 'width', \App\Modules\Booking\BookingEmbedRenderer::DEFAULT_WIDTH),
             // El calendario habla el idioma de la página, no el del servicio.
             'lang'       => self::$lang,
         ]);

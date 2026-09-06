@@ -755,6 +755,24 @@
     }
   }
 
+  /**
+   * RSV-UI — Renombra una parte en la lista sin ir al servidor.
+   *
+   * El guardado de sección (`/section`) devuelve historial, no la lista de
+   * partes, así que al cambiar el servicio de un calendario la lista seguiría
+   * diciendo el nombre viejo hasta la siguiente recarga. El nombre real ya
+   * viaja en el `data-pp-label` que acaba de escribir el overlay; esto solo
+   * pone al día lo que se ve.
+   */
+  function renameSection(sectionId, label) {
+    if (!sectionId || !label) return;
+    var found = false;
+    pageSections.forEach(function (p) {
+      if (p.id === sectionId) { p.label = label; found = true; }
+    });
+    if (found) renderSectionList(pageSections);
+  }
+
   function markCurrentSection() {
     if (!sectionList) return;
     sectionList.querySelectorAll('button[data-section]').forEach(function (b) {
@@ -997,7 +1015,39 @@
         + '</div><small class="cvstudio-hint">' + pp.t('js.cv.gallery_hint') + '</small></div>'
       : '';
 
+    // RSV-UI — Calendario de reservas: lo de dentro lo pinta el módulo, pero
+    // cómo se coloca en la página se decide aquí. Va el primero porque en una
+    // sección de calendario es lo que se viene a tocar.
+    var bk = props.booking;
+    // Qué servicio enseña este calendario. `auto` = el primero activo, que es
+    // como lo inserta el botón "+ Calendario" si no eliges ninguno.
+    var bkServices = Array.isArray(window.PP_BOOKING_SERVICES) ? window.PP_BOOKING_SERVICES : [];
+    var bkServiceBlock = (bk && bkServices.length)
+      ? '<div class="cvstudio-field"><label for="ep-booking-service">' + pp.t('js.cv.booking_service') + '</label>'
+        + '<select id="ep-booking-service">'
+          + '<option value="auto"' + (bk.service === 'auto' ? ' selected' : '') + '>'
+            + pp.t('js.cv.booking_auto', { servicio: bkServices[0].name }) + '</option>'
+          + bkServices.map(function (s) {
+              return '<option value="' + s.id + '"' + (String(bk.service) === String(s.id) ? ' selected' : '') + '>'
+                + esc(s.name) + ' · ' + s.duration_min + ' min</option>';
+            }).join('')
+        + '</select></div>'
+      : '';
+    var bookingBlock = bk
+      ? bkServiceBlock
+        + '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_width') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('bookingwidth', 'card', bk.width, pp.t('js.cv.booking_w_card'))
+          + seg('bookingwidth', 'wide', bk.width, pp.t('js.cv.booking_w_wide'))
+          + seg('bookingwidth', 'full', bk.width, pp.t('js.cv.booking_w_full'))
+        + '</div></div>'
+        + '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_days') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('bookingdays', '7', bk.days, '7') + seg('bookingdays', '14', bk.days, '14')
+          + seg('bookingdays', '21', bk.days, '21') + seg('bookingdays', '31', bk.days, '31')
+        + '</div><small class="cvstudio-hint">' + pp.t('js.cv.booking_hint') + '</small></div>'
+      : '';
+
     return ''
+      + bookingBlock
       + colorField(pp.t('chrome.bg_color_js'), 'bgcolor', { current: props.bgcolor })
       + galleryBlock
       + bgImageBlock
@@ -1014,7 +1064,7 @@
   // —los únicos que cambian la imagen de fondo— se vuelven inalcanzables.
   // Las claves son tipos internos; solo la etiqueta se traduce.
   var CRUMB_LABELS = { text: pp.t('js.chrome.text'), box: pp.t('js.cv.box'), link: pp.t('chrome.button_js'), image: pp.t('js.post_editor.image'), section: pp.t('js.cv.section') };
-  var panelState = { chain: [], index: -1, sectionLabel: '' };
+  var panelState = { chain: [], index: -1, sectionLabel: '', sectionId: '' };
 
   function renderCrumbs(chain, active, sectionLabel) {
     var parts = ['<button type="button" class="cvstudio-crumb" data-scope="-1" title="' + pp.t('js.cv.clear_scope') + '">' + pp.t('js.onb.page') + '</button>'];
@@ -1058,7 +1108,7 @@
       : sectionControls(p);
 
     var chain = Array.isArray(d.chain) ? d.chain : [];
-    panelState = { chain: chain, index: typeof d.chainIndex === 'number' ? d.chainIndex : -1, sectionLabel: d.sectionLabel || '' };
+    panelState = { chain: chain, index: typeof d.chainIndex === 'number' ? d.chainIndex : -1, sectionLabel: d.sectionLabel || '', sectionId: d.sectionId || '' };
 
     panel.innerHTML = ''
       + '<div class="cvstudio-panel__head">'
@@ -1091,7 +1141,7 @@
   }
 
   // Operaciones segmentadas (toggle visual de "activo" entre hermanas).
-  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1 };
+  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1, bookingwidth: 1, bookingdays: 1 };
 
   function wirePanel(kind) {
     // Estas no pintan "Guardado" a ciegas: el overlay serializa la sección y el
@@ -1148,6 +1198,23 @@
     panel.querySelectorAll('[data-scope]').forEach(function (btn) {
       btn.addEventListener('click', function () { selectScope(parseInt(btn.dataset.scope, 10)); });
     });
+
+    // RSV-UI — cambiar de servicio: el panel resuelve `auto` al primer servicio
+    // activo para que el widget pueda remontarse ya, y manda el nombre nuevo
+    // para renombrar la parte en "Partes de esta página".
+    var bkSel = panel.querySelector('#ep-booking-service');
+    if (bkSel) {
+      bkSel.addEventListener('change', function () {
+        var list = Array.isArray(window.PP_BOOKING_SERVICES) ? window.PP_BOOKING_SERVICES : [];
+        if (!list.length) return;
+        var ref = bkSel.value;
+        var chosen = ref === 'auto' ? list[0] : list.filter(function (s) { return String(s.id) === ref; })[0];
+        if (!chosen) return;
+        var label = pp.t('js.cv.booking_section_label', { servicio: chosen.name });
+        applyOp('bookingservice', { ref: ref, resolved: chosen.id, label: label });
+        renameSection(panelState.sectionId, label);
+      });
+    }
 
     var close = panel.querySelector('#ep-close');
     if (close) close.addEventListener('click', function () { closePanel(); clearSelection(true); });

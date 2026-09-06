@@ -507,6 +507,14 @@ $icon = static function (string $name): string {
       'title' => (string) $p['title'],
       'url' => '/' . ltrim((string) $p['slug'], '/'),
   ], $linkTargets ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+  // RSV-UI — Servicios reservables, para poder CAMBIAR el de un calendario ya
+  // insertado desde el panel. El menú de "+ Calendario" los tiene en su HTML,
+  // pero el panel necesita nombre y duración como datos, no como botones.
+  window.PP_BOOKING_SERVICES = <?= json_encode(array_map(static fn(array $s) => [
+      'id' => (int) $s['id'],
+      'name' => (string) $s['name'],
+      'duration_min' => (int) $s['duration_min'],
+  ], $bookingServices ?? []), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 </script>
 <?php /* El Studio es standalone (sin `admin/layout`), así que tiene que traerse
          el catálogo del navegador y `pp.t` por su cuenta: sin esto sus ~94

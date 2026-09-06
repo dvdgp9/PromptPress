@@ -2112,7 +2112,9 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
     margin: 0 0 1.6em;
     max-width: 52ch;
 }
-/* "Calendario solo": centrado, porque el widget tiene un ancho fijo pequeño. */
+/* "Calendario solo": centrado, porque la tarjeta es más estrecha que la página.
+   Con el calendario a ancho completo el centrado no estorba: el embed ya ocupa
+   todo, y el título de la sección sigue queriendo ir centrado. */
 .pp-booking-section--v-default {
     text-align: center;
 }
@@ -2126,7 +2128,7 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
 /* "Con título y texto": texto a un lado, calendario al otro. */
 .pp-booking-section--v-with-text {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr minmax(0, auto);
     gap: clamp(24px, 5vw, 56px);
     align-items: center;
 }
@@ -2148,6 +2150,7 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
    para un visitante sin JavaScript. */
 .pp-booking-embed {
     max-width: 420px;
+    width: 100%;
     border: 1px solid var(--pp-border);
     border-radius: var(--pp-radius-card, 14px);
     padding: 18px;
@@ -2169,6 +2172,13 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
     color: var(--pp-text-muted);
     font-size: .95rem;
 }
+/* RSV-UI — Ancho elegido por el gestor. El widget repite estas tres clases con
+   el prefijo `.ppbk--w-*` al montar; aquí valen para el avance sin JS (la
+   previsualización del editor y el visitante sin JavaScript), que si no
+   mentiría: se elegía "completo" y la previa seguía enseñando una tarjeta. */
+.pp-booking-embed--w-wide { max-width: 760px; }
+.pp-booking-embed--w-full { max-width: none; }
+
 
 /* Generic */
 .pp-generic h2{font-size:clamp(1.5rem, 2.5vw, 2rem)}

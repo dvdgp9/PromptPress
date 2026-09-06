@@ -417,6 +417,10 @@ final class CanvasService
                     $content = \App\Modules\Booking\BookingEmbedRenderer::render($siteId, [
                         'service_id' => ctype_digit($ref) ? (int) $ref : 0,
                         'days'       => $opts['days'] ?? null,
+                        // RSV-UI — el ancho viaja en el placeholder porque es lo
+                        // ÚNICO del embed que sobrevive al round-trip del Studio:
+                        // el HTML de dentro se regenera en cada render.
+                        'width'      => $opts['width'] ?? null,
                         'lang'       => $pageLang,
                     ]);
                     if ($content !== '') {
@@ -540,7 +544,7 @@ final class CanvasService
         // posts, products y booking llevan opciones canónicas ordenadas.
         $optionKeys = match ($kind) {
             'posts'   => ['limit', 'variant', 'heading', 'subheading'],
-            'booking' => ['days'],
+            'booking' => ['days', 'width'],
             default   => ['limit', 'heading'],
         };
         $opts = self::parsePlaceholderOptions($optionsRaw);
@@ -621,7 +625,7 @@ final class CanvasService
                 array_slice($services, 0, 8)
             ));
             // i18n-ignore-start: contexto de reservas que viaja al prompt, no al panel.
-            $parts[] = "Este sitio tiene RESERVAS DE CITAS activas. Si la página pide pedir cita, reservar o ver disponibilidad, inserta el placeholder `{{booking:auto}}`: el sistema lo sustituye por el calendario real con los huecos libres y el formulario de reserva. Para un servicio concreto usa su id; `auto` coge el primero activo. Opción: `{{booking:auto|days=7}}` para acortar la agenda visible. NUNCA dibujes un calendario, unas horas o un formulario de reserva a mano: no funcionarían.\n"
+            $parts[] = "Este sitio tiene RESERVAS DE CITAS activas. Si la página pide pedir cita, reservar o ver disponibilidad, inserta el placeholder `{{booking:auto}}`: el sistema lo sustituye por el calendario real con los huecos libres y el formulario de reserva. Para un servicio concreto usa su id; `auto` coge el primero activo. Opciones: `days` acorta la agenda visible (`{{booking:auto|days=7}}`) y `width` decide cuánto ocupa: `card` (tarjeta estrecha, por defecto), `wide` o `full` (`{{booking:auto|width=full}}`). En una sección dedicada a pedir cita usa `width=full`; en una columna estrecha, `card`. NUNCA dibujes un calendario, unas horas o un formulario de reserva a mano: no funcionarían.\n"
                 . "SERVICIOS REALES (id = nombre (duración, precio)): {$list}.\n"
                 . "El calendario YA muestra el nombre, la duración y el precio de cada servicio: no hace falta repetirlos en el texto de alrededor. Si aun así los mencionas, usa EXACTAMENTE estos valores. NUNCA inventes una duración, un precio, unos horarios ni un número de plazas: si no está en esta lista, no lo escribas.";
             // i18n-ignore-end
@@ -653,7 +657,10 @@ final class CanvasService
             if ($part === '' || !str_contains($part, '=')) continue;
             [$key, $value] = array_map('trim', explode('=', $part, 2));
             $key = strtolower($key);
-            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading', 'days'], true)) continue;
+            // Lista blanca común a todos los placeholders: una clave que no esté
+            // aquí se cae ANTES de llegar al renderer (y, por tanto, también se
+            // pierde al canonicalizar), así que toda opción nueva pasa por aquí.
+            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading', 'days', 'width'], true)) continue;
             $value = trim(strip_tags($value));
             $value = preg_replace('/[\x00-\x1F\x7F]/u', '', $value) ?? '';
             if ($value === '') continue;

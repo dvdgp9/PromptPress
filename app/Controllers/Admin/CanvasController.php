@@ -1047,6 +1047,53 @@ final class CanvasController
   function sectionOf(el){ return el.closest('[data-pp-section]'); }
   function inEmbed(el){ return !!el.closest('[data-pp-placeholder]'); }
 
+  // ---------- RSV-UI: ajustes del calendario de reservas ----------
+  // Dentro de un embed no se puede tocar nada (el HTML se regenera en cada
+  // render), así que lo editable es el PLACEHOLDER: `booking:auto|days=14|width=full`
+  // es lo único que sobrevive al guardado, porque `normalizeEditedSectionHtml()`
+  // reconstruye el embed a partir de `data-pp-placeholder`.
+  var BOOKING_WIDTHS = ['card','wide','full'];
+
+  function bookingEmbedOf(sec){
+    return sec ? sec.querySelector('[data-pp-placeholder^="booking:"]') : null;
+  }
+
+  function bookingOpts(embed){
+    var ref = embed ? (embed.getAttribute('data-pp-placeholder') || '') : '';
+    // `service` es la referencia tal cual está guardada: `auto` (el primero
+    // activo, que puede cambiar solo) o el id de un servicio concreto.
+    var head = ref.split('|')[0];
+    var out = { days: '14', width: 'card', service: head.slice(head.indexOf(':') + 1) || 'auto' };
+    ref.split('|').slice(1).forEach(function(kv){
+      var i = kv.indexOf('=');
+      if(i < 0) return;
+      var k = kv.slice(0, i).trim(), v = kv.slice(i + 1).trim();
+      if(k === 'days' || k === 'width') out[k] = v;
+    });
+    if(BOOKING_WIDTHS.indexOf(out.width) < 0) out.width = 'card';
+    return out;
+  }
+
+  // Reescribe una opción del placeholder conservando el resto. El orden
+  // canónico lo vuelve a fijar el servidor al guardar; aquí basta con que la
+  // clave quede una sola vez.
+  function setBookingOpt(embed, key, value){
+    var ref = embed.getAttribute('data-pp-placeholder') || '';
+    var head = ref.split('|')[0];
+    var opts = bookingOpts(embed);
+    opts[key] = value;
+    embed.setAttribute('data-pp-placeholder', head + '|days=' + opts.days + '|width=' + opts.width);
+    return opts;
+  }
+
+  // Cambia el SERVICIO conservando ancho y días: cambiar de calendario no puede
+  // deshacer de paso cómo estaba colocado en la página.
+  function setBookingService(embed, ref){
+    var opts = bookingOpts(embed);
+    embed.setAttribute('data-pp-placeholder', 'booking:' + ref + '|days=' + opts.days + '|width=' + opts.width);
+    return opts;
+  }
+
   function showTag(el){
     if(!tag){ tag = document.createElement('div'); tag.className='pp-studio-tag'; document.body.appendChild(tag); }
     var r = el.getBoundingClientRect();
@@ -1261,6 +1308,11 @@ final class CanvasController
       // en la propia sección o en un envoltorio interior.
       p.hasBgImage = !!resolveBgTarget(el);
       p.bgcolor = cs ? cs.backgroundColor : '';
+      // Si la sección lleva un calendario de reservas, el panel enseña además
+      // sus ajustes: era la única pieza del lienzo sin forma de cambiar el
+      // ancho, y a 420px fijos se veía como una tarjetita perdida.
+      var bkEmbed = bookingEmbedOf(el);
+      p.booking = bkEmbed ? bookingOpts(bkEmbed) : null;
     }
     return p;
   }
@@ -1447,6 +1499,65 @@ final class CanvasController
     var el = activeTarget;
     if(!el) return;
     if(msg.op === 'el-duplicate' || msg.op === 'el-delete' || msg.op === 'el-move'){ restructure(msg); return; }
+
+    // RSV-UI — cambiar QUÉ servicio enseña un calendario ya insertado. El
+    // panel manda la referencia a guardar (`auto` o un id), el id concreto con
+    // el que remontar el widget ahora mismo, y el nombre para la lista de partes.
+    if(msg.op === 'bookingservice' && msg.value){
+      var svcSec = sectionOf(el);
+      var svcEmbed = bookingEmbedOf(svcSec);
+      if(!svcEmbed) return;
+      var wanted = String(msg.value.ref || '');
+      var resolved = parseInt(msg.value.resolved, 10) || 0;
+      if(!/^(auto|\d{1,10})$/.test(wanted) || resolved <= 0) return;
+      setBookingService(svcEmbed, wanted);
+      var svcBox = svcEmbed.matches('[data-pp-booking]') ? svcEmbed : svcEmbed.querySelector('[data-pp-booking]');
+      if(svcBox){
+        svcBox.setAttribute('data-service', String(resolved));
+        // El widget trae del servidor el nombre y la duración del servicio
+        // anterior; remontar es lo que los pone al día.
+        if(typeof window.ppBookingMount === 'function') window.ppBookingMount(svcBox);
+      }
+      // El nombre de la parte lo puso `insertBooking` con el servicio de
+      // entonces: sin esto, "Partes de esta página" seguiría nombrando uno que
+      // ya no se enseña.
+      if(svcSec && typeof msg.value.label === 'string' && msg.value.label !== ''){
+        svcSec.setAttribute('data-pp-label', msg.value.label);
+      }
+      if(!msg.preview) serializeAndSave(svcSec);
+      return;
+    }
+
+    // RSV-UI — ancho y ventana de agenda del calendario de reservas.
+    if(msg.op === 'bookingwidth' || msg.op === 'bookingdays'){
+      var bkSec = sectionOf(el);
+      var bkEmbed = bookingEmbedOf(bkSec);
+      if(!bkEmbed) return;
+      var isWidth = msg.op === 'bookingwidth';
+      var val = String(msg.value || '');
+      if(isWidth && BOOKING_WIDTHS.indexOf(val) < 0) return;
+      if(!isWidth && !/^\d{1,2}$/.test(val)) return;
+      setBookingOpt(bkEmbed, isWidth ? 'width' : 'days', val);
+      // El contenedor del widget es el propio embed (o el div de dentro, según
+      // venga del render). Se le cambia el atributo y se refresca en vivo: sin
+      // esto habría que recargar para ver el efecto de lo que acabas de pulsar.
+      var box = bkEmbed.matches('[data-pp-booking]') ? bkEmbed : bkEmbed.querySelector('[data-pp-booking]');
+      if(box){
+        if(isWidth){
+          box.setAttribute('data-width', val);
+          BOOKING_WIDTHS.forEach(function(w){
+            box.classList.remove('pp-booking-embed--w-' + w, 'ppbk--w-' + w);
+          });
+          box.classList.add('pp-booking-embed--w-' + val, 'ppbk--w-' + val);
+        } else {
+          box.setAttribute('data-days', val);
+          // La agenda hay que volver a pedirla: el widget expone su montaje.
+          if(typeof window.ppBookingMount === 'function') window.ppBookingMount(box);
+        }
+      }
+      if(!msg.preview) serializeAndSave(bkSec);
+      return;
+    }
     var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1, sliderlayout:1, gallery:1 };
 
     if(msg.op === 'size'){

@@ -35,6 +35,29 @@ final class BookingEmbedRenderer
     public const DEFAULT_DAYS = 14;
 
     /**
+     * RSV-UI — Anchos del calendario dentro de la página.
+     *
+     * El widget nació con `max-width:420px` clavado, así que un calendario en
+     * una página ancha salía como una tarjetita perdida en el centro y no había
+     * forma de cambiarlo sin tocar código. Ahora el ancho es una opción más del
+     * embed, y viaja por los tres caminos: sección clásica, placeholder canvas
+     * y panel del Studio.
+     *
+     * - `card` — la tarjeta de siempre (420px).
+     * - `wide` — hasta 760px; calendario y horas en dos columnas.
+     * - `full` — todo el ancho del contenedor.
+     */
+    public const WIDTHS = ['card', 'wide', 'full'];
+    public const DEFAULT_WIDTH = 'card';
+
+    /** Normaliza el ancho pedido; cualquier valor raro vuelve a la tarjeta. */
+    public static function normalizeWidth(int|string|null $raw): string
+    {
+        $w = strtolower(trim((string) $raw));
+        return in_array($w, self::WIDTHS, true) ? $w : self::DEFAULT_WIDTH;
+    }
+
+    /**
      * Servicios que se pueden embeber: activos, del sitio, ordenados por nombre.
      *
      * @return array<int, array{id:int, name:string, duration_min:int, price_label:string}>
@@ -95,7 +118,7 @@ final class BookingEmbedRenderer
      * más y recibía el idioma del SERVICIO, que nace en castellano: un
      * calendario en una página francesa hablaba en español.
      *
-     * @param array{service_id?:int|string|null, days?:int|string|null, lang?:string|null} $opts
+     * @param array{service_id?:int|string|null, days?:int|string|null, lang?:string|null, width?:string|null} $opts
      * @return string cadena vacía si no hay nada que pintar
      */
     public static function render(int $siteId, array $opts = []): string
@@ -110,6 +133,7 @@ final class BookingEmbedRenderer
 
         $days = (int) ($opts['days'] ?? self::DEFAULT_DAYS);
         $days = max(1, min(31, $days > 0 ? $days : self::DEFAULT_DAYS));
+        $width = self::normalizeWidth($opts['width'] ?? null);
 
         $widgetUrl = base_url('public/js/pp-booking-widget.js');
         $js = PP_ROOT . '/public/js/pp-booking-widget.js';
@@ -138,9 +162,10 @@ final class BookingEmbedRenderer
         // Clases propias, no las del widget: el CSS de `.ppbk` lo inyecta el JS
         // y aquí puede no haber JS nunca. `.pp-booking-embed` vive en el CSS
         // público (DesignSystem), que la previsualización sí carga.
-        $h  = '<div class="pp-booking-embed" data-pp-booking';
+        $h  = '<div class="pp-booking-embed pp-booking-embed--w-' . $width . '" data-pp-booking';
         $h .= ' data-service="' . $serviceId . '"';
         $h .= ' data-lang="' . e($lang) . '"';
+        $h .= ' data-width="' . $width . '"';
         $h .= ' data-days="' . $days . '">';
         $h .= '<p class="pp-booking-embed__name">' . e($name) . '</p>';
         $h .= '<p class="pp-booking-embed__meta">' . e($sub) . '</p>';
