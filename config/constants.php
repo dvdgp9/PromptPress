@@ -5,7 +5,7 @@
  */
 
 if (!defined('PP_VERSION')) {
-    define('PP_VERSION', '1.2.0');
+    define('PP_VERSION', '1.2.2');
 }
 
 // Path raíz del proyecto (sin barra final)

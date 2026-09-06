@@ -7786,3 +7786,221 @@ pendientes el chip pasa a ámbar «Cambios sin publicar» y el botón a «Public
 cambios». El usuario no lo veía porque su instalación va por 1.1.x: llega con el
 paquete 1.2.0. Se propuso cambiar «Guardado» por «Guardado en el borrador» y el
 usuario prefirió dejarlo como está.
+
+---
+
+## RSV-UI — El calendario de reservas: que se vea y que se pueda vestir (06/09/2026)
+
+### Background and Motivation
+
+Usuario, 06/09/2026: «cuando añado un calendario, sale así. (1) A nivel de
+funcionalidad/UX necesitamos que se vea mejor, esa interfaz no es buena para ver
+días y horas. (2) En diseño es crucial que se pueda editar el estilo, por ejemplo
+ponerlo al 100% de anchura, entre otras cosas.»
+
+Estado de partida (`public/js/pp-booking-widget.js`):
+
+- **Días**: una tira horizontal con scroll (`.ppbk-days`) de pastillas «vie 12 /
+  3 huecos». Con 14 o 31 días de agenda hay que arrastrar a ciegas: no se ve el
+  mes, ni qué semana es, ni dónde están los huecos.
+- **Horas**: `flex-wrap` de botones sin agrupar; a las 9:00 y a las 20:30 les
+  toca el mismo peso visual.
+- **Ancho**: `.ppbk{max-width:420px}` clavado en el JS y `.pp-booking-embed
+  {max-width:420px}` clavado en `DesignSystem`. No hay ningún control: ni en el
+  editor clásico, ni en el placeholder canvas, ni en el panel del Studio. Poner
+  el calendario a 100% era imposible sin tocar código.
+
+### Key Challenges and Analysis
+
+1. **El estilo del embed NO se puede editar como el resto del lienzo.** El
+   overlay del Studio bloquea a propósito todo lo que está dentro de un embed
+   (`canRestructure()` → `inEmbed(el)` es `false`), y con razón: el HTML de
+   dentro se regenera en cada render desde `{{booking:ref}}`, así que cualquier
+   retoque inline se perdería al guardar. **La única superficie que sobrevive al
+   round-trip es el propio placeholder**: `normalizeEditedSectionHtml()` lo
+   reconstruye desde `data-pp-placeholder`, y `canonicalPlaceholderRef()` decide
+   qué opciones se conservan (hoy, para booking, solo `days`). Por tanto el
+   ancho tiene que viajar como opción del placeholder (`width=full`), no como
+   CSS inline.
+2. **Tres caminos, un solo renderer.** Sección clásica (`SectionSchemas` +
+   `SectionRenderer::renderBooking`), placeholder canvas
+   (`CanvasService::expandPlaceholders`) y el botón «Calendario de reservas» del
+   Studio (`CanvasController::insertBooking`) acaban todos en
+   `BookingEmbedRenderer::render()`. El ancho se añade ahí una vez y los tres lo
+   heredan.
+3. **La vista previa sin JS también cuenta.** El editor de secciones pinta el
+   iframe con `sandbox="allow-same-origin"` (sin scripts), así que lo que se ve
+   es `.pp-booking-embed` del CSS público, no `.ppbk` del widget. Los modificadores
+   de ancho tienen que existir en los dos sitios o la previa mentirá.
+4. **Textos**: el widget no traduce nada por su cuenta; los pide a la API
+   (`BookingApiController::widgetTexts()` → `Microcopy 'booking.*'`). Toda
+   etiqueta nueva del calendario necesita sus 6 idiomas, y `tests/booking_microcopy.php`
+   ya vigila que no falte ninguna clave que el JS pida con `T('...')`.
+5. **Primer día de la semana**: no se puede clavar el lunes (un sitio en inglés
+   empieza en domingo). `Intl.Locale#getWeekInfo` cuando existe, lunes de
+   respaldo.
+
+### High-level Task Breakdown
+
+- **RSV-1 — Calendario de verdad en el widget.** Rejilla mensual (cabecera de
+  mes con flechas, iniciales de los días, celdas con estado libre/ocupado/hoy/
+  elegido) en vez de la tira horizontal; horas agrupadas por franja (mañana /
+  tarde / noche) en rejilla; pasos numerados (1 día → 2 hora → 3 datos) y
+  resumen de la cita elegida sobre el formulario.
+  *Criterio*: con `days=14` se ve el mes completo, se navega a los meses que
+  toca la ventana y no más allá, y las horas salen agrupadas.
+- **RSV-2 — Microcopia nueva en 6 idiomas** (`booking.pick_day`, `pick_time`,
+  `pick_data`, `part_morning`, `part_afternoon`, `part_evening`, `chosen`,
+  `no_day_slots`, `month_prev`, `month_next`) + servirlas en `widgetTexts()`.
+  *Criterio*: `tests/booking_microcopy.php` en verde (vigila las dos cosas).
+- **RSV-3 — Opción `width` de punta a punta**: `BookingEmbedRenderer` (clase +
+  `data-width`), CSS público (`.pp-booking-embed--w-*`), CSS del widget
+  (`.ppbk--w-*`, que en ancho/completo reparte calendario y horas en dos
+  columnas), placeholder canvas (`canonicalPlaceholderRef` + expansión) y campo
+  «Ancho» en el schema de la sección clásica.
+  *Criterio*: `{{booking:auto|width=full}}` sobrevive a un guardado del Studio y
+  pinta a 100%.
+- **RSV-4 — Editarlo desde el panel del Studio.** Al seleccionar la sección de
+  un calendario, el panel ofrece «Ancho» y «Días de agenda»; el overlay reescribe
+  `data-pp-placeholder`, refresca el widget en vivo y guarda la sección.
+  *Criterio*: cambiar el ancho se ve al instante y sigue ahí tras recargar.
+
+### Project Status Board
+
+- [x] RSV-1 Calendario mensual + horas por franjas en el widget
+- [x] RSV-2 Microcopia nueva (6 idiomas) servida por la API
+- [x] RSV-3 Opción `width` en los tres caminos + CSS
+- [x] RSV-4 Controles de calendario en el panel del Studio
+
+### Current Status / Progress Tracking (06/09/2026, Executor)
+
+Las cuatro tareas están hechas y comprobadas en navegador (servidor local 8788,
+página canvas con los tres anchos, y el Studio con la sesión de admin).
+
+**Qué se ve ahora.** El widget abre por el mes del primer hueco libre; los días
+sin agenda salen en gris y sin punto, hoy lleva un anillo, y el día elegido va en
+color de marca. Las flechas de mes solo llegan hasta donde llega la ventana de
+agenda (`days`), así que no se puede navegar a meses vacíos. Las horas salen
+agrupadas en Mañana (<14h) / Tarde (<20h) / Noche, en rejilla `auto-fill`, y el
+rótulo de franja solo aparece si hay más de una. Al elegir hora se abre el paso 3
+con un resumen «martes, 8 de septiembre a las 10:30 · Cambiar».
+
+**Anchos medidos en el navegador** (viewport 1280): `card` 420px una columna,
+`wide` 760px en 300+386, `full` 1200px en 300+826; a 375px los tres caen a una
+columna. La altura del calendario a ancho completo baja de 848px a 432px: lo que
+antes era una tira vertical ahora se lee de una pasada.
+
+**El round-trip del Studio, comprobado de verdad:** al pulsar «Completo» el
+placeholder pasó a `booking:228|days=14|width=full`, el widget se recolocó en dos
+columnas sin recargar y la barra marcó «Cambios sin publicar»; el HTML guardado
+en BD conservó `{{booking:228|days=14|width=full}}`. Con «7 días» el widget se
+remontó solo (`window.ppBookingMount`) y pasó a enseñar 5 días libres.
+
+**Tests:** `tests/booking_calendar_ui.php` (nuevo, 38 comprobaciones). Regresión
+en verde: los 9 `booking_*`, los 25 `canvas_*`, `admin_i18n`, `site_microcopy` y
+`form_inline_insert`. `scripts/i18n_lint.php` sigue en 41 pendientes, las mismas
+que antes de tocar nada.
+
+### Executor's Feedback or Assistance Requests
+
+1. **Compatibilidad**: las páginas y secciones ya guardadas siguen saliendo como
+   tarjeta (`card` es el valor por defecto en los tres caminos), así que nadie se
+   encuentra la web movida al actualizar. El cambio que SÍ se nota sin tocar nada
+   es el calendario en sí: la tira de días desaparece para todo el mundo.
+2. **Decisión tomada sin preguntar**: «entre otras cosas» del encargo se ha
+   resuelto con `width` + los controles de sección que ya existían (color de
+   fondo, espaciado, aparecer al bajar), que ahora conviven en el mismo panel. Si
+   se quiere más (alineación, marco sí/no, color del día elegido aparte de la
+   paleta), es otra tarea: cada opción nueva hay que darla de alta en las tres
+   listas blancas del placeholder.
+3. **Estado del entorno de dev**: se creó y se borró un servicio de demo con su
+   página. Queda un cabo suelto: el módulo Reservas del sitio 1 se dejó
+   ENCENDIDO (el script de montaje lo encendió sin guardar el valor anterior).
+
+### Lessons
+
+- **Una opción de embed canvas hay que darla de alta en TRES sitios** o se pierde
+  sola: `parsePlaceholderOptions()` (lista blanca común, la que se me olvidó y
+  hacía que `width=full` se cayera antes de llegar al renderer),
+  `canonicalPlaceholderRef()` (orden canónico al guardar) y la expansión del
+  propio tipo. Lo único que sobrevive al guardado del editor en vivo es el texto
+  del placeholder: el HTML de dentro del embed se regenera en cada render.
+- **En `pp-booking-widget.js` no se pueden poner comentarios entre literales
+  concatenados**: `tests/booking_microcopy.php` empareja comillas en secuencia
+  para cazar castellano cableado y lee el comentario de en medio como cadena. Los
+  comentarios van encima del `css.textContent =`.
+- `text-transform: capitalize` pone mayúscula en CADA palabra: «Septiembre De
+  2026». Para fechas, `::first-letter{text-transform:uppercase}`.
+
+### Paquete 1.2.1 generado (06/09/2026, Executor)
+
+`deliverables/promptpress-1.2.1-20260906-1059.zip` — 1068 archivos, 2,7 MB,
+`unzip -t` en verde. SHA-256:
+`aba5c9a5eed824c5befaa9bc43440b1f4353df9ab5c04044dd50955e34ca4da8`.
+
+- Versión subida de 1.2.0 a **1.2.1**: entra RSV-UI y nada más (calendario
+  mensual con horas por franjas + ancho editable del embed de reservas). Es un
+  incremento sobre un módulo ya existente, sin migraciones nuevas ni cambios de
+  esquema, así que va de patch y no de minor.
+- Comprobado que el paquete NO lleva `config/config.php`, `config/image_bank.php`,
+  `.cursor/`, `.claude/`, `storage/uploads/`, `iaia-analytics/` ni `deliverables/`,
+  y que dentro `PP_VERSION` dice 1.2.1.
+- Lleva las 36 migraciones de siempre; ninguna nueva. `UpdateInstallerService`
+  corre el `Migrator` después de desplegar, así que no hay nada que hacer a mano.
+- **Aviso al Planner:** el paquete se generó desde el árbol de trabajo SIN
+  commitear. Si el 1.2.1 se sube a producción, conviene dejar el commit hecho
+  para que lo desplegado y el repo cuenten lo mismo.
+- Lo que el gestor notará al actualizar: el calendario de reservas cambia de
+  aspecto para todo el mundo (la tira de días desaparece). Los anchos, en cambio,
+  arrancan en `card`, así que ninguna página publicada se mueve de sitio.
+
+### RSV-5 — Cambiar el servicio de un calendario ya insertado (06/09/2026)
+
+Petición del usuario: «una vez que hay un calendario insertado, ¿en los controles
+manuales se podría seleccionar otro? Igual he creado uno pero ahora quiero
+cambiarlo por otro.»
+
+Sí, y por el mismo sitio que el ancho: el servicio **es** la referencia del
+placeholder (`booking:auto` / `booking:228`), así que cambiarlo es reescribir la
+cabecera dejando las opciones intactas. Nuevo desplegable «Servicio» en el panel
+de la sección, encima del ancho.
+
+- `views/admin/canvas/studio.php` — `window.PP_BOOKING_SERVICES` (id, nombre,
+  duración). El menú de «+ Calendario» ya tenía los servicios, pero como botones;
+  el panel los necesita como datos.
+- Overlay (`CanvasController`) — `bookingOpts()` devuelve además `service`;
+  `setBookingService()` reescribe solo la cabecera; la op `bookingservice`
+  remonta el widget (el nombre y la duración los trae del servidor y eran los del
+  servicio anterior) y reescribe `data-pp-label`.
+- `canvas-studio.js` — el `<select>`, y `renameSection()` para que «Partes de esta
+  página» no siga nombrando un servicio que ya no se enseña (el guardado de
+  sección devuelve historial, no la lista de partes).
+- **«Automático» se guarda como `auto`** pero el panel manda además el id
+  resuelto, porque el widget necesita un servicio concreto para montarse ya.
+
+**Comprobado en el Studio con dos servicios reales:** al pasar de «AAA Primera
+consulta» a «AAB Sesión larga» el placeholder quedó
+`booking:240|days=14|width=full` (el ancho **no** se perdió), el widget se remontó
+con el nombre y los 60 min del nuevo, la parte pasó a llamarse «Calendario: AAB
+Sesión larga» en la lista y en el HTML guardado, y volviendo a «Automático» se
+guardó `booking:auto` montando el primero activo (239).
+
+- Tests: `tests/booking_calendar_ui.php` sube a 51 comprobaciones. Regresión en
+  verde (todos los `booking_*`, `canvas_*`, `admin_i18n`, `form_inline_insert`).
+- Entorno de dev: los dos servicios de prueba y su página, borrados.
+
+### Paquete 1.2.2 generado (06/09/2026, Executor)
+
+`deliverables/promptpress-1.2.2-20260906-1120.zip` — 1068 archivos, 2,7 MB,
+`unzip -t` en verde. SHA-256:
+`f3fa5c85abb6adf5adbed7d4db7b766ce21c516f53eeafc166c566c2114cdff5`.
+
+- Versión 1.2.1 → **1.2.2**: añade RSV-5 (cambiar el servicio de un calendario
+  desde el panel) sobre lo que ya iba en 1.2.1 (calendario mensual + ancho). Sin
+  migraciones nuevas.
+- **Sustituye al 1.2.1**: lo lleva todo dentro, así que si el 1.2.1 no llegó a
+  subirse, se puede ignorar.
+- Comprobado que no lleva `config/config.php`, `config/image_bank.php`, `.cursor/`,
+  `.claude/`, `storage/uploads/` ni `iaia-analytics/`, y que dentro `PP_VERSION`
+  dice 1.2.2.
+- Sigue generado desde el árbol de trabajo SIN commitear.
