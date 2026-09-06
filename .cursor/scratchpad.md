@@ -8150,3 +8150,19 @@ consecuencia de lo que ya se hacía. El único gesto que queda es subir
 - Ojo a la consecuencia: a partir de ahora, **un push a `main` con la versión
   subida publica al mundo** y todas las instalaciones ofrecen la actualización.
   Es lo pedido, pero conviene tenerlo presente antes de subir `PP_VERSION`.
+
+**Comprobado con una release de verdad (06/09/2026).** El push del propio
+workflow lo disparó y publicó `v1.2.3` solo: run
+[34033645407](https://github.com/dvdgp9/PromptPress/actions/runs/34033645407),
+`success`, con los dos assets (`promptpress-1.2.3.zip`, 2,7 MB, y su `.sha256`).
+No hizo falta tocar los permisos del repo: el token ya venía con escritura.
+
+Y el circuito entero, contra esa release real:
+- instalación al día (1.2.3) → «Tu instalación está al día», habiendo leído el
+  checksum del asset (`5b096a62…`);
+- instalación en 1.2.0 → «Hay una nueva versión disponible», con la URL real del
+  zip y el enlace al changelog, que es justo lo que destapa el botón «Aplicar
+  actualización» del panel.
+
+Nota: el `.zip` de la release NO es byte a byte el que se generó en local (lo
+arma CI por su cuenta), y da igual: cada uno viaja con su propio `.sha256`.
