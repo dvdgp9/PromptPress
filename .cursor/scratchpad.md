@@ -8004,3 +8004,119 @@ guardó `booking:auto` montando el primero activo (239).
   `.claude/`, `storage/uploads/` ni `iaia-analytics/`, y que dentro `PP_VERSION`
   dice 1.2.2.
 - Sigue generado desde el árbol de trabajo SIN commitear.
+
+---
+
+## UPD-GH — Actualizarse solo desde GitHub Releases (06/09/2026)
+
+### Background and Motivation
+
+Usuario, 06/09/2026: «Esto de hacer un zip y subir es bastante pesado. ¿Hay
+alguna forma de habilitar las actualizaciones de manera cómoda desde la
+plataforma? Tenemos un botón de "check now" que no hace nada.» Y tras el
+análisis: «¿Va bien si lo dejamos en GitHub de momento? Ahora mismo abierto, no
+hay problema. En el futuro metemos license key.»
+
+### Key Challenges and Analysis
+
+1. **El cliente ya está entero, le falta interlocutor.** `UpdateService::checkNow()`
+   hace POST a `config('updates.version_check_url')`; esa clave no existe en
+   ninguna instalación, así que entra por la rama "mock" y contesta «canal no
+   configurado». Detrás, `UpdateInstallerService::apply()` ya hace backup →
+   descarga → checksum → firma → mantenimiento → despliegue → migraciones, y hay
+   rollback. El botón «Aplicar actualización» ya está en la vista, escondido
+   detrás de `has_update && download_url`.
+2. **Con GitHub no hace falta servidor propio.** La API pública de releases ya
+   da todo lo que el cliente necesita: `tag_name` (versión), `assets[].browser_download_url`
+   (paquete), `html_url` (changelog). Montar un endpoint intermedio sería añadir
+   una pieza que hay que alojar y mantener para no aportar nada… hasta que llegue
+   la licencia, y para entonces `version_check_url` ya tiene su sitio.
+3. **El repo por defecto NO puede vivir en `config.php`.** Ese archivo lo escribe
+   el instalador y no está en el paquete, así que pedir una edición manual en
+   cada instalación es justo la fricción que se quiere quitar. Va como constante
+   en `config/constants.php` (que SÍ viaja en el paquete), y `config.php` puede
+   pisarla si algún día hace falta.
+4. **Orden de precedencia**: `updates.version_check_url` (endpoint propio, el
+   camino de la licencia el día que llegue) > `updates.github_repo` > constante
+   `PP_UPDATES_GITHUB_REPO` > sin canal. Así el futuro con licencia no obliga a
+   tocar este código, solo a rellenar una clave.
+5. **El checksum**: GitHub no publica el SHA-256 de un asset, así que lo subimos
+   nosotros como segundo asset `.sha256` y el cliente lo lee. Sin él la descarga
+   se instalaría igual (el checksum es opcional), pero entonces un zip corrupto a
+   medio bajar se desplegaría sin avisar.
+6. **Sin releases todavía**: `/releases/latest` devuelve 404 en el repo hoy. Eso
+   NO es un error que enseñar en rojo: es «aún no hay ninguna publicación».
+
+### High-level Task Breakdown
+
+- **UPD-GH-1 — El cliente entiende GitHub Releases.** Nueva rama en
+  `UpdateService` con parsing aislado y comprobable; mensajes propios para 404
+  (sin publicaciones), 403/429 (límite de la API) y release sin `.zip`.
+  *Criterio*: con un JSON de release real, el parser saca versión, paquete y
+  changelog; sin releases, el panel dice «todavía no hay publicaciones».
+- **UPD-GH-2 — Repo por defecto en `constants.php`** + precedencia documentada.
+  *Criterio*: una instalación que actualiza al paquete nuevo comprueba updates
+  sin tocar `config.php`.
+- **UPD-GH-3 — `build_package.php` deja el `.sha256` al lado del zip.**
+  *Criterio*: `shasum -c` del fichero generado pasa.
+- **UPD-GH-4 — Tests** (`tests/updates_github.php`) y comprobación en el panel.
+
+### Project Status Board
+
+- [x] UPD-GH-1 Rama GitHub Releases en UpdateService
+- [x] UPD-GH-2 Repo por defecto en constants.php
+- [x] UPD-GH-3 .sha256 junto al paquete
+- [x] UPD-GH-4 Tests + comprobación en el panel de Ajustes
+
+### Current Status / Progress Tracking (06/09/2026, Executor)
+
+Hecho y comprobado contra la API de GitHub de verdad, no con simulacros.
+
+**Lo que se ve en Ajustes → Actualizaciones.** «Comprobar ahora» ya contesta:
+con el repo todavía sin publicaciones dice «Todavía no hay ninguna versión
+publicada en dvdgp9/PromptPress» en verde (no en rojo: no hay nada roto, solo
+no hay nada que instalar) y guarda la fecha de comprobación.
+
+**Comprobado en vivo** (`checkNow()` contra api.github.com):
+- repo sin releases → mensaje amable, `has_update:false`, `status:ok`;
+- repo real con releases (`gohugoio/hugo`) → saca etiqueta `0.165.0` sin la `v`,
+  la URL real del `.zip` y el enlace al changelog. O sea: el día que exista una
+  release nuestra, el panel la verá igual;
+- repo mal escrito en `config.php` → aviso explícito, no silencio.
+
+**La mitad que nunca se había estrenado** —descargar por URL— también se probó,
+sirviendo el paquete por HTTP local: descarga íntegra de 2,7 MB, checksum bueno
+aceptado, checksum falso rechazado con el mensaje de siempre, y un 404 abortando
+con su HTTP en el texto. El resto de la tubería (backup → despliegue →
+migraciones) es la MISMA que ya usa la subida manual, que el usuario lleva
+tiempo usando.
+
+- Tests: `tests/updates_github.php` (29, nuevo). Regresión en verde.
+- Decisión que salió de un test en rojo: un `github_repo` mal escrito **no** cae
+  al repo del producto. Preferimos que el panel avise a que el sitio esté
+  mirando, calladito, un repo distinto del que su dueño cree haber puesto.
+
+### Executor's Feedback or Assistance Requests
+
+1. **El primer salto sigue siendo manual.** La instalación de producción no
+   tiene este código, así que 1.2.3 hay que subirlo a mano UNA última vez. A
+   partir de ahí, botón.
+2. **La release la tiene que crear el usuario**: yo no tengo (ni debo tener)
+   token de GitHub. `build_package.php` ya escupe los pasos exactos al terminar.
+3. **Hay que subir los DOS archivos** a la release: el `.zip` y el `.sha256`. Sin
+   el segundo la actualización se instala igual, pero deja de comprobarse que la
+   descarga llegó entera.
+4. **Sin licencia, el paquete es público.** Es lo acordado («ahora mismo abierto,
+   no hay problema»). El día que toque cerrarlo, `updates.version_check_url` ya
+   manda sobre GitHub sin tocar este código: solo hay que levantar el endpoint.
+
+### Lessons
+
+- **Un canal de actualizaciones no puede vivir en `config/config.php`**: ese
+  archivo lo escribe el instalador, no viaja en el paquete y es distinto en cada
+  sitio, así que cualquier ajuste ahí exige entrar a mano en cada instalación —
+  justo lo que se quería quitar. Lo que tiene que llegar a todos va en
+  `config/constants.php`, que sí va dentro del zip.
+- `array_is_list()` es de PHP 8.1 y `composer.json` admite 8.0: en un hosting
+  viejo habría sido un fatal. Para distinguir una lista de un objeto en un JSON
+  decodificado basta `array_key_exists(0, $x)`.

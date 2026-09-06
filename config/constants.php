@@ -5,7 +5,24 @@
  */
 
 if (!defined('PP_VERSION')) {
-    define('PP_VERSION', '1.2.2');
+    define('PP_VERSION', '1.2.3');
+}
+
+/**
+ * UPD-GH — De dónde salen las actualizaciones si nadie dice otra cosa.
+ *
+ * Vive AQUÍ y no en `config/config.php` a propósito: ese archivo lo escribe el
+ * instalador, no viaja en el paquete y es distinto en cada instalación, así que
+ * apuntarlo ahí obligaría a editar a mano cada sitio — justo la lata que esto
+ * viene a quitar. Al ser una constante del paquete, una instalación que se
+ * actualiza ya sabe dónde mirar la próxima vez, sin tocar nada.
+ *
+ * `config.php` puede pisarla con `updates.github_repo`, y un endpoint propio
+ * (`updates.version_check_url`) gana a las dos: ese será el camino el día que
+ * las descargas pidan licencia.
+ */
+if (!defined('PP_UPDATES_GITHUB_REPO')) {
+    define('PP_UPDATES_GITHUB_REPO', 'dvdgp9/PromptPress');
 }
 
 // Path raíz del proyecto (sin barra final)

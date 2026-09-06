@@ -59,6 +59,13 @@ $constants = (string) @file_get_contents($root . '/config/constants.php');
 if (preg_match("/define\(\s*'PP_VERSION'\s*,\s*'([^']+)'/", $constants, $m)) {
     $version = $m[1];
 }
+// El repo de las releases sale del mismo sitio y por el mismo método: este
+// script NO arranca la app a propósito (empaqueta, no ejecuta), así que lee el
+// fichero en vez de mirar la constante.
+$repo = 'TU-USUARIO/TU-REPO';
+if (preg_match("/define\(\s*'PP_UPDATES_GITHUB_REPO'\s*,\s*'([^']+)'/", $constants, $mRepo)) {
+    $repo = $mRepo[1];
+}
 
 $opts = getopt('', ['out::']);
 $out  = (string) ($opts['out'] ?? $root . '/deliverables/promptpress-' . $version . '-' . date('Ymd-Hi') . '.zip');
@@ -137,10 +144,34 @@ if ($leaked !== []) {
     exit(1);
 }
 
+// UPD-GH — Checksum al lado del paquete, en formato `shasum`.
+//
+// GitHub no publica el SHA-256 de un asset, así que este archivo se sube como
+// SEGUNDO asset de la release y `UpdateService` lo lee para que el instalador
+// pueda comprobar la descarga antes de desplegar nada. Sin él la actualización
+// se instalaría igual (el checksum es opcional), pero un zip que llegue a
+// medias pasaría sin avisar.
+$sha = hash_file('sha256', $out);
+$shaFile = $out . '.sha256';
+file_put_contents($shaFile, $sha . '  ' . basename($out) . "\n");
+
 printf(
-    "OK  %s\n    %d archivos · %s · versión %s\n",
+    "OK  %s\n    %d archivos · %s · versión %s\n    sha256: %s\n    %s\n",
     $out,
     $count,
     number_format(filesize($out) / 1024 / 1024, 1) . ' MB',
-    $version
+    $version,
+    $sha,
+    basename($shaFile)
+);
+
+// Lo que hay que hacer con esto, para no tener que recordarlo cada vez.
+printf(
+    "\nPublicar la actualización:\n"
+    . "  1. Crear la release %s en https://github.com/%s/releases/new\n"
+    . "  2. Subir los DOS archivos como assets: el .zip y el .sha256\n"
+    . "  3. Publicarla (no dejarla en borrador)\n"
+    . "Las instalaciones la verán en Ajustes → Actualizaciones → Comprobar ahora.\n",
+    'v' . $version,
+    $repo
 );
