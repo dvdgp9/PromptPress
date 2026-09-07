@@ -80,6 +80,18 @@ final class App
                 redirect(base_url('install/'));
             }
 
+            // SESION-RECUERDA SR-3 — La sesión de PHP dura poco a propósito; si
+            // el usuario marcó «mantener la sesión iniciada», su cookie la
+            // reabre aquí, antes de que `requireAuth` lo mande al login. Solo
+            // en /admin y solo si no hay sesión: al público no le cuesta ni una
+            // consulta.
+            if (str_starts_with($path, '/admin') && !Auth::check()) {
+                $rememberedUser = RememberToken::resume();
+                if ($rememberedUser !== null) {
+                    Auth::login($rememberedUser);
+                }
+            }
+
             // UPD — Modo mantenimiento: mientras se despliega una actualización,
             // el público ve un 503 amable. El panel sigue abierto para que quien
             // actualiza pueda seguir (y restaurar si algo sale mal).

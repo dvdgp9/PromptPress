@@ -8402,3 +8402,120 @@ valor visual con 0 dependencias. Plan por fases.
 - [ ] IG-A2 Renderer de la cuadrícula
 - [ ] IG-A3 Alta en "Añadir" + controles del panel
 - [ ] IG-B* Feed real — bloqueado hasta decidir app central vs token
+
+---
+
+## SESION-RECUERDA — «Mantener la sesión iniciada» (07/09/2026)
+
+### Background and Motivation
+
+La sesión del panel se cae «cada tantos minutos». Causa real: `core/Session.php`
+abre la cookie con `lifetime => 0` (muere al cerrar el navegador) y PHP borra el
+fichero de sesión pasado `session.gc_maxlifetime`, que por defecto son **24
+minutos de inactividad**. Trabajar en el Studio con pausas = volver al login.
+
+El usuario pide una casilla «recordarme» en el login, de 30 o 60 días.
+
+### Key Challenges and Analysis
+
+**Lo que NO hay que hacer: alargar la sesión de PHP a 60 días.** Es la solución
+de una línea y es la mala:
+
+- El recolector de basura de PHP mira el `save_path`. En hosting compartido ese
+  directorio es común, y el GC de *otro* sitio borra nuestros ficheros mucho
+  antes de los 60 días: la sesión larga no es fiable.
+- Un `PPRESSSESSID` robado valdría 60 días y no hay forma de revocarlo.
+- Miles de ficheros de sesión vivos en disco.
+
+**Lo correcto es un token persistente aparte**, patrón selector/validador:
+
+- La cookie lleva `selector:validador`. El **selector** busca la fila (índice), el
+  **validador** se guarda solo hasheado (SHA-256) y se compara con `hash_equals`.
+  Así, quien lea la base de datos no puede fabricar una cookie válida.
+- La sesión de PHP se queda como está (corta): la cookie solo sirve para
+  *reabrirla* sola cuando ha caducado. Al reabrirla se regenera el id de sesión.
+- Se puede revocar: cerrar sesión borra la fila; cambiar la contraseña (cuando
+  exista esa pantalla) borrará todas las del usuario.
+
+**El detalle que rompe estas implementaciones: la rotación.** Lo canónico es
+renovar el validador en cada uso, pero si el navegador dispara varias peticiones
+a la vez (pestañas, assets), la segunda llega con el validador ya rotado y echa
+al usuario. Solución: se guarda también el validador anterior con una **ventana
+de gracia de 120 s**; dentro de ella los dos valen. Si no encaja ninguno de los
+dos, se borra esa fila (cookie robada o caducada) y a la pantalla de login.
+
+**Caducidad deslizante:** cada uso empuja `expires_at` otros 30 días. Quien entra
+cada semana no vuelve a ver el login; quien desaparece un mes, sí.
+
+**Duración:** 30 días. Es un panel de administración con permisos de publicar y
+de gastar en IA; 60 días en un portátil compartido es mucha cuerda. Va en una
+constante, así que cambiarlo es tocar un número.
+
+### High-level Task Breakdown
+
+- **SR-1** — Migración `database/migrations/2026_09_07_remember_tokens.php`:
+  tabla `auth_tokens` (`selector` UNIQUE, `validator_hash`, `prev_validator_hash`,
+  `prev_valid_until`, `user_id` FK, `expires_at`, `created_at`, `last_used_at`).
+  *Éxito:* `php database/migrate.php` la aplica y es idempotente.
+- **SR-2** — `Core\RememberToken`: `issue()`, `resume()`, `revokeCurrent()`,
+  `revokeAllFor($userId)`, `prune()`. Cookie `PPRESS_REMEMBER`, HttpOnly,
+  SameSite=Lax, Secure bajo HTTPS, 30 días.
+  *Éxito:* test CLI que emite, valida, rota, comprueba la gracia de 120 s y que
+  un validador falso borra la fila.
+- **SR-3** — Enganche: en `App::run()`, si la ruta es `/admin*` y no hay sesión,
+  intentar `resume()` antes de que el middleware redirija al login. Emisión en
+  `AuthController::login()` si viene la casilla; borrado en `logout()`.
+  *Éxito:* con la casilla marcada, borrar la cookie de sesión y recargar el
+  panel entra directo; sin marcarla, va al login.
+- **SR-4** — Casilla en `views/admin/auth/login.php` + microcopia en los 4
+  idiomas (`auth.remember`, `auth.remember_help`).
+  *Éxito:* `php scripts/i18n_lint.php` no añade pendientes nuevas.
+
+### Project Status Board
+
+- [x] SR-1 Tabla `auth_tokens`
+- [x] SR-2 `Core\RememberToken`
+- [x] SR-3 Enganche en login/logout/boot
+- [x] SR-4 Casilla y microcopia
+
+### Current Status / Progress Tracking (07/09/2026, Executor)
+
+| Archivo | Qué |
+|---|---|
+| `database/migrations/2026_09_07_remember_tokens.php` | tabla `auth_tokens` (FK a `users` con ON DELETE CASCADE) |
+| `core/RememberToken.php` | `issue` / `resume` / `revokeCurrent` / `revokeAllFor` / `prune` |
+| `core/App.php` | en `/admin*` y sin sesión, `resume()` antes de que el middleware redirija |
+| `app/Controllers/Admin/AuthController.php` | emite si viene la casilla; revoca siempre al entrar y al salir |
+| `views/admin/auth/login.php`, `admin/assets/css/admin.css`, `lang/admin/*.php` | casilla, ayuda y microcopia en es/en/fr/pt |
+| `tests/remember_token.php` | 17 comprobaciones |
+
+**Comprobado de punta a punta** (borrando a mano el fichero de sesión del disco,
+que es exactamente lo que hace el recolector de PHP a los ~24 min):
+
+| Caso | Resultado |
+|---|---|
+| Entrar con la casilla marcada | fila en `auth_tokens`, caduca a 30 días |
+| Sesión borrada del disco + recargar el panel | sigue dentro; mismo selector, validador nuevo, `last_used_at` puesto y caducidad empujada |
+| Cerrar sesión | la fila desaparece y `/admin/pages` manda al login |
+| Entrar SIN marcar la casilla | cero filas; al perder la sesión, al login |
+
+`scripts/i18n_lint.php` sigue en 41 pendientes (las de antes; ninguna nueva).
+
+### Executor's Feedback or Assistance Requests
+
+- No hay pantalla de cambio de contraseña en el proyecto, así que
+  `revokeAllFor()` queda escrita y probada pero sin llamador. El día que exista
+  esa pantalla **tiene que llamarla**: cambiar la contraseña sin invalidar los
+  tokens deja al ladrón dentro.
+- Sigue pendiente de decidir: `tests/admin_navigation_responsive.php:96` afirma
+  `PP_VERSION === '1.1.2'` y falla en cada release desde hace versiones.
+
+### Lessons
+
+- La sesión del panel se caía «cada tantos minutos» por `session.gc_maxlifetime`
+  (24 min por defecto), no por la cookie. Alargar la sesión de PHP no vale como
+  arreglo: el GC mira el `save_path`, que en hosting compartido es común, y el
+  de otro sitio borra los ficheros antes.
+- En un «recuérdame» con rotación de validador, el fallo clásico es echar al
+  usuario cuando el navegador dispara peticiones en paralelo. Se resuelve
+  guardando el validador anterior con una ventana de gracia (aquí, 120 s).

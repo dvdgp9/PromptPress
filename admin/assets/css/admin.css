@@ -3988,6 +3988,16 @@ body.pp-editor-mode #pp-page-form > .pp-ai-page-builder {
     cursor: pointer;
 }
 
+/* SESION-RECUERDA SR-4 — «Mantener la sesión iniciada» en el login. */
+.pp-login__remember { margin-bottom: 18px; }
+.pp-login__remember-help {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--pp-text-muted);
+}
+
 /* ===== AI Usage Dashboard (T6.4) ===== */
 .pp-ai-kpi-grid {
     display: grid;

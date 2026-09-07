@@ -54,6 +54,16 @@
                            autocomplete="current-password" required>
                 </div>
 
+                <?php /* SESION-RECUERDA SR-4 — Sin esto la sesión se cae a los
+                         ~24 minutos de inactividad y hay que volver a entrar. */ ?>
+                <div class="pp-form-group pp-login__remember">
+                    <label class="pp-checkbox-label">
+                        <input type="checkbox" name="remember" value="1">
+                        <span><?= e(__('auth.remember')) ?></span>
+                    </label>
+                    <small class="pp-login__remember-help"><?= e(__('auth.remember_help')) ?></small>
+                </div>
+
                 <button type="submit" class="pp-btn pp-btn--primary pp-btn--block">
                     <?= e(__('auth.submit')) ?>
                 </button>

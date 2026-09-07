@@ -127,6 +127,8 @@ return [
     'auth.error.invalid' => 'Identifiants incorrects.',
     'auth.logged_out' => 'Session fermée avec succès.',
     'auth.welcome' => 'Bienvenue, {nombre} !',
+    'auth.remember' => 'Rester connecté',
+    'auth.remember_help' => 'Pendant 30 jours sur ce navigateur. À ne pas cocher sur un ordinateur partagé.',
     'settings.title' => 'Réglages · Général',
     'settings.tabs_aria' => 'Sections des réglages',
     'settings.tab.general' => 'Général',

@@ -127,6 +127,8 @@ return [
     'auth.error.invalid' => 'Credenciais incorretas.',
     'auth.logged_out' => 'Sessão encerrada corretamente.',
     'auth.welcome' => 'Bem-vindo, {nombre}!',
+    'auth.remember' => 'Manter a sessão iniciada',
+    'auth.remember_help' => 'Durante 30 dias neste navegador. Não marques num computador partilhado.',
     'settings.title' => 'Definições · Geral',
     'settings.tabs_aria' => 'Secções de definições',
     'settings.tab.general' => 'Geral',

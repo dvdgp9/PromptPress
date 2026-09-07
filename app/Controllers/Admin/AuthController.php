@@ -4,6 +4,7 @@ namespace App\Controllers\Admin;
 
 use Core\Auth;
 use Core\CSRF;
+use Core\RememberToken;
 use Core\Request;
 use Core\Response;
 use Core\Session;
@@ -53,6 +54,15 @@ class AuthController
         }
 
         Auth::login((int) $user['id']);
+
+        // SESION-RECUERDA SR-3 — El token viejo de este navegador se tira
+        // siempre: si el usuario NO marca la casilla esta vez, está diciendo
+        // que ya no quiere que se le recuerde aquí.
+        RememberToken::revokeCurrent();
+        if (Request::post('remember') !== null) {
+            RememberToken::issue((int) $user['id']);
+        }
+
         Session::flash('success', __('auth.welcome', ['nombre' => $user['username']]));
         Response::redirect(base_url('admin/'));
     }
@@ -64,6 +74,7 @@ class AuthController
             CSRF::check();
         }
         Auth::logout();
+        RememberToken::revokeCurrent();
         Session::flash('success', __('auth.logged_out'));
         Response::redirect(base_url('admin/login'));
     }

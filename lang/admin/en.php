@@ -127,6 +127,8 @@ return [
     'auth.error.invalid' => 'Invalid credentials.',
     'auth.logged_out' => 'Logged out successfully.',
     'auth.welcome' => 'Welcome, {nombre}!',
+    'auth.remember' => 'Keep me signed in',
+    'auth.remember_help' => 'For 30 days on this browser. Leave it unchecked on a shared computer.',
     'settings.title' => 'Settings · General',
     'settings.tabs_aria' => 'Settings sections',
     'settings.tab.general' => 'General',

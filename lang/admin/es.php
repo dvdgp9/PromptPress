@@ -151,6 +151,8 @@ return [
     'auth.error.invalid'  => 'Credenciales incorrectas.',
     'auth.logged_out'     => 'Sesión cerrada correctamente.',
     'auth.welcome'        => '¡Bienvenido, {nombre}!',
+    'auth.remember'       => 'Mantener la sesión iniciada',
+    'auth.remember_help'  => 'Durante 30 días en este navegador. No lo marques en un equipo compartido.',
 
     // --- Ajustes · General --------------------------------------------------
     'settings.title'      => 'Ajustes · General',
