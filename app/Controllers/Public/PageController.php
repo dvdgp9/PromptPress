@@ -49,7 +49,9 @@ final class PageController
         }
 
         $cacheKey = CacheService::homeKey($siteId, $lang);
-        if (!self::pageHasForm((int) $page['id'])) {
+        // ADMIN-BAR — Con sesión iniciada la página lleva la barra, así que ni
+        // se lee ni se escribe la caché: lo cacheado es lo que ve el visitante.
+        if (!\App\Services\AdminBar::shouldRender() && !self::pageHasForm((int) $page['id'])) {
             $cached = CacheService::get($siteId, $cacheKey);
             if ($cached !== null) {
                 self::serve($cached, true);
@@ -128,7 +130,7 @@ final class PageController
             Response::notFound();
         }
 
-        if (!self::pageHasForm((int) $page['id'])) {
+        if (!\App\Services\AdminBar::shouldRender() && !self::pageHasForm((int) $page['id'])) {
             $cached = CacheService::get($siteId, $slug);
             if ($cached !== null) {
                 self::serve($cached, true);
@@ -298,15 +300,23 @@ final class PageController
             $h .= '<script src="' . e(base_url('public/js/pp-analytics.js')) . '?v=' . e((string) $ver) . '"'
                 . ' data-site="' . (int) $siteId . '" defer></script>';
         }
+        // ADMIN-BAR — La píldora para saltar al panel o al editor de ESTA
+        // página. Solo con sesión iniciada; para el visitante devuelve ''.
+        $adminBar = \App\Services\AdminBar::render($page);
+        $h .= $adminBar;
         $h .= '</body></html>';
 
         // T7.3: persistir en cache antes de servir. Las páginas con formularios
         // llevan CSRF por sesión, así que no se cachean como HTML estático.
-        $cacheable = $isCanvas ? !$canvasHasForm : !self::sectionsHaveForm($sections);
+        //
+        // ADMIN-BAR — Y una página CON barra no se guarda jamás: la clave de
+        // caché es sitio + slug + idioma, sin nada del usuario, así que se le
+        // acabaría sirviendo a los visitantes con los enlaces del panel dentro.
+        $cacheable = ($adminBar === '') && ($isCanvas ? !$canvasHasForm : !self::sectionsHaveForm($sections));
         if ($cacheKey !== null && $cacheable) {
             CacheService::put($siteId, $cacheKey, $h);
         }
-        self::serve($h, false);
+        self::serve($h, false, $adminBar !== '');
     }
 
     /**
@@ -371,9 +381,17 @@ final class PageController
         return $h;
     }
 
-    private static function serve(string $html, bool $hit): never
+    private static function serve(string $html, bool $hit, bool $private = false): never
     {
         header('X-PP-Cache: ' . ($hit ? 'HIT' : 'MISS'));
+        // ADMIN-BAR — Nuestra caché ya se ha saltado esta respuesta, pero
+        // delante puede haber una CDN o el proxy del hosting con su propia idea
+        // de qué guardar. Sin esto, un intermediario podría quedarse la página
+        // con la barra y servírsela a cualquiera (justo lo que nos pasó con la
+        // hoja de estilos en la 1.2.8, pero con consecuencias peores).
+        if ($private) {
+            header('Cache-Control: private, no-store, max-age=0');
+        }
         Response::html($html);
     }
 

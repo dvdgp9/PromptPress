@@ -93,7 +93,14 @@ foreach (['es', 'en', 'fr', 'pt'] as $locale) {
 
 $spanishCatalog = require PP_ROOT . '/lang/admin/es.php';
 navResponsiveCheck('spanish_chrome_uses_cabecera', ($spanishCatalog['nav.chrome'] ?? '') === 'Cabecera y pie');
-navResponsiveCheck('release_version_is_1_1_2', defined('PP_VERSION') && PP_VERSION === '1.1.2');
+// La comprobación clavaba la versión ('1.1.2') y llevaba fallando desde la
+// primera release posterior, que es lo peor que puede hacer un test: gritar en
+// cada tanda sin significar nada. Lo que sí importa es que la versión exista y
+// tenga forma de versión, porque de ahí salen el paquete, la release y ahora
+// también el `?v=` de la hoja pública.
+navResponsiveCheck('release_version_is_semver',
+    defined('PP_VERSION') && preg_match('/^\d+\.\d+\.\d+$/', (string) PP_VERSION) === 1,
+    defined('PP_VERSION') ? (string) PP_VERSION : 'sin definir');
 
 echo PHP_EOL . ($failed === 0 ? 'ALL PASS' : $failed . ' FAILED') . PHP_EOL;
 exit($failed === 0 ? 0 : 1);

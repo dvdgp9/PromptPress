@@ -151,6 +151,12 @@ return [
     'auth.error.invalid'  => 'Credenciales incorrectas.',
     'auth.logged_out'     => 'Sesión cerrada correctamente.',
     'auth.welcome'        => '¡Bienvenido, {nombre}!',
+    // ADMIN-BAR — la píldora que sale en la web con la sesión iniciada.
+    'bar.panel'       => 'Panel',
+    'bar.edit_studio' => 'Editar en el Studio',
+    'bar.edit_page'   => 'Editar esta página',
+    'bar.edit_post'   => 'Editar esta entrada',
+    'bar.hide'        => 'Plegar el acceso al panel',
     'auth.remember'       => 'Mantener la sesión iniciada',
     'auth.remember_help'  => 'Durante 30 días en este navegador. No lo marques en un equipo compartido.',
 

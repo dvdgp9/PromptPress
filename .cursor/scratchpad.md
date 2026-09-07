@@ -8672,3 +8672,117 @@ en vez de a ojo):
 | `wide` | 760 px | 163 y 123 px |
 | `full` (1280 px) | 1280 px | 163 y 123 px, alineadas a la izquierda |
 | `full` en móvil (375 px) | 375 px | 163 + 123 en una fila, sin desbordar |
+
+---
+
+## ADMIN-BAR — Entrar al panel desde la web (07/09/2026)
+
+### Background and Motivation
+
+Estando con la sesión iniciada y navegando la web como un visitante más, no hay
+forma de saltar al panel ni de editar la página que se está mirando: hay que
+escribir la URL del admin y volver a buscar la página. Se quiere un acceso
+directo a las dos cosas.
+
+### Key Challenges and Analysis
+
+**La trampa: las páginas públicas se cachean como HTML completo.**
+`CacheService::put($siteId, $cacheKey, $h)` guarda la página entera, con clave de
+sitio + slug + idioma y **sin nada del usuario**. Si la barra se pintara sin más
+dentro de `$h`, la primera visita del gestor dejaría en caché una página CON la
+barra y todos los visitantes verían los enlaces al panel. Por eso:
+
+- con sesión iniciada **no se lee ni se escribe la caché** (dos guardas de una
+  línea, junto a la que ya existe para las páginas con formulario), y
+- esa respuesta va con `Cache-Control: private, no-store`, porque delante puede
+  haber una CDN o un proxy del hosting con su propia idea de qué cachear (es lo
+  que acabamos de sufrir con `design.css`).
+
+**Barra flotante, no barra superior.** Una barra fija arriba como la de
+WordPress obliga a empujar el `<body>` y aquí las cabeceras son pegajosas y de
+diseño variable: se rompería en sitios distintos de formas distintas. Una
+píldora flotante abajo a la derecha —el mismo gesto que el chat del Studio— no
+toca el layout de nadie.
+
+**Un solo camino para páginas y entradas.** Una entrada del blog es una fila de
+`pages` con `page_type='article'`, así que se sirve por el MISMO
+`Public\PageController::show()`. Con una sola implementación quedan cubiertas
+las dos, cambiando a dónde apunta «Editar»:
+
+| página | editar lleva a |
+|---|---|
+| `render_mode=canvas` | `/admin/canvas/{id}` (Studio) |
+| `page_type=article` | `/admin/posts/{id}/edit` |
+| resto (`sections`) | `/admin/pages/{id}/edit` |
+
+**Sin assets nuevos.** El CSS y el JS de la barra van en línea. Un `.css` aparte
+volvería a depender de la caché de la hoja, que es justo el problema que
+acabamos de arreglar.
+
+### High-level Task Breakdown
+
+- **AB-1** — `App\Services\AdminBar::render(array $page, int $siteId): string`:
+  píldora flotante con «Panel» y «Editar esta página», el destino según la tabla
+  de arriba, `@media print` oculta y un botón para plegarla (recordado en
+  `localStorage`, que es cosa de ese navegador y de nadie más).
+  *Éxito:* devuelve cadena vacía sin sesión; con sesión, los dos enlaces
+  correctos para cada uno de los tres tipos.
+- **AB-2** — Enganche en `Public\PageController`: pintar antes de `</body>`,
+  saltarse la caché al leer y al escribir con sesión iniciada, y mandar
+  `Cache-Control: private, no-store` en esa respuesta.
+  *Éxito:* como visitante la página se sigue cacheando (`X-PP-Cache: HIT`) y no
+  trae barra; con sesión trae barra y responde `MISS` siempre.
+- **AB-3** — Microcopia en los cuatro idiomas del panel (la lee el gestor, no el
+  visitante, así que manda su idioma).
+- **AB-4** — Tests: presencia/ausencia según sesión, destino correcto por tipo de
+  página y —el importante— que una página servida con barra **no acaba en la
+  caché**.
+
+### Project Status Board
+
+- [x] AB-1 Servicio `AdminBar`
+- [x] AB-2 Enganche y guardas de caché
+- [x] AB-3 Microcopia
+- [x] AB-4 Tests
+
+### Current Status / Progress Tracking (07/09/2026, Executor)
+
+`app/Services/AdminBar.php` (nuevo), enganche en `Public\PageController`,
+microcopia en los cuatro idiomas y `tests/admin_bar.php` (17 comprobaciones).
+
+**Comprobado con curl, que es donde se ve lo que importa:**
+
+| | X-PP-Cache | barra |
+|---|---|---|
+| Visitante, 1ª visita | MISS | no |
+| Visitante, 2ª visita | HIT | no |
+| Gestor con sesión | MISS + `Cache-Control: private, no-store` | sí |
+| Fichero de caché tras pasar el gestor | — | **sin barra** |
+| Visitante después del gestor | HIT | no |
+
+Enlaces: una canvas lleva a `/admin/canvas/{id}` («Editar en el Studio»), una
+clásica a `/admin/pages/{id}/edit`, una entrada a `/admin/posts/{id}/edit`.
+La píldora mide 304×44 abajo a la derecha y se pliega a 48 px (recordado en
+`localStorage`).
+
+**Dos cosas que se cayeron por el camino, a propósito:**
+
+- El aviso de «Borrador» que llevaba la píldora era **código muerto**: la ruta
+  pública solo sirve `status='published'`, así que nunca se está mirando un
+  borrador desde la web. Fuera el badge, su microcopia y su test. El día que el
+  gestor pueda previsualizar borradores en la web de verdad, ese es el momento.
+- Añadí un `min-width:0` "para arreglar" que la píldora no encogía al plegarse.
+  Era un diagnóstico equivocado: medido con la transición anulada, encoge igual
+  con `min-width:auto` (304 → 48). Lo que congelaba el plegado era el panel del
+  navegador oculto, que no genera frames. Revertido.
+
+### Lessons
+
+- **El panel del navegador oculto no pinta**, y eso no solo deja las capturas en
+  blanco: `requestAnimationFrame` no llega y **las transiciones CSS se quedan
+  clavadas en su valor inicial**. Dos veces ya ha hecho parecer roto algo que
+  funcionaba. Cuando el panel esté oculto, medir con `transition:none` antes de
+  concluir que un estilo no se aplica.
+- Cualquier cosa que se pinte en una página pública según QUIÉN mire obliga a
+  saltarse `CacheService` **al leer y al escribir**: la clave es sitio + slug +
+  idioma, sin nada del usuario.
