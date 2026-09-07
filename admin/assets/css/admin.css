@@ -3988,6 +3988,11 @@ body.pp-editor-mode #pp-page-form > .pp-ai-page-builder {
     cursor: pointer;
 }
 
+/* RSV-TABS — Lista de servicios de un calendario en el panel del Studio. */
+.cvstudio-checklist { display: flex; flex-direction: column; gap: 2px; }
+.cvstudio-checklist .cvstudio-check { padding: 5px 2px; }
+.cvstudio-check__meta { color: #9ca3af; font-weight: 500; }
+
 /* SESION-RECUERDA SR-4 — «Mantener la sesión iniciada» en el login. */
 .pp-login__remember { margin-bottom: 18px; }
 .pp-login__remember-help {

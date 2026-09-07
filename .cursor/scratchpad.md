@@ -8519,3 +8519,129 @@ que es exactamente lo que hace el recolector de PHP a los ~24 min):
 - En un «recuérdame» con rotación de validador, el fallo clásico es echar al
   usuario cuando el navegador dispara peticiones en paralelo. Se resuelve
   guardando el validador anterior con una ventana de gracia (aquí, 120 s).
+
+---
+
+## RSV-TABS — Dos calendarios con pestañas (07/09/2026)
+
+### Background and Motivation
+
+Una clienta ofrece dos citas distintas: sesión gratis de 15 min y sesión
+completa de 1 h. Hoy un embed de calendario muestra UN servicio, así que para
+ofrecer las dos hay que poner dos calendarios seguidos, uno debajo del otro.
+Se quiere una pestaña para elegir.
+
+### Key Challenges and Analysis — VIABILIDAD: alta
+
+Casi todo lo difícil ya está hecho:
+
+- **El widget ya admite varios calendarios en la misma página.** El arranque de
+  `public/js/pp-booking-widget.js` es
+  `querySelectorAll('[data-pp-booking]:not([data-pp-booking-ready])')` y el
+  comentario del propio archivo ya contempla el caso. Cada contenedor lleva su
+  servicio, sus días y su ancho en atributos.
+- **No hay `id` duplicados que choquen.** El formulario del widget usa
+  `placeholder`, no `<label for>`, así que dos calendarios no se pisan el foco.
+- **`window.ppBookingMount(box)` ya existe** y vuelve a montar un contenedor en
+  caliente (lo usa el Studio al cambiar ancho o días).
+- Los ids de servicio ya se validan uno a uno con
+  `BookingEmbedRenderer::resolveServiceId()`, que descarta lo que no sea del
+  sitio o esté desactivado.
+
+**Decisión de diseño: un solo calendario, no dos escondidos.** Lo natural sería
+pintar N contenedores y enseñar uno; sale mejor pintar UNO y que la pestaña le
+cambie el `data-service` y lo remonte:
+
+- no se piden N disponibilidades al cargar la página, solo la del servicio
+  visible;
+- no hay que enseñar al arranque del widget a saltarse contenedores ocultos;
+- perder el formulario a medio rellenar al cambiar de pestaña es lo correcto:
+  esa cita ya no es la que se estaba pidiendo.
+
+**Sintaxis del placeholder:** `{{booking:3,7|width=full}}`. El `ref` de los
+placeholders acepta hoy `[a-z0-9\-_/]`; hay que añadir la coma. `{{booking:auto}}`
+y `{{booking:3}}` siguen significando lo mismo que ahora.
+
+**El orden de los ids ES el orden de las pestañas**, así que
+`canonicalPlaceholderRef()` no puede ordenarlos: guarda lo que el gestor eligió.
+
+**Lo que NO entra en esta tanda:** la sección clásica de reservas
+(`SectionRenderer::renderBooking()`, con su `service_id` en `SectionSchemas`).
+Necesita campo nuevo de esquema y formulario de admin, y las páginas de venta
+son canvas desde el pivote C10. Se queda con un servicio, y se dice.
+
+### High-level Task Breakdown
+
+- **RT-1** — `BookingEmbedRenderer::renderTabs(int $siteId, array $ids, array $opts)`:
+  barra `role="tablist"` (nombre del servicio + duración) + UN contenedor
+  `[data-pp-booking]` con el primer servicio. Con un solo id válido devuelve el
+  calendario de siempre, sin pestañas.
+  *Éxito:* con 2 ids sale una pestaña por servicio; con 1, nada cambia; con un
+  id desactivado, ese desaparece de las pestañas.
+- **RT-2** — Pestañas en `pp-booking-widget.js`: un listener delegado que cambia
+  `data-service`, actualiza `aria-selected` y llama a `ppBookingMount`. Teclado:
+  flechas y Home/End, como manda el patrón de tabs.
+  *Éxito:* cambiar de pestaña pide la disponibilidad del otro servicio y el
+  calendario se repinta sin recargar.
+- **RT-3** — Placeholder: coma en el `ref` de `expandPlaceholders()`, parseo de
+  la lista, validación id a id y orden preservado en
+  `canonicalPlaceholderRef()`.
+  *Éxito:* guardar en el Studio y recargar deja el placeholder igual, con los
+  ids en el mismo orden.
+- **RT-4** — Panel del Studio: elegir varios servicios (el orden de selección es
+  el de las pestañas), junto a ancho y días. Y en «Añadir → Calendario», la
+  opción de meterlo ya con varios.
+  *Éxito:* marcar dos servicios en el panel repinta el embed con dos pestañas y
+  sobrevive a recargar.
+- **RT-5** — Tests: `tests/booking_embed.php` (render con 1, 2 y con un id
+  inválido) y `tests/canvas_*` para el round-trip del placeholder.
+
+### Project Status Board
+
+- [x] RT-1 `renderTabs()`
+- [x] RT-2 Pestañas en el widget
+- [x] RT-3 Placeholder con lista de servicios
+- [x] RT-4 Panel del Studio y menú de insertar
+- [x] RT-5 Tests
+
+### Current Status / Progress Tracking (07/09/2026, Executor)
+
+| Archivo | Qué |
+|---|---|
+| `app/Modules/Booking/BookingEmbedRenderer.php` | `resolveServiceIds()` + barra de pestañas; `render()` acepta `service_ids` |
+| `public/js/pp-booking-widget.js` | la pestaña cambia `data-service` y remonta; teclado del patrón WAI |
+| `app/Services/Canvas/CanvasService.php` | coma en el `ref` (TRES regex), expansión y forma canónica sin reordenar |
+| `app/Controllers/Admin/CanvasController.php` | `insertBooking` con lista; el overlay pide recargar cuando aparecen/desaparecen pestañas |
+| `admin/assets/js/canvas-studio.js` | casillas de servicios en el panel; reapertura del panel tras recargar |
+| `app/Services/DesignSystem.php`, `Microcopy.php`, `lang/admin/*.php`, `views/admin/canvas/studio.php` | estilos, `booking.tabs_label` y microcopia |
+
+**La trampa que casi se lleva la función por delante:** el `ref` del placeholder
+se valida en TRES sitios, y el tercero es `normalizeEditedSectionHtml()`, que a
+lo que no reconoce **no lo ignora: lo borra**. Sin la coma también ahí, guardar
+desde el Studio se habría llevado el calendario entero.
+
+**Comprobado en navegador** (dos servicios de prueba, «Sesión gratuita 15 min» y
+«Sesión completa 60 min»):
+
+| Caso | Resultado |
+|---|---|
+| `{{booking:281,282}}` | dos pestañas, `role="tablist"`, UN solo calendario montado |
+| Pulsar la segunda pestaña | `data-service` 281→282, el widget se remonta y enseña «Sesión completa»; `aria-selected` y `aria-labelledby` siguen a la pestaña |
+| Flechas del teclado | mueven el foco SIN cambiar de calendario (sigue en 282) |
+| Enter | ahí sí cambia (a 281) |
+| Desmarcar un servicio en el panel | `booking:281`, las pestañas desaparecen y la parte se renombra «Calendario: Sesión gratuita» |
+| Volver a marcarlo | `booking:281,282`, pestañas de vuelta, parte «Calendario: 2 servicios» |
+| Quitar y devolver el primero | queda `282,281`: el orden es el de marcado, que es el de las pestañas |
+
+`tests/booking_embed.php` sube con 9 comprobaciones nuevas (orden, repetidos,
+inexistentes, desactivados, una pestaña sola, y el round-trip del Studio).
+
+### Lessons
+
+- Recargar la vista previa deja el panel del Studio **apuntando a nada**: la
+  selección vive dentro del iframe y la recarga se la lleva. Si una acción del
+  panel obliga a recargar, hay que volver a seleccionar con `panel: true` o el
+  siguiente cambio del usuario no hace nada (y parece que el panel está roto).
+- El `ref` de un placeholder canvas se valida en tres sitios de `CanvasService`
+  (`expandPlaceholders`, `canonicalizePlaceholders` y `normalizeEditedSectionHtml`).
+  El tercero BORRA lo que no encaja. Ver [[canvas-embed-options]].

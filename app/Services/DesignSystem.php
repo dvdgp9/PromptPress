@@ -2178,6 +2178,43 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
    mentiría: se elegía "completo" y la previa seguía enseñando una tarjeta. */
 .pp-booking-embed--w-wide { max-width: 760px; }
 .pp-booking-embed--w-full { max-width: none; }
+/* RSV-TABS — Varios servicios en un mismo calendario (p. ej. «15 min gratis» y
+   «sesión completa»). La barra manda sobre UN calendario, que cambia de
+   servicio al pulsar; el ancho lo hereda del embed para que pestañas y
+   calendario midan lo mismo. */
+.pp-booking-tabs { max-width: 420px; width: 100%; box-sizing: border-box; }
+.pp-booking-tabs--w-wide { max-width: 760px; }
+.pp-booking-tabs--w-full { max-width: none; }
+.pp-booking-tabs__bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.pp-booking-tabs__tab {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-card, 14px);
+    background: var(--pp-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    padding: 10px 14px;
+    cursor: pointer;
+}
+.pp-booking-tabs__tab:hover { border-color: var(--pp-primary); }
+.pp-booking-tabs__tab[aria-selected="true"] {
+    background: var(--pp-primary);
+    border-color: var(--pp-primary);
+    color: var(--pp-on-primary, #fff);
+}
+.pp-booking-tabs__name { font-weight: 700; font-size: .95rem; }
+.pp-booking-tabs__meta { font-size: .8rem; opacity: .78; }
+.pp-booking-tabs .pp-booking-embed { max-width: none; }
 
 
 /* Generic */

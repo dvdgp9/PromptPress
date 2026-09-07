@@ -1059,6 +1059,13 @@ final class Microcopy
         // (I18N-FULL T0.2). Las claves `booking.*` que empiezan por los
         // nombres del widget se sirven al JS desde la API.
         // ===================================================================
+        // RSV-TABS — nombre del grupo de pestañas para quien navega con lector
+        // de pantalla: sin esto solo oiría «lista de pestañas».
+        'booking.tabs_label' => [
+            'es' => 'Elige el tipo de cita', 'en' => 'Choose the type of appointment',
+            'ca' => 'Tria el tipus de cita', 'gl' => 'Escolle o tipo de cita',
+            'fr' => 'Choisissez le type de rendez-vous', 'pt' => 'Escolhe o tipo de marcação',
+        ],
         'booking.loading' => [
             'es' => 'Cargando disponibilidad…', 'en' => 'Loading availability…',
             'ca' => 'Carregant disponibilitat…', 'gl' => 'Cargando dispoñibilidade…',

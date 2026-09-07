@@ -239,6 +239,19 @@
       return;
     }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
+    // RSV-TABS — la barra de pestañas la pinta el servidor desde el
+    // placeholder, así que remontar el widget no basta: hay que repedir la
+    // página. Va detrás del guardado que el propio overlay acaba de lanzar.
+    if (d.type === 'reload-preview') {
+      // Al recargar, el panel se queda sin nada seleccionado dentro del iframe
+      // y el siguiente cambio no tendría a quién aplicarse: hay que volver a
+      // abrirlo sobre la misma parte.
+      pendingPanelReopen = true;
+      var pendingTabs = flushSectionSave();
+      if (pendingTabs && pendingTabs.then) pendingTabs.then(reloadPreview);
+      else reloadPreview();
+      return;
+    }
     if (d.type === 'image-clicked') openMediaModal();
     if (d.type === 'element-selected') {
       selectedElementContext = (d.kind || 'elemento') + (d.props && d.props.text ? ' con texto "' + d.props.text.slice(0, 180) + '"' : '');
@@ -276,7 +289,11 @@
       }
       if (selectedSection) {
         suppressChatFocusOnce = true;
-        iframe.contentWindow.postMessage({ source: 'pp-studio-parent', type: 'select', id: selectedSection }, '*');
+        iframe.contentWindow.postMessage({
+          source: 'pp-studio-parent', type: 'select', id: selectedSection,
+          panel: pendingPanelReopen
+        }, '*');
+        pendingPanelReopen = false;
       }
       lastScrollY = 0;
       // El destello va después del scroll restaurado: manda la vista a lo que
@@ -1091,8 +1108,23 @@
     // Qué servicio enseña este calendario. `auto` = el primero activo, que es
     // como lo inserta el botón "+ Calendario" si no eliges ninguno.
     var bkServices = Array.isArray(window.PP_BOOKING_SERVICES) ? window.PP_BOOKING_SERVICES : [];
-    var bkServiceBlock = (bk && bkServices.length)
-      ? '<div class="cvstudio-field"><label for="ep-booking-service">' + pp.t('js.cv.booking_service') + '</label>'
+    // RSV-TABS — con dos o más servicios se marcan con casillas: marcar varios
+    // es lo que pone las pestañas. El ORDEN de marcado es el de las pestañas,
+    // por eso `bookingPicked` es una lista y no un conjunto.
+    var bkServiceBlock = '';
+    if (bk && bkServices.length > 1) {
+      bookingPicked = bookingRefToList(bk.service);
+      bkServiceBlock = '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_services') + '</label>'
+        + '<div class="cvstudio-checklist" id="ep-booking-services">'
+        + bkServices.map(function (s) {
+            var on = bookingPicked.indexOf(String(s.id)) >= 0;
+            return '<label class="cvstudio-check"><input type="checkbox" data-booking-pick="' + s.id + '"'
+              + (on ? ' checked' : '') + '> ' + esc(s.name)
+              + ' <span class="cvstudio-check__meta">' + s.duration_min + ' min</span></label>';
+          }).join('')
+        + '</div><small class="cvstudio-hint">' + pp.t('js.cv.booking_services_hint') + '</small></div>';
+    } else if (bk && bkServices.length === 1) {
+      bkServiceBlock = '<div class="cvstudio-field"><label for="ep-booking-service">' + pp.t('js.cv.booking_service') + '</label>'
         + '<select id="ep-booking-service">'
           + '<option value="auto"' + (bk.service === 'auto' ? ' selected' : '') + '>'
             + pp.t('js.cv.booking_auto', { servicio: bkServices[0].name }) + '</option>'
@@ -1100,8 +1132,8 @@
               return '<option value="' + s.id + '"' + (String(bk.service) === String(s.id) ? ' selected' : '') + '>'
                 + esc(s.name) + ' · ' + s.duration_min + ' min</option>';
             }).join('')
-        + '</select></div>'
-      : '';
+        + '</select></div>';
+    }
     var bookingBlock = bk
       ? bkServiceBlock
         + '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_width') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
@@ -1134,6 +1166,44 @@
   // Las claves son tipos internos; solo la etiqueta se traduce.
   var CRUMB_LABELS = { text: pp.t('js.chrome.text'), box: pp.t('js.cv.box'), link: pp.t('chrome.button_js'), image: pp.t('js.post_editor.image'), section: pp.t('js.cv.section') };
   var panelState = { chain: [], index: -1, sectionLabel: '', sectionId: '' };
+
+  // ----------------------------------------------------------------
+  // RSV-TABS — Qué servicios enseña un calendario. La referencia guardada es
+  // `auto`, un id, o una lista `3,7`; en la lista, el orden importa porque es
+  // el de las pestañas que verá el visitante.
+  // ----------------------------------------------------------------
+  var bookingPicked = [];
+
+  // Recargar la vista por unas pestañas no puede costarle al gestor volver a
+  // pinchar la parte para seguir tocando el mismo panel.
+  var pendingPanelReopen = false;
+
+  function bookingRefToList(ref) {
+    return String(ref || '')
+      .split(',')
+      .map(function (x) { return x.trim(); })
+      .filter(function (x) { return /^\d+$/.test(x); });
+  }
+
+  function applyBookingServices() {
+    var list = Array.isArray(window.PP_BOOKING_SERVICES) ? window.PP_BOOKING_SERVICES : [];
+    if (!list.length) return;
+
+    // Sin ninguno marcado, `auto`: el primer servicio activo, que puede cambiar
+    // más adelante sin dejar la página apuntando a un calendario que ya no está.
+    var ref = bookingPicked.length ? bookingPicked.join(',') : 'auto';
+    var first = bookingPicked.length
+      ? list.filter(function (s) { return String(s.id) === bookingPicked[0]; })[0]
+      : list[0];
+    if (!first) return;
+
+    var label = bookingPicked.length > 1
+      ? pp.t('js.cv.booking_section_label_multi', { n: bookingPicked.length })
+      : pp.t('js.cv.booking_section_label', { servicio: first.name });
+
+    applyOp('bookingservice', { ref: ref, resolved: first.id, label: label });
+    renameSection(panelState.sectionId, label);
+  }
 
   function renderCrumbs(chain, active, sectionLabel) {
     var parts = ['<button type="button" class="cvstudio-crumb" data-scope="-1" title="' + pp.t('js.cv.clear_scope') + '">' + pp.t('js.onb.page') + '</button>'];
@@ -1267,6 +1337,21 @@
     panel.querySelectorAll('[data-scope]').forEach(function (btn) {
       btn.addEventListener('click', function () { selectScope(parseInt(btn.dataset.scope, 10)); });
     });
+
+    // RSV-TABS — casillas: cada cambio reescribe la referencia entera
+    // (`auto`, `3`, o `3,7`) conservando el orden en que se fueron marcando.
+    var bkList = panel.querySelector('#ep-booking-services');
+    if (bkList) {
+      bkList.addEventListener('change', function (e) {
+        var input = e.target.closest ? e.target.closest('[data-booking-pick]') : null;
+        if (!input) return;
+        var id = String(input.dataset.bookingPick || '');
+        var at = bookingPicked.indexOf(id);
+        if (input.checked && at < 0) bookingPicked.push(id);
+        if (!input.checked && at >= 0) bookingPicked.splice(at, 1);
+        applyBookingServices();
+      });
+    }
 
     // RSV-UI — cambiar de servicio: el panel resuelve `auto` al primer servicio
     // activo para que el widget pueda remontarse ya, y manda el nombre nuevo

@@ -184,6 +184,56 @@ check_be('placeholder con servicio inexistente deja un comentario, no un hueco r
 
 check_be('modulesHint anuncia las reservas', str_contains(CanvasService::modulesHint($siteId), '{{booking:auto}}'));
 
+// ---------------------------------------------------------------------------
+// RSV-TABS — Varios servicios en un mismo calendario, con pestañas.
+// ---------------------------------------------------------------------------
+$otherId = ServiceStore::create($siteId, ['name' => 'zzz Test embed segundo', 'duration_min' => 60]);
+
+$ids = BookingEmbedRenderer::resolveServiceIds($siteId, $activeId . ',' . $otherId);
+check_be('la lista de servicios conserva el orden que eligió el gestor',
+    $ids === [$activeId, $otherId], json_encode($ids));
+check_be('la lista al revés también', 
+    BookingEmbedRenderer::resolveServiceIds($siteId, $otherId . ',' . $activeId) === [$otherId, $activeId]);
+check_be('se caen los repetidos, los inexistentes y los desactivados',
+    BookingEmbedRenderer::resolveServiceIds($siteId, $activeId . ',' . $activeId . ',999999,' . $offId) === [$activeId],
+    json_encode(BookingEmbedRenderer::resolveServiceIds($siteId, $activeId . ',' . $activeId . ',999999,' . $offId)));
+
+$tabs = CanvasService::expandPlaceholders('{{booking:' . $activeId . ',' . $otherId . '}}', $siteId, $has);
+check_be('con dos servicios sale una barra de pestañas',
+    str_contains($tabs, 'data-pp-booking-tabs')
+    && substr_count($tabs, 'role="tab"') === 2
+    && str_contains($tabs, 'role="tablist"'), $tabs);
+// UN calendario, no dos escondidos: es lo que evita pedir dos disponibilidades
+// nada más abrir la página.
+check_be('las pestañas mandan sobre un solo calendario',
+    substr_count($tabs, 'data-pp-booking ') === 1 || substr_count($tabs, 'data-pp-booking\"') === 1
+    || substr_count($tabs, '<div class="pp-booking-embed') === 1, $tabs);
+check_be('la primera pestaña es la que se enseña',
+    str_contains($tabs, 'data-service="' . $activeId . '" data-lang')
+    && str_contains($tabs, 'aria-selected="true"')
+    && substr_count($tabs, 'aria-selected="true"') === 1, $tabs);
+
+// Una pestaña sola no es una pestaña.
+$oneLeft = CanvasService::expandPlaceholders('{{booking:' . $activeId . ',' . $offId . '}}', $siteId, $has);
+check_be('si solo sobrevive un servicio, no hay pestañas',
+    !str_contains($oneLeft, 'data-pp-booking-tabs') && str_contains($oneLeft, 'data-pp-booking'), $oneLeft);
+
+// Round-trip del Studio: sin esto, guardar borraba el calendario entero, porque
+// `normalizeEditedSectionHtml` tira lo que no reconoce como placeholder.
+$tabsBack = CanvasService::normalizeEditedSectionHtml(
+    CanvasService::expandPlaceholders('{{booking:' . $activeId . ',' . $otherId . '|width=full}}', $siteId, $has)
+);
+check_be('el embed con pestañas vuelve a ser su placeholder al guardar',
+    str_contains($tabsBack, '{{booking:' . $activeId . ',' . $otherId . '|width=full}}'), $tabsBack);
+
+$dirty = CanvasService::normalizeEditedSectionHtml(
+    CanvasService::expandPlaceholders('{{booking:' . $otherId . ',' . $activeId . ',' . $otherId . '}}', $siteId, $has)
+);
+check_be('la forma canónica quita repetidos y NO reordena',
+    str_contains($dirty, '{{booking:' . $otherId . ',' . $activeId . '}}'), $dirty);
+
+ServiceStore::delete($siteId, $otherId);
+
 // El bloque que inserta el botón "+ Calendario" del Studio: su id lleva un
 // sufijo aleatorio, así que el nombre visible tiene que salir de `data-pp-label`
 // o "Partes de esta página" mostraría "Booking 3 cf4f44f6".

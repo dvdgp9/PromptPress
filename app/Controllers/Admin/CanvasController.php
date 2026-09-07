@@ -338,7 +338,17 @@ final class CanvasController
         // menú por defecto para no obligar a elegir.
         $raw = trim((string) Request::post('service_id', ''));
         $isAuto = ($raw === '' || $raw === 'auto' || $raw === '0');
-        $serviceId = \App\Modules\Booking\BookingEmbedRenderer::resolveServiceId($siteId, $isAuto ? 0 : (int) $raw);
+
+        // RSV-TABS — "3,7" inserta un calendario con una pestaña por servicio.
+        // Si de la lista solo sobrevive uno, entra como calendario normal: una
+        // pestaña sola no es una pestaña.
+        $tabIds = $isAuto || !str_contains($raw, ',')
+            ? []
+            : \App\Modules\Booking\BookingEmbedRenderer::resolveServiceIds($siteId, $raw);
+
+        $serviceId = $tabIds !== []
+            ? $tabIds[0]
+            : \App\Modules\Booking\BookingEmbedRenderer::resolveServiceId($siteId, $isAuto ? 0 : (int) $raw);
         if ($serviceId === null) {
             Response::json(['ok' => false, 'error' => __('cv.booking.no_services')], 422);
         }
@@ -357,9 +367,12 @@ final class CanvasController
 
         // Se guarda `auto` si el gestor no eligió servicio: así la página sigue
         // funcionando si más adelante cambia cuál es el primer servicio activo.
-        $ref = $isAuto ? 'auto' : (string) $serviceId;
+        $ref = count($tabIds) > 1
+            ? implode(',', $tabIds)
+            : ($isAuto ? 'auto' : (string) $serviceId);
         $sectionId = trim((string) Request::post('section', ''));
-        $embedId = 'booking-' . $ref . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+        // El id de la sección no puede llevar comas: es un `data-pp-section`.
+        $embedId = 'booking-' . str_replace(',', '-', $ref) . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
         $embed = '<section data-pp-section="' . $embedId . '" data-pp-label="' . e($label) . '"'
             . ' class="pp-canvas-booking-embed">{{booking:' . $ref . '}}</section>';
         $html = self::insertAtRequestedPosition($canvas['html'], $embed, $sectionId);
@@ -1730,7 +1743,9 @@ final class CanvasController
       if(!svcEmbed) return;
       var wanted = String(msg.value.ref || '');
       var resolved = parseInt(msg.value.resolved, 10) || 0;
-      if(!/^(auto|\d{1,10})$/.test(wanted) || resolved <= 0) return;
+      // RSV-TABS — `auto`, un id, o una lista `3,7` (pestañas).
+      if(!/^(auto|\d{1,10}(,\d{1,10})*)$/.test(wanted) || resolved <= 0) return;
+      var wasTabs = /,/.test(bookingOpts(svcEmbed).service);
       setBookingService(svcEmbed, wanted);
       var svcBox = svcEmbed.matches('[data-pp-booking]') ? svcEmbed : svcEmbed.querySelector('[data-pp-booking]');
       if(svcBox){
@@ -1746,6 +1761,10 @@ final class CanvasController
         svcSec.setAttribute('data-pp-label', msg.value.label);
       }
       if(!msg.preview) serializeAndSave(svcSec);
+      // RSV-TABS — La barra de pestañas la pinta el servidor a partir del
+      // placeholder, así que cuando aparece o desaparece no basta con remontar
+      // el widget: hay que volver a pedir la página.
+      if(!msg.preview && (wasTabs || /,/.test(wanted))) post('reload-preview');
       return;
     }
 

@@ -333,6 +333,15 @@ $icon = static function (string $name): string {
                 <?= e(__('cv.booking.auto')) ?>
                 <span class="cvstudio-insert__meta"><?= e($bookingServices[0]['name']) ?></span>
               </button>
+              <?php /* RSV-TABS — Dos o más servicios (p. ej. «15 min gratis» y
+                       «sesión completa») en un solo calendario con pestañas. */ ?>
+              <?php if (count($bookingServices) > 1): ?>
+              <button type="button" class="cvstudio-menu__item"
+                      data-booking-service="<?= e(implode(',', array_map(static fn(array $s): string => (string) (int) $s['id'], $bookingServices))) ?>">
+                <?= e(__('cv.booking.all_tabs')) ?>
+                <span class="cvstudio-insert__meta"><?= count($bookingServices) ?></span>
+              </button>
+              <?php endif; ?>
               <strong class="cvstudio-insert__title"><?= e(__('cv.booking.pick_service')) ?></strong>
               <?php foreach ($bookingServices as $svc): ?>
                 <button type="button" class="cvstudio-menu__item" data-booking-service="<?= (int) $svc['id'] ?>">

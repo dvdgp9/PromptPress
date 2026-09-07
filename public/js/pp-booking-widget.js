@@ -619,6 +619,83 @@
     }
     window.ppBookingMount = mountBox;
 
+    /**
+     * RSV-TABS — Pestañas: un solo calendario que cambia de servicio.
+     *
+     * No hay N calendarios escondidos: la pestaña reescribe `data-service` del
+     * único contenedor y lo remonta, así que la página solo pide la
+     * disponibilidad del servicio que se está mirando.
+     */
+    function tabsWrapOf(el) {
+        for (var n = el; n; n = n.parentElement) {
+            if (n.hasAttribute && n.hasAttribute('data-pp-booking-tabs')) return n;
+        }
+        return null;
+    }
+
+    function tabsOf(wrap) {
+        return Array.prototype.slice.call(wrap.querySelectorAll('[role="tab"]'));
+    }
+
+    function activateTab(tab) {
+        var wrap = tabsWrapOf(tab);
+        if (!wrap) return;
+        var box = wrap.querySelector('[data-pp-booking]');
+        var sid = tab.getAttribute('data-service');
+        if (!box || !sid) return;
+
+        tabsOf(wrap).forEach(function (t) {
+            var on = t === tab;
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+            t.setAttribute('tabindex', on ? '0' : '-1');
+            t.classList.toggle('is-on', on);
+        });
+        if (tab.id) box.setAttribute('aria-labelledby', tab.id);
+
+        // Ya se está enseñando: no hay por qué tirar el formulario a medias de
+        // quien solo ha vuelto a pulsar la pestaña en la que estaba.
+        if (box.getAttribute('data-service') === sid) return;
+
+        box.setAttribute('data-service', sid);
+        box.removeAttribute('data-pp-booking-ready');
+        mountBox(box);
+    }
+
+    // El script se incluye una vez por embed, así que puede ejecutarse dos
+    // veces en la misma página: sin esta bandera, cada clic se atendería dos
+    // veces (y el calendario se montaría dos veces seguidas).
+    if (!window.__ppBookingTabsWired) {
+        window.__ppBookingTabsWired = 1;
+
+        document.addEventListener('click', function (e) {
+            var tab = e.target && e.target.closest ? e.target.closest('[role="tab"][data-service]') : null;
+            if (tab && tabsWrapOf(tab)) activateTab(tab);
+        });
+
+        // Patrón de pestañas de la WAI: las flechas MUEVEN el foco y es Enter o
+        // Espacio quien cambia de calendario. Activar al enfocar dispararía una
+        // consulta de disponibilidad por cada tecla.
+        document.addEventListener('keydown', function (e) {
+            var tab = e.target && e.target.closest ? e.target.closest('[role="tab"][data-service]') : null;
+            if (!tab) return;
+            var wrap = tabsWrapOf(tab);
+            if (!wrap) return;
+
+            var tabs = tabsOf(wrap);
+            var i = tabs.indexOf(tab);
+            var next = -1;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % tabs.length;
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = tabs.length - 1;
+            else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { activateTab(tab); e.preventDefault(); return; }
+            if (next < 0) return;
+
+            e.preventDefault();
+            tabs[next].focus();
+        });
+    }
+
     var scriptService = parseInt(script.getAttribute('data-service') || '0', 10);
 
     if (scriptService) {

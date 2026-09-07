@@ -110,6 +110,33 @@ final class BookingEmbedRenderer
     }
 
     /**
+     * RSV-TABS — Lista ordenada de servicios para un embed con pestañas.
+     *
+     * El ORDEN es el que eligió el gestor, porque es el orden de las pestañas:
+     * aquí no se ordena ni se reordena nada. Se quitan los repetidos y los que
+     * no existen, no son del sitio o están desactivados, con el mismo criterio
+     * que `resolveServiceId()`: mejor una pestaña menos que una pestaña que
+     * lleva a un calendario que no debería estar ahí.
+     *
+     * @param array<int,int|string>|string|null $raw ids, o la lista "3,7" tal
+     *        y como viene del placeholder
+     * @return int[]
+     */
+    public static function resolveServiceIds(int $siteId, array|string|null $raw): array
+    {
+        $wanted = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $valid = array_column(self::embeddableServices($siteId), 'id');
+
+        $out = [];
+        foreach ($wanted as $candidate) {
+            $id = (int) trim((string) $candidate);
+            if ($id <= 0 || in_array($id, $out, true) || !in_array($id, $valid, true)) continue;
+            $out[] = $id;
+        }
+        return $out;
+    }
+
+    /**
      * HTML del calendario embebido.
      *
      * `lang` es el idioma de la PÁGINA que se está pintando, y viaja al widget
@@ -118,7 +145,11 @@ final class BookingEmbedRenderer
      * más y recibía el idioma del SERVICIO, que nace en castellano: un
      * calendario en una página francesa hablaba en español.
      *
-     * @param array{service_id?:int|string|null, days?:int|string|null, lang?:string|null, width?:string|null} $opts
+     * RSV-TABS — `service_ids` (dos o más) pinta una pestaña por servicio y UN
+     * solo calendario, que cambia de servicio al pulsar. No son N calendarios
+     * escondidos: así la página solo pide la disponibilidad del que se ve.
+     *
+     * @param array{service_id?:int|string|null, service_ids?:array<int,int|string>|string|null, days?:int|string|null, lang?:string|null, width?:string|null} $opts
      * @return string cadena vacía si no hay nada que pintar
      */
     public static function render(int $siteId, array $opts = []): string
@@ -126,9 +157,19 @@ final class BookingEmbedRenderer
         if ($siteId <= 0 || !ModuleRegistry::isEnabled($siteId, 'booking')) {
             return '';
         }
-        $serviceId = self::resolveServiceId($siteId, $opts['service_id'] ?? null);
+
+        // Con varios servicios manda la lista; si de ella no sobrevive ninguno
+        // (todos borrados o desactivados) se cae al camino de siempre, que es
+        // el que sabe devolver vacío sin dejar un hueco roto.
+        $tabIds = self::resolveServiceIds($siteId, $opts['service_ids'] ?? null);
+        $serviceId = $tabIds !== []
+            ? $tabIds[0]
+            : self::resolveServiceId($siteId, $opts['service_id'] ?? null);
         if ($serviceId === null) {
             return '';
+        }
+        if (count($tabIds) < 2) {
+            $tabIds = [];   // una sola pestaña no es una pestaña
         }
 
         $days = (int) ($opts['days'] ?? self::DEFAULT_DAYS);
@@ -162,15 +203,28 @@ final class BookingEmbedRenderer
         // Clases propias, no las del widget: el CSS de `.ppbk` lo inyecta el JS
         // y aquí puede no haber JS nunca. `.pp-booking-embed` vive en el CSS
         // público (DesignSystem), que la previsualización sí carga.
-        $h  = '<div class="pp-booking-embed pp-booking-embed--w-' . $width . '" data-pp-booking';
+        $uid = 'pp-bk-' . (++self::$seq);
+        $tabs = $tabIds !== [] ? self::renderTabBar($siteId, $tabIds, $uid, $width, $lang) : '';
+
+        $h  = $tabs !== '' ? '<div class="pp-booking-tabs pp-booking-tabs--w-' . $width . '" data-pp-booking-tabs>' . $tabs : '';
+        $h .= '<div class="pp-booking-embed pp-booking-embed--w-' . $width . '" data-pp-booking';
         $h .= ' data-service="' . $serviceId . '"';
         $h .= ' data-lang="' . e($lang) . '"';
         $h .= ' data-width="' . $width . '"';
-        $h .= ' data-days="' . $days . '">';
+        $h .= ' data-days="' . $days . '"';
+        if ($tabs !== '') {
+            // Un solo panel para todas las pestañas: el `aria-labelledby` dice
+            // cuál lo está mandando, y el JS lo mueve al cambiar.
+            $h .= ' id="' . $uid . '-panel" role="tabpanel" aria-labelledby="' . $uid . '-tab-' . $tabIds[0] . '"';
+        }
+        $h .= '>';
         $h .= '<p class="pp-booking-embed__name">' . e($name) . '</p>';
         $h .= '<p class="pp-booking-embed__meta">' . e($sub) . '</p>';
         $h .= '<p class="pp-booking-embed__meta">' . e(\App\Services\Microcopy::t('booking.loading', $lang)) . '</p>';
         $h .= '</div>';
+        if ($tabs !== '') {
+            $h .= '</div>';
+        }
         $h .= '<noscript><p class="pp-booking-embed__noscript">'
             . e(\App\Services\Microcopy::t('booking.noscript', $lang))
             . '</p></noscript>';
@@ -178,6 +232,46 @@ final class BookingEmbedRenderer
 
         return $h;
     }
+
+    /**
+     * Barra de pestañas. Una por servicio, con su nombre y su duración: elegir
+     * entre «15 min gratis» y «1 h» es justo lo que hay que poder leer sin
+     * abrir nada.
+     *
+     * @param int[] $ids
+     */
+    private static function renderTabBar(int $siteId, array $ids, string $uid, string $width, string $lang): string
+    {
+        $byId = [];
+        foreach (self::embeddableServices($siteId) as $s) {
+            $byId[$s['id']] = $s;
+        }
+
+        $h = '<div class="pp-booking-tabs__bar" role="tablist" aria-label="'
+            . e(\App\Services\Microcopy::t('booking.tabs_label', $lang)) . '">';
+        foreach ($ids as $i => $id) {
+            $s = $byId[$id] ?? null;
+            if ($s === null) continue;
+            $meta = $s['duration_min'] . ' min';
+            if (trim($s['price_label']) !== '') {
+                $meta .= ' · ' . $s['price_label'];
+            }
+            $on = $i === 0;
+            $h .= '<button type="button" class="pp-booking-tabs__tab' . ($on ? ' is-on' : '') . '"'
+                . ' id="' . $uid . '-tab-' . $id . '"'
+                . ' role="tab" data-service="' . $id . '"'
+                . ' aria-controls="' . $uid . '-panel"'
+                . ' aria-selected="' . ($on ? 'true' : 'false') . '"'
+                . ' tabindex="' . ($on ? '0' : '-1') . '">'
+                . '<span class="pp-booking-tabs__name">' . e($s['name']) . '</span>'
+                . '<span class="pp-booking-tabs__meta">' . e($meta) . '</span>'
+                . '</button>';
+        }
+        return $h . '</div>';
+    }
+
+    /** Distingue las pestañas de dos embeds en la misma página. */
+    private static int $seq = 0;
 
     /** Idioma en el que se pinta el texto sin JS. */
     private static function lang(int $siteId): string

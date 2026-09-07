@@ -369,7 +369,7 @@ final class CanvasService
         $pageLang = \App\Services\LanguageService::normalize($lang ?? \App\Services\LanguageService::codeFor($siteId));
 
         $result = preg_replace_callback(
-            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/,]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
             static function (array $m) use ($siteId, &$hasForm, &$hasResources, $pageLang): string {
                 $kind = strtolower($m[1]);
                 $ref = strtolower($m[2]);
@@ -416,6 +416,9 @@ final class CanvasService
                     // servicio activo: así la IA puede insertarlo sin conocer ids.
                     $content = \App\Modules\Booking\BookingEmbedRenderer::render($siteId, [
                         'service_id' => ctype_digit($ref) ? (int) $ref : 0,
+                        // RSV-TABS — `3,7` = una pestaña por servicio, en ese
+                        // orden. El renderer descarta los que ya no valen.
+                        'service_ids' => str_contains($ref, ',') ? $ref : null,
                         'days'       => $opts['days'] ?? null,
                         // RSV-UI — el ancho viaja en el placeholder porque es lo
                         // ÚNICO del embed que sobrevive al round-trip del Studio:
@@ -525,7 +528,7 @@ final class CanvasService
     private static function canonicalizePlaceholders(string $html): string
     {
         return preg_replace_callback(
-            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
+            '/\{\{\s*(form|posts|products|booking|resources)\s*:\s*([a-z0-9\-_\/,]+)((?:\s*\|\s*[a-z0-9_-]+\s*=\s*[^|}]+)*)\s*\}\}/iu',
             static fn(array $m): string => '{{' . self::canonicalPlaceholderRef(
                 strtolower($m[1]),
                 strtolower($m[2]),
@@ -539,6 +542,19 @@ final class CanvasService
     {
         if ($kind === 'form') {
             return $kind . ':' . $ref;
+        }
+
+        // RSV-TABS — Una lista de servicios se limpia (solo dígitos, sin
+        // repetidos) pero NO se ordena: ese orden es el de las pestañas, y es
+        // el que el gestor eligió.
+        if ($kind === 'booking' && str_contains($ref, ',')) {
+            $ids = [];
+            foreach (explode(',', $ref) as $piece) {
+                $piece = trim($piece);
+                if ($piece === '' || !ctype_digit($piece) || in_array($piece, $ids, true)) continue;
+                $ids[] = $piece;
+            }
+            $ref = count($ids) > 1 ? implode(',', $ids) : ($ids[0] ?? 'auto');
         }
 
         // posts, products y booking llevan opciones canónicas ordenadas.
@@ -1286,7 +1302,7 @@ final class CanvasService
         }
         foreach ($embeds as $el) {
             $ref = trim($el->getAttribute('data-pp-placeholder'));
-            if (preg_match('/^(form|posts|products|booking|resources):([a-z0-9\-_\/]+)((?:\|[a-z0-9_-]+=[^|}]+)*)$/iu', $ref, $m)) {
+            if (preg_match('/^(form|posts|products|booking|resources):([a-z0-9\-_\/,]+)((?:\|[a-z0-9_-]+=[^|}]+)*)$/iu', $ref, $m)) {
                 $canonical = self::canonicalPlaceholderRef(strtolower($m[1]), strtolower($m[2]), (string) ($m[3] ?? ''));
                 $el->parentNode?->replaceChild($doc->createTextNode('{{' . $canonical . '}}'), $el);
             } else {
