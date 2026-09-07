@@ -44,6 +44,8 @@ $icon = static function (string $name): string {
         'mobile'   => '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
         // STUDIO-UX A2 — ampliar el lienzo (barra y chat fuera).
         'expand'   => '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>',
+        // SEC-BAR-3 — la lista de partes deja la barra lateral y se abre desde aquí.
+        'layers'   => '<rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="12" width="18" height="5" rx="1.5"/><path d="M6 20h12"/>',
     ];
     $p = $paths[$name] ?? '';
     return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
@@ -93,6 +95,22 @@ $icon = static function (string $name): string {
         <span class="cvstudio-status <?= $isPublished ? 'is-live' : '' ?>" id="studio-status"></span>
         <span class="cvstudio-saved" id="studio-saved" hidden><?= e(__('js.saved')) ?></span>
       </span>
+    </div>
+    <!-- SEC-BAR-3 — Las acciones de cada parte viven ahora sobre la propia
+         sección del lienzo; la lista completa se consulta desde aquí, sin
+         ocupar la barra lateral (que es para editar). -->
+    <div class="cvstudio-menu cvstudio-structure" id="studio-structure">
+      <button type="button" class="cvstudio-ghost-btn cvstudio-structure__btn" id="studio-structure-btn"
+              aria-haspopup="true" aria-expanded="false" aria-controls="studio-structure-menu"
+              title="<?= e(__('cv.page_parts')) ?>">
+        <?= $icon('layers') ?><span><?= e(__('cv.page_parts')) ?></span>
+      </button>
+      <div class="cvstudio-menu__pop cvstudio-structure__pop" id="studio-structure-menu" hidden
+           role="group" aria-label="<?= e(__('cv.page_parts')) ?>">
+        <ul class="cvstudio-seclist" id="side-sections">
+          <li class="cvstudio-side__hint"><?= e(__('cv.loading')) ?></li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -151,6 +169,10 @@ $icon = static function (string $name): string {
     <div class="cvstudio-frame" id="studio-frame-wrap">
       <iframe id="studio-iframe" src="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>" title="<?= e(__('cv.iframe_title')) ?>"></iframe>
     </div>
+    <!-- SEC-BAR-3 — el aviso ("Parte eliminada · Deshacer") ya no puede vivir
+         dentro de la lista: la orden se da desde el lienzo y el popover está
+         cerrado. Flota centrado sobre el lienzo, que es donde se mira. -->
+    <div class="cvstudio-structure-status" id="structure-status" role="status" aria-live="polite" hidden></div>
   </div>
 
   <!-- STUDIO-UX A3′ — el chat no se muda de sitio, deja de estorbar: cuelga de
@@ -197,17 +219,6 @@ $icon = static function (string $name): string {
   <aside class="cvstudio-side" id="studio-side">
     <!-- FH7 — panel contextual de edición directa (se muestra al seleccionar) -->
     <div class="cvstudio-panel" id="edit-panel" hidden></div>
-
-    <!-- STUDIO-STRUCTURE S3 — la estructura permanece visible incluso cuando
-         el panel contextual está abierto: seleccionar una parte no puede hacer
-         desaparecer las acciones para moverla o eliminarla. -->
-    <div class="cvstudio-side__structure">
-      <h3 class="cvstudio-side__title"><?= e(__('cv.page_parts')) ?></h3>
-      <ul class="cvstudio-seclist" id="side-sections">
-        <li class="cvstudio-side__hint"><?= e(__('cv.loading')) ?></li>
-      </ul>
-      <div class="cvstudio-structure-status" id="structure-status" role="status" aria-live="polite" hidden></div>
-    </div>
 
     <!-- STUDIO-2 A1 — la barra nunca está vacía: sin selección explica cómo se
          edita y ofrece las partes de la página para llegar a cada una. -->

@@ -1008,6 +1008,21 @@ final class CanvasController
   [data-pp-section].pp-studio-hover{outline:2px dashed color-mix(in srgb, var(--pp-primary) 65%, transparent);outline-offset:-2px}
   [data-pp-section].pp-studio-selected{outline:3px solid var(--pp-primary);outline-offset:-3px}
   .pp-studio-tag{position:absolute;z-index:9999;background:var(--pp-primary);color:var(--pp-on-primary,#fff);font:600 12px/1 var(--pp-font-body,sans-serif);padding:6px 10px;border-radius:6px;pointer-events:none;transform:translateY(-100%)}
+  /* SEC-BAR — acciones de estructura sobre la propia seccion (patron Elementor).
+     La barra monta sobre la linea superior de la seccion seleccionada; si es la
+     primera y no hay sitio arriba, se mete dentro. z-index por debajo de
+     .pp-studio-rt: cuando se edita texto manda la barra de formato. */
+  .pp-studio-secbar{position:absolute;z-index:9998;display:flex;align-items:center;gap:2px;background:#fff;border:1px solid #e5e7eb;border-radius:9px;box-shadow:0 10px 30px rgba(17,24,39,.18);padding:3px}
+  .pp-studio-secbar[hidden]{display:none}
+  .pp-studio-secbar button{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:#4b5563;cursor:pointer;padding:0}
+  .pp-studio-secbar button:hover:not(:disabled){background:#f3f4f6;color:#111827}
+  .pp-studio-secbar button:disabled{opacity:.28;cursor:default}
+  .pp-studio-secbar button.is-danger:hover:not(:disabled){background:#fef2f2;color:#b91c1c}
+  .pp-studio-secbar svg{display:block}
+  /* SEC-BAR-4 — "+" en la juntura entre dos partes. */
+  .pp-studio-addhere{position:absolute;z-index:9997;display:inline-flex;align-items:center;gap:6px;transform:translate(-50%,-50%);background:var(--pp-primary);color:var(--pp-on-primary,#fff);border:0;border-radius:999px;padding:7px 13px;font:700 12px/1 system-ui,-apple-system,'Segoe UI',sans-serif;cursor:pointer;box-shadow:0 8px 22px rgba(17,24,39,.26)}
+  .pp-studio-addhere[hidden]{display:none}
+  .pp-studio-addhere svg{display:block}
   .pp-studio-text-hover{outline:1.5px dashed color-mix(in srgb, var(--pp-primary) 55%, transparent);outline-offset:3px;cursor:text;border-radius:2px}
   .pp-studio-box-hover{outline:2px solid color-mix(in srgb, var(--pp-primary) 65%, transparent);outline-offset:3px;cursor:pointer}
   .pp-studio-editing{outline:2px solid var(--pp-primary);outline-offset:3px;border-radius:2px;cursor:text}
@@ -1169,14 +1184,151 @@ final class CanvasController
   }
   function hideTag(){ if(tag) tag.style.display='none'; }
 
+  // ---------- SEC-BAR: acciones de la parte seleccionada, sobre ella ----------
+  // Son las MISMAS cuatro acciones de la lista de partes, puestas donde el
+  // usuario esta mirando. El overlay no toca la base de datos: manda la orden
+  // al padre, que ya sabe llamar al endpoint de estructura (y deshacer).
+  var secbar = null, addHere = null, addHereFor = null;
+  var SECBAR_ICONS = {
+    up: '<path d="M6 15l6-6 6 6"/>',
+    down: '<path d="M6 9l6 6 6-6"/>',
+    duplicate: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
+    'delete': '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/>'
+  };
+  function svgIcon(path){
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
+      + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+  }
+  function sectionsInOrder(){
+    return Array.prototype.slice.call(document.querySelectorAll('[data-pp-section]'));
+  }
+  function secbarTitles(){
+    return {
+      up: t('move_up','Mover hacia arriba'),
+      down: t('move_down','Mover hacia abajo'),
+      duplicate: t('duplicate_section','Duplicar'),
+      'delete': t('delete_section','Eliminar')
+    };
+  }
+  function buildSecbar(){
+    if(secbar) return secbar;
+    secbar = document.createElement('div');
+    secbar.className = 'pp-studio-secbar';
+    secbar.setAttribute('role','toolbar');
+    secbar.hidden = true;
+    ['up','down','duplicate','delete'].forEach(function(action){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('data-secbar', action);
+      if(action === 'delete') b.className = 'is-danger';
+      b.innerHTML = svgIcon(SECBAR_ICONS[action]);
+      // mousedown: sin esto el clic en la barra sale de la seccion y la
+      // deselecciona antes de que llegue el click.
+      b.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      b.addEventListener('click', function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        if(!selected || b.disabled) return;
+        post('structure', { action: action, id: selected.getAttribute('data-pp-section') });
+      });
+      secbar.appendChild(b);
+    });
+    document.body.appendChild(secbar);
+    relabelSecbar();
+    return secbar;
+  }
+  // Las etiquetas llegan del padre (studio-config) DESPUES de construirse la
+  // barra, asi que hay que poder reescribirlas.
+  function relabelSecbar(){
+    if(!secbar) return;
+    var titles = secbarTitles();
+    Array.prototype.forEach.call(secbar.querySelectorAll('[data-secbar]'), function(b){
+      var txt = titles[b.getAttribute('data-secbar')] || '';
+      b.title = txt;
+      b.setAttribute('aria-label', txt);
+    });
+  }
+  function showSecbar(){
+    if(!selected || editing){ hideSecbar(); return; }
+    var bar = buildSecbar();
+    var all = sectionsInOrder(), i = all.indexOf(selected);
+    bar.querySelector('[data-secbar="up"]').disabled = i <= 0;
+    bar.querySelector('[data-secbar="down"]').disabled = i < 0 || i === all.length - 1;
+    bar.hidden = false;
+    positionSecbar();
+  }
+  function hideSecbar(){ if(secbar) secbar.hidden = true; }
+  function positionSecbar(){
+    if(!secbar || secbar.hidden || !selected) return;
+    var r = selected.getBoundingClientRect();
+    var h = secbar.offsetHeight || 36, w = secbar.offsetWidth || 140;
+    // Con sitio arriba, la barra cabalga sobre la linea de la seccion; pegada
+    // al borde superior de la pagina (el hero), se mete dentro.
+    var top = r.top >= h ? r.top + window.scrollY - h + 14 : r.top + window.scrollY + 8;
+    var left = Math.max(r.left + window.scrollX + 8, r.right + window.scrollX - w - 12);
+    secbar.style.top = top + 'px';
+    secbar.style.left = Math.max(4, left) + 'px';
+  }
+
+  // ---------- SEC-BAR-4: "+" en la juntura entre partes ----------
+  function buildAddHere(){
+    if(addHere) return addHere;
+    addHere = document.createElement('button');
+    addHere.type = 'button';
+    addHere.className = 'pp-studio-addhere';
+    addHere.hidden = true;
+    addHere.innerHTML = svgIcon('<path d="M12 5v14M5 12h14"/>') + '<span></span>';
+    addHere.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+    addHere.addEventListener('click', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      if(!addHereFor) return;
+      post('insert-here', { anchor: addHereFor.id, position: addHereFor.position });
+    });
+    document.body.appendChild(addHere);
+    return addHere;
+  }
+  function hideAddHere(){ if(addHere) addHere.hidden = true; addHereFor = null; }
+  function updateAddHere(e){
+    if(addHere && !addHere.hidden && (e.target === addHere || addHere.contains(e.target))) return;
+    if(editing){ hideAddHere(); return; }
+    var sec = sectionOf(e.target);
+    if(!sec){ hideAddHere(); return; }
+    var r = sec.getBoundingClientRect(), NEAR = 26, pos = null;
+    if(e.clientY - r.top <= NEAR) pos = 'before';
+    else if(r.bottom - e.clientY <= NEAR) pos = 'after';
+    if(!pos){ hideAddHere(); return; }
+    var b = buildAddHere();
+    addHereFor = { id: sec.getAttribute('data-pp-section'), position: pos };
+    b.querySelector('span').textContent = t('add_here','Anadir aqui');
+    b.hidden = false;
+    b.style.left = (r.left + r.width / 2 + window.scrollX) + 'px';
+    b.style.top = ((pos === 'before' ? r.top : r.bottom) + window.scrollY) + 'px';
+  }
+  // Freno por reloj, no por requestAnimationFrame: en una pestana que no se
+  // esta pintando el rAF no llega nunca y el "+" no volveria a salir.
+  var addHereTick = 0;
+  document.addEventListener('mousemove', function(e){
+    var now = Date.now();
+    if(now - addHereTick < 60) return;
+    addHereTick = now;
+    updateAddHere(e);
+  }, {passive:true});
+  document.addEventListener('mouseleave', hideAddHere);
+
+  window.addEventListener('scroll', function(){ positionSecbar(); hideAddHere(); }, true);
+  // El ancho del lienzo cambia con una transicion CSS del padre: sin la
+  // segunda pasada la barra se queda donde estaba el borde antiguo.
+  window.addEventListener('resize', function(){ positionSecbar(); setTimeout(positionSecbar, 320); });
+
   function selectSection(sec, toggle, editingFlag){
     if(toggle && selected === sec){
       sec.classList.remove('pp-studio-selected'); selected = null;
+      hideSecbar();
       post('section-deselected');
       return;
     }
     if(selected && selected !== sec) selected.classList.remove('pp-studio-selected');
     selected = sec; sec.classList.add('pp-studio-selected');
+    showSecbar();
     post('section-selected', { id: sec.getAttribute('data-pp-section'), label: label(sec.getAttribute('data-pp-section'), sec), editing: !!editingFlag });
   }
 
@@ -1937,8 +2089,10 @@ final class CanvasController
     el.contentEditable = 'true';
     try { document.execCommand('styleWithCSS', false, false); } catch(e) { /* navegadores viejos */ }
     el.classList.add('pp-studio-editing');
+    hideSecbar(); hideAddHere();
     var sec = sectionOf(el);
     if(sec) selectSection(sec, false, true);
+    hideSecbar();
     reportSelection(el);
     // El foco debe quedarse AQUÍ (el panel del chat no debe robarlo).
     setTimeout(function(){ if(editing === el && document.activeElement !== el) el.focus(); }, 0);
@@ -1955,11 +2109,14 @@ final class CanvasController
       var sec = sectionOf(el);
       if(sec) serializeAndSave(sec);
     }
+    showSecbar();
   }
 
   // mousedown (no click) para que el navegador coloque el cursor donde tocas.
   document.addEventListener('mousedown', function(e){
     var t = e.target;
+    if(secbar && !secbar.hidden && secbar.contains(t)) return;    // barra de la seccion
+    if(addHere && !addHere.hidden && addHere.contains(t)) return; // "+" de insercion
     if(rt && !rt.hidden && rt.contains(t)) return;                // barra de formato
     if(editing && (editing === t || editing.contains(t))) return; // seguir editando
     if(t.closest && !inEmbed(t)){
@@ -2097,6 +2254,7 @@ final class CanvasController
       if(d.labels) studioLabels = d.labels;
       if(Array.isArray(d.linkTargets)) linkTargets = d.linkTargets;
       if(rt){ rt.remove(); rt = null; }   // se reconstruye con las etiquetas buenas
+      relabelSecbar();
       return;
     }
     if(d.type === 'apply'){ applyToTarget(d); return; }
@@ -2108,7 +2266,7 @@ final class CanvasController
       // igualmente decía «Guardado» (P6).
       if(selected) selected.classList.remove('pp-studio-selected');
       selected = null; activeTarget = null; activeChain = [];
-      hideTag();
+      hideTag(); hideSecbar(); hideAddHere();
       post('element-deselected');
       return;
     }

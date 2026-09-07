@@ -20,13 +20,23 @@ function structureUiCheck(string $name, bool $ok, string $detail = ''): void
 }
 
 $view = (string) file_get_contents(PP_ROOT . '/views/admin/canvas/studio.php');
+$overlay = (string) file_get_contents(PP_ROOT . '/app/Controllers/Admin/CanvasController.php');
 $js = (string) file_get_contents(PP_ROOT . '/admin/assets/js/canvas-studio.js');
 $css = (string) file_get_contents(PP_ROOT . '/admin/assets/css/admin.css');
 
 structureUiCheck('Studio publica endpoint estructural', str_contains($view, 'data-structure-url='));
-structureUiCheck('lista estructural persiste fuera del estado vacío',
-    strpos($view, 'id="side-sections"') < strpos($view, 'id="side-empty"')
-    && strpos($view, 'id="side-sections"') > strpos($view, 'id="edit-panel"')
+// SEC-BAR-3 — la lista deja de ocupar la barra lateral (que es para editar) y
+// se consulta desde un popover de la barra superior. Lo que se fija aquí es que
+// siga existiendo y que sea alcanzable, no dónde estaba antes.
+structureUiCheck('lista estructural en el popover de la barra superior',
+    str_contains($view, 'id="studio-structure-btn"')
+    && strpos($view, 'id="side-sections"') > strpos($view, 'id="studio-structure-menu"')
+    && strpos($view, 'id="side-sections"') < strpos($view, '<div class="cvstudio-main">')
+);
+// El aviso ("Parte eliminada · Deshacer") no puede vivir dentro del popover: la
+// orden se da desde el lienzo y la lista está cerrada.
+structureUiCheck('el aviso estructural vive fuera del popover',
+    strpos($view, 'id="structure-status"') > strpos($view, '<div class="cvstudio-main">')
 );
 structureUiCheck('hay región viva de estado estructural',
     str_contains($view, 'id="structure-status"') && str_contains($view, 'aria-live="polite"')
@@ -58,6 +68,24 @@ structureUiCheck('la fila ofrece duplicar como acción directa',
     str_contains($js, "structureActionButton('duplicate'")
     && str_contains($js, "duplicate: 'js.cv.duplicate_section'")
     && str_contains($js, 'duplicate:')
+);
+
+// SEC-BAR-1/2 — las acciones se dan sobre la propia sección: el overlay del
+// iframe las pinta y el padre las ejecuta contra el mismo endpoint.
+structureUiCheck('el overlay pinta la barra de acciones de la sección',
+    str_contains($overlay, '.pp-studio-secbar')
+    && str_contains($overlay, "post('structure'")
+    && str_contains($overlay, 'function positionSecbar(')
+);
+structureUiCheck('el padre ejecuta la orden que llega del lienzo',
+    str_contains($js, "d.type === 'structure'")
+    && str_contains($js, "d.type === 'insert-here'")
+    && str_contains($js, 'function openBlockPicker(')
+);
+// SEC-BAR-4 — insertar donde se está mirando, no solo desde la barra lateral.
+structureUiCheck('el lienzo ofrece "+" entre partes',
+    str_contains($overlay, '.pp-studio-addhere')
+    && str_contains($overlay, "post('insert-here'")
 );
 
 structureUiCheck('CSS cubre filas, acciones, inserción y estados',

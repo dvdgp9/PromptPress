@@ -223,6 +223,21 @@
     // foco del usuario vive ahí y estos listeners están en el padre.
     if (d.type === 'key') { studioShortcut(d.key, d.mods); return; }
     if (d.type === 'section-deselected') { clearSelection(false); closePanel(); }
+    // SEC-BAR-2 — la barra flotante del lienzo manda la orden; el endpoint, el
+    // estado de carga y el "deshacer" son los mismos que los de la lista.
+    if (d.type === 'structure' && d.id) {
+      var isMove = d.action === 'up' || d.action === 'down';
+      updateCanvasStructure(isMove ? 'move' : d.action, d.id, isMove ? d.action : '');
+      return;
+    }
+    // SEC-BAR-4 — "+" entre dos partes: fija el punto de insercion y abre el
+    // selector de bloques, que es donde se elige QUE se mete.
+    if (d.type === 'insert-here' && d.anchor) {
+      if (canvasIsWide()) setCanvasWide(false);
+      chooseInsertPoint(d.anchor, d.position === 'before' ? 'before' : 'after');
+      openBlockPicker();
+      return;
+    }
     if (d.type === 'section-changed') saveSectionInline(d.id, d.html);
     if (d.type === 'image-clicked') openMediaModal();
     if (d.type === 'element-selected') {
@@ -244,7 +259,14 @@
           unlink: pp.t('js.cv.rt_unlink'),
           link_url: pp.t('js.cv.rt_link_url'),
           link_apply: pp.t('js.cv.rt_link_apply'),
-          link_page: pp.t('js.cv.rt_link_page')
+          link_page: pp.t('js.cv.rt_link_page'),
+          // SEC-BAR — la barra de acciones vive en el iframe y tampoco sabe el
+          // idioma del usuario.
+          move_up: pp.t('js.cv.move_up'),
+          move_down: pp.t('js.cv.move_down'),
+          duplicate_section: pp.t('js.cv.duplicate_section'),
+          delete_section: pp.t('js.cv.delete_section'),
+          add_here: pp.t('js.cv.add_here')
         },
         linkTargets: LINKS
       });
@@ -327,8 +349,11 @@
     insertPlacementHint.hidden = false;
   }
 
+  var structureStatusTimer = 0;
+
   function showStructureStatus(text, kind, undoSection) {
     if (!structureStatus) return;
+    if (structureStatusTimer) { clearTimeout(structureStatusTimer); structureStatusTimer = 0; }
     structureStatus.innerHTML = '';
     structureStatus.className = 'cvstudio-structure-status' + (kind ? ' is-' + kind : '');
     var message = document.createElement('span');
@@ -347,10 +372,16 @@
       structureStatus.appendChild(undo);
     }
     structureStatus.hidden = false;
+    // Flota sobre el lienzo: si se quedara fijo taparía la página. «Deshacer»
+    // aguanta lo suficiente para llegar a pulsarlo.
+    if (kind !== 'loading') {
+      structureStatusTimer = setTimeout(hideStructureStatus, undoSection ? 9000 : 4500);
+    }
   }
 
   function hideStructureStatus() {
     if (!structureStatus) return;
+    if (structureStatusTimer) { clearTimeout(structureStatusTimer); structureStatusTimer = 0; }
     structureStatus.hidden = true;
     structureStatus.innerHTML = '';
     structureStatus.className = 'cvstudio-structure-status';
@@ -604,6 +635,44 @@
       if (e.key === 'Escape' && !copyMenu.hidden) closeCopyMenu();
     });
   })();
+
+  // ----------------------------------------------------------------
+  // SEC-BAR-3 — «Partes de esta página» en un popover de la barra superior.
+  // Mover, duplicar y eliminar se hacen ya sobre la propia sección; esta lista
+  // se queda como índice (y como vía accesible y táctil para lo mismo).
+  // ----------------------------------------------------------------
+  var structureWrap = document.getElementById('studio-structure');
+  var structureBtn = document.getElementById('studio-structure-btn');
+  var structureMenu = document.getElementById('studio-structure-menu');
+
+  function closeStructureMenu() {
+    if (!structureMenu || !structureBtn) return;
+    structureMenu.hidden = true;
+    structureBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  if (structureWrap && structureBtn && structureMenu) {
+    structureBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!structureMenu.hidden) { closeStructureMenu(); return; }
+      structureMenu.hidden = false;
+      structureBtn.setAttribute('aria-expanded', 'true');
+      var cur = structureMenu.querySelector('.cvstudio-seclist__item.is-current button[data-section]')
+        || structureMenu.querySelector('button[data-section]');
+      if (cur) setTimeout(function () { cur.focus(); }, 0);
+    });
+    // Ir a una parte (o elegir dónde insertar) cierra la lista: lo que el
+    // usuario quiere ver a continuación es la página. Mover o duplicar no.
+    structureMenu.addEventListener('click', function (e) {
+      if (e.target.closest('.cvstudio-seclist__select, .cvstudio-insertpoint__btn')) closeStructureMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!structureMenu.hidden && !structureWrap.contains(e.target)) closeStructureMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !structureMenu.hidden) { closeStructureMenu(); structureBtn.focus(); }
+    });
+  }
 
   // ----------------------------------------------------------------
   // STUDIO-UX F5 — Reordenar arrastrando: el DOM de la lista se mueve en vivo
@@ -2010,18 +2079,23 @@
     });
   }
 
+  // SEC-BAR-4 — abrir el selector es ahora una funcion con nombre: lo pide
+  // tambien el "+" que sale entre dos partes dentro del lienzo.
+  function openBlockPicker() {
+    if (!blockPickerMenu || !blockPickerBtn) return;
+    if (!blockPickerMenu.hidden) return;
+    blockPickerMenu.hidden = false;
+    blockPickerBtn.setAttribute('aria-expanded', 'true');
+    blockPickerBtn.scrollIntoView({ block: 'nearest' });
+    var first = blockPickerMenu.querySelector('[data-section-template], .cvstudio-insert__btn:not(:disabled)');
+    if (first) setTimeout(function () { first.focus(); }, 0);
+  }
+
   if (blockPicker && blockPickerBtn && blockPickerMenu) {
     blockPickerBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var open = blockPickerMenu.hidden;
-      if (!open) {
-        closeBlockPicker();
-        return;
-      }
-      blockPickerMenu.hidden = false;
-      blockPickerBtn.setAttribute('aria-expanded', 'true');
-      var first = blockPickerMenu.querySelector('[data-section-template], .cvstudio-insert__btn:not(:disabled)');
-      if (first) setTimeout(function () { first.focus(); }, 0);
+      if (!blockPickerMenu.hidden) { closeBlockPicker(); return; }
+      openBlockPicker();
     });
     blockPickerMenu.addEventListener('click', function (e) {
       var trigger = e.target.closest('.cvstudio-insert__btn');

@@ -8232,3 +8232,173 @@ los controles de una caja.
 - Tests: `tests/canvas_rich_text.php` sube a 18 comprobaciones (guardan que no
   se vuelva a una lista de etiquetas y que media y contenedores sigan fuera).
   Regresión de `canvas_*` en verde.
+
+---
+
+## SEC-BAR — Acciones de sección sobre la propia sección (07/09/2026)
+
+### Background and Motivation
+
+Hoy las acciones de estructura (subir, bajar, duplicar, eliminar) viven en la
+lista "Page parts" de la barra derecha. El usuario mira el lienzo, la sección ya
+se marca con línea verde + etiqueta, pero para moverla tiene que cambiar de foco
+a una lista. Objetivo (patrón Elementor): las acciones aparecen **sobre el borde
+superior de la sección seleccionada**, junto a su etiqueta. La lista de partes
+pierde protagonismo: pasa a un botón "Estructura" en la barra superior que abre
+un popover flotante. La barra derecha queda para el panel de edición + "Añadir".
+
+### Key Challenges and Analysis
+
+- La etiqueta ("Value prop") ya la pinta el overlay DENTRO del iframe
+  (`CanvasController::overlayScript()`, nowdoc, `.pp-studio-tag`, línea ~1010 y
+  `placeTag` ~1163). La barra de acciones tiene que vivir ahí mismo: es el único
+  sitio con las coordenadas reales de la sección.
+- El overlay NO puede tocar la BD: hoy las acciones las ejecuta el padre
+  (`updateCanvasStructure()` en `admin/assets/js/canvas-studio.js:~740`). Basta
+  con que el overlay haga `post('structure',{action,id,dir})` y el padre
+  reutilice esa misma función. Cero lógica nueva de servidor.
+- Estado de los botones ↑/↓: el overlay conoce el orden por DOM
+  (`[data-pp-section]`), así que puede deshabilitar primera/última sin
+  preguntar al padre.
+- Colisiones: `.pp-studio-rt` (barra de formato de texto) usa z-index 10000 y
+  puede aparecer a la vez; la barra de sección se queda en 9999 y se oculta
+  mientras hay edición de texto activa.
+- Borde superior de la primera sección: la barra se saldría del lienzo →
+  volcarla hacia dentro cuando `rect.top < 44`.
+- Accesibilidad/táctil: la lista sigue existiendo (popover) con los mismos
+  botones y el drag de reordenar; no se pierde ninguna vía.
+
+### High-level Task Breakdown
+
+- **SEC-BAR-1** — Barra flotante en el overlay. `.pp-studio-secbar` pegada a la
+  etiqueta de la sección seleccionada, con ↑ ↓ ⧉ 🗑 (`pointer-events:auto`),
+  reposicionada en scroll/resize/select, volcada hacia dentro si no cabe arriba.
+  *Éxito:* al seleccionar una sección aparecen los 4 botones sobre su línea
+  superior; ↑/↓ deshabilitados en la primera/última.
+- **SEC-BAR-2** — Puente overlay→padre: `post('structure', …)` y handler en
+  `canvas-studio.js` que llama a `updateCanvasStructure()`.
+  *Éxito:* mover/duplicar/eliminar desde el lienzo guarda igual que desde la
+  lista (recargar y comprobar orden en BD).
+- **SEC-BAR-3** — Degradar "Page parts": sale de `views/admin/canvas/studio.php`
+  a un popover que abre un botón nuevo de la barra superior; misma lista, mismo
+  drag, mismos botones. La barra derecha arranca con el panel de edición.
+  *Éxito:* la barra derecha ya no muestra la lista; el popover sí, y sigue
+  navegando/reordenando.
+- **SEC-BAR-4** — Puntos de inserción "+" también en el lienzo (entre secciones,
+  al pasar el ratón), reutilizando `chooseInsertPoint()`. *Opcional, va después.*
+
+### Project Status Board
+
+- [x] SEC-BAR-1 Barra flotante sobre la sección
+- [x] SEC-BAR-2 Puente overlay→padre
+- [x] SEC-BAR-3 Page parts a popover
+- [x] SEC-BAR-4 "+" de inserción en el lienzo
+
+### Current Status / Progress Tracking (07/09/2026, Executor)
+
+Todo SEC-BAR implementado y comprobado en navegador sobre la página 3111
+(6 partes: hero, presentacion, retos, manifiesto, metodologia, cierre-contacto).
+
+**Qué se tocó**
+
+| Archivo | Qué |
+|---|---|
+| `app/Controllers/Admin/CanvasController.php` (`overlayScript`) | `.pp-studio-secbar` (↑ ↓ ⧉ 🗑) + `.pp-studio-addhere` ("+"), posicionado, `post('structure')` y `post('insert-here')` |
+| `admin/assets/js/canvas-studio.js` | recibe ambos mensajes, reutiliza `updateCanvasStructure()` / `chooseInsertPoint()`; `openBlockPicker()` extraído; popover de la lista; el aviso se auto-oculta |
+| `views/admin/canvas/studio.php` | botón «Partes de esta página» + popover en la barra superior; la lista sale del `aside`; el aviso pasa a flotar sobre el lienzo |
+| `admin/assets/css/admin.css` | estilos del botón/popover y aviso flotante; fuera `.cvstudio-side__structure` |
+| `tests/canvas_structure_ui.php` | el contrato de sitio (lista dentro del `aside`) se sustituye por el nuevo, y se fijan las piezas de SEC-BAR |
+
+**Comprobado en navegador (localhost:8791, página 3111)**
+
+| Caso | Resultado |
+|---|---|
+| Seleccionar parte → barra sobre su línea superior | sale, con ↑ deshabilitado en la primera y ↓ en la última |
+| ↓ desde el lienzo | `presentacion` pasa detrás de `retos`; aviso «Sección movida.» |
+| ↑ | orden restaurado |
+| 🗑 | 5 partes, aviso «Sección eliminada · Deshacer» flotando sobre el lienzo; Deshacer devuelve las 6 |
+| ⧉ | aparece `manifiesto-2`; deshacer lo quita |
+| Rozar la juntura entre partes | píldora «+ Añadir aquí» centrada en la línea |
+| Clic en el "+" | fija «Añadir antes de «Retos»» y abre el selector de bloques |
+| Editar un texto a mano | la barra de sección se esconde (manda la de formato) y vuelve al terminar |
+| Vista móvil (390 px) | la barra se recoloca dentro del lienzo estrecho |
+| HTML guardado | sin `pp-studio-secbar/addhere/selected/editing` ni `contenteditable` |
+
+Regresión: `tests/canvas_*` en verde.
+
+### Lessons
+
+- El overlay del Studio vive en el iframe y **nunca** toca la BD: pinta y manda
+  un `postMessage` al padre, que es quien tiene el endpoint, el CSRF, el estado
+  de carga y el "deshacer". Añadir una acción al lienzo = un `post(...)` nuevo y
+  una rama en el `window.addEventListener('message')` de `canvas-studio.js`.
+- No frenar un `mousemove` con `requestAnimationFrame`: en una pestaña que no se
+  está pintando el rAF no llega nunca y el efecto no vuelve a salir. Freno por
+  reloj (`Date.now()`).
+- El ancho del lienzo cambia con una transición CSS **del padre**; el iframe
+  recibe `resize` durante la animación, así que cualquier cosa posicionada a
+  mano necesita una segunda pasada después (`setTimeout(..., 320)`).
+
+---
+
+## IG-FEED — Feed de Instagram en la página (07/09/2026)
+
+### Background and Motivation
+
+Poder añadir a una página canvas una cuadrícula con las últimas fotos de
+Instagram del cliente. Encaja como embed nuevo: `{{instagram:…}}`.
+
+### Key Challenges and Analysis — VIABILIDAD
+
+El problema no es PromptPress, es Meta:
+
+- **Basic Display API: cerrada** (04/12/2024). Ya no existe la vía fácil.
+- Lo vigente es **Instagram API with Instagram Login** (o Graph vía Página de
+  Facebook): exige cuenta **profesional**, una **app de Meta**, OAuth, y token
+  de larga duración de **60 días que hay que refrescar**.
+- **oEmbed** de posts sueltos también pide token de app desde 2020.
+- Y el clavo: PromptPress es **autoalojado, una instalación por cliente**. Sin
+  App Review, una app de Meta solo lee datos de su propio dueño → cada cliente
+  necesitaría crear su app. Inviable para el usuario objetivo. Las alternativas
+  reales son (a) una app central de Ebone con App Review + un endpoint propio
+  que haga de intermediario del OAuth, o (b) que el cliente pegue un token.
+- Widgets SaaS (Elfsight, LightWidget…) resolverían en 10 minutos pero rompen la
+  regla de "nada de SaaS externo salvo IA" y meten JS de terceros + RGPD.
+
+**Veredicto:** el feed automático es viable pero caro y frágil (tokens que
+caducan, políticas de Meta que cambian). La cuadrícula manual da el 90 % del
+valor visual con 0 dependencias. Plan por fases.
+
+### High-level Task Breakdown
+
+**Fase A — "Cuadrícula Instagram" manual (recomendada, ship ya)**
+- **IG-A1** — Embed `{{instagram:manual|cols=3|rows=2}}`: alta en las tres
+  listas blancas de `CanvasService` (`parsePlaceholderOptions`,
+  `canonicalPlaceholderRef`, rama de expansión) — ver [[canvas-embed-options]].
+- **IG-A2** — Renderer: rejilla cuadrada con fotos de la mediateca, overlay con
+  icono IG, `@usuario` y enlace al perfil. Sin JS.
+- **IG-A3** — Alta en el "Añadir a la página" del Studio + controles en el panel
+  (nº de columnas, elegir fotos, usuario).
+  *Éxito:* insertar el bloque, elegir 6 fotos, guardar, recargar y verlo en la
+  página pública; enlace al perfil correcto.
+
+**Fase B — Feed real (opt-in, "avanzado")**
+- **IG-B1** — Módulo `instagram` en `ModuleRegistry` + ajustes: conectar cuenta
+  (OAuth si hay app central) o pegar token de larga duración.
+- **IG-B2** — Tabla `instagram_media` (cache) + refresco por cron
+  (`scripts/instagram_sync.php`, mismo patrón que `analytics_rollup.php`) que
+  además renueva el token antes de los 60 días.
+- **IG-B3** — `{{instagram:auto|limit=9}}` sirviendo del cache; si el token
+  muere, degrada solo a la cuadrícula manual (nunca hueco vacío).
+- **IG-B4** — Aviso RGPD: las imágenes se sirven desde la CDN de Meta salvo que
+  se cacheen localmente (decidir; cachear es más limpio y más rápido).
+  *Bloqueante previo:* decidir (a) app central de Ebone + App Review, o (b)
+  token pegado a mano. Antes de tocar código, pedir búsqueda web de la doc
+  vigente de Meta (regla del proyecto).
+
+### Project Status Board
+
+- [ ] IG-A1 Embed `{{instagram:manual}}` en las tres listas
+- [ ] IG-A2 Renderer de la cuadrícula
+- [ ] IG-A3 Alta en "Añadir" + controles del panel
+- [ ] IG-B* Feed real — bloqueado hasta decidir app central vs token
