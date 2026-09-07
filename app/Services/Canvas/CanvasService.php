@@ -378,8 +378,9 @@ final class CanvasService
 
                 // FH4 — el embed se envuelve con un marcador para que el editor
                 // inline pueda revertirlo a su placeholder al guardar la sección.
-                $wrap = static fn(string $html): string =>
-                    '<div class="pp-canvas-embed" data-pp-placeholder="' . htmlspecialchars($placeholderRef, ENT_QUOTES, 'UTF-8') . '">' . $html . '</div>';
+                $wrap = static fn(string $html, string $extraClass = ''): string =>
+                    '<div class="pp-canvas-embed' . ($extraClass !== '' ? ' ' . $extraClass : '')
+                    . '" data-pp-placeholder="' . htmlspecialchars($placeholderRef, ENT_QUOTES, 'UTF-8') . '">' . $html . '</div>';
 
                 if ($kind === 'resources') {
                     $content = \App\Modules\Resources\FeaturedResourcesRenderer::render(
@@ -452,7 +453,18 @@ final class CanvasService
                     return '<!-- pp:form "' . htmlspecialchars($ref, ENT_QUOTES, 'UTF-8') . '" no encontrado -->';
                 }
                 $hasForm = true;
-                return $wrap(SectionRenderer::render($section));
+
+                // EMB-1 — Un formulario es UNA entidad que puede estar en varias
+                // páginas, así que su título no puede editarse desde aquí sin
+                // cambiárselo a todas. Lo que sí es de ESTA colocación: el ancho
+                // y unos títulos que mandan solo aquí. Vacíos, manda el
+                // formulario; puestos, mandan estos.
+                $formOpts = self::parsePlaceholderOptions($optionsRaw);
+
+                return $wrap(
+                    SectionRenderer::render($section, ['form_text' => self::formPlacementText($formOpts)]),
+                    self::embedWidthClass($formOpts['width'] ?? null)
+                );
             },
             $html
         );
@@ -540,9 +552,6 @@ final class CanvasService
 
     private static function canonicalPlaceholderRef(string $kind, string $ref, string $optionsRaw = ''): string
     {
-        if ($kind === 'form') {
-            return $kind . ':' . $ref;
-        }
 
         // RSV-TABS — Una lista de servicios se limpia (solo dígitos, sin
         // repetidos) pero NO se ordena: ese orden es el de las pestañas, y es
@@ -559,9 +568,13 @@ final class CanvasService
 
         // posts, products y booking llevan opciones canónicas ordenadas.
         $optionKeys = match ($kind) {
-            'posts'   => ['limit', 'variant', 'heading', 'subheading'],
-            'booking' => ['days', 'width'],
-            default   => ['limit', 'heading'],
+            'posts'     => ['limit', 'variant', 'heading', 'subheading'],
+            'booking'   => ['days', 'width'],
+            // EMB-1 — el formulario ya no es un bloque mudo.
+            'form'      => ['width', 'heading', 'subheading'],
+            // EMB-3 — recursos: cómo se ven y cuáles se enseñan.
+            'resources' => ['limit', 'variant', 'heading', 'subheading', 'category'],
+            default     => ['limit', 'heading'],
         };
         $opts = self::parsePlaceholderOptions($optionsRaw);
         $parts = [];
@@ -676,7 +689,7 @@ final class CanvasService
             // Lista blanca común a todos los placeholders: una clave que no esté
             // aquí se cae ANTES de llegar al renderer (y, por tanto, también se
             // pierde al canonicalizar), así que toda opción nueva pasa por aquí.
-            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading', 'days', 'width'], true)) continue;
+            if (!in_array($key, ['limit', 'variant', 'heading', 'subheading', 'days', 'width', 'category'], true)) continue;
             $value = trim(strip_tags($value));
             $value = preg_replace('/[\x00-\x1F\x7F]/u', '', $value) ?? '';
             if ($value === '') continue;
@@ -692,6 +705,43 @@ final class CanvasService
      *
      * @return array<string,mixed>|null fila de page_sections
      */
+    /**
+     * EMB-1 — Anchos de un embed dentro de la página, con el mismo vocabulario
+     * que ya usaba el calendario de reservas: `card`, `wide`, `full`.
+     */
+    private const EMBED_WIDTHS = ['card', 'wide', 'full'];
+
+    private static function embedWidthClass(int|string|null $raw): string
+    {
+        $w = strtolower(trim((string) $raw));
+        return in_array($w, self::EMBED_WIDTHS, true) ? 'pp-canvas-embed--w-' . $w : '';
+    }
+
+    /**
+     * EMB-1 — Títulos de COLOCACIÓN de un formulario.
+     *
+     * El formulario es compartido: el mismo puede estar en «Contacto» y en una
+     * landing, y cada página querer encabezarlo distinto. Estos títulos viven en
+     * el placeholder, así que cambiarlos aquí no toca el formulario ni las demás
+     * páginas donde esté puesto. Vacíos, manda lo que diga el formulario.
+     *
+     * Van como opción del render y no mutando la sección porque
+     * `FormI18n::resolve()` corre DENTRO del renderer: si se escribieran antes,
+     * la traducción del formulario a ese idioma los pisaría.
+     *
+     * @param array<string,string> $opts
+     * @return array<string,string>
+     */
+    private static function formPlacementText(array $opts): array
+    {
+        $out = [];
+        $heading = trim((string) ($opts['heading'] ?? ''));
+        $subheading = trim((string) ($opts['subheading'] ?? ''));
+        if ($heading !== '') $out['heading'] = $heading;
+        if ($subheading !== '') $out['description'] = $subheading;
+        return $out;
+    }
+
     private static function findFormSection(int $siteId, string $ref): ?array
     {
         if (ctype_digit($ref)) {

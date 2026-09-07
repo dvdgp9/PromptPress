@@ -1117,6 +1117,11 @@ final class CanvasController
    */
   function editableFrom(el){
     if(!el || !el.closest) return null;
+    // EMB-4 — Dentro de un embed no se edita nada porque su HTML se regenera…
+    // salvo los textos que SON opciones del placeholder, que sí sobreviven
+    // porque al guardar se escriben ahí. El servidor los marca.
+    var embField = el.closest('[data-pp-embed-field]');
+    if(embField) return embField;
     if(inEmbed(el)) return null;
     var sec = sectionOf(el);
     if(!sec) return null;
@@ -1184,6 +1189,52 @@ final class CanvasController
   function setBookingService(embed, ref){
     var opts = bookingOpts(embed);
     embed.setAttribute('data-pp-placeholder', 'booking:' + ref + '|days=' + opts.days + '|width=' + opts.width);
+    return opts;
+  }
+
+  // ---------- EMB-OPT: los ajustes de CUALQUIER embed ----------
+  // El calendario ya tenía los suyos (arriba). Esto es lo mismo para el resto:
+  // formulario, entradas, productos y recursos guardan sus ajustes en el propio
+  // placeholder, `tipo:ref|clave=valor`, que es lo único que sobrevive al
+  // guardado. La diferencia con el calendario es que aquí el HTML lo tiene que
+  // rehacer el servidor, así que cada cambio pide recargar la vista.
+  function embedOf(sec){
+    return sec ? sec.querySelector('[data-pp-placeholder]') : null;
+  }
+  function embedKind(embed){
+    var ref = embed ? (embed.getAttribute('data-pp-placeholder') || '') : '';
+    var i = ref.indexOf(':');
+    return i < 0 ? '' : ref.slice(0, i).toLowerCase();
+  }
+  function embedOpts(embed){
+    var ref = embed ? (embed.getAttribute('data-pp-placeholder') || '') : '';
+    var parts = ref.split('|');
+    var head = parts[0];
+    var out = { ref: head.slice(head.indexOf(':') + 1) };
+    parts.slice(1).forEach(function(kv){
+      var i = kv.indexOf('=');
+      if(i < 0) return;
+      out[kv.slice(0, i).trim()] = kv.slice(i + 1).trim();
+    });
+    return out;
+  }
+  // `|` y `}` cortarían el placeholder por la mitad, y los saltos de línea no
+  // sobreviven al ida y vuelta: fuera antes de escribir nada.
+  function cleanOptValue(v){
+    return String(v == null ? '' : v).replace(/[|}{\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function setEmbedOpt(embed, key, value){
+    var kind = embedKind(embed);
+    var opts = embedOpts(embed);
+    var clean = cleanOptValue(value);
+    // Vacío = quitar la opción, no guardarla en blanco: así el bloque vuelve a
+    // su comportamiento por defecto en vez de quedarse con un hueco.
+    if(clean === '') delete opts[key]; else opts[key] = clean;
+    var out = kind + ':' + opts.ref;
+    Object.keys(opts).forEach(function(k){
+      if(k !== 'ref') out += '|' + k + '=' + opts[k];
+    });
+    embed.setAttribute('data-pp-placeholder', out);
     return opts;
   }
 
@@ -1547,6 +1598,11 @@ final class CanvasController
       // ancho, y a 420px fijos se veía como una tarjetita perdida.
       var bkEmbed = bookingEmbedOf(el);
       p.booking = bkEmbed ? bookingOpts(bkEmbed) : null;
+      // EMB-2 — El resto de embeds (formulario, entradas, productos, recursos)
+      // tenían opciones escritas en el servidor y ninguna forma de tocarlas.
+      var emb = embedOf(el);
+      var kind = embedKind(emb);
+      p.embed = (emb && kind && kind !== 'booking') ? { kind: kind, opts: embedOpts(emb) } : null;
     }
     return p;
   }
@@ -1737,6 +1793,20 @@ final class CanvasController
     // RSV-UI — cambiar QUÉ servicio enseña un calendario ya insertado. El
     // panel manda la referencia a guardar (`auto` o un id), el id concreto con
     // el que remontar el widget ahora mismo, y el nombre para la lista de partes.
+    // EMB-2 — Un ajuste de embed: se escribe en el placeholder, se guarda y se
+    // repide la página, porque el bloque lo pinta el servidor a partir de ahí.
+    if(msg.op === 'embedopt' && msg.value){
+      var embSec = sectionOf(el);
+      var embEl = embedOf(embSec);
+      if(!embEl) return;
+      var key = String(msg.value.key || '');
+      if(!/^[a-z_-]{1,20}$/.test(key)) return;
+      setEmbedOpt(embEl, key, msg.value.value);
+      serializeAndSave(embSec);
+      post('reload-preview');
+      return;
+    }
+
     if(msg.op === 'bookingservice' && msg.value){
       var svcSec = sectionOf(el);
       var svcEmbed = bookingEmbedOf(svcSec);
@@ -2126,7 +2196,17 @@ final class CanvasController
     if(!commit){ el.innerHTML = editingOriginal; return; }
     if(el.innerHTML !== editingOriginal){
       var sec = sectionOf(el);
-      if(sec) serializeAndSave(sec);
+      // EMB-4 — Un título de embed no se guarda como HTML: se escribe en el
+      // placeholder, que es lo único que sobrevive al regenerado del bloque.
+      var field = el.getAttribute('data-pp-embed-field');
+      var fieldEmbed = field ? embedOf(sec) : null;
+      if(field && fieldEmbed){
+        setEmbedOpt(fieldEmbed, field, el.textContent || '');
+        if(sec) serializeAndSave(sec);
+        post('reload-preview');
+      } else if(sec) {
+        serializeAndSave(sec);
+      }
     }
     showSecbar();
   }
@@ -2138,7 +2218,10 @@ final class CanvasController
     if(addHere && !addHere.hidden && addHere.contains(t)) return; // "+" de insercion
     if(rt && !rt.hidden && rt.contains(t)) return;                // barra de formato
     if(editing && (editing === t || editing.contains(t))) return; // seguir editando
-    if(t.closest && !inEmbed(t)){
+    // EMB-4 — La puerta se abre también DENTRO de un embed, pero solo para los
+    // textos marcados: `editableFrom()` es quien decide, y para el resto del
+    // embed sigue devolviendo null.
+    if(t.closest && (!inEmbed(t) || t.closest('[data-pp-embed-field]'))){
       var txt = editableFrom(t);
       // Los enlaces se editan desde el `click` (hay que frenar la navegación).
       if(txt && txt.tagName !== 'A'){ startEdit(txt); return; }
@@ -2256,7 +2339,7 @@ final class CanvasController
     document.querySelectorAll('.pp-studio-box-hover').forEach(function(x){ x.classList.remove('pp-studio-box-hover'); });
     if(!s){ hideTag(); return; }
     s.classList.add('pp-studio-hover'); showTag(s);
-    if(!inEmbed(e.target)){
+    if(!inEmbed(e.target) || e.target.closest('[data-pp-embed-field]')){
       var txt = editableFrom(e.target);
       if(txt && txt !== editing) txt.classList.add('pp-studio-text-hover');
       else { var box = visualBoxFrom(e.target); if(box) box.classList.add('pp-studio-box-hover'); }

@@ -167,7 +167,10 @@ try {
     check_re(
         'bloque independiente conserva un heading accesible',
         str_contains($frOut, 'pp-featured-resources__head')
-            && str_contains($frOut, '<h2>Ressources</h2>'),
+            // EMB-4 — el h2 lleva ahora `data-pp-embed-field` para poder
+            // editarlo a mano en el Studio, así que se comprueba el texto y no
+            // la forma exacta de la etiqueta.
+            && preg_match('/<h2[^>]*>Ressources<\/h2>/', $frOut) === 1,
         $frOut
     );
     ModuleRegistry::setEnabled($siteId, 'resources', true);

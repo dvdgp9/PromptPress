@@ -8786,3 +8786,111 @@ La píldora mide 304×44 abajo a la derecha y se pliega a 48 px (recordado en
 - Cualquier cosa que se pinte en una página pública según QUIÉN mire obliga a
   saltarse `CacheService` **al leer y al escribir**: la clave es sitio + slug +
   idioma, sin nada del usuario.
+
+---
+
+## EMB-OPT — Los embeds del Studio, editables (07/09/2026)
+
+### Background and Motivation
+
+Insertar un formulario o unos recursos en una página canvas da un bloque que no
+se puede tocar: ni cómo se coloca, ni qué enseña, ni sus títulos. Al calendario
+de reservas sí se le hizo el trabajo (RSV-UI: ancho, días, servicios, con sus
+controles en el panel) y el resto se quedó atrás.
+
+### Key Challenges and Analysis
+
+Estado real, medido:
+
+| embed | opciones | controles en el panel | editable a mano |
+|---|---|---|---|
+| `booking` | servicios, `days`, `width` | sí | no |
+| `posts` | `limit`, `variant`, `heading`, `subheading` | **no** | no |
+| `resources` | `limit`, `heading` | **no** | no |
+| `products` | `limit`, `heading` | **no** | no |
+| `form` | **ninguna** | **no** | no |
+
+- **El formulario no admite opciones en absoluto.** `canonicalPlaceholderRef()`
+  corta por lo sano con `if ($kind === 'form') return $kind . ':' . $ref;`, así
+  que cualquier opción se pierde al guardar. Es el primer sitio a tocar.
+- **`posts` ya tiene cuatro opciones que nadie puede tocar**: existen en el
+  parser y en el renderer, pero el panel solo pinta el bloque de reservas. Ahí
+  hay funcionalidad ya escrita y pagada, sin interfaz.
+- **Lo de editar a mano tiene una razón**: `inEmbed()` bloquea la edición inline
+  dentro de un embed porque su HTML se regenera en cada render y lo escrito se
+  perdería. Pero un texto que ES una opción del placeholder (`heading`) sí puede
+  editarse si al guardar se escribe en el placeholder. Ese es el truco que
+  convierte "no se puede tocar nada" en "el título se edita como cualquier otro".
+- Recordar las TRES listas blancas de [[canvas-embed-options]]: toda opción
+  nueva se da de alta en `parsePlaceholderOptions()`, en `$optionKeys` de
+  `canonicalPlaceholderRef()` y en la rama de expansión del tipo.
+
+### High-level Task Breakdown
+
+- **EMB-1** — El formulario deja de ser un bloque mudo: quitar el corte de
+  `form` en `canonicalPlaceholderRef()` y darle `width` (card/wide/full, el
+  mismo vocabulario que reservas) y `heading`/`subheading` de colocación (vacío
+  = lo que diga el formulario; puesto = manda aquí, sin tocar el formulario
+  original, que puede estar en varias páginas).
+  *Éxito:* dos páginas con el mismo formulario y títulos distintos, y ambos
+  sobreviven a guardar y recargar.
+- **EMB-2** — Controles en el panel para TODOS los embeds. Un bloque genérico
+  que lea el tipo del placeholder y pinte lo suyo; `posts` y `products` se
+  llevan gratis las opciones que ya tenían escritas.
+  *Éxito:* seleccionar un embed de entradas y poder cambiar cuántas, la
+  variante y sus títulos sin tocar el chat.
+- **EMB-3** — Más opciones para recursos: `variant` (rejilla / lista),
+  `subheading` y `category` (enseñar solo una categoría).
+  *Éxito:* un bloque de recursos de una categoría concreta, en lista.
+- **EMB-4** — Editar los títulos del embed a mano en el lienzo: marcar en el
+  HTML generado los textos que son opciones (`data-pp-embed-field="heading"`),
+  dejar que el overlay los edite y, al guardar, escribirlos en el placeholder en
+  vez de en el HTML.
+  *Éxito:* pinchar el título de un bloque de recursos, escribir, recargar y que
+  siga ahí.
+
+Orden recomendado: EMB-1 y EMB-2 primero (arreglan el hueco peor y destapan lo
+que ya existe), luego EMB-3 y por último EMB-4.
+
+### Project Status Board
+
+- [x] EMB-1 Opciones del formulario
+- [x] EMB-2 Controles en el panel para todos los embeds
+- [x] EMB-3 Más opciones para recursos
+- [x] EMB-4 Títulos del embed editables a mano
+
+### Current Status / Progress Tracking (07/09/2026, Executor)
+
+| Archivo | Qué |
+|---|---|
+| `CanvasService.php` | fuera el corte de `form`; `$optionKeys` para `form` y `resources`; `category` en la lista blanca; ancho del envoltorio; títulos de colocación |
+| `SectionRenderer.php` | `form_text` llega a `renderForm()` y se aplica DESPUÉS de `FormI18n::resolve()` |
+| `FeaturedResourcesRenderer.php` | `variant` (rejilla/lista), `subheading` y filtro por `category` |
+| `CanvasController.php` (overlay) | `embedOf/embedKind/embedOpts/setEmbedOpt` genéricos, op `embedopt`, y la puerta abierta a editar los textos marcados dentro de un embed |
+| `canvas-studio.js` | bloque de controles por tipo de embed y `EMBED_OPS` |
+| `DesignSystem.php`, `resources.css`, `lang/admin/*.php` | anchos, variante lista, subtítulo y microcopia |
+| `tests/canvas_embed_options.php` | 12 comprobaciones nuevas |
+
+**Comprobado en el Studio, sobre la página 3111:**
+
+| Caso | Resultado |
+|---|---|
+| Panel de un formulario | ancho + título + subtítulo (sin «cuántos», que no lista nada) |
+| Escribir el título en el panel | `form:867\|heading=…` y el formulario lo enseña |
+| Ancho «wide» | `\|width=wide` y `pp-canvas-embed--w-wide` en el envoltorio |
+| **Dos veces el MISMO formulario en la página** | uno con su título propio y otro con el de la colocación — el formulario no cambia |
+| Editar el título a mano en el lienzo (EMB-4) | se pone `contenteditable`, y al salir el texto va al PLACEHOLDER, no al HTML |
+| Panel de recursos | cuántos + rejilla/lista + categoría + títulos |
+| Variante lista | `\|variant=list` y `pp-featured-resources--list` |
+| Filtrar por «Plantillas» | de 3 tarjetas a 1, la que toca |
+
+**Un susto que era mío, no del código:** al comprobar el título del formulario
+miraba `querySelector('[data-pp-placeholder^="form:"]')` y la página tenía DOS
+formularios, así que leía el equivocado y parecía que no se aplicaba nada.
+
+### Lessons
+
+- Los títulos de colocación de un formulario hay que aplicarlos **después** de
+  `FormI18n::resolve()`: si se escriben antes en el `content`, la traducción del
+  formulario a ese idioma los pisa. Por eso viajan como opción de render
+  (`form_text`) y no mutando la sección.

@@ -19,8 +19,27 @@ final class FeaturedResourcesRenderer
 
         $lang = LanguageService::normalize($lang);
         $limit = max(1, min(12, (int) ($options['limit'] ?? 3)));
-        $items = array_slice(ResourceStore::publishedForLanguage($siteId, $lang), 0, $limit);
+
+        $items = ResourceStore::publishedForLanguage($siteId, $lang);
+
+        // EMB-3 — Enseñar solo una categoría. Se compara sin distinguir
+        // mayúsculas ni espacios de sobra porque la categoría es texto libre y
+        // el gestor la escribe a mano cada vez.
+        $category = mb_strtolower(trim((string) ($options['category'] ?? '')));
+        if ($category !== '') {
+            $items = array_values(array_filter(
+                $items,
+                static fn (array $r): bool => mb_strtolower(trim((string) ($r['category'] ?? ''))) === $category
+            ));
+        }
+
+        $items = array_slice($items, 0, $limit);
+        // Sin nada que enseñar es mejor no dejar un encabezado suelto colgando.
         if ($items === []) return '';
+
+        // `list` es una fila por recurso, para cuando el bloque acompaña a un
+        // texto y una rejilla de tarjetas pesaría demasiado.
+        $variant = ((string) ($options['variant'] ?? '')) === 'list' ? 'list' : 'grid';
 
         $heading = mb_substr(trim((string) ($options['heading'] ?? '')), 0, 120);
         // Las primeras versiones de Studio persistían el heading automático en
@@ -30,6 +49,7 @@ final class FeaturedResourcesRenderer
         if ($heading === '' || self::isAutomaticHeading($heading)) {
             $heading = Microcopy::t('resources.title', $lang);
         }
+        $subheading = mb_substr(trim((string) ($options['subheading'] ?? '')), 0, 240);
         $prefix = LanguageService::prefixFor($siteId, $lang);
         $base = ($prefix !== '' ? $prefix . '/' : '') . 'recursos/';
         $cards = '';
@@ -49,9 +69,13 @@ final class FeaturedResourcesRenderer
                 . '</span></a></article>';
         }
 
-        return '<section class="pp-featured-resources" aria-label="' . e($heading) . '">'
+        return '<section class="pp-featured-resources pp-featured-resources--' . $variant . '" aria-label="' . e($heading) . '">'
             . '<div class="pp-featured-resources__inner"><header class="pp-featured-resources__head">'
-            . '<h2>' . e($heading) . '</h2>'
+            // EMB-4 — editables a mano en el Studio; ver `renderForm()`.
+            . '<h2 data-pp-embed-field="heading">' . e($heading) . '</h2>'
+            . ($subheading !== ''
+                ? '<p class="pp-featured-resources__sub" data-pp-embed-field="subheading">' . e($subheading) . '</p>'
+                : '')
             . '</header><div class="pp-featured-resources__grid">' . $cards . '</div></div></section>';
     }
 

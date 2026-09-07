@@ -97,7 +97,7 @@ final class SectionRenderer
             'benefits'     => self::renderBenefits($content, $variant),
             'faq'          => self::renderFaq($content, $variant),
             'cta'          => self::renderCta($content, $variant),
-            'form'         => self::renderForm($content, $id, $variant, (array) ($options['form_hidden'] ?? [])),
+            'form'         => self::renderForm($content, $id, $variant, (array) ($options['form_hidden'] ?? []), (array) ($options['form_text'] ?? [])),
             'testimonials' => self::renderTestimonials($content, $variant),
             'stats'        => self::renderStats($content, $variant),
             'gallery'      => self::renderGallery($content, $variant),
@@ -338,12 +338,20 @@ final class SectionRenderer
         return $html;
     }
 
-    private static function renderForm(array $c, int $sectionId, string $variant, array $extraHidden = []): string
+    private static function renderForm(array $c, int $sectionId, string $variant, array $extraHidden = [], array $placementText = []): string
     {
         // FORMS-LANG T6 — un formulario es UNA entidad compartida por todas las
         // páginas que lo embeben; sus textos se resuelven al idioma de la que
         // se está pintando. Sin traducción para ese idioma, manda el texto base.
         $c = \App\Services\FormI18n::resolve($c, self::$lang);
+
+        // EMB-1 — Títulos de esta COLOCACIÓN (los del placeholder canvas), que
+        // mandan sobre los del formulario. Después de resolver el idioma: si se
+        // aplicaran antes, la traducción del formulario los pisaría.
+        foreach (['heading', 'description'] as $key) {
+            $value = trim((string) ($placementText[$key] ?? ''));
+            if ($value !== '') $c[$key] = $value;
+        }
 
         $heading = self::str($c, 'heading');
         $desc    = self::str($c, 'description');
@@ -370,8 +378,12 @@ final class SectionRenderer
         }
 
         $html .= '<div class="pp-form__panel">';
-        if ($heading !== '') $html .= '<h2 class="pp-form__heading">' . self::e($heading) . '</h2>';
-        if ($desc !== '')    $html .= '<p class="pp-form__desc">' . self::nl2br(self::e($desc)) . '</p>';
+        // EMB-4 — Estos dos textos se pueden editar a mano en el lienzo: el
+        // Studio los reconoce por el atributo y, al guardar, los escribe en el
+        // placeholder (títulos de esta colocación) en vez de en el HTML, que se
+        // regenera. Fuera del Studio el atributo no hace nada.
+        if ($heading !== '') $html .= '<h2 class="pp-form__heading" data-pp-embed-field="heading">' . self::e($heading) . '</h2>';
+        if ($desc !== '')    $html .= '<p class="pp-form__desc" data-pp-embed-field="subheading">' . self::nl2br(self::e($desc)) . '</p>';
 
         if (empty($validFields)) {
             $html .= '</div></div>';

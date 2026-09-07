@@ -1134,6 +1134,66 @@
             }).join('')
         + '</select></div>';
     }
+    // EMB-2 — Ajustes del embed que lleve la sección (formulario, entradas,
+    // productos, recursos). Las opciones existían en el servidor desde hace
+    // versiones; lo que faltaba era esto.
+    var emb = props.embed;
+    var eo = (emb && emb.opts) || {};
+    var embedBlock = '';
+    if (emb) {
+      var campos = '';
+      var esFormulario = emb.kind === 'form';
+      var esRecursos = emb.kind === 'resources';
+      var esListado = emb.kind === 'posts' || emb.kind === 'products' || esRecursos;
+
+      // Cuántos enseña. El formulario no lista nada, así que no lo lleva.
+      if (esListado) {
+        campos += '<div class="cvstudio-field"><label>' + pp.t('js.cv.emb_limit') + '</label>'
+          + '<div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + ['2', '3', '4', '6'].map(function (n) {
+              return seg('emblimit', n, String(eo.limit || '3'), n);
+            }).join('')
+          + '</div></div>';
+      }
+
+      // Cómo se ve. Cada tipo tiene su vocabulario, así que no se comparte.
+      if (esRecursos) {
+        campos += '<div class="cvstudio-field"><label>' + pp.t('js.cv.emb_layout') + '</label>'
+          + '<div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('embvariant', 'grid', String(eo.variant || 'grid'), pp.t('js.cv.emb_grid'))
+          + seg('embvariant', 'list', String(eo.variant || 'grid'), pp.t('js.cv.emb_list'))
+          + '</div></div>';
+        campos += '<div class="cvstudio-field"><label for="ep-emb-category">' + pp.t('js.cv.emb_category') + '</label>'
+          + '<input type="text" id="ep-emb-category" data-embopt="category" maxlength="100"'
+          + ' value="' + esc(String(eo.category || '')) + '"'
+          + ' placeholder="' + esc(pp.t('js.cv.emb_category_all')) + '"></div>';
+      }
+
+      // El ancho es de la COLOCACIÓN, no del formulario: el mismo formulario
+      // puede ir estrecho en una página y a todo lo ancho en otra.
+      if (esFormulario) {
+        campos += '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_width') + '</label>'
+          + '<div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
+          + seg('embwidth', 'card', String(eo.width || 'full'), pp.t('js.cv.booking_w_card'))
+          + seg('embwidth', 'wide', String(eo.width || 'full'), pp.t('js.cv.booking_w_wide'))
+          + seg('embwidth', 'full', String(eo.width || 'full'), pp.t('js.cv.booking_w_full'))
+          + '</div></div>';
+      }
+
+      // Títulos. En el formulario mandan solo en ESTA página; en el resto son
+      // los del bloque.
+      campos += '<div class="cvstudio-field"><label for="ep-emb-heading">' + pp.t('js.cv.emb_heading') + '</label>'
+        + '<input type="text" id="ep-emb-heading" data-embopt="heading" maxlength="120"'
+        + ' value="' + esc(String(eo.heading || '')) + '"'
+        + ' placeholder="' + esc(pp.t('js.cv.emb_heading_auto')) + '"></div>'
+        + '<div class="cvstudio-field"><label for="ep-emb-subheading">' + pp.t('js.cv.emb_subheading') + '</label>'
+        + '<input type="text" id="ep-emb-subheading" data-embopt="subheading" maxlength="240"'
+        + ' value="' + esc(String(eo.subheading || '')) + '"></div>';
+
+      embedBlock = campos
+        + '<small class="cvstudio-hint">' + pp.t(esFormulario ? 'js.cv.emb_form_hint' : 'js.cv.emb_hint') + '</small>';
+    }
+
     var bookingBlock = bk
       ? bkServiceBlock
         + '<div class="cvstudio-field"><label>' + pp.t('js.cv.booking_width') + '</label><div class="cvstudio-btnrow cvstudio-btnrow--wrap">'
@@ -1149,6 +1209,7 @@
 
     return ''
       + bookingBlock
+      + embedBlock
       + colorField(pp.t('chrome.bg_color_js'), 'bgcolor', { current: props.bgcolor })
       + galleryBlock
       + bgImageBlock
@@ -1280,7 +1341,13 @@
   }
 
   // Operaciones segmentadas (toggle visual de "activo" entre hermanas).
-  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1, bookingwidth: 1, bookingdays: 1 };
+  var SEGMENTED = { pad: 1, bgdim: 1, radius: 1, sliderlayout: 1, bookingwidth: 1, bookingdays: 1,
+    emblimit: 1, embvariant: 1, embwidth: 1 };
+
+  // EMB-2 — Los botones del embed son `data-op` como los demás, pero la orden
+  // que viaja es siempre la misma (`embedopt`) con la clave dentro: así el
+  // overlay tiene UN camino para todos los ajustes en vez de uno por opción.
+  var EMBED_OPS = { emblimit: 'limit', embvariant: 'variant', embwidth: 'width' };
 
   function wirePanel(kind) {
     // Estas no pintan "Guardado" a ciegas: el overlay serializa la sección y el
@@ -1293,7 +1360,11 @@
     });
     panel.querySelectorAll('[data-op]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        applyOp(btn.dataset.op, btn.dataset.val);
+        if (EMBED_OPS[btn.dataset.op]) {
+          applyOp('embedopt', { key: EMBED_OPS[btn.dataset.op], value: btn.dataset.val });
+        } else {
+          applyOp(btn.dataset.op, btn.dataset.val);
+        }
         if (SEGMENTED[btn.dataset.op]) {
           var sibs = btn.parentNode.querySelectorAll('[data-op="' + btn.dataset.op + '"]');
           sibs.forEach(function (b) { b.classList.remove('is-on'); });
@@ -1306,6 +1377,13 @@
         var on = !btn.classList.contains('is-on');
         btn.classList.toggle('is-on', on);
         applyOp(btn.dataset.toggle, on);
+      });
+    });
+    // Al salir del campo, no en cada tecla: cada cambio obliga al servidor a
+    // repintar el bloque y a recargar la vista.
+    panel.querySelectorAll('[data-embopt]').forEach(function (field) {
+      field.addEventListener('change', function () {
+        applyOp('embedopt', { key: field.dataset.embopt, value: field.value });
       });
     });
     panel.querySelectorAll('[data-corner]').forEach(function (field) {

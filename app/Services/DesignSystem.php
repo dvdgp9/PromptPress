@@ -2185,6 +2185,14 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
    mentiría: se elegía "completo" y la previa seguía enseñando una tarjeta. */
 .pp-booking-embed--w-wide { max-width: 760px; }
 .pp-booking-embed--w-full { max-width: none; }
+/* EMB-1 — Ancho de un embed dentro de una página canvas (formulario, de
+   momento), con el mismo vocabulario que el calendario: card / wide / full.
+   `full` no necesita regla: es lo que hace el bloque por su cuenta. */
+.pp-canvas-embed--w-card { max-width: 420px; }
+.pp-canvas-embed--w-wide { max-width: 760px; }
+.pp-canvas-embed--w-card,
+.pp-canvas-embed--w-wide { width: 100%; margin-inline: auto; }
+
 /* RSV-TABS — Varios servicios en un mismo calendario (p. ej. «15 min gratis» y
    «sesión completa»). La barra manda sobre UN calendario, que cambia de
    servicio al pulsar; el ancho lo hereda del embed para que pestañas y

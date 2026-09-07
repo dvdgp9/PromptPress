@@ -44,7 +44,7 @@ final class FeaturedProductsRenderer
 
         $h = '<div class="pp-featured-products">';
         if ($heading !== '') {
-            $h .= '<h2 class="pp-featured-products__heading">' . e($heading) . '</h2>';
+            $h .= '<h2 class="pp-featured-products__heading" data-pp-embed-field="heading">' . e($heading) . '</h2>';
         }
         $h .= '<div class="pp-featured-products__grid" style="--ppfp-cols:' . min(count($products), 4) . '">';
         foreach ($products as $p) {
