@@ -175,6 +175,16 @@ try {
         $raw['colors']['text'] !== '#101010' || $inherited['colors']['text'] === '#101010',
         'load() devolvió ' . $raw['colors']['text']
     );
+    // --- 7. La hoja pública viaja versionada -------------------------------
+    // Sin esto, una instalación que se actualiza sigue pintando con el CSS
+    // viejo: la URL de `design.css` no cambiaba nunca y la hoja se sirve
+    // cacheable, así que los estilos de una versión nueva no llegaban.
+    $head = DesignSystem::renderHead($siteId);
+    check(
+        'renderHead pide design.css con la versión en la URL',
+        str_contains($head, 'design.css?v=' . PP_VERSION),
+        $head
+    );
 } finally {
     $restore();
     echo PHP_EOL . 'Estado restaurado.' . PHP_EOL;

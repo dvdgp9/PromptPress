@@ -8645,3 +8645,30 @@ inexistentes, desactivados, una pestaña sola, y el round-trip del Studio).
 - El `ref` de un placeholder canvas se valida en tres sitios de `CanvasService`
   (`expandPlaceholders`, `canonicalizePlaceholders` y `normalizeEditedSectionHtml`).
   El tercero BORRA lo que no encaja. Ver [[canvas-embed-options]].
+
+### RSV-TABS-CSS — Las pestañas salían sin estilo (07/09/2026, Executor)
+
+El gestor actualizó a 1.2.7, las pestañas funcionaban… y se veían como botones
+del navegador, sin nada de CSS.
+
+**El CSS no estaba roto: no llegaba.** `renderHead()` enlazaba
+`base_url('design.css')` **sin versión**, y la ruta la sirve con
+`Cache-Control: public, max-age=60`. Como la URL no cambia nunca al actualizar,
+cualquier navegador, proxy o CDN que tuviera la hoja guardada seguía sirviendo
+la de antes; el HTML ya pedía `.pp-booking-tabs__tab` y la hoja no lo conocía.
+Es exactamente la lección que el proyecto ya tenía anotada para los assets del
+panel (`?v=filemtime`), y a esta ruta se le había escapado. Ahora va
+`design.css?v=PP_VERSION`, con test en `tests/design_precedence.php`.
+
+De paso, un fallo de diseño que el screenshot dejó ver: las pestañas eran
+`flex: 1 1 auto`, así que con el calendario a todo el ancho salían dos botones
+de media página. Ahora se ajustan al contenido (`flex: 0 1 auto`).
+
+Medido en el navegador (el panel estaba oculto y no pinta, así que por geometría
+en vez de a ojo):
+
+| Ancho del embed | Barra | Pestañas |
+|---|---|---|
+| `wide` | 760 px | 163 y 123 px |
+| `full` (1280 px) | 1280 px | 163 y 123 px, alineadas a la izquierda |
+| `full` en móvil (375 px) | 375 px | 163 + 123 en una fila, sin desbordar |

@@ -498,7 +498,14 @@ final class DesignSystem
         // `$visualStyleSlug` y `$paletteOverride` se mantienen en la firma
         // porque muchas llamadas los pasan; ahora se ignoran.
 
-        $cssHref = htmlspecialchars(base_url('design.css'), ENT_QUOTES, 'UTF-8');
+        // La hoja se sirve cacheable y su URL no cambiaba NUNCA, así que una
+        // instalación que actualizaba seguía pintando con el CSS viejo: los
+        // estilos nuevos de una versión (p. ej. las pestañas del calendario)
+        // no aparecían aunque el HTML ya los pidiera, y con una CDN o un proxy
+        // por delante el problema duraba días. Mismo criterio que el resto de
+        // assets del panel, que ya viajan con `?v=` (ahí, `filemtime`; aquí no
+        // hay fichero porque la hoja se genera, así que manda la versión).
+        $cssHref = htmlspecialchars(base_url('design.css') . '?v=' . PP_VERSION, ENT_QUOTES, 'UTF-8');
         $cssLink = '<link rel="stylesheet" href="' . $cssHref . '">';
 
         // Si hay skin compuesto, emitimos un `<style>` inline con las vars
@@ -2192,7 +2199,9 @@ main:has(.pp-article-hero) .pp-section--article_body { padding-top: clamp(32px, 
     margin-bottom: 12px;
 }
 .pp-booking-tabs__tab {
-    flex: 1 1 auto;
+    /* Al contenido, no a partes iguales: con el calendario a todo el ancho,
+       repartir el espacio daba dos botones de media página. */
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
     flex-direction: column;
