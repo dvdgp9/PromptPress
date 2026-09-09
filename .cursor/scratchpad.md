@@ -9074,3 +9074,23 @@ Terminado y verificado a mano sobre el servidor local (8788):
 - Al forzar la conservación de un atributo en `replaceSection` hay que dejar
   fuera el camino de la edición a mano: el guardado del Studio pasa por la
   misma función, y «conservar siempre» le impedía cambiar el ancla.
+
+### Revisión de UX del destino del enlace (09/09/2026)
+
+Feedback del usuario sobre el panel del botón: «es una única selección pero se
+pueden hacer dos aparte de la caja de texto. No está nada claro». Tenía razón:
+«Enlace a una página», «…o una sección de esta página» y «…o una dirección»
+escribían los tres en el mismo `href`, apilados, sin que se viera cuál mandaba.
+
+Ahora es una sola decisión en dos pasos: un selector de TIPO de destino
+(Otra página · Una sección · Una dirección) y debajo únicamente el control de
+ese tipo. Al abrir el panel, el tipo activo se deduce del enlace que ya tiene
+(`#algo` que exista → sección; una URL del sitio → página; el resto → dirección).
+Cambiar de tipo no toca el enlace: solo cambia el control.
+
+- Si la página no tiene secciones, el tipo «Una sección» no aparece.
+- Las claves muertas (`js.cv.link_to_page`, `js.cv.link_to_section`,
+  `js.cv.or_url`) se retiran de los cuatro idiomas.
+- Verificado en el Studio: los tres tipos, que cambiar de tipo no reescriba el
+  enlace, y que al reabrir el panel salga marcado el tipo correcto.
+

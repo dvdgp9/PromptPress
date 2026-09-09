@@ -9947,6 +9947,8 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 .cvstudio-btnrow button:last-child{border-right:0}
 .cvstudio-btnrow button:hover{background:#f3f4f6}
 .cvstudio-btnrow button.is-on{background:#111827;color:#fff}
+/* Destino del enlace: el tipo elegido manda, solo se ve su control. */
+.cvstudio-dest[hidden]{display:none}
 .cvstudio-corners{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .cvstudio-corners label{display:flex;flex-direction:column;gap:4px;color:#6b7280;font-size:.7rem}
 .cvstudio-corners input{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:7px 8px;font:inherit;font-size:.82rem;background:#fff}

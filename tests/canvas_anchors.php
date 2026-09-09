@@ -114,7 +114,18 @@ $design = (string) file_get_contents(PP_ROOT . '/app/Services/DesignSystem.php')
 anchorCheck('el panel de sección deja poner el ancla',
     str_contains($js, "id=\"ep-anchor\"") && str_contains($js, "applyOp('anchor'"));
 anchorCheck('el panel de enlace deja elegir una sección de la página',
-    str_contains($js, "id=\"ep-section\"") && str_contains($js, 'sectionTargetField'));
+    str_contains($js, "id=\"ep-section\"") && str_contains($js, 'linkDestinationField'));
+// A dónde lleva un enlace es UNA decisión: primero el tipo de destino, y solo
+// se ve el control de ese tipo. Tres campos apilados escribiendo en el mismo
+// sitio parecían tres cosas que rellenar.
+anchorCheck('el destino del enlace se elige una sola vez',
+    str_contains($js, 'data-linkmode')
+    && str_contains($js, 'data-destpane')
+    && substr_count($js, "pp.t('js.cv.link_dest')") === 1
+    && !str_contains($js, "pp.t('js.cv.or_url')")
+);
+anchorCheck('solo se ve el control del destino elegido',
+    str_contains((string) file_get_contents(PP_ROOT . '/admin/assets/css/admin.css'), '.cvstudio-dest[hidden]{display:none}'));
 anchorCheck('el overlay aplica y guarda el ancla',
     str_contains($controller, "msg.op === 'anchor'") && str_contains($controller, 'anchor:1'));
 anchorCheck('la barra de texto ofrece las secciones como destino',
@@ -127,7 +138,11 @@ foreach (['es', 'en', 'fr', 'pt'] as $lang) {
     anchorCheck('microcopia del ancla en ' . $lang,
         str_contains($file, "'js.cv.anchor'")
         && str_contains($file, "'js.cv.anchor_hint'")
-        && str_contains($file, "'js.cv.link_to_section'")
+        && str_contains($file, "'js.cv.link_dest'")
+        && str_contains($file, "'js.cv.dest_page'")
+        && str_contains($file, "'js.cv.dest_section'")
+        && str_contains($file, "'js.cv.dest_url'")
+        && str_contains($file, "'js.cv.dest_section_hint'")
         && str_contains($file, "'js.cv.pick_section'")
         && str_contains($file, "'js.cv.rt_link_section'")
     );

@@ -1081,34 +1081,60 @@
     return slug + '-' + n;
   }
 
-  function sectionTargetField(props) {
-    if (!pageSections.length) return '';
-    var cur = String(props.href || '');
-    var opts = '<option value="">— ' + pp.t('js.cv.pick_section') + ' —</option>'
+  /**
+   * A dónde lleva el enlace: UNA decisión, un control.
+   *
+   * Antes eran tres campos apilados —página, sección y dirección— que escribían
+   * todos en el mismo sitio: parecía que había que rellenar varios y no se veía
+   * cuál mandaba. Ahora se elige primero el tipo de destino y debajo aparece
+   * solo lo que hace falta para ese tipo.
+   */
+  function linkDestinationField(props) {
+    var href = String(props.href || '');
+    var hasSections = pageSections.length > 0;
+    var isSection = hasSections && href.charAt(0) === '#';
+    var isPage = !isSection && href !== '' && LINKS.some(function (l) { return l.url === href; });
+    // Sin destino todavía, lo más habitual es enlazar a otra página.
+    var mode = isSection ? 'section' : (isPage || href === '' ? 'page' : 'url');
+
+    var modes = [['page', pp.t('js.cv.dest_page')]];
+    if (hasSections) modes.push(['section', pp.t('js.cv.dest_section')]);
+    modes.push(['url', pp.t('js.cv.dest_url')]);
+
+    var tabs = modes.map(function (m) {
+      return '<button type="button" data-linkmode="' + m[0] + '" class="' + (mode === m[0] ? 'is-on' : '') + '">' + m[1] + '</button>';
+    }).join('');
+
+    var pageOpts = '<option value="">— ' + pp.t('js.cv.pick_page') + ' —</option>'
+      + LINKS.map(function (l) {
+        return '<option value="' + esc(l.url) + '"' + (l.url === href ? ' selected' : '') + '>' + esc(l.title) + '</option>';
+      }).join('');
+    var sectionOpts = '<option value="">— ' + pp.t('js.cv.pick_section') + ' —</option>'
       + pageSections.map(function (p) {
         var val = '#' + (p.anchor || p.id);
-        return '<option value="' + esc(val) + '"' + (val === cur ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+        return '<option value="' + esc(val) + '"' + (val === href ? ' selected' : '') + '>' + esc(p.label) + '</option>';
       }).join('');
-    return '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_to_section') + '</label>'
-      + '<select id="ep-section">' + opts + '</select></div>';
+
+    var pane = function (name, inner) {
+      return '<div class="cvstudio-dest" data-destpane="' + name + '"' + (mode === name ? '' : ' hidden') + '>' + inner + '</div>';
+    };
+
+    return '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_dest') + '</label>'
+      + '<div class="cvstudio-btnrow cvstudio-btnrow--wrap">' + tabs + '</div></div>'
+      + pane('page', '<div class="cvstudio-field"><select id="ep-page" aria-label="' + pp.t('js.cv.dest_page') + '">' + pageOpts + '</select></div>')
+      + (hasSections ? pane('section', '<div class="cvstudio-field"><select id="ep-section" aria-label="' + pp.t('js.cv.dest_section') + '">' + sectionOpts + '</select>'
+          + '<small class="cvstudio-hint">' + pp.t('js.cv.dest_section_hint') + '</small></div>') : '')
+      + pane('url', '<div class="cvstudio-field"><input type="text" id="ep-url" placeholder="https://…" aria-label="' + pp.t('js.cv.dest_url') + '" value="' + esc(href) + '"></div>');
   }
 
   function linkControls(props) {
-    var opts = '<option value="">— ' + pp.t('js.cv.pick_page') + ' —</option>'
-      + LINKS.map(function (l) {
-        return '<option value="' + esc(l.url) + '"' + (l.url === props.href ? ' selected' : '') + '>' + esc(l.title) + '</option>';
-      }).join('');
     var styleControls = props.isButton
       ? colorField(pp.t('js.cv.fill'), 'fill', { none: true, current: props.fill }) + colorField(pp.t('js.cv.text_color'), 'color', { current: props.color }) + radiusField() + sizeField()
       : colorField(pp.t('js.cv.color'), 'color', { current: props.color }) + sizeField();
     return ''
       + '<div class="cvstudio-field"><label>' + pp.t('js.chrome.text') + '</label>'
         + '<input type="text" id="ep-text" value="' + esc(props.text || '') + '"></div>'
-      + '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_to_page') + '</label>'
-        + '<select id="ep-page">' + opts + '</select></div>'
-      + sectionTargetField(props)
-      + '<div class="cvstudio-field"><label>' + pp.t('js.cv.or_url') + '</label>'
-        + '<input type="text" id="ep-url" placeholder="https://…" value="' + esc(props.href || '') + '"></div>'
+      + linkDestinationField(props)
       + '<label class="cvstudio-check"><input type="checkbox" id="ep-newtab"' + (props.newTab ? ' checked' : '') + '> ' + pp.t('js.cv.open_new_tab') + '</label>'
       + '<hr class="cvstudio-sep">'
       + styleControls;
@@ -1510,12 +1536,24 @@
       var urlIn = panel.querySelector('#ep-url');
       var textIn = panel.querySelector('#ep-text');
       var newtab = panel.querySelector('#ep-newtab');
+      // Elegir el TIPO de destino no cambia el enlace todavía: solo enseña el
+      // control que toca. El enlace cambia al elegir la página, la sección o
+      // escribir la dirección.
+      panel.querySelectorAll('[data-linkmode]').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          var mode = tab.dataset.linkmode;
+          panel.querySelectorAll('[data-linkmode]').forEach(function (b) { b.classList.toggle('is-on', b === tab); });
+          panel.querySelectorAll('[data-destpane]').forEach(function (pane) { pane.hidden = pane.dataset.destpane !== mode; });
+          var field = panel.querySelector('[data-destpane="' + mode + '"] select, [data-destpane="' + mode + '"] input');
+          if (field) field.focus();
+        });
+      });
       if (pageSel) pageSel.addEventListener('change', function () {
-        if (pageSel.value) { urlIn.value = pageSel.value; applyOp('link', pageSel.value); }
+        if (pageSel.value) { if (urlIn) urlIn.value = pageSel.value; applyOp('link', pageSel.value); }
       });
       var secSel = panel.querySelector('#ep-section');
       if (secSel) secSel.addEventListener('change', function () {
-        if (secSel.value) { urlIn.value = secSel.value; applyOp('link', secSel.value); }
+        if (secSel.value) { if (urlIn) urlIn.value = secSel.value; applyOp('link', secSel.value); }
       });
       if (urlIn) urlIn.addEventListener('change', function () { applyOp('link', urlIn.value.trim()); });
       if (textIn) textIn.addEventListener('change', function () { applyOp('settext', textIn.value); });
