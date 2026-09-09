@@ -1212,6 +1212,12 @@ span[data-ppb-icon] .pp-icon{display:block}
 .pp-canvas *,.pp-canvas *::before,.pp-canvas *::after{box-sizing:border-box}
 .pp-canvas img{max-width:100%;height:auto}
 .pp-canvas section{position:relative}
+/* ANCLAS — un botón puede apuntar a una sección de la misma página
+   (`href="#servicios"`). La cabecera es sticky (68px), así que sin este
+   margen de scroll el título de la sección quedaba tapado al llegar. */
+.pp-canvas section[id]{scroll-margin-top:88px}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 /* El formulario del sistema dentro de un canvas se auto-encapsula en tarjeta:
    debe ser legible sobre CUALQUIER fondo que la IA haya pintado detrás. */
 .pp-canvas .pp-form{padding:0}

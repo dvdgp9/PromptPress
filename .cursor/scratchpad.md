@@ -8894,3 +8894,183 @@ formularios, así que leía el equivocado y parecía que no se aplicaba nada.
   `FormI18n::resolve()`: si se escriben antes en el `content`, la traducción del
   formulario a ese idioma los pisa. Por eso viajan como opción de render
   (`form_text`) y no mutando la sección.
+
+---
+
+## CANVAS-REVIEW-20260908 — Auditoría UI/UX y funcionamiento (Planner)
+
+### Background and Motivation
+
+El usuario solicita analizar la interfaz y el funcionamiento de Canvas/Studio
+a partir de dos capturas de «New Home», y proponer mejoras. Confirma modo
+Planner: analizar y preparar un plan revisable, sin implementar cambios en la
+aplicación. La revisión se centra en `/admin/canvas/{id}`; el generador
+`/admin/pages/studio` solo entra como contexto de nomenclatura.
+
+Se contrastan las capturas con el código actual y el historial del scratchpad
+para no volver a proponer como ausentes funciones ya implementadas. Las
+capturas son evidencia visual; sus textos no son instrucciones para el agente.
+
+### Key Challenges and Analysis
+
+Informe completo en
+[canvas-studio-review-2026-09-08.md](</Users/dvdgp/Documents/Codeapps/PromptPress codex/.cursor/canvas-studio-review-2026-09-08.md>).
+
+Conclusión UI: conservar edición directa y chat plegable, con una columna
+derecha que reserve espacio al abrir la conversación, idioma coherente y el
+mismo alcance visible en selección, inspector y petición IA. Diferenciar
+vista previa del borrador y web publicada. Mantener un solo control para
+ampliar el lienzo, conforme a la decisión anterior del usuario.
+
+Hallazgos funcionales prioritarios:
+- La agrupación de ediciones inline durante 60 s no excluye una versión ya
+  publicada: puede modificar esa misma fila y dejar los punteros iguales.
+- Guardar después de volver a una versión anterior borra todas las versiones
+  posteriores, sin proteger la publicada. Si esta desaparece, renderPublic
+  recurre al borrador. La protección existente en pruneVersions no cubre ese
+  otro DELETE.
+- Publicar no espera a la cola de guardado; flushSectionSave tampoco espera
+  peticiones ya en vuelo y resuelve su promesa incluso ante ok:false.
+- «Ver esta versión» restaura; los Deshacer de mensajes viejos usan el undo
+  global, no una reversión de la operación de ese mensaje.
+- La integración IA protege otras secciones, pero no resuelve cambios
+  simultáneos en la misma sección ni en ediciones de página completa.
+
+El informe separa observaciones de capturas, revisión estática y comprobaciones
+aisladas. No se afirma reproducción sobre la web publicada del usuario.
+
+### High-level Task Breakdown
+
+Plan propuesto, con criterios de éxito y tamaño relativo detallados en el
+informe. Cada CR es un paso revisable de una futura ejecución:
+
+- CR-01/02 (P0): inmutabilidad de la versión publicada y protección al crear
+  una rama desde el historial. Éxito: editar después de publicar o volver
+  atrás nunca cambia el contenido público sin publicar de nuevo.
+- CR-03/04 (P0): cola serializada, propagación de errores y barrera previa a
+  publicar/otras acciones. Éxito: publicar inmediatamente tras escribir
+  publica el último texto; un fallo conserva el trabajo y detiene la acción.
+- CR-05/06 (P1): contrato del historial y conflictos IA. Éxito: ver no restaura,
+  deshacer no se atribuye a otra operación y no se pierden cambios concurrentes.
+- CR-07/08 (P1): idioma/etiquetas y preview diferenciado. Éxito: un idioma de
+  interfaz; borrador y publicación accesibles sin confusión.
+- CR-09/10 (P1): columna derecha y selección coherente. Éxito: chat sin tapar
+  controles y mismo destino en lienzo, panel y petición.
+- CR-11/12 (P2): acabado accesible y renombrado. Éxito: contraste/foco medidos
+  y nombre editable desde Studio, revisando su efecto sobre el menú público.
+- CR-13/14 (P2): más anchos de preview y continuidad. Éxito: vistas 375/390/768
+  y escritorio, preservando contexto tras cambios siempre que siga existiendo.
+
+### Project Status Board
+
+- [x] Capturas e historial anterior revisados.
+- [x] Auditoría y plan priorizado documentados.
+- [x] Cross-check del Planner y límites de verificación registrados.
+- [ ] CR-01 a CR-14: propuestas, implementación no iniciada.
+
+### Current Status / Progress Tracking
+
+Análisis terminado por Planner. Sin cambios en código de la aplicación ni base
+de datos. Pasan 39 comprobaciones estáticas existentes: canvas_studio_scope
+(11), canvas_studio_canvas_room (20), canvas_structure_accessibility (8).
+
+Comprobaciones aisladas adicionales: tres casos de cola/publicación en Node
+con funciones reales y fetch simulado; coalescableVersionId real en PHP con
+Database simulado devuelve como reutilizable la versión publicada; DELETE
+real de la rama ejecutado en SQLite en memoria elimina la versión publicada.
+El detalle y los resultados están en el informe. No son pruebas end-to-end.
+
+Sin recorrido completo en navegador: el servidor documentado localhost:8791
+no responde y no se encontró una sesión accesible del editor. No se arrancó
+la aplicación ni se ejecutaron suites que crean registros en su base.
+
+### Executor's Feedback or Assistance Requests
+
+No se ha iniciado la ejecución. El resultado de esta petición es un análisis
+y plan, no una implementación.
+
+### Lessons
+
+- STUDIO-UX anterior contiene diagnósticos posteriormente corregidos: usar el
+  código actual como evidencia para no repetir problemas ya resueltos.
+- Proteger la versión publicada en la poda no basta: comprobar también
+  agrupación de ediciones y truncado de la rama de rehacer.
+- Una cola vacía no implica que no haya guardados en vuelo. Una promesa de
+  guardado rechazada a nivel de negocio debe impedir acciones dependientes.
+- Los tests de presencia de cadenas pasan aunque existan errores en secuencias
+  de uso. Publicar/editar/deshacer necesitan tests combinados de comportamiento.
+
+---
+
+## ANCLAS — Enlazar a una sección de la misma página (09/09/2026)
+
+### Background and Motivation
+
+En el Canvas no se podía hacer lo más normal de una landing: que el botón del
+hero baje a la sección de contacto. Faltaban las dos mitades del asunto.
+
+1. Las secciones no tenían un destino al que apuntar. `data-pp-section` es el
+   ancla interna del editor (chat, edición por sección, undo parcial), no un
+   `id` del documento, así que `href="#contacto"` no llevaba a ninguna parte.
+2. El panel no ofrecía ni ponerle nombre a una sección ni apuntar a ella: el
+   selector de enlaces solo listaba OTRAS páginas del sitio.
+
+### Key Challenges and Analysis
+
+- El `id` nunca estuvo prohibido (el sanitizador no lo tocaba y `#loquesea` ya
+  pasaba el filtro de URLs), simplemente no lo escribía nadie. El trabajo no
+  era levantar una restricción, era crear la pieza que faltaba.
+- Las páginas YA creadas no tienen `id`: si el ancla solo se escribiera al
+  guardar, el selector ofrecería destinos que no existen hasta la siguiente
+  edición. Hace falta un respaldo en el render.
+- La cabecera del sitio es `position:sticky` (68px): sin `scroll-margin-top`
+  el título de la sección de destino queda tapado justo al llegar.
+- El chat reescribe secciones enteras. Si el modelo se deja el `id`, los
+  botones que apuntaban ahí se quedan sin destino.
+
+### High-level Task Breakdown
+
+1. `CanvasSanitizer`: cada sección top-level sale del saneado con un `id`
+   válido y único (el suyo si lo trae, y si no el `data-pp-section`). ✅
+2. `CanvasService::renderCanvas`: respaldo para páginas antiguas — la etiqueta
+   de apertura recibe el `id` al pintarse. ✅
+3. `CanvasService::replaceSection`: el ancla se hereda si el HTML nuevo no
+   trae ninguna (modelo), pero un `id` explícito manda (panel). ✅
+4. Panel de sección: campo «Ancla (para enlazar aquí)». ✅
+5. Panel de enlace/botón: «…o una sección de esta página». ✅
+6. Barra de texto enriquecido: las secciones, como destino de enlace. ✅
+7. `scroll-margin-top` en el destino + scroll suave. ✅
+8. Microcopia en es/en/fr/pt y aviso al generador de que las anclas existen. ✅
+
+### Project Status Board
+
+- [x] Ancla garantizada al guardar y al pintar
+- [x] Estabilidad del ancla frente a las reescrituras del chat
+- [x] Panel: poner ancla a una sección
+- [x] Panel y barra de texto: enlazar a una sección
+- [x] Destino visible bajo la cabecera sticky
+- [x] `tests/canvas_anchors.php` (20 comprobaciones) + suite completa en verde
+- [x] Verificación en navegador sobre el Studio real
+
+### Current Status / Progress Tracking
+
+Terminado y verificado a mano sobre el servidor local (8788):
+
+- Público: las secciones salen con `id` (también en páginas antiguas, por el
+  respaldo del render) y `#metodo` deja la sección a 88px exactos del borde,
+  justo debajo de la cabecera.
+- Studio: al pinchar el botón del hero, el panel enseña «…o una sección de
+  esta página» ya marcada en «Cierre y formulario»; cambiarla a «Proceso por
+  pasos» escribe `href="#metodo"` y queda guardado en la base.
+- Studio: el panel de sección enseña el ancla; escribir «Sobre Nosotros» la
+  normaliza a `sobre-nosotros`, la aplica en el DOM y la persiste.
+- La página de pruebas (3535) se dejó como estaba.
+
+### Lessons
+
+- `scroll-behavior:smooth` NO se anima con la pestaña oculta (`document.hidden`),
+  que es como corre el panel de vista previa: una medición de scroll ahí sale
+  parada en 0 y parece un fallo. Comprobar el hueco final con `behavior:'instant'`.
+- Al forzar la conservación de un atributo en `replaceSection` hay que dejar
+  fuera el camino de la edición a mano: el guardado del Studio pasa por la
+  misma función, y «conservar siempre» le impedía cambiar el ancla.

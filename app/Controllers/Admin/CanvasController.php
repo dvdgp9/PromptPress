@@ -1583,6 +1583,8 @@ final class CanvasController
     }
     if(kind === 'section'){
       p.pad = el.getAttribute('data-pp-pad') || 'default';
+      // ANCLAS — el id de la sección es su destino de enlace (#ancla).
+      p.anchor = el.getAttribute('id') || '';
       p.reveal = el.getAttribute('data-pp-behavior') === 'reveal';
       // Carrusel dentro de la sección: disposición actual y nº de fotos, para
       // poder ofrecer los controles de galería en el panel.
@@ -1868,7 +1870,7 @@ final class CanvasController
       if(!msg.preview) serializeAndSave(bkSec);
       return;
     }
-    var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1, sliderlayout:1, gallery:1 };
+    var sectionOps = { pad:1, reveal:1, bgcolor:1, bgimg:1, bgdim:1, sliderlayout:1, gallery:1, anchor:1 };
 
     if(msg.op === 'size'){
       var cur = Math.round(parseFloat(getComputedStyle(el).fontSize)) || 16;
@@ -1913,6 +1915,11 @@ final class CanvasController
         var px = PAD_PRESETS[msg.value];
         if(px){ sec.style.paddingTop = px+'px'; sec.style.paddingBottom = px+'px'; }
         else { sec.style.removeProperty('padding-top'); sec.style.removeProperty('padding-bottom'); }
+      } else if(msg.op === 'anchor'){
+        // ANCLAS — el panel manda el ancla ya normalizada; vacía significa
+        // "vuelve a la de por defecto" (la del propio data-pp-section).
+        var an = String(msg.value || '').trim();
+        sec.setAttribute('id', an !== '' ? an : sec.getAttribute('data-pp-section'));
       } else if(msg.op === 'reveal'){
         if(msg.value) sec.setAttribute('data-pp-behavior','reveal');
         else if(sec.getAttribute('data-pp-behavior')==='reveal') sec.removeAttribute('data-pp-behavior');
@@ -2077,6 +2084,7 @@ final class CanvasController
 
   function openLinkRow(){
     saveRange();
+    fillLinkTargets();   // las secciones (y sus anclas) pueden haber cambiado
     rtLinkRow.hidden = false;
     var a = currentLink();
     rtUrl.value = a ? (a.getAttribute('href') || '') : '';
@@ -2163,6 +2171,16 @@ final class CanvasController
     linkTargets.forEach(function(p){
       opts.push('<option value="' + p.url + '">' + p.title + '</option>');
     });
+    // ANCLAS — enlazar a otra parte de ESTA página, no solo a otra página.
+    var inner = [];
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pp-section]'), function(s){
+      var an = s.getAttribute('id');
+      if(!an) return;
+      inner.push('<option value="#' + an + '">' + label(s.getAttribute('data-pp-section'), s) + '</option>');
+    });
+    if(inner.length){
+      opts.push('<optgroup label="' + t('link_section','Sección de esta página') + '">' + inner.join('') + '</optgroup>');
+    }
     rtPageSel.innerHTML = opts.join('');
   }
 
@@ -2448,7 +2466,7 @@ final class CanvasController
   // la lista "Partes de esta página" no tenga que adivinarlo desde el id.
   post('ready', { scrollY: 0, palette: brandPalette(), sections: Array.prototype.map.call(document.querySelectorAll('[data-pp-section]'), function(s){
     var id = s.getAttribute('data-pp-section');
-    return { id: id, label: label(id, s) };
+    return { id: id, label: label(id, s), anchor: s.getAttribute('id') || '' };
   }) });
   window.addEventListener('scroll', function(){ hideTag(); }, {passive:true});
 })();

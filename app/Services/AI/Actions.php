@@ -833,6 +833,7 @@ final class Actions
                   . "COMPONENTES FUNCIONALES:\n"
                   . "- Formularios: NUNCA los dibujes. Si la página necesita uno, escribe `{{form:TIPO}}` usando SOLO contact, newsletter, quote, booking o job; el sistema lo crea y deduplica. También puedes usar el ID de un formulario ya creado que encaje exactamente.\n"
                   . "- Botones del sistema disponibles si quieres consistencia: `pp-btn pp-btn--primary pp-btn--lg` y `pp-btn--ghost` (ya estilados por el skin). También puedes diseñar los tuyos con tokens.\n"
+                  . "- Enlaces DENTRO de la misma página: cada `<section>` recibe automáticamente un `id` igual a su `data-pp-section`, así que un botón puede llevar a otra sección con `href=\"#slug-de-esa-seccion\"` (p. ej. `href=\"#contacto\"`). Úsalo cuando el CTA se refiera a algo que ya está más abajo en la página.\n"
                   . "ENLACES Y CTAs — COHERENCIA CON EL SITIO (regla dura): la página es un TODO dentro de un sitio real, no una pieza aislada.\n"
                   . "- Cada enlace/CTA debe apuntar SOLO a uno de: (a) una PÁGINA REAL del sitio (lista «PÁGINAS DEL SITIO» abajo, usa su ruta exacta), (b) un ANCLA a una sección REAL de ESTA misma página (`href=\"#slug-de-seccion\"` que exista en tu html), (c) el placeholder `{{form:REF}}`, o (d) `/contacto`.\n"
                   . "- PROHIBIDO inventar páginas o enlazar a destinos que no existen. Si no aparece en la lista, NO la enlaces.\n"

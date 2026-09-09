@@ -205,6 +205,53 @@ final class CanvasSanitizer
             }
             $seen[$id] = true;
         }
+
+        self::ensureSectionAnchors($root);
+    }
+
+    /**
+     * ANCLAS — Cada sección top-level lleva un `id` enlazable.
+     *
+     * Sin esto no había forma de que un botón apuntase a otra parte de la MISMA
+     * página: `data-pp-section` es el ancla interna del editor, no un id del
+     * documento, así que `href="#servicios"` no llevaba a ninguna parte. El id
+     * se respeta si ya viene (la IA o el usuario lo han puesto) y, si no, se
+     * hereda del `data-pp-section`, que ya es único y descriptivo.
+     */
+    private static function ensureSectionAnchors(\DOMElement $root): void
+    {
+        $taken = [];
+        foreach ($root->childNodes as $node) {
+            if (!$node instanceof \DOMElement || strtolower($node->tagName) !== 'section') continue;
+            $anchor = self::slugAnchor($node->getAttribute('id'));
+            // `pp-` es el prefijo del sistema (`#pp-canvas-12`): reservado.
+            if ($anchor === '' || str_starts_with($anchor, 'pp-')) {
+                $anchor = self::slugAnchor($node->getAttribute('data-pp-section'));
+            }
+            if ($anchor === '') $anchor = 'seccion';
+            $base = $anchor;
+            $n = 2;
+            while (isset($taken[$anchor])) { $anchor = $base . '-' . $n; $n++; }
+            $taken[$anchor] = true;
+            $node->setAttribute('id', $anchor);
+        }
+    }
+
+    /** Normaliza un ancla a minúsculas/guiones (sin acentos ni espacios). */
+    public static function slugAnchor(string $raw): string
+    {
+        $s = strtolower(trim($raw));
+        // i18n-ignore-start: tabla de transliteración, no es interfaz.
+        $s = strtr($s, [
+            'á'=>'a','à'=>'a','ä'=>'a','â'=>'a','ã'=>'a','é'=>'e','è'=>'e','ë'=>'e','ê'=>'e',
+            'í'=>'i','ì'=>'i','ï'=>'i','î'=>'i','ó'=>'o','ò'=>'o','ö'=>'o','ô'=>'o','õ'=>'o',
+            'ú'=>'u','ù'=>'u','ü'=>'u','û'=>'u','ñ'=>'n','ç'=>'c',
+        ]);
+        // i18n-ignore-end
+        $s = preg_replace('/[^a-z0-9]+/', '-', $s) ?? '';
+        $s = trim($s, '-');
+        if ($s !== '' && ctype_digit($s[0])) $s = 's-' . $s;   // un id no empieza por cifra
+        return rtrim(substr($s, 0, 60), '-');
     }
 
     // ==================================================================

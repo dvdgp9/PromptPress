@@ -345,7 +345,13 @@ final class CanvasService
         $lang = $lang ?? self::pageLanguage($pageId, $siteId);
         $hasForm = false;
         $hasResources = false;
-        $html = self::expandPlaceholders($canvas['html'], $siteId, $hasForm, $lang, $hasResources);
+        $html = self::expandPlaceholders(
+            self::withSectionAnchors($canvas['html']),
+            $siteId,
+            $hasForm,
+            $lang,
+            $hasResources
+        );
 
         $scope = '#pp-canvas-' . $pageId;
         $css = $canvas['css'] !== '' ? CanvasSanitizer::sanitizeCss($canvas['css'], $scope) : '';
@@ -355,6 +361,38 @@ final class CanvasService
             $out .= '<style>' . $css . '</style>';
         }
         return ['html' => $out, 'has_form' => $hasForm, 'has_resources' => $hasResources];
+    }
+
+    /**
+     * ANCLAS — Respaldo en el render: una sección sin `id` recibe el de su
+     * `data-pp-section`.
+     *
+     * El sanitizador ya lo escribe al guardar, pero las páginas creadas ANTES
+     * de esto solo lo tendrían tras su siguiente edición: hasta entonces un
+     * `href="#servicios"` no llevaría a ninguna parte. Se toca solo la etiqueta
+     * de apertura (nada de reserializar el documento entero).
+     */
+    private static function withSectionAnchors(string $html): string
+    {
+        $seen = [];
+        return (string) preg_replace_callback(
+            '/<section\b([^>]*\bdata-pp-section="([^"]*)"[^>]*)>/i',
+            static function (array $m) use (&$seen): string {
+                $attrs = $m[1];
+                if (preg_match('/\sid\s*=/i', $attrs)) {
+                    if (preg_match('/\sid\s*=\s*"([^"]*)"/i', $attrs, $idm)) $seen[$idm[1]] = true;
+                    return $m[0];
+                }
+                $anchor = CanvasSanitizer::slugAnchor($m[2]);
+                if ($anchor === '') return $m[0];
+                $base = $anchor;
+                $n = 2;
+                while (isset($seen[$anchor])) { $anchor = $base . '-' . $n; $n++; }
+                $seen[$anchor] = true;
+                return '<section id="' . $anchor . '"' . $attrs . '>';
+            },
+            $html
+        );
     }
 
     /**
@@ -815,6 +853,15 @@ final class CanvasService
 
         foreach ($root->childNodes as $node) {
             if ($node instanceof \DOMElement && $node->getAttribute('data-pp-section') === $sectionId) {
+                // ANCLAS — el `id` es un destino de enlace. Si el HTML nuevo
+                // no trae ninguno (al modelo se le ha caído al reescribir la
+                // sección), se hereda el que había: si no, los botones que
+                // apuntaban aquí se quedarían sin destino. Si trae uno, manda
+                // ese: es el camino por el que el panel cambia el ancla.
+                $keepAnchor = trim($node->getAttribute('id'));
+                if ($keepAnchor !== '' && trim($replacement->getAttribute('id')) === '') {
+                    $replacement->setAttribute('id', $keepAnchor);
+                }
                 $imported = $doc->importNode($replacement, true);
                 $root->replaceChild($imported, $node);
                 $out = '';
@@ -825,7 +872,7 @@ final class CanvasService
         return null;
     }
 
-    /** Lista [{id,label}] de secciones top-level de una página canvas. */
+    /** Lista [{id,label,anchor}] de secciones top-level de una página canvas. */
     public static function listSections(string $pageHtml): array
     {
         [, $root] = self::domFromHtml($pageHtml);
@@ -840,8 +887,10 @@ final class CanvasService
                 // "Booking 3 cf4f44f6" en vez de "Calendario: Consulta inicial".
                 $label = trim($node->getAttribute('data-pp-label'));
                 $out[] = [
-                    'id'    => $id,
-                    'label' => $label !== '' ? $label : ucfirst(str_replace(['-', '_'], ' ', $id)),
+                    'id'     => $id,
+                    'label'  => $label !== '' ? $label : ucfirst(str_replace(['-', '_'], ' ', $id)),
+                    // ANCLAS — destino de enlace dentro de la propia página.
+                    'anchor' => trim($node->getAttribute('id')),
                 ];
             }
         }

@@ -273,6 +273,7 @@
           link_url: pp.t('js.cv.rt_link_url'),
           link_apply: pp.t('js.cv.rt_link_apply'),
           link_page: pp.t('js.cv.rt_link_page'),
+          link_section: pp.t('js.cv.rt_link_section'),
           // SEC-BAR — la barra de acciones vive en el iframe y tampoco sabe el
           // idioma del usuario.
           move_up: pp.t('js.cv.move_up'),
@@ -785,7 +786,11 @@
   // ids a secas por si queda una preview vieja en caché.
   function renderSectionList(parts) {
     pageSections = (Array.isArray(parts) ? parts : []).map(function (p) {
-      return typeof p === 'string' ? { id: p, label: sectionLabel(p) } : { id: p.id, label: p.label || sectionLabel(p.id) };
+      // ANCLAS — `anchor` es el id enlazable de la sección (#ancla). Sin él
+      // (previews antiguas en caché) se cae al propio id de sección.
+      return typeof p === 'string'
+        ? { id: p, label: sectionLabel(p), anchor: p }
+        : { id: p.id, label: p.label || sectionLabel(p.id), anchor: p.anchor || p.id };
     });
     if (!sectionList) return;
     sectionList.innerHTML = '';
@@ -1046,6 +1051,48 @@
       + cornerFields(props);
   }
 
+  /**
+   * ANCLAS — Enlazar a una sección de ESTA página.
+   *
+   * Antes solo se podía apuntar a otra página o a una dirección escrita a mano,
+   * así que un botón "Ver servicios" no tenía forma de bajar a la sección de
+   * servicios. Cada parte de la página tiene un ancla (`#servicios`) que se
+   * puede cambiar desde el panel de la sección.
+   */
+  // Mismas reglas que el sanitizador del servidor (CanvasSanitizer::slugAnchor).
+  function slugAnchor(raw) {
+    var s = String(raw || '').trim().toLowerCase();
+    s = s.normalize ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : s;
+    s = s.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (/^[0-9]/.test(s)) s = 's-' + s;
+    return s.slice(0, 60).replace(/-+$/, '');
+  }
+
+  // Dos secciones con la misma ancla dejarían un enlace apuntando a la otra.
+  function uniqueAnchor(slug, ownSectionId) {
+    if (!slug) return '';
+    var taken = {};
+    pageSections.forEach(function (p) {
+      if (p.id !== ownSectionId) taken[p.anchor || p.id] = true;
+    });
+    if (!taken[slug]) return slug;
+    var n = 2;
+    while (taken[slug + '-' + n]) n++;
+    return slug + '-' + n;
+  }
+
+  function sectionTargetField(props) {
+    if (!pageSections.length) return '';
+    var cur = String(props.href || '');
+    var opts = '<option value="">— ' + pp.t('js.cv.pick_section') + ' —</option>'
+      + pageSections.map(function (p) {
+        var val = '#' + (p.anchor || p.id);
+        return '<option value="' + esc(val) + '"' + (val === cur ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+      }).join('');
+    return '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_to_section') + '</label>'
+      + '<select id="ep-section">' + opts + '</select></div>';
+  }
+
   function linkControls(props) {
     var opts = '<option value="">— ' + pp.t('js.cv.pick_page') + ' —</option>'
       + LINKS.map(function (l) {
@@ -1059,6 +1106,7 @@
         + '<input type="text" id="ep-text" value="' + esc(props.text || '') + '"></div>'
       + '<div class="cvstudio-field"><label>' + pp.t('js.cv.link_to_page') + '</label>'
         + '<select id="ep-page">' + opts + '</select></div>'
+      + sectionTargetField(props)
       + '<div class="cvstudio-field"><label>' + pp.t('js.cv.or_url') + '</label>'
         + '<input type="text" id="ep-url" placeholder="https://…" value="' + esc(props.href || '') + '"></div>'
       + '<label class="cvstudio-check"><input type="checkbox" id="ep-newtab"' + (props.newTab ? ' checked' : '') + '> ' + pp.t('js.cv.open_new_tab') + '</label>'
@@ -1217,7 +1265,13 @@
         + seg('pad', 'compact', props.pad, 'Compacto') + seg('pad', 'normal', props.pad, 'Normal')
         + seg('pad', 'roomy', props.pad, 'Amplio') + seg('pad', 'default', props.pad, 'Auto')
       + '</div></div>'
-      + '<label class="cvstudio-check"><input type="checkbox" id="ep-reveal"' + (props.reveal ? ' checked' : '') + '> Aparecer suavemente al bajar</label>';
+      + '<label class="cvstudio-check"><input type="checkbox" id="ep-reveal"' + (props.reveal ? ' checked' : '') + '> Aparecer suavemente al bajar</label>'
+      // ANCLAS — nombre corto con el que los botones de la página pueden
+      // apuntar a esta sección.
+      + '<hr class="cvstudio-sep">'
+      + '<div class="cvstudio-field"><label for="ep-anchor">' + pp.t('js.cv.anchor') + '</label>'
+        + '<input type="text" id="ep-anchor" value="' + esc(props.anchor || '') + '" placeholder="servicios">'
+        + '<small class="cvstudio-hint">' + pp.t('js.cv.anchor_hint') + '</small></div>';
   }
 
   // Migas de ámbito: Página ▸ Sección ▸ Bloque ▸ elemento. Sin ellas, cuando la
@@ -1459,6 +1513,10 @@
       if (pageSel) pageSel.addEventListener('change', function () {
         if (pageSel.value) { urlIn.value = pageSel.value; applyOp('link', pageSel.value); }
       });
+      var secSel = panel.querySelector('#ep-section');
+      if (secSel) secSel.addEventListener('change', function () {
+        if (secSel.value) { urlIn.value = secSel.value; applyOp('link', secSel.value); }
+      });
       if (urlIn) urlIn.addEventListener('change', function () { applyOp('link', urlIn.value.trim()); });
       if (textIn) textIn.addEventListener('change', function () { applyOp('settext', textIn.value); });
       if (newtab) newtab.addEventListener('change', function () { applyOp('newtab', newtab.checked); });
@@ -1470,6 +1528,15 @@
       if (repl) repl.addEventListener('click', function () { openMediaModal(); });
     }
     if (kind === 'section') {
+      // ANCLAS — el ancla se normaliza aquí (el panel sabe qué otras secciones
+      // hay) y viaja ya limpia al overlay; el servidor la vuelve a validar.
+      var anchorIn = panel.querySelector('#ep-anchor');
+      if (anchorIn) anchorIn.addEventListener('change', function () {
+        var slug = uniqueAnchor(slugAnchor(anchorIn.value), panelState.sectionId);
+        anchorIn.value = slug;
+        applyOp('anchor', slug);
+        pageSections.forEach(function (p) { if (p.id === panelState.sectionId) p.anchor = slug || p.id; });
+      });
       var reveal = panel.querySelector('#ep-reveal');
       if (reveal) reveal.addEventListener('change', function () { applyOp('reveal', reveal.checked); });
       var bgChange = panel.querySelector('#ep-bg-change');
