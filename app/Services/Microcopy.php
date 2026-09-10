@@ -336,6 +336,35 @@ final class Microcopy
             'fr' => 'Merci, nous vous recontacterons rapidement.',
             'pt' => 'Obrigado, entraremos em contacto em breve.',
         ],
+        // RSRC-FORM — Plantilla de descarga: el formulario que hay que rellenar
+        // para llevarse un recurso. `heading_for` lleva el título del recurso
+        // porque se crea desde el propio editor y ahí SÍ se sabe cuál es.
+        'form.tpl.download.heading' => [
+            'es' => 'Descarga el recurso', 'en' => 'Get your download',
+            'ca' => 'Descarrega el recurs', 'gl' => 'Descarga o recurso',
+            'eu' => 'Deskargatu baliabidea', 'fr' => 'Téléchargez la ressource',
+            'pt' => 'Descarrega o recurso',
+        ],
+        'form.tpl.download.heading_for' => [
+            'es' => 'Descarga «{recurso}»', 'en' => 'Get «{recurso}»',
+            'ca' => 'Descarrega «{recurso}»', 'gl' => 'Descarga «{recurso}»',
+            'eu' => '«{recurso}» deskargatu', 'fr' => 'Téléchargez «{recurso}»',
+            'pt' => 'Descarrega «{recurso}»',
+        ],
+        'form.tpl.download.success' => [
+            'es' => '¡Listo! Te hemos enviado el enlace de descarga por correo.',
+            'en' => 'All set! We have emailed you the download link.',
+            'ca' => 'Fet! T\'hem enviat l\'enllaç de descàrrega per correu.',
+            'gl' => 'Listo! Enviámosche a ligazón de descarga por correo.',
+            'eu' => 'Eginda! Deskarga-esteka postaz bidali dizugu.',
+            'fr' => 'C\'est fait ! Nous vous avons envoyé le lien de téléchargement par e-mail.',
+            'pt' => 'Pronto! Enviámos-te o link de descarga por email.',
+        ],
+        'form.tpl.download.submit' => [
+            'es' => 'Descargar', 'en' => 'Download', 'ca' => 'Descarregar',
+            'gl' => 'Descargar', 'eu' => 'Deskargatu', 'fr' => 'Télécharger',
+            'pt' => 'Descarregar',
+        ],
         'form.tpl.newsletter.heading' => [
             'es' => 'Suscríbete a nuestra newsletter', 'en' => 'Subscribe to our newsletter',
             'ca' => 'Subscriu-te a la nostra newsletter', 'gl' => 'Subscríbete á nosa newsletter',

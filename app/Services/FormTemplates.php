@@ -78,6 +78,24 @@ final class FormTemplates
                     ],
                 ]),
             ],
+            // RSRC-FORM — La puerta de un recurso descargable. Pide lo justo
+            // para poder mandarle el archivo: nombre y email. Base legal
+            // `consent`, que es lo que de verdad ocurre — te doy mis datos a
+            // cambio de la descarga — y no «interés legítimo».
+            'download' => [
+                'label'       => 'form_tpl.download.label',
+                'description' => 'form_tpl.download.desc',
+                'content'     => self::wrap('download', $lang, [
+                    'heading'         => $t('form.tpl.download.heading'),
+                    'success_message' => $t('form.tpl.download.success'),
+                    'submit_text'     => $t('form.tpl.download.submit'),
+                    'lawful_basis'    => 'consent',
+                    'fields'          => [
+                        self::field($t('form.tpl.field.name'),  'nombre', 'text',  true),
+                        self::field($t('form.tpl.field.email'), 'email',  'email', true),
+                    ],
+                ]),
+            ],
             'quote' => [
                 'label'       => 'form_tpl.quote.label',
                 'description' => 'form_tpl.quote.desc',

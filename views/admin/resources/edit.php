@@ -129,22 +129,49 @@ $fileSize = $hasFile ? ($resource['file_size'] >= 1024 * 1024
                     <span><strong><?= e(__('resource.admin.access.form')) ?></strong><small><?= e(__('resource.admin.access.form_help')) ?></small></span>
                 </label>
             </div>
+            <?php /* RSRC-FORM — El desplegable se pinta SIEMPRE, aunque el sitio
+               no tenga ni un formulario: así el botón de crear uno vive en el
+               mismo sitio en los dos casos, y al crearlo solo hay que añadir
+               una opción. Antes, sin formularios salía otro bloque distinto y
+               un enlace que se llevaba fuera del editor. */ ?>
             <div class="pp-resource-form-link" data-form-settings <?= $accessMode === 'form' ? '' : 'hidden' ?>>
-                <?php if ($forms === []): ?>
-                    <p><strong><?= e(__('resource.admin.form_empty_title')) ?></strong><span><?= e(__('resource.admin.form_empty_help')) ?></span></p>
-                    <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/formularios')) ?>"><?= e(__('resource.admin.create_form')) ?></a>
-                    <input type="hidden" name="form_id" value="">
-                <?php else: ?>
-                    <div class="pp-form-group">
-                        <label for="pp-resource-form"><?= e(__('resource.admin.form_label')) ?></label>
-                        <select id="pp-resource-form" name="form_id" data-form-select>
-                            <option value=""><?= e(__('resource.admin.form_placeholder')) ?></option>
-                            <?php foreach ($forms as $form): ?>
-                                <option value="<?= (int) $form['id'] ?>" <?= (int) ($resource['form_id'] ?? 0) === (int) $form['id'] ? 'selected' : '' ?>><?= e((string) $form['heading']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small><?= e(__('resource.admin.form_help')) ?></small>
-                    </div>
+                <div class="pp-form-group">
+                    <label for="pp-resource-form"><?= e(__('resource.admin.form_label')) ?></label>
+                    <select id="pp-resource-form" name="form_id" data-form-select>
+                        <option value=""><?= e(__('resource.admin.form_placeholder')) ?></option>
+                        <?php foreach ($forms as $form): ?>
+                            <option value="<?= (int) $form['id'] ?>" <?= (int) ($resource['form_id'] ?? 0) === (int) $form['id'] ? 'selected' : '' ?>><?= e((string) $form['heading']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small><?= e($forms === [] ? __('resource.admin.form_empty_help') : __('resource.admin.form_help')) ?></small>
+                </div>
+
+                <?php /* Crear formularios es la capacidad `forms`; editar recursos
+                   es `content`. Un redactor tiene la segunda y no la primera, así
+                   que para él este botón no existe — y el servidor lo comprueba
+                   igual. */ ?>
+                <?php if (\Core\Auth::can(\App\Services\Permissions::CAP_FORMS)): ?>
+                <div class="pp-resource-form-create" data-form-create>
+                    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm"
+                            data-create-form
+                            data-url="<?= e(base_url('admin/resources/' . $id . '/form')) ?>"
+                            data-busy-label="<?= e(__('resource.admin.creating_form')) ?>">
+                        <?= e(__('resource.admin.create_form')) ?>
+                    </button>
+                    <small><?= e(__('resource.admin.create_form_help')) ?></small>
+                    <?php /* Apunta SIEMPRE al formulario que hay elegido, no solo
+                       al que se acabe de crear: si el recurso ya venía con uno,
+                       el atajo sirve igual. El JS lo resincroniza al cambiar el
+                       desplegable. */ ?>
+                    <?php $tuneFormId = (int) ($resource['form_id'] ?? 0); ?>
+                    <a class="pp-link pp-resource-form-tune" data-form-tune
+                       data-form-base="<?= e(base_url('admin/formularios')) ?>"
+                       target="_blank" rel="noopener"
+                       <?= $tuneFormId > 0 ? '' : 'hidden' ?>
+                       href="<?= e($tuneFormId > 0 ? base_url('admin/formularios/' . $tuneFormId) : '') ?>">
+                        <?= e(__('resource.admin.tune_form')) ?>
+                    </a>
+                </div>
                 <?php endif; ?>
             </div>
         </section>

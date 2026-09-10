@@ -29,5 +29,7 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
         $r->get('/resources/{id}',                  [ResourceAdminController::class, 'edit'],    [$guard]);
         $r->post('/resources/{id}',                 [ResourceAdminController::class, 'update'],  [$guard]);
         $r->post('/resources/{id}/delete',          [ResourceAdminController::class, 'destroy'], [$guard]);
+        // RSRC-FORM — crear la puerta de descarga sin salir del editor
+        $r->post('/resources/{id}/form',            [ResourceAdminController::class, 'createForm'], [$guard]);
     }, $adminMiddlewares);
 };

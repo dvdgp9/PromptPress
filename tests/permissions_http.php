@@ -159,6 +159,37 @@ try {
         (string) $status . ' ' . mb_substr($body, 0, 200)
     );
 
+    // RSRC-FORM — El editor de recursos vive en `content`, pero el botón de
+    // crear el formulario de descarga es `forms`. Un redactor llega al editor y
+    // NO puede crear el formulario; un editor sí. Es el único sitio del panel
+    // donde una pantalla mezcla dos capacidades, así que conviene fijarlo.
+    $recursoInexistente = $baseUrl . '/admin/resources/999999/form';
+
+    permLogin($baseUrl, $created['redactor']['username'], $password);
+    [, $perfil] = permHttp('GET', $baseUrl . '/admin/profile');
+    [$status, $body] = permHttp('POST', $recursoInexistente, ['_csrf' => permCsrf($perfil)], [
+        'Accept: application/json',
+    ]);
+    permHttpCheck(
+        'redactor_no_crea_formularios_desde_recursos',
+        $status === 403,
+        (string) $status . ' ' . mb_substr($body, 0, 200)
+    );
+
+    // El editor sí pasa la capacidad: lo que le corta es que ese recurso no
+    // existe (404), no el permiso. Si esto contestara 403, la barrera estaría
+    // puesta en el sitio equivocado.
+    permLogin($baseUrl, $created['editor']['username'], $password);
+    [, $perfil] = permHttp('GET', $baseUrl . '/admin/profile');
+    [$status, $body] = permHttp('POST', $recursoInexistente, ['_csrf' => permCsrf($perfil)], [
+        'Accept: application/json',
+    ]);
+    permHttpCheck(
+        'editor_si_puede_y_le_corta_el_404',
+        $status === 404,
+        (string) $status . ' ' . mb_substr($body, 0, 200)
+    );
+
     // Sin sesión sigue mandando el login, no el 403: el guard no se come a requireAuth.
     if ($cookieJar !== '' && is_file($cookieJar)) @unlink($cookieJar);
     $cookieJar = (string) tempnam(sys_get_temp_dir(), 'permisos-anon-');

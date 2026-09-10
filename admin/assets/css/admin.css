@@ -12256,3 +12256,25 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
     padding-left: 18px;
 }
 .pp-alert__list li + li { margin-top: 4px; }
+
+
+/* RSRC-FORM — Crear la puerta de descarga sin salir del editor de recursos. */
+.pp-resource-form-create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-border);
+}
+.pp-resource-form-create small {
+    color: var(--pp-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    flex: 1 1 22ch;
+}
+.pp-resource-form-tune { font-size: 0.82rem; }
+/* `.pp-link` trae `display:inline-block` y eso pisa el `hidden` del navegador:
+   sin esto, el atajo se ve aunque no haya formulario al que llevar. */
+.pp-resource-form-tune[hidden] { display: none; }

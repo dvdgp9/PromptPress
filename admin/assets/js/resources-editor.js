@@ -63,7 +63,69 @@
             updateSelectedCards('status', '.pp-resource-status-option');
         });
     });
-    if (formSelect) formSelect.addEventListener('change', updateReadiness);
+    /* RSRC-FORM — El atajo «afinar este formulario» sigue al desplegable. Ojo:
+       `.pp-link` trae `display:inline-block`, que pisa el atributo `hidden` del
+       navegador; por eso el CSS lo fuerza aparte y aquí basta con `hidden`. */
+    var formTune = editor.querySelector('[data-form-tune]');
+    function syncTuneLink() {
+        if (!formTune || !formSelect) return;
+        var id = formSelect.value;
+        if (!id) {
+            formTune.hidden = true;
+            return;
+        }
+        formTune.href = formTune.getAttribute('data-form-base') + '/' + id;
+        formTune.hidden = false;
+    }
+
+    if (formSelect) {
+        formSelect.addEventListener('change', function () {
+            updateReadiness();
+            syncTuneLink();
+        });
+    }
+
+    /* RSRC-FORM — Crear la puerta de descarga sin salir del editor.
+       El editor es un POST clásico con multipart y sin autoguardado: irse a
+       /admin/formularios se llevaba por delante lo escrito y el archivo ya
+       elegido, que un <input type="file"> no recupera al volver. */
+    var createFormBtn = editor.querySelector('[data-create-form]');
+    if (createFormBtn && formSelect) {
+        createFormBtn.addEventListener('click', function () {
+            var original = createFormBtn.textContent;
+            createFormBtn.disabled = true;
+            createFormBtn.textContent = createFormBtn.getAttribute('data-busy-label');
+
+            var body = new FormData();
+            var token = editor.querySelector('input[name="_csrf"]');
+            body.append('_csrf', token ? token.value : '');
+
+            fetch(createFormBtn.getAttribute('data-url'), {
+                method: 'POST',
+                body: body,
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function (response) {
+                return response.json().catch(function () { return {}; });
+            }).then(function (data) {
+                if (!data || !data.ok || !data.form) {
+                    throw new Error(data && data.error ? data.error : pp.t('js.resources.form_failed'));
+                }
+                var option = document.createElement('option');
+                option.value = data.form.id;
+                option.textContent = data.form.heading;
+                formSelect.appendChild(option);
+                formSelect.value = String(data.form.id);
+                updateReadiness();
+                syncTuneLink();
+            }).catch(function (error) {
+                window.alert(error && error.message ? error.message : pp.t('js.resources.form_failed'));
+            }).then(function () {
+                createFormBtn.disabled = false;
+                createFormBtn.textContent = original;
+            });
+        });
+    }
     if (fileInput) {
         fileInput.addEventListener('change', function () {
             fileName.textContent = fileInput.files && fileInput.files[0]
@@ -197,4 +259,5 @@
     }
 
     updateReadiness();
+    syncTuneLink();
 })();

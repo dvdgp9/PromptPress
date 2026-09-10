@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Resources;
 
 use App\Services\FormStore;
+use App\Services\FormTemplates;
 use App\Services\LanguageService;
+use App\Services\Microcopy;
+use App\Services\Permissions;
 use Core\Auth;
 use Core\CSRF;
 use Core\Request;
@@ -142,6 +145,64 @@ final class ResourceAdminController
             $issues[] = 'resource.publish_issue.form';
         }
         return $issues;
+    }
+
+    /**
+     * RSRC-FORM — Crear aquí mismo el formulario que abre la descarga.
+     *
+     * Antes, el paso 03 ofrecía un enlace a /admin/formularios. Y el editor de
+     * recursos es un POST clásico con `multipart/form-data` sin autoguardado ni
+     * aviso de cambios sin guardar: salir por ese enlace se llevaba por delante
+     * el título, la descripción y —lo peor— el archivo ya elegido en el paso
+     * 02, que un `<input type="file">` no puede recuperar al volver. O sea que
+     * el flujo empujaba a perder trabajo justo donde más se había invertido.
+     *
+     * El formulario se crea y se devuelve, pero NO se engancha al recurso desde
+     * aquí: eso lo hace el guardado del editor, como todo lo demás. Enganchar
+     * ahora significaría que un recurso ya publicado con descarga directa
+     * pasara a exigir formulario sin que nadie haya pulsado Guardar.
+     */
+    public function createForm(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+
+        // El guard del router protege esta ruta con `content`, que es lo que
+        // hace falta para editar un recurso. Crear formularios es otra
+        // capacidad distinta (`forms`), y un redactor tiene la primera pero no
+        // la segunda: por eso aquí se pregunta, y no es una comprobación
+        // repetida.
+        if (!Auth::can(Permissions::CAP_FORMS)) {
+            Response::json(['ok' => false, 'error' => __('common.access_denied')], 403);
+        }
+
+        $resource = ResourceStore::find($siteId, (int) ($params['id'] ?? 0));
+        if ($resource === null) {
+            Response::json(['ok' => false, 'error' => __('resource.admin.err.not_found')], 404);
+        }
+
+        // FORMS-LANG — nace en el idioma PRINCIPAL del sitio, igual que
+        // cualquier formulario creado desde plantilla.
+        $lang = LanguageService::primaryFor($siteId);
+        $content = FormTemplates::content('download', $lang);
+
+        // El encabezado lleva el nombre del recurso: quien lo vea en la lista
+        // de formularios tiene que saber de cuál es la puerta sin abrirlo.
+        $title = trim((string) ($resource['title'] ?? ''));
+        if ($title !== '') {
+            $content['heading'] = Microcopy::t('form.tpl.download.heading_for', $lang, ['recurso' => $title]);
+        }
+
+        $formId = FormStore::create($siteId, $content);
+
+        Response::json([
+            'ok'   => true,
+            'form' => [
+                'id'      => $formId,
+                'heading' => (string) $content['heading'],
+                'editUrl' => base_url('admin/formularios/' . $formId),
+            ],
+        ]);
     }
 
     /** @param string[] $errors */

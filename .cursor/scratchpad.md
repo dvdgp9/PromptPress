@@ -9433,3 +9433,91 @@ sin email de contacto en la memoria del sitio: sale `admin@example.com`.
   salida** más contar líneas `^FAIL`.
 - `tests/update_from_zip.php` se salta solo si `PP_ENV` no es `development`:
   sale con código 2 y parece un fallo cuando no lo es.
+
+---
+
+## RSRC-FORM — La puerta de descarga se crea sin salir del editor (10/09/2026)
+
+### Background and Motivation (RSRC-FORM)
+
+Petición del usuario: «en Recursos, permitir crear un formulario directamente
+ahí en el punto 03; mejorará la integración de la plataforma como una sola».
+
+Al mirarlo apareció un motivo más fuerte que la integración: **el flujo actual
+perdía trabajo**. El paso 03 «Forma de entrega» ofrecía, cuando el sitio no
+tenía formularios, un enlace a `/admin/formularios`. Y el editor de recursos es
+un POST clásico con `multipart/form-data`, sin autoguardado y sin aviso de
+cambios sin guardar (no había un solo `beforeunload` en el módulo). Salir por
+ese enlace se llevaba el título, la descripción y —lo peor— el archivo ya
+elegido en el paso 02, que un `<input type="file">` no recupera al volver.
+
+O sea: el panel empujaba a perder trabajo justo en el paso donde más se había
+invertido.
+
+Segundo problema, menor pero real: el desplegable ofrecía TODOS los formularios
+del sitio (`FormStore::all`), incluido el de contacto de la web, sin forma de
+crear el adecuado sin salir.
+
+### Key Challenges and Analysis (RSRC-FORM)
+
+**1. Qué formulario se crea.** Un selector de plantillas dentro del paso 03
+sería reproducir `/admin/formularios` en miniatura. En vez de eso se añade una
+plantilla `download` al catálogo —nombre y email, base legal `consent`, sin
+marketing por defecto— que además queda disponible en Formularios como
+cualquier otra. Al crearla desde un recurso, el encabezado lleva su título
+(«Descarga «Guía práctica…»»), para que en la lista de formularios se sepa de
+cuál es la puerta sin abrirlo.
+
+**2. Dos capacidades en la misma pantalla.** Editar un recurso es `content`;
+crear formularios es `forms`. **Un redactor tiene la primera y no la segunda.**
+Es el único sitio del panel donde una pantalla mezcla dos capacidades, así que
+el botón pregunta por `forms` y el servidor lo vuelve a comprobar — y eso no es
+la comprobación repetida que se evitó en `UserController`, porque la capacidad
+que protege la ruta es otra.
+
+**3. El endpoint NO engancha el formulario al recurso.** Se crea y se devuelve;
+el vínculo lo escribe el guardado del editor, como todo lo demás. Enganchar
+desde el endpoint significaría que un recurso ya publicado con descarga directa
+pasara a exigir formulario sin que nadie pulsara Guardar.
+
+### Project Status Board (RSRC-FORM)
+
+- [x] Plantilla `download` en el catálogo + microcopia en 7 idiomas
+- [x] Endpoint `POST /admin/resources/{id}/form` con la barrera de `forms`
+- [x] Paso 03: desplegable siempre visible, botón de crear y atajo «afinar»
+- [x] `tests/resources_form_create.php` + cruce de capacidades en `permissions_http`
+- [x] Los cuatro idiomas del panel
+- [x] Suite completa
+
+### Current Status / Progress Tracking (RSRC-FORM)
+
+Verificado en navegador de punta a punta: se crea el recurso, se elige «pedir
+datos primero», se pulsa Crear formulario y el nuevo aparece en el desplegable
+ya seleccionado, con el aviso de publicación bajando a pedir solo el archivo.
+Al guardar, el recurso queda con `access_mode=form` y su `form_id`.
+
+Y la parte de permisos, con un redactor real: ve el editor (200) sin el botón, y
+un POST directo al endpoint contesta 403 sin crear nada.
+
+**Un fallo propio cazado al revisar la pantalla:** el atajo «Afinar este
+formulario» salía visible tras recargar y apuntando a `#`. La causa es que
+`.pp-link` trae `display:inline-block`, que **pisa el atributo `hidden` del
+navegador**. Se arregló mejor de lo que estaba: el atajo ahora sigue al
+desplegable (si el recurso ya traía formulario, sirve desde el primer momento) y
+el CSS fuerza el `[hidden]`.
+
+125 tests en verde.
+
+### Lessons (RSRC-FORM)
+
+- `[hidden]` no es fiable si alguna regla de autor le da `display` al elemento.
+  `.pp-link` lo hace, así que cualquier cosa que se oculte con `hidden` y lleve
+  esa clase necesita su propia regla `[hidden]{display:none}`.
+- Dos aserciones propias se rompieron por cambios míos posteriores, y las dos
+  eran demasiado burdas: buscar `ResourceStore::update` en TODO el controlador
+  (existe legítimamente en otro método) y prohibir `base_url('admin/formularios')`
+  en toda la vista (el atajo lo usa para componer `/formularios/{id}`). Al
+  afirmar sobre el código fuente, acotar al trozo que se quiere describir.
+- `tests/form_templates.php` contaba plantillas (`count(...) === 5`). Ahora
+  compara la lista completa: cuando falle dirá cuál falta, no solo que el número
+  no cuadra.

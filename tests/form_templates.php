@@ -48,7 +48,11 @@ check('exists() true para clave válida', FormTemplates::exists('quote'));
 check('exists() false para clave inventada', !FormTemplates::exists('inventada'));
 check('content() cae a contact si clave inválida', (FormTemplates::content('inventada')['form_type'] ?? '') === 'contact');
 check('label() devuelve etiqueta', FormTemplates::label('booking') === 'Reserva / cita');
-check('keys() lista las 5', count(FormTemplates::keys()) === 5);
+check(
+    'keys() lista el catálogo completo',
+    FormTemplates::keys() === ['contact', 'newsletter', 'download', 'quote', 'booking', 'job'],
+    json_encode(FormTemplates::keys()) ?: ''
+);
 
 // FormStore::defaultContact delega en el catálogo (sin duplicar schema).
 check('defaultContact == plantilla contact', FormStore::defaultContact() === FormTemplates::content('contact'));
