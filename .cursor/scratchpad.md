@@ -9521,3 +9521,81 @@ el CSS fuerza el `[hidden]`.
 - `tests/form_templates.php` contaba plantillas (`count(...) === 5`). Ahora
   compara la lista completa: cuando falle dirá cuál falta, no solo que el número
   no cuadra.
+
+---
+
+## ANL-FIX — La analítica en blanco y los botones muertos (10/09/2026)
+
+### Background and Motivation (ANL-FIX)
+
+El usuario reporta desde producción (margonaturo.com): el panel de Analítica
+sale con los KPIs en «—», sin gráfica ni desgloses, y los botones de 7/30/90
+días no responden al clic.
+
+### Key Challenges and Analysis (ANL-FIX)
+
+**La causa.** `analytics-dashboard.js` construye su tabla de etiquetas nada más
+arrancar, en el nivel superior del fichero:
+
+```js
+var LABELS = { referrer: { '': pp.t('js.an.direct') }, … };
+```
+
+Y `views/admin/analytics/index.php` soltaba su `<script src>` **dentro del
+contenido**, no en la sección `scripts`. El layout emite `pp-i18n.js` —quien
+define `window.pp`— DESPUÉS del contenido, así que el dashboard se ejecutaba
+antes de que `pp` existiera: `Uncaught ReferenceError: pp is not defined`, el
+IIFE entero moría y con él **las dos cosas que el usuario notó**: el render
+inicial (de ahí los «—») y el registro de los listeners de rango (de ahí los
+botones muertos). Un solo fallo, dos síntomas que parecían dos.
+
+Reproducido en local antes de tocar nada, y confirmado en la pestaña de red:
+`analytics-dashboard.js` se pedía ANTES que `pp-i18n.js`.
+
+**Por qué no saltó antes.** El fallo llegó con ADMIN-I18N, cuando `LABELS` pasó
+de literales castellanos a `pp.t()`. Nadie movió el script.
+
+**Lo que apareció al barrer.** De las cuatro vistas del panel que cargan JS,
+`canvas/studio.php` es standalone y carga `pp-i18n.js` ella misma (correcto),
+pero `posts/edit.php` tenía el MISMO defecto. No se rompe porque sus scripts
+usan `pp.t()` solo dentro de funciones, o sea que funciona por suerte: el día
+que alguien mueva un `pp.t()` al arranque de esos ficheros, se rompe igual y sin
+avisar. Movido también.
+
+### Project Status Board (ANL-FIX)
+
+- [x] Reproducir el fallo en local antes de tocar nada
+- [x] `analytics/index.php` → sección `scripts`
+- [x] `posts/edit.php` → sección `scripts` (mismo defecto, latente)
+- [x] `tests/admin_script_order.php` para cerrar la clase de fallo
+- [x] Suite completa
+
+### Current Status / Progress Tracking (ANL-FIX)
+
+Verificado en navegador con la consola limpia (pestaña nueva: la consola de la
+herramienta acumula entre navegaciones y engaña):
+
+- Analítica pinta KPIs, gráfica y desgloses, sin un error en consola.
+- Los botones de rango responden: cambian el activo, piden
+  `/admin/analytics/data?range=N` (200) y repintan — con 90 días el eje arranca
+  en 13 jun en vez de 12 ago.
+- El editor de entradas sigue sin errores tras mover sus scripts.
+
+`tests/admin_script_order.php` no fija el caso concreto sino la regla: ninguna
+vista que extienda el layout puede cargar `<script src>` fuera de la sección
+`scripts`. Comprobado que caza la regresión —se reintrodujo el fallo a propósito
+y el test falló nombrando el fichero y diciendo qué hacer.
+
+126 tests en verde.
+
+### Lessons (ANL-FIX)
+
+- En el panel, un `<script src>` fuera de `View::start('scripts')` se ejecuta
+  ANTES que `pp-i18n.js`. Si el script llama a `pp.t()` al arrancar, muere
+  entero y en silencio; si solo lo llama dentro de funciones, sobrevive por
+  suerte. Los dos casos existían en el repo.
+- Un IIFE que revienta en su primera línea se lleva TODO lo que venía después,
+  incluido el registro de listeners. Por eso «no se ven datos» y «los botones no
+  van» pueden ser un único fallo y no dos.
+- La consola del navegador de las tools acumula entre navegaciones: un error ya
+  arreglado sigue apareciendo. Para verificar de verdad, pestaña nueva.

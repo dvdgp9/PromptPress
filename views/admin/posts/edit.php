@@ -191,6 +191,12 @@ $backLabel    = $isLegalPage ? __('post_edit.back_privacy') : __('post_edit.back
     </aside>
 </div>
 
+<?php /* ANL-FIX — En la sección `scripts`, que se emite después de
+   `pp-i18n.js`. Estos dos usan `pp.t()` solo dentro de funciones, así que aquí
+   sueltos funcionaban por suerte: el día que alguien mueva un `pp.t()` al
+   arranque del fichero, se rompe entero y sin avisar. Es lo que le pasó al
+   dashboard de analítica. */ ?>
+<?php \Core\View::start('scripts'); ?>
 <script src="<?= e(base_url('admin/assets/js/unsplash-picker.js')) ?>"></script>
 <script src="<?= e(base_url('admin/assets/js/post-editor.js')) ?>"></script>
 <script>
@@ -353,3 +359,4 @@ $backLabel    = $isLegalPage ? __('post_edit.back_privacy') : __('post_edit.back
     });
 })();
 </script>
+<?php \Core\View::end(); ?>

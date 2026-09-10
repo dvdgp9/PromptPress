@@ -102,6 +102,14 @@
     <p class="pp-analytics-footnote"><?= e(__('analytics.footnote')) ?></p>
 </div>
 
+<?php /* ANL-FIX — Estos scripts van en la sección `scripts` del layout, que se
+   emite DESPUÉS de `pp-i18n.js`. Aquí sueltos se ejecutaban antes, y como
+   `analytics-dashboard.js` construye su tabla de etiquetas con `pp.t()` nada
+   más arrancar, reventaba con «pp is not defined» y se llevaba por delante el
+   dashboard entero: los KPIs se quedaban en «—» y los botones de 7/30/90 días
+   no respondían, porque sus listeners nunca llegaban a registrarse. */ ?>
+<?php \Core\View::start('scripts'); ?>
 <script type="application/json" id="pp-analytics-data"><?= json_encode($stats, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?></script>
 <?php $js = PP_ROOT . '/admin/assets/js/analytics-dashboard.js'; $jsVer = file_exists($js) ? filemtime($js) : PP_VERSION; ?>
 <script src="<?= e(base_url('admin/assets/js/analytics-dashboard.js')) ?>?v=<?= e($jsVer) ?>"></script>
+<?php \Core\View::end(); ?>
