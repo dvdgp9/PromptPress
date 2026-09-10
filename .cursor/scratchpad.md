@@ -9599,3 +9599,119 @@ y el test falló nombrando el fichero y diciendo qué hacer.
   van» pueden ser un único fallo y no dos.
 - La consola del navegador de las tools acumula entre navegaciones: un error ya
   arreglado sigue apareciendo. Para verificar de verdad, pestaña nueva.
+
+---
+
+## EDIT-LOCK — Dos personas en la misma página (10/09/2026)
+
+### Background and Motivation (EDIT-LOCK)
+
+Con equipo (EQUIPO, v1.5.0) esto deja de ser teórico. Hoy no hay protección de
+ninguna clase: dos personas abren la misma página y ninguna se entera.
+
+En el **Studio** es donde duele: `CanvasService::save()` escribe la página
+ENTERA en cada guardado sin mirar sobre qué versión se editaba, y el Studio
+**no tiene botón de Guardar** — autoguarda en cada acción, con `keepalive`
+incluso al cerrar la pestaña. Así que no es «gana el último en lo que tocó»:
+el último sustituye la página completa, sin aviso. Se puede recuperar del
+historial (25 versiones), pero solo si alguien se da cuenta — y `page_versions`
+ni siquiera guarda QUIÉN hizo cada versión.
+
+El editor clásico de secciones está mejor: guarda sección a sección y sí
+registra el autor (`VersionService::snapshotSection(..., Auth::id(), ...)`).
+
+### Key Challenges and Analysis (EDIT-LOCK)
+
+**Por qué el modelo de Elementor no se copia tal cual.** El usuario señaló que
+Elementor hace bloqueo (B), y tiene razón en apuntar ahí — pero Elementor tiene
+un momento consciente de escritura («Actualizar»). El Studio no: gotea. Dos
+personas dentro a la vez no se pisan al final, se pisan continuamente. Eso hace
+que **impedir la coincidencia valga más aquí que en Elementor**, no menos.
+
+Y a la vez sube el precio de que el bloqueo falle: cuando el lock de Elementor
+caduca, el otro aún no ha escrito nada; cuando falla el nuestro, ya lleva
+cuarenta escrituras.
+
+**Decisión: B como capa visible, C como red debajo.** El bloqueo evita el
+encuentro; la detección de conflicto responde a «¿y el día que el lock no
+estaba?». Los casos en que la prevención falla son concretos y todos ocurren:
+lock caducado, «tomar el control», sesión caída, y **dos pestañas del mismo
+usuario** — este último no lo ve ningún lock por `user_id`, por eso el lock se
+identifica por PESTAÑA (token), no por persona.
+
+**Alcance.** El Studio primero, que es el caso crítico. Sus escrituras son
+muchas (section, structure, insert-*, copy-section, restore, undo, redo, chat,
+publish, settings): el guard va en una comprobación central, no repartida.
+
+### High-level Task Breakdown (EDIT-LOCK)
+
+- **L1** Tabla `edit_locks` + servicio `EditLock` (modelo puro, con tests).
+- **L2** Endpoints de lock y guard en todas las escrituras del Studio.
+- **L3** UI del Studio: aviso, solo lectura, «tomar el control», latido.
+- **L4** C — versión base en el guardado; conflicto en vez de pisar.
+- **L5** D — autor en `page_versions`, para que el historial diga quién.
+- **L6** Tests y verificación con dos sesiones de verdad.
+
+### Project Status Board (EDIT-LOCK)
+
+- [x] L1 — Tabla y servicio
+- [x] L2 — Endpoints y guard
+- [x] L3 — Interfaz del Studio
+- [x] L4 — Detección de conflicto (en el servicio; NO cableada al Studio, ver abajo)
+- [x] L5 — Autor en el historial
+- [x] L6 — Tests y verificación a dos sesiones
+
+### Current Status / Progress Tracking (EDIT-LOCK)
+
+**L1-L3 — El bloqueo, funcionando.** `edit_locks` + `EditLock` + endpoint
+`/admin/canvas/{id}/lock` (take/ping/release) + guard en las **12** escrituras
+del Studio + aviso a pantalla completa con «Editar de todas formas».
+
+Verificado a dos sesiones de verdad (ana por curl, admin en el navegador):
+- Admin abre una página que tiene ana → aviso «La tiene ana_lock. Puedes mirar,
+  pero no se guardará nada de lo que toques», fondo atenuado.
+- Admin pulsa «Editar de todas formas» → el aviso desaparece y pasa a editar.
+- A ana le falla el latido (409, diciendo que ahora es de admin) y su intento de
+  escribir la página se rechaza. **Comprobado que la página no cambió.**
+
+**L4 — La red, en el servicio pero SIN cablear al Studio, a propósito.**
+`CanvasService::save()` acepta una versión base y lanza `CanvasConflictException`
+si ya no es la actual. Está probado (`tests/canvas_conflict.php`), incluido que
+el trabajo del primero no se pisa.
+
+No se ha enchufado al Studio porque **`saveInFlight` es un contador**: el Studio
+puede tener varias escrituras en vuelo a la vez, y la segunda llevaría una
+versión ya caduca por culpa de la primera. Resultado: conflictos falsos
+rechazando guardados legítimos del propio usuario. Cablearlo exige antes
+serializar las escrituras del Studio, y eso es otra tarea.
+
+Lo que sí cubre ya el guard del lock: pestaña desalojada, lock caducado, sesión
+caída — todas escriben sin lock válido y reciben 409.
+
+**L5 — El historial dice quién.** `page_versions.created_by` con
+`ON DELETE SET NULL`: borrar una cuenta no puede llevarse por delante el
+historial de las páginas que esa persona tocó (comprobado).
+
+**Sobre exigir el lock en toda escritura.** Rompió dos tests HTTP que escribían
+sin token, y eso destapó una fragilidad real: si el JS del lock fallara al
+arrancar, el usuario se quedaría sin poder guardar y sin saber por qué. Ahora
+una escritura con token sobre una página LIBRE se queda el lock y sigue. Que no
+haya dueño no es motivo para rechazar a nadie; que lo tenga otro, sí.
+
+129 tests en verde.
+
+### Lessons (EDIT-LOCK)
+
+- `Database::execute()` devuelve las filas AFECTADAS, y MySQL cuenta 0 cuando el
+  UPDATE no cambia el valor. Un `heartbeat` que dedujera «sigo siendo el dueño»
+  de ahí falla cuando dos latidos caen en el mismo segundo: raro, intermitente y
+  desquiciante de diagnosticar. La comprobación va explícita.
+- El token del lock vive en `sessionStorage`, no en `localStorage`: sobrevive a
+  recargar (con `localStorage` daría igual, pero) y NO se comparte entre
+  pestañas, que es justo lo que hace falta para que dos ventanas de la misma
+  persona cuenten como dos editores.
+- Un bloqueo que no se pueda romper es peor que ninguno: basta que alguien cierre
+  el portátil con la pestaña abierta. Caducidad (90 s, tres latidos) + «tomar el
+  control» + soltar en `pagehide`.
+- Al desalojado se le ofrece «Recargar», nunca «volver a tomarla»: recuperarla
+  escribiría encima de quien está trabajando ahora.

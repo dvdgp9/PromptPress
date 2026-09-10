@@ -12278,3 +12278,71 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 /* `.pp-link` trae `display:inline-block` y eso pisa el `hidden` del navegador:
    sin esto, el atajo se ve aunque no haya formulario al que llevar. */
 .pp-resource-form-tune[hidden] { display: none; }
+
+
+/* ==========================================================================
+   EDIT-LOCK — Aviso de que la página la tiene otra persona
+   ========================================================================== */
+
+.cvstudio-lock {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: grid;
+    place-items: center;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(2px);
+}
+.cvstudio-lock[hidden] { display: none; }
+
+.cvstudio-lock__card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 26px 28px;
+    max-width: 40ch;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+    text-align: center;
+}
+.cvstudio-lock__card strong {
+    display: block;
+    font-size: 1.05rem;
+    margin-bottom: 8px;
+    color: #111827;
+}
+.cvstudio-lock__card p {
+    margin: 0 0 18px;
+    color: #4b5563;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+.cvstudio-lock__card small {
+    display: block;
+    margin-top: 12px;
+    color: #9ca3af;
+    font-size: 0.78rem;
+}
+.cvstudio-lock__actions { display: flex; gap: 10px; justify-content: center; }
+.cvstudio-lock__btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.88rem;
+    background: var(--pp-primary);
+    color: #fff;
+    cursor: pointer;
+}
+.cvstudio-lock__btn:hover { filter: brightness(0.95); }
+.cvstudio-lock__btn[hidden] { display: none; }
+
+/* Solo lectura: se puede mirar y desplazarse, no tocar. La barra superior
+   sigue viva para poder salir del Studio — encerrar a alguien en una página
+   que no puede editar NI abandonar sería peor que el problema original. */
+.cvstudio-body.is-readonly .cvstudio-stage,
+.cvstudio-body.is-readonly .cvstudio-chat,
+.cvstudio-body.is-readonly .cvstudio-top__center,
+.cvstudio-body.is-readonly .cvstudio-top__right {
+    pointer-events: none;
+    opacity: 0.55;
+}

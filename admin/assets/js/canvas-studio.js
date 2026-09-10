@@ -12,6 +12,36 @@
 
   var body = document.body;
   var csrf = document.querySelector('meta[name="csrf"]').content;
+
+  /* ===================================================================
+     EDIT-LOCK — Quién tiene esta página cogida.
+
+     El token identifica la PESTAÑA y vive en `sessionStorage`, que es
+     exactamente lo que hace falta: sobrevive a recargar (si no, cada F5 te
+     dejaría fuera de tu propio lock hasta que caducara) y NO se comparte
+     entre pestañas, así que dos ventanas de la misma persona se ven como
+     dos editores distintos — que es justo lo que son.
+     =================================================================== */
+  var lockToken = (function () {
+    var key = 'pp-lock-' + body.dataset.pageId;
+    var fresh = function () {
+      var a = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(a);
+      return Array.prototype.map.call(a, function (b) {
+        return ('0' + b.toString(16)).slice(-2);
+      }).join('');
+    };
+    try {
+      var stored = sessionStorage.getItem(key);
+      if (!stored) { stored = fresh(); sessionStorage.setItem(key, stored); }
+      return stored;
+    } catch (e) {
+      return fresh();   // navegación privada: token de un solo uso
+    }
+  })();
+
+  var lockMine = false;
+  var lockTimer = null;
   var iframe = document.getElementById('studio-iframe');
   var frameWrap = document.getElementById('studio-frame-wrap');
   var messages = document.getElementById('chat-messages');
@@ -501,6 +531,7 @@
 
       var fd = new FormData();
       fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
       fd.append('action', 'duplicate');
       fd.append('section', sectionId);
       // El ancla viaja aparte de `section`: `section` es QUÉ se duplica y
@@ -611,6 +642,7 @@
 
       var fd = new FormData();
       fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
       fd.append('source_page', pageId);
       fd.append('source_section', sectionId);
       appendRequestedPlacement(fd);
@@ -759,6 +791,7 @@
     showStructureStatus(pp.t('js.cv.moving_section'), 'loading');
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('action', 'reorder');
     order.forEach(function (id) { fd.append('order[]', id); });
 
@@ -888,6 +921,7 @@
 
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('action', action);
     fd.append('section', sectionId);
     if (direction) fd.append('direction', direction);
@@ -1667,6 +1701,7 @@
 
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('instruction', text);
     if (selectedSection) fd.append('section', selectedSection);
     if (selectedElementContext) fd.append('element_context', selectedElementContext);
@@ -1733,6 +1768,7 @@
       // 1) Avisar al servidor ANTES de abortar: es lo que impide que se guarde.
       var fd = new FormData();
       fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
       fd.append('request_id', id);
       fetch(body.dataset.cancelUrl, { method: 'POST', body: fd, keepalive: true })
         .catch(function () { /* si falla, el abort de abajo al menos libera la UI */ })
@@ -1793,6 +1829,7 @@
     if (btn) btn.disabled = true;
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fetch(url, { method: 'POST', body: fd })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (data) {
@@ -1831,6 +1868,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Recuperando…'; }
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('version_id', versionId);
     fetch(body.dataset.restoreUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
@@ -1896,6 +1934,7 @@
   function sendSectionSave(sectionId, html, useKeepalive) {
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('section', sectionId);
     fd.append('html', html);
     saveInFlight++;
@@ -2113,6 +2152,7 @@
       mediaGrid.innerHTML = '<p class="pp-chat-hint">Subiendo «' + esc(file.name) + '»…</p>';
       var fd = new FormData();
       fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
       fd.append('file', file);
       fetch(body.dataset.mediaUploadUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
@@ -2164,6 +2204,7 @@
     if (btn) { btn.disabled = true; btn.classList.add('is-busy'); }
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('result_id', it.id);
     fd.append('query', query);
     fd.append('orientation', 'landscape');
@@ -2276,6 +2317,7 @@
     if (triggerBtn) triggerBtn.disabled = true;
     var fd = new FormData();
     fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
     fd.append('publish', publishing ? '1' : '0');
     fetch(body.dataset.publishUrl, { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
@@ -2393,6 +2435,7 @@
         showStructureStatus(pp.t('js.cv.inserting_template'), 'loading');
         var fd = new FormData();
         fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
         fd.append('action', 'insert_template');
         fd.append('template', item.dataset.sectionTemplate || '');
         appendRequestedPlacement(fd);
@@ -2454,6 +2497,7 @@
         showStructureStatus(pp.t('js.cv.inserting_form'), 'loading');
         var fd = new FormData();
         fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
         if (formId) fd.append('form_id', formId);
         if (template) fd.append('template', template);
         appendRequestedPlacement(fd);
@@ -2501,6 +2545,7 @@
         showStructureStatus(pp.t('js.cv.inserting_booking'), 'loading');
         var fd = new FormData();
         fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
         fd.append('service_id', item.dataset.bookingService || 'auto');
         appendRequestedPlacement(fd);
         fetch(body.dataset.insertBookingUrl, { method: 'POST', body: fd })
@@ -2539,6 +2584,7 @@
         showStructureStatus(pp.t('js.cv.inserting_resources'), 'loading');
         var fd = new FormData();
         fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
         fd.append('limit', item.dataset.resourcesLimit || '3');
         appendRequestedPlacement(fd);
         fetch(body.dataset.insertResourcesUrl, { method: 'POST', body: fd })
@@ -2618,6 +2664,7 @@
       setMsg('Guardando…');
       var fd = new FormData();
       fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
       fd.append('meta_title', fTitle.value.trim());
       fd.append('meta_description', fDesc.value.trim());
       if (fSlug) fd.append('slug', fSlug.value.trim());
@@ -2662,6 +2709,7 @@
         setMsg(pp.t('js.cv.ai_suggesting', { campo: spec.label }));
         var fd = new FormData();
         fd.append('_csrf', csrf);
+    fd.append('lock_token', lockToken);
         fd.append('action', 'improve_seo');
         fd.append('input_json', JSON.stringify({
           page_title: body.dataset.pageTitle || '',
@@ -2684,6 +2732,117 @@
           .catch(function () { setMsg('No se pudo generar la sugerencia ahora mismo.', true); })
           .finally(function () { chip.disabled = false; chip.classList.remove('is-busy'); });
       });
+    });
+  }
+
+  /* ===================================================================
+     EDIT-LOCK — Coger la página, latir, y avisar cuando deja de ser tuya.
+
+     El Studio autoguarda a cada acción, así que dos personas dentro a la vez
+     no chocan al final: se pisan continuamente. Por eso el bloqueo es la capa
+     visible, y el servidor rechaza igual toda escritura sin lock (409).
+     =================================================================== */
+  var lockBanner = document.getElementById('studio-lock');
+
+  function lockPost(op, force) {
+    var fd = new FormData();
+    fd.append('_csrf', csrf);
+    fd.append('token', lockToken);
+    fd.append('op', op);
+    if (force) fd.append('force', '1');
+    var opts = { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } };
+    if (op === 'release') opts.keepalive = true;   // la pestaña se está cerrando
+    return fetch(body.dataset.lockUrl, opts).then(function (r) {
+      return r.json().catch(function () { return { ok: false }; });
+    });
+  }
+
+  function showLockBanner(kind, username) {
+    if (!lockBanner) return;
+    var title = lockBanner.querySelector('[data-lock-title]');
+    var text = lockBanner.querySelector('[data-lock-text]');
+    var takeBtn = lockBanner.querySelector('[data-lock-take]');
+    var reloadBtn = lockBanner.querySelector('[data-lock-reload]');
+    var hint = lockBanner.querySelector('[data-lock-hint]');
+
+    if (kind === 'taken') {
+      title.textContent = pp.t('js.lock.taken_title');
+      text.textContent = username
+        ? pp.t('js.lock.taken_by', { nombre: username })
+        : pp.t('js.lock.taken_unknown');
+      takeBtn.textContent = pp.t('js.lock.take_over');
+      takeBtn.hidden = false;
+      reloadBtn.hidden = true;
+      // Que quede claro ANTES de pulsar que esto echa a alguien.
+      hint.textContent = pp.t('js.lock.take_over_hint');
+    } else {
+      // Nos han desalojado: ofrecer recargar, no «tomar el control». Volver a
+      // tomarla escribiría encima de quien está trabajando ahora.
+      title.textContent = pp.t('js.lock.lost_title');
+      text.textContent = pp.t('js.lock.lost_body');
+      reloadBtn.textContent = pp.t('js.lock.reload');
+      takeBtn.hidden = true;
+      reloadBtn.hidden = false;
+      hint.textContent = '';
+    }
+    lockBanner.hidden = false;
+    body.classList.add('is-readonly');
+  }
+
+  function hideLockBanner() {
+    if (lockBanner) lockBanner.hidden = true;
+    body.classList.remove('is-readonly');
+  }
+
+  function startHeartbeat() {
+    if (lockTimer) clearInterval(lockTimer);
+    lockTimer = setInterval(function () {
+      if (!lockMine) return;
+      lockPost('ping').then(function (data) {
+        if (data && data.ok) return;
+        // Alguien tomó el control mientras editábamos.
+        lockMine = false;
+        clearInterval(lockTimer);
+        showLockBanner('lost');
+      });
+    }, 30000);
+  }
+
+  function takeLock(force) {
+    return lockPost('take', force).then(function (data) {
+      lockMine = !!(data && data.ok);
+      if (lockMine) {
+        hideLockBanner();
+        startHeartbeat();
+      } else {
+        showLockBanner('taken', data && data.status ? data.status.username : null);
+      }
+      return lockMine;
+    });
+  }
+
+  if (body.dataset.lockUrl) {
+    takeLock(false);
+
+    if (lockBanner) {
+      var takeBtn = lockBanner.querySelector('[data-lock-take]');
+      takeBtn.addEventListener('click', function () {
+        takeBtn.disabled = true;
+        var original = takeBtn.textContent;
+        takeBtn.textContent = pp.t('js.lock.retaking');
+        takeLock(true).finally(function () {
+          takeBtn.disabled = false;
+          takeBtn.textContent = original;
+        });
+      });
+      lockBanner.querySelector('[data-lock-reload]')
+        .addEventListener('click', function () { window.location.reload(); });
+    }
+
+    // Soltar al cerrar: sin esto la página queda «ocupada» hasta que caduque el
+    // lock, y quien venga detrás se encuentra un bloqueo de un fantasma.
+    window.addEventListener('pagehide', function () {
+      if (lockMine) lockPost('release');
     });
   }
 })();

@@ -85,6 +85,10 @@ function structureHttp(string $method, string $url, array $post = []): array
         CURLOPT_HTTPHEADER => ['Accept: application/json,text/html'],
     ]);
     if ($method === 'POST') {
+    // EDIT-LOCK — Toda escritura del Studio va con el token de su pestaña, igual
+    // que lo manda el navegador. El servidor coge el lock solo en la primera si
+    // la página está libre, así que aquí no hay que pedirlo aparte.
+        $post['lock_token'] = $post['lock_token'] ?? 'test-lock-token-0000000000000000';
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
     }

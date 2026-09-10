@@ -49,8 +49,25 @@ final class CanvasService
      *
      * @return array{html:string,css:string,warnings:array<int,string>}
      */
-    public static function save(int $pageId, string $html, string $css, string $origin = 'edit', string $summary = ''): array
+    /**
+     * EDIT-LOCK L4 — Excepción cuando se guarda sobre una versión que ya no es
+     * la actual. La lanza `save()` solo si el llamante dice sobre qué versión
+     * creía estar editando.
+     */
+    public static function save(int $pageId, string $html, string $css, string $origin = 'edit', string $summary = '', ?int $baseVersionId = null): array
     {
+        // EDIT-LOCK L4 — La red que hay debajo del bloqueo. El lock evita el
+        // encuentro; esto responde a «¿y el día que el lock no estaba puesto?»
+        // — caducó, alguien tomó el control, se cayó la sesión. Sin esto, ese
+        // día se pierde trabajo en silencio, que es exactamente lo que pasaba
+        // antes de EDIT-LOCK.
+        if ($baseVersionId !== null) {
+            $current = self::currentVersionId($pageId);
+            if ($current > 0 && $current !== $baseVersionId) {
+                throw new CanvasConflictException($current, $baseVersionId);
+            }
+        }
+
         // Placeholders a forma canónica ({{form:x}} sin espacios) para que la
         // detección por LIKE del endpoint de formularios sea fiable.
         $html = self::canonicalizePlaceholders($html);
@@ -79,14 +96,14 @@ final class CanvasService
         $mergeId = self::coalescableVersionId($pageId, $origin, $summary, $pointer);
         if ($mergeId > 0) {
             Database::execute(
-                'UPDATE page_versions SET html = ?, css = ? WHERE id = ?',
-                [$clean['html'], $cleanCss, $mergeId]
+                'UPDATE page_versions SET html = ?, css = ?, created_by = ? WHERE id = ?',
+                [$clean['html'], $cleanCss, \Core\Auth::id(), $mergeId]
             );
             $newVersionId = $mergeId;
         } else {
             Database::execute(
-                'INSERT INTO page_versions (page_id, html, css, origin, summary) VALUES (?, ?, ?, ?, ?)',
-                [$pageId, $clean['html'], $cleanCss, $origin, $summary]
+                'INSERT INTO page_versions (page_id, html, css, origin, summary, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+                [$pageId, $clean['html'], $cleanCss, $origin, $summary, \Core\Auth::id()]
             );
             $newVersionId = (int) Database::lastInsertId();
         }

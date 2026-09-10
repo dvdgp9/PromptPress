@@ -60,6 +60,7 @@ $icon = static function (string $name): string {
       data-versions-url="<?= e(base_url('admin/canvas/' . $pageId . '/versions')) ?>"
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
       data-publish-url="<?= e(base_url('admin/canvas/' . $pageId . '/publish')) ?>"
+      data-lock-url="<?= e(base_url('admin/canvas/' . $pageId . '/lock')) ?>"
       data-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/section')) ?>"
       data-structure-url="<?= e(base_url('admin/canvas/' . $pageId . '/structure')) ?>"
       data-insert-form-url="<?= e(base_url('admin/canvas/' . $pageId . '/insert-form')) ?>"
@@ -85,6 +86,20 @@ $icon = static function (string $name): string {
       data-can-redo="<?= !empty($history['can_redo']) ? '1' : '0' ?>"
       data-published="<?= $isPublished ? '1' : '0' ?>"
       data-has-unpublished="<?= !empty($history['has_unpublished']) ? '1' : '0' ?>">
+
+<?php /* EDIT-LOCK L3 — Nace oculto y lo enseña el JS: si el bloqueo no llega a
+   funcionar, lo que se ve es el Studio de siempre y no un aviso pegado. */ ?>
+<div class="cvstudio-lock" id="studio-lock" role="alertdialog" aria-live="assertive" hidden>
+  <div class="cvstudio-lock__card">
+    <strong data-lock-title></strong>
+    <p data-lock-text></p>
+    <div class="cvstudio-lock__actions">
+      <button type="button" class="cvstudio-lock__btn" data-lock-take hidden></button>
+      <button type="button" class="cvstudio-lock__btn" data-lock-reload hidden></button>
+    </div>
+    <small data-lock-hint></small>
+  </div>
+</div>
 
 <header class="cvstudio-top">
   <div class="cvstudio-top__zone cvstudio-top__left">

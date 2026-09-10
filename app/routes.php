@@ -204,6 +204,8 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/canvas/{id}/preview',   [CanvasController::class, 'preview']);
     $r->post('/canvas/{id}/chat',     [CanvasController::class, 'chat']);
     $r->post('/canvas/{id}/cancel',   [CanvasController::class, 'cancel']); // CANCEL — parar una generación
+    // EDIT-LOCK — coger / latir / soltar el bloqueo de edición
+    $r->post('/canvas/{id}/lock',     [CanvasController::class, 'lock']);
     $r->post('/canvas/{id}/section',  [CanvasController::class, 'updateSection']); // FH4 edición directa
     $r->post('/canvas/{id}/structure', [CanvasController::class, 'updateCanvasStructure']); // STUDIO-STRUCTURE S2
     $r->post('/canvas/{id}/insert-form', [CanvasController::class, 'insertForm']); // FORMS F5

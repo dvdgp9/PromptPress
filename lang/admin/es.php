@@ -4052,4 +4052,19 @@ return [
     'profile.err.current_wrong'      => 'La contraseña actual no es correcta.',
     'profile.flash.saved'            => 'Datos guardados.',
     'profile.flash.password_changed' => 'Contraseña cambiada.',
+
+    // EDIT-LOCK — Dos personas en la misma página
+    'lock.taken_by'      => 'Ahora mismo está editando esta página {nombre}.',
+    'lock.lost'          => 'Has dejado de tener esta página para ti. Recarga para ver cómo ha quedado.',
+    'lock.err.no_token'  => 'Falta la referencia de esta pestaña. Recarga la página.',
+    'js.lock.taken_title'   => 'Esta página la está editando otra persona',
+    'js.lock.taken_by'      => 'La tiene {nombre}. Puedes mirar, pero no se guardará nada de lo que toques.',
+    'js.lock.taken_unknown' => 'La tiene otra pestaña. Puedes mirar, pero no se guardará nada de lo que toques.',
+    'js.lock.take_over'     => 'Editar de todas formas',
+    'js.lock.take_over_hint' => 'La otra persona verá un aviso y dejará de poder guardar.',
+    'js.lock.read_only'     => 'Solo lectura',
+    'js.lock.lost_title'    => 'Alguien ha tomado el control',
+    'js.lock.lost_body'     => 'Otra persona ha entrado a editar esta página. Lo que hagas a partir de ahora no se guarda.',
+    'js.lock.reload'        => 'Recargar',
+    'js.lock.retaking'      => 'Tomando el control…',
 ];

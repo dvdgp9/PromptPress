@@ -12,6 +12,7 @@ use App\Services\Canvas\CanvasChatService;
 use App\Services\Canvas\CanvasSectionTemplates;
 use App\Services\Canvas\CanvasService;
 use App\Services\DesignSystem;
+use App\Services\EditLock;
 use App\Services\FormStore;
 use App\Services\FormPlacementStore;
 use App\Services\FormTemplates;
@@ -132,6 +133,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
 
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $instruction = trim((string) Request::post('instruction', ''));
         $sectionId = trim((string) Request::post('section', ''));
         $elementContext = trim((string) Request::post('element_context', ''));
@@ -276,6 +278,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
 
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $formId = (int) Request::post('form_id', 0);
         $template = trim((string) Request::post('template', ''));
         if ($formId <= 0 && $template !== '') {
@@ -330,6 +333,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
 
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         if (!\App\Modules\ModuleRegistry::isEnabled($siteId, 'booking')) {
             Response::json(['ok' => false, 'error' => __('cv.booking.module_off')], 422);
         }
@@ -439,6 +443,7 @@ final class CanvasController
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         $pageId = (int) $page['id'];
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
 
         $sourcePageId = (int) Request::post('source_page', 0);
         $sectionId = trim((string) Request::post('source_section', ''));
@@ -504,6 +509,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
 
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $lang = \App\Services\LanguageService::forPage($page, $siteId);
         $resources = self::resourcesForStudio($siteId, $lang);
         if ($resources === []) {
@@ -551,6 +557,7 @@ final class CanvasController
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         $pageId = (int) $page['id'];
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
 
         $action = trim((string) Request::post('action', ''));
         $sectionId = trim((string) Request::post('section', ''));
@@ -754,6 +761,7 @@ final class CanvasController
         $pageId = (int) $page['id'];
 
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $sectionId = trim((string) Request::post('section', ''));
         $sectionHtml = (string) Request::post('html', '');
         if ($sectionId === '' || trim($sectionHtml) === '') {
@@ -804,6 +812,7 @@ final class CanvasController
         $siteId = self::requireSiteId();
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $state = CanvasService::undo((int) $page['id']);
         Response::json($state !== null
             ? ['ok' => true, 'history' => $state]
@@ -816,6 +825,7 @@ final class CanvasController
         $siteId = self::requireSiteId();
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $state = CanvasService::redo((int) $page['id']);
         Response::json($state !== null
             ? ['ok' => true, 'history' => $state]
@@ -861,6 +871,7 @@ final class CanvasController
         $siteId = self::requireSiteId();
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $versionId = (int) Request::post('version_id', '0');
         $state = $versionId > 0 ? CanvasService::restore((int) $page['id'], $versionId) : null;
         Response::json($state !== null
@@ -874,6 +885,7 @@ final class CanvasController
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         $pageId = (int) $page['id'];
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
         $publish = Request::post('publish', '1') === '1';
         Database::execute(
             "UPDATE pages SET status = ?, published_at = ?, updated_at = NOW() WHERE id = ?",
@@ -901,6 +913,7 @@ final class CanvasController
         $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
         $pageId = (int) $page['id'];
         CSRF::check();
+        self::requireEditLock((int) $page['id']);
 
         $metaTitle = trim((string) Request::post('meta_title', ''));
         $metaDescription = trim((string) Request::post('meta_description', ''));
@@ -2472,6 +2485,117 @@ final class CanvasController
 })();
 </script>
 HTML;
+    }
+
+    /**
+     * EDIT-LOCK L2 — El endpoint del bloqueo: coger, latir y soltar.
+     *
+     * Las tres operaciones van por una sola ruta porque comparten todo salvo
+     * una línea, y tres rutas para eso solo servirían para que un día alguien
+     * proteja dos y se olvide de la tercera.
+     */
+    public function lock(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        $page = self::findCanvasPage((int) ($params['id'] ?? 0), $siteId);
+        $pageId = (int) $page['id'];
+        CSRF::check();
+
+        $op = (string) Request::post('op', 'take');
+        $token = trim((string) Request::post('token', ''));
+        $userId = (int) \Core\Auth::id();
+
+        if ($token === '') {
+            Response::json(['ok' => false, 'error' => __('lock.err.no_token')], 422);
+        }
+
+        if ($op === 'ping') {
+            $alive = EditLock::heartbeat(EditLock::ENTITY_PAGE, $pageId, $token);
+            Response::json([
+                'ok'     => $alive,
+                'status' => self::lockPayload($pageId, $token),
+            ], $alive ? 200 : 409);
+        }
+
+        if ($op === 'release') {
+            EditLock::release(EditLock::ENTITY_PAGE, $pageId, $token);
+            Response::json(['ok' => true]);
+        }
+
+        // 'take' — con `force` es «editar de todas formas».
+        $force = Request::post('force') === '1';
+        $result = EditLock::acquire(EditLock::ENTITY_PAGE, $pageId, $userId, $token, $force);
+        EditLock::prune();
+
+        Response::json([
+            'ok'     => $result['ok'],
+            'status' => self::lockPayload($pageId, $token),
+        ], $result['ok'] ? 200 : 409);
+    }
+
+    /**
+     * Lo que necesita saber el navegador: si puede escribir y, si no, de quién
+     * es la página. Nunca devuelve el token ajeno — no le sirve de nada al
+     * cliente y sería la llave para suplantar a otra pestaña.
+     *
+     * @return array<string,mixed>
+     */
+    private static function lockPayload(int $pageId, string $token): array
+    {
+        $status = EditLock::status(EditLock::ENTITY_PAGE, $pageId);
+        $mine = $status['held'] && $status['token'] === $token;
+        return [
+            'mine'     => $mine,
+            'held'     => $status['held'],
+            'username' => $mine ? null : $status['username'],
+        ];
+    }
+
+    /**
+     * EDIT-LOCK L2 — Cortafuegos de TODA escritura del Studio.
+     *
+     * El Studio autoguarda en cada acción, así que aquí no basta con avisar en
+     * la interfaz: sin esta comprobación, una pestaña que perdió el lock —o que
+     * nunca lo tuvo— seguiría escribiendo la página entera a espaldas de quien
+     * la está editando.
+     *
+     * Contesta 409 y no 403 a propósito: no es un problema de permisos, es que
+     * el recurso está ocupado. El navegador lo distingue para enseñar «la está
+     * editando Ana» en vez de «acceso denegado».
+     */
+    private static function requireEditLock(int $pageId): void
+    {
+        $token = trim((string) Request::post('lock_token', ''));
+        if (EditLock::heldBy(EditLock::ENTITY_PAGE, $pageId, $token)) {
+            return;
+        }
+
+        $status = EditLock::status(EditLock::ENTITY_PAGE, $pageId);
+
+        // Nadie la tiene: esta escritura se queda el lock y sigue. Sin esto, un
+        // fallo de red al arrancar el Studio —o un lock caducado tras un rato
+        // sin tocar nada— dejaría al usuario delante de una página que no puede
+        // guardar sin saber por qué. Que no haya dueño no es motivo para
+        // rechazar a nadie; tenerlo otro, sí.
+        if (!$status['held'] && $token !== '') {
+            $acquired = EditLock::acquire(
+                EditLock::ENTITY_PAGE,
+                $pageId,
+                (int) \Core\Auth::id(),
+                $token
+            );
+            if ($acquired['ok']) {
+                return;
+            }
+            $status = EditLock::status(EditLock::ENTITY_PAGE, $pageId);
+        }
+        Response::json([
+            'ok'     => false,
+            'error'  => $status['held'] && is_string($status['username'])
+                ? __('lock.taken_by', ['nombre' => $status['username']])
+                : __('lock.lost'),
+            'lock'   => self::lockPayload($pageId, $token),
+        ], 409);
     }
 
     private static function findCanvasPage(int $pageId, int $siteId): array
