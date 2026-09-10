@@ -81,7 +81,12 @@ final class AdminBar
         $h  = '<div class="pp-adminbar" id="pp-adminbar" hidden>';
         $h .= '<div class="pp-adminbar__actions">';
         $h .= '<a class="pp-adminbar__link" href="' . $panelUrl . '">' . self::icon('panel') . '<span>' . e(__('bar.panel')) . '</span></a>';
-        $h .= '<a class="pp-adminbar__link pp-adminbar__link--primary" href="' . $editUrl . '">' . self::icon('edit') . '<span>' . e($editLabel) . '</span></a>';
+        // EQUIPO T4 — Hoy los tres roles editan contenido, así que este botón
+        // sale siempre. Se pregunta igual para que la barra no pueda prometer
+        // un 403 si mañana aparece un rol de solo lectura.
+        if (Auth::can(Permissions::CAP_CONTENT)) {
+            $h .= '<a class="pp-adminbar__link pp-adminbar__link--primary" href="' . $editUrl . '">' . self::icon('edit') . '<span>' . e($editLabel) . '</span></a>';
+        }
         $h .= '</div>';
         $h .= '<button type="button" class="pp-adminbar__toggle" id="pp-adminbar-toggle"'
             . ' aria-expanded="true" aria-controls="pp-adminbar" title="' . e(__('bar.hide')) . '"'

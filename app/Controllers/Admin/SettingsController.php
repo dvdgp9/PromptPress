@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controllers\Admin;
 
-use App\Services\AdminI18n;
 use App\Services\CacheService;
 use App\Services\ArticleTemplateService;
 use App\Services\LanguageService;
@@ -242,45 +241,6 @@ class SettingsController
     }
 
     /**
-     * Idioma del PANEL para el usuario logueado (ADMIN-I18N T0.4).
-     *
-     * Vacío = heredar del sitio, que es el defecto y lo que hace que una web
-     * francesa dé panel francés sin configurar nada. Es preferencia personal:
-     * solo toca la fila del usuario en sesión, nunca la del sitio.
-     */
-    public function panelLanguage(): void
-    {
-        CSRF::check();
-        $userId = Auth::id();
-        if ($userId === null) {
-            Response::redirect(base_url('admin/login'));
-        }
-
-        $code = strtolower(trim((string) Request::post('panel_language', '')));
-        $inherit = $code === '';
-
-        if (!$inherit && !in_array($code, AdminI18n::LOCALES, true)) {
-            Session::flash('error', __('settings.panel_language.unavailable'));
-            Response::redirect(base_url('admin/settings'));
-        }
-
-        Database::execute('UPDATE users SET language = ? WHERE id = ?', [$inherit ? null : $code, $userId]);
-
-        // Sin esto el aviso de abajo saldría en el idioma ANTERIOR: `locale()`
-        // ya está resuelto y cacheado para este request.
-        AdminI18n::forget();
-        if (!$inherit) {
-            AdminI18n::setLocale($code);
-        }
-
-        Session::flash('notice', $inherit
-            ? __('settings.panel_language.saved_inherit')
-            : __('settings.panel_language.saved', ['idioma' => LanguageService::label($code)]));
-
-        Response::redirect(base_url('admin/settings'));
-    }
-
-    /**
      * Activa un idioma adicional para el sitio (I18N-FULL T1.3).
      *
      * Opt-in puro: hasta que alguien pulse aquí, el sitio sigue siendo de un
@@ -344,14 +304,6 @@ class SettingsController
                 'languages' => self::LANGUAGES,
                 'activeLanguages' => LanguageService::activeFor((int) $ctx['site']['id']),
                 'primaryLanguage' => LanguageService::primaryFor((int) $ctx['site']['id']),
-                // ADMIN-I18N — idioma del panel (preferencia del usuario, no del sitio).
-                'panelLanguages' => $this->panelLanguageOptions(),
-                'panelLanguage'  => $this->userPanelLanguage(),
-                'panelLanguageInherited' => LanguageService::label(AdminI18n::resolveFrom(
-                    null,
-                    LanguageService::primaryFor((int) $ctx['site']['id']),
-                    null
-                )),
                 'timezones' => $this->timezoneOptions(),
                 'articleTemplate' => $ctx['articleTemplate'] ?? ArticleTemplateService::forSite((int) $ctx['site']['id']),
                 'articleTemplateOptions' => $this->articleTemplateOptions(),
@@ -360,24 +312,6 @@ class SettingsController
                 'csrf'      => CSRF::token(),
             ]
         ));
-    }
-
-    /**
-     * Idiomas que el panel sabe hablar hoy, con su etiqueta.
-     *
-     * Se deriva de `AdminI18n::LOCALES`, no de una lista propia: añadir
-     * `lang/admin/ca.php` y su código a esa constante tiene que bastar para que
-     * aparezca aquí, sin tocar Ajustes.
-     *
-     * @return array<string,string>
-     */
-    private function panelLanguageOptions(): array
-    {
-        $out = [];
-        foreach (AdminI18n::LOCALES as $code) {
-            $out[$code] = LanguageService::label($code);
-        }
-        return $out;
     }
 
     /**
@@ -392,17 +326,6 @@ class SettingsController
             $out[$tz] = __($key);
         }
         return $out;
-    }
-
-    /** Preferencia guardada del usuario, o '' si hereda del sitio. */
-    private function userPanelLanguage(): string
-    {
-        $userId = Auth::id();
-        if ($userId === null) {
-            return '';
-        }
-        $row = Database::selectOne('SELECT language FROM users WHERE id = ? LIMIT 1', [$userId]);
-        return (string) ($row['language'] ?? '');
     }
 
     private function validate(array $input, int $siteId): array

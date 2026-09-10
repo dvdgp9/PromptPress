@@ -2,6 +2,8 @@
 
 namespace Core;
 
+use App\Services\Permissions;
+
 /**
  * Gestión de autenticación basada en sesión.
  */
@@ -9,6 +11,9 @@ final class Auth
 {
     private const USER_KEY = 'user_id';
     private const SITE_KEY = 'site_id';
+
+    /** @var array{id:?int, row:?array<string,mixed>}|null Usuario memorizado para esta petición. */
+    private static ?array $userCache = null;
 
     public static function check(): bool
     {
@@ -27,12 +32,90 @@ final class Auth
         return is_numeric($id) ? (int) $id : null;
     }
 
-    public static function role(): ?string
+    /**
+     * Fila del usuario en sesión, memorizada para esta petición.
+     *
+     * EQUIPO T3 — Desde que el guard de capacidades corre en CADA petición del
+     * panel, el rol se pregunta varias veces (guard, navegación, escritorio).
+     * Dentro de una misma petición no cambia, y si cambia (alguien se edita a
+     * sí mismo) el redirect posterior trae una petición nueva.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function user(): ?array
     {
         $id = self::id();
-        if ($id === null) return null;
-        $row = Database::selectOne('SELECT role FROM users WHERE id = ? LIMIT 1', [$id]);
+        if ($id === null) {
+            self::$userCache = ['id' => null, 'row' => null];
+            return null;
+        }
+        if (self::$userCache !== null && self::$userCache['id'] === $id) {
+            return self::$userCache['row'];
+        }
+        $row = Database::selectOne('SELECT id, username, email, role FROM users WHERE id = ? LIMIT 1', [$id]);
+        self::$userCache = ['id' => $id, 'row' => $row];
+        return $row;
+    }
+
+    public static function role(): ?string
+    {
+        $row = self::user();
         return is_string($row['role'] ?? null) ? (string) $row['role'] : null;
+    }
+
+    /**
+     * Nombre de quien está dentro, para pintarlo en la barra superior.
+     *
+     * EQUIPO T6 — Antes el layout dependía de que cada controlador le pasara
+     * `$userName`, y solo se lo pasaba el escritorio: en TODAS las demás
+     * pantallas la barra ponía «Admin» a secas. Con un único usuario llamado
+     * `admin` nadie lo notaba; con equipo, cada editor veía el nombre de otro.
+     */
+    public static function username(): ?string
+    {
+        $row = self::user();
+        return is_string($row['username'] ?? null) ? (string) $row['username'] : null;
+    }
+
+    /** ¿El usuario en sesión tiene esta capacidad? Atajo para vistas y controladores. */
+    public static function can(string $capability): bool
+    {
+        return Permissions::roleHas(self::role(), $capability);
+    }
+
+    /**
+     * Middleware: corta con 403 si el rol no alcanza para la ruta pedida.
+     *
+     * Va colgado del grupo `/admin` y de los módulos, igual que
+     * `requireOnboarding()`: lee la ruta de la petición en vez de declararse
+     * ruta por ruta, que con ~200 rutas sería imposible de mantener.
+     *
+     * Esta es la ÚNICA barrera que cuenta. Ocultar entradas del menú es
+     * cortesía; lo que impide entrar es esto.
+     */
+    public static function requireCapability(): bool
+    {
+        $path = Request::path();
+        if (Permissions::allows(self::role(), $path)) {
+            return true;
+        }
+
+        // Buena parte del panel habla por fetch: un 403 en HTML dentro de un
+        // `await response.json()` se ve como un error de sintaxis y manda a
+        // quien lo depure al sitio equivocado.
+        if (self::wantsJson()) {
+            Response::json(['ok' => false, 'error' => __('common.access_denied')], 403);
+        }
+        Response::forbidden(__('common.access_denied'));
+    }
+
+    private static function wantsJson(): bool
+    {
+        if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch') {
+            return true;
+        }
+        $accept = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
+        return str_contains($accept, 'application/json');
     }
 
     /** Credential check: busca user por username o email, valida password con password_verify. */
@@ -85,6 +168,7 @@ final class Auth
     {
         Session::forget(self::USER_KEY);
         Session::forget(self::SITE_KEY);
+        self::$userCache = null;
         Session::regenerate();
         CSRF::renew();
     }

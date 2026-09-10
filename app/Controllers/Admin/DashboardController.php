@@ -126,13 +126,9 @@ class DashboardController
 
         if (is_installed()) {
             try {
-                $userId = Session::get('user_id');
-                if ($userId) {
-                    $user = Database::selectOne('SELECT username FROM users WHERE id = ?', [$userId]);
-                    if ($user) {
-                        $userName = $user['username'];
-                    }
-                }
+                // EQUIPO T6 — La misma fila memorizada que usa el guard de
+                // permisos, en vez de una consulta propia por petición.
+                $userName = \Core\Auth::username() ?? $userName;
                 $siteId = Session::get('site_id');
                 if ($siteId) {
                     $site = Database::selectOne('SELECT name FROM sites WHERE id = ?', [$siteId]);

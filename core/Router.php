@@ -11,7 +11,7 @@ namespace Core;
  */
 final class Router
 {
-    /** @var array<int, array{method:string, regex:string, params:array, handler:mixed, middlewares:array}> */
+    /** @var array<int, array{method:string, path:string, regex:string, params:array, handler:mixed, middlewares:array}> */
     private array $routes = [];
 
     /** @var string current group prefix */
@@ -61,11 +61,24 @@ final class Router
 
         $this->routes[] = [
             'method'      => $method,
+            'path'        => $fullPath,
             'regex'       => $regex,
             'params'      => $params,
             'handler'     => $handler,
             'middlewares' => array_merge($this->groupMiddlewares, $middlewares),
         ];
+    }
+
+    /**
+     * Las rutas registradas, tal cual. Existe para que `tests/permissions_coverage.php`
+     * pueda preguntar por las rutas REALES en vez de leer `app/routes.php` con
+     * expresiones regulares: así una ruta nueva sin área asignada salta sola.
+     *
+     * @return array<int, array{method:string, path:string, regex:string, params:array, handler:mixed, middlewares:array}>
+     */
+    public function all(): array
+    {
+        return $this->routes;
     }
 
     public function dispatch(string $method, string $path): void

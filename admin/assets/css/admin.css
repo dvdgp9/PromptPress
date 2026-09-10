@@ -1257,6 +1257,11 @@ input[name="model"], input[name="model_light"], input#pp-ai-model {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M9 12l2 2 4-4'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M9 12l2 2 4-4'/%3E%3C/svg%3E");
 }
+/* Users (EQUIPO) — dos siluetas: el equipo, no una persona suelta */
+.pp-icon--users {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
+}
 /* Settings */
 .pp-icon--settings {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z'/%3E%3C/svg%3E");
@@ -12184,3 +12189,70 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 .pp-palette-card strong{font-size:.85rem}
 .pp-palette-card small{color:var(--pp-text-muted,#6b7280);font-size:.76rem;line-height:1.4}
 .pp-design-hint--locked{color:var(--pp-primary,#ea580c);font-weight:600}
+
+
+/* ==========================================================================
+   EQUIPO — Usuarios del panel
+   ========================================================================== */
+
+.pp-users-table td { vertical-align: top; }
+.pp-users-email {
+    color: var(--pp-text-muted);
+    font-size: 0.82rem;
+    margin-top: 2px;
+}
+.pp-users-you { margin-left: 6px; }
+.pp-users-can {
+    color: var(--pp-text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-width: 46ch;
+}
+.pp-users-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+.pp-users-delete-form { display: inline; margin: 0; }
+
+/* Borrar bloqueado (eres tú, o es el último administrador). Se deja ver, en
+   gris y con el motivo en el `title`: esconderlo del todo haría pensar que la
+   fila está incompleta. */
+.pp-users-locked {
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    cursor: not-allowed;
+}
+
+.pp-users-roles-legend {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--pp-border);
+    display: grid;
+    gap: 10px;
+}
+.pp-users-roles-legend li {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 12px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.pp-users-roles-legend strong { color: var(--pp-text); }
+.pp-users-roles-legend span { color: var(--pp-text-muted); }
+
+@media (max-width: 720px) {
+    .pp-users-roles-legend li { grid-template-columns: 1fr; gap: 2px; }
+    .pp-users-actions { justify-content: flex-start; }
+}
+
+/* Lista de errores dentro de una alerta */
+.pp-alert__list {
+    margin: 0;
+    padding-left: 18px;
+}
+.pp-alert__list li + li { margin-top: 4px; }

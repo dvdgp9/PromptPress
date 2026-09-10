@@ -184,37 +184,6 @@
     </div>
 </form>
 
-<?php /* ADMIN-I18N — El idioma del PANEL, que no es el de la web.
-       Va en su propio formulario y FUERA del de arriba: es una preferencia de
-       quien está logueado, no un ajuste del sitio, y guardarla no debe arrastrar
-       el resto de campos. */ ?>
-<section class="pp-form-card">
-    <h3><?= e(__('settings.panel_language')) ?></h3>
-    <p class="pp-form-help">
-        <?= __('settings.panel_language_help.html') ?>
-    </p>
-
-    <form method="POST" action="<?= e(base_url('admin/settings/panel-language')) ?>" class="pp-lang-add">
-        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
-        <label for="pp-panel-language" class="pp-sr-only"><?= e(__('settings.panel_language')) ?></label>
-        <select id="pp-panel-language" name="panel_language">
-            <option value="">
-                <?= e(__('settings.panel_language_inherit', ['idioma' => $panelLanguageInherited])) ?>
-            </option>
-            <?php foreach ($panelLanguages as $code => $label): ?>
-                <option value="<?= e($code) ?>" <?= ($panelLanguage === $code) ? 'selected' : '' ?>>
-                    <?= e($label) ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-        <button type="submit" class="pp-btn pp-btn--secondary"><?= e(__('settings.panel_language_submit')) ?></button>
-    </form>
-
-    <p class="pp-form-help pp-form-help--muted">
-        <?= e(__('settings.panel_language_note', ['idiomas' => implode(', ', $panelLanguages)])) ?>
-    </p>
-</section>
-
 <?php if (is_array($updateStatus ?? null)): ?>
 <section class="pp-form-card pp-update-card">
     <div class="pp-form-card__head">

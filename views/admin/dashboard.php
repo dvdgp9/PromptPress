@@ -17,6 +17,10 @@
  */
 \Core\View::extend('admin/layout');
 
+// EQUIPO T4 — El escritorio es lo primero que ve cada rol: si aquí quedan
+// accesos a sitios que le van a contestar 403, el panel parece roto.
+$can = static fn(string $capability): bool => \Core\Auth::can($capability);
+
 // Helpers locales
 $fmtNum   = fn($n) => number_format((int) $n, 0, ',', '.');
 $fmtCost  = fn($c) => '$' . number_format((float) $c, 4, '.', '');
@@ -51,8 +55,9 @@ $actionLabels = [
 
     <?php
     // E-GDPR G6 — Widget de cumplimiento. Solo se muestra cuando hay gaps.
+    // Todo lo que ofrece lleva a Privacidad, que es cosa del administrador.
     $compliance = $compliance ?? ['level' => 'green', 'gaps' => []];
-    if (($compliance['level'] ?? 'green') !== 'green' && !empty($compliance['gaps'])):
+    if ($can('settings') && ($compliance['level'] ?? 'green') !== 'green' && !empty($compliance['gaps'])):
         $level = $compliance['level'];
         $wizardPending = !($wizardCompleted ?? true);
         if ($wizardPending) {
@@ -100,7 +105,8 @@ $actionLabels = [
 
     <!-- Stats: agrupadas por divider, no card-boxing. Métrica IA destacada. -->
     <section class="pp-stats">
-        <a href="<?= e(base_url('admin/ai-usage')) ?>" class="pp-stat pp-stat--primary">
+        <?php if ($can('settings')): ?>
+        <a href="<?= e(base_url('admin/ai/usage')) ?>" class="pp-stat pp-stat--primary">
             <span class="pp-stat__label"><?= e(__('dashboard.stat.ai_calls')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countAILogs) ?></span>
             <?php if ($countAILogs > 0): ?>
@@ -111,6 +117,7 @@ $actionLabels = [
             <span class="pp-stat__sub"><?= e(__('dashboard.stat.no_activity')) ?></span>
             <?php endif; ?>
         </a>
+        <?php endif; ?>
 
         <a href="<?= e(base_url('admin/pages')) ?>" class="pp-stat">
             <span class="pp-stat__label"><?= e(__('nav.pages')) ?></span>
@@ -127,10 +134,12 @@ $actionLabels = [
             <span class="pp-stat__value"><?= $fmtNum($countMedia) ?></span>
         </a>
 
+        <?php if ($can('assistant')): ?>
         <a href="<?= e(base_url('admin/documents')) ?>" class="pp-stat">
             <span class="pp-stat__label"><?= e(__('nav.documents')) ?></span>
             <span class="pp-stat__value"><?= $fmtNum($countDocuments) ?></span>
         </a>
+        <?php endif; ?>
     </section>
 
     <!-- Quick actions -->
@@ -141,18 +150,24 @@ $actionLabels = [
                 <span class="pp-icon--pages"></span>
                 <span><?= e(__('dashboard.quick.create_page')) ?></span>
             </a>
+            <?php if ($can('assistant')): ?>
             <a href="<?= e(base_url('admin/memory')) ?>" class="pp-quick-action">
                 <span class="pp-icon--memory"></span>
                 <span><?= e(__('dashboard.quick.define_knowledge')) ?></span>
             </a>
+            <?php endif; ?>
+            <?php if ($can('appearance')): ?>
             <a href="<?= e(base_url('admin/design')) ?>" class="pp-quick-action">
                 <span class="pp-icon--design"></span>
                 <span><?= e(__('dashboard.quick.configure_design')) ?></span>
             </a>
+            <?php endif; ?>
+            <?php if ($can('settings')): ?>
             <a href="<?= e(base_url('admin/settings')) ?>" class="pp-quick-action">
                 <span class="pp-icon--settings"></span>
                 <span><?= e(__('nav.settings')) ?></span>
             </a>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -212,11 +227,12 @@ $actionLabels = [
         </div>
 
         <!-- Recent AI calls -->
+        <?php if ($can('settings')): ?>
         <div class="pp-dashboard__section">
             <div class="pp-section-header">
                 <h3><?= e(__('dashboard.recent_ai')) ?></h3>
                 <?php if (!empty($recentAILogs)): ?>
-                <a href="<?= e(base_url('admin/ai-usage')) ?>" class="pp-link"><?= e(__('dashboard.see_all')) ?> →</a>
+                <a href="<?= e(base_url('admin/ai/usage')) ?>" class="pp-link"><?= e(__('dashboard.see_all')) ?> →</a>
                 <?php endif; ?>
             </div>
 
@@ -257,6 +273,7 @@ $actionLabels = [
             </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
     </div>
 

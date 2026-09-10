@@ -9094,3 +9094,342 @@ Cambiar de tipo no toca el enlace: solo cambia el control.
 - Verificado en el Studio: los tres tipos, que cambiar de tipo no reescriba el
   enlace, y que al reabrir el panel salga marcado el tipo correcto.
 
+
+---
+
+## EQUIPO — Varias personas en el panel, cada una con lo suyo (10/09/2026)
+
+### Background and Motivation (EQUIPO)
+
+Hoy PromptPress es de una sola persona. La tabla `users` existe desde el
+principio (`install/schema.sql:27`) con `role ENUM('admin','editor')`, la sesión
+ya cuelga de un `user_id` y hasta el idioma del panel es por usuario
+(ADMIN-I18N), pero **no hay una sola pantalla para crear, editar o borrar
+cuentas**: el único usuario nace en el paso 3 del instalador
+(`install/steps/admin.php:102`), siempre con rol `admin`, y la única forma de
+añadir otro es un `INSERT` a mano en MySQL.
+
+El rol `editor` está a medio cablear: se comprueba en 6 sitios contados
+(`Auth::role() !== 'admin'` en resetear sitio, aplicar/subir/restaurar
+actualización, ajustes de IA y guardar header/pie). Las otras ~180 rutas de
+`/admin` no preguntan nada. O sea: un editor creado a mano entraría y podría
+rehacer el diseño, vaciar la memoria del sitio o tocar la privacidad.
+
+Lo que se pide: que un equipo pueda entrar al panel, y que lo que cada uno ve y
+puede tocar dependa de verdad de quién es.
+
+**Decisiones cerradas con el usuario (10/09/2026):**
+
+1. **Tres roles fijos**: Administrador, Editor y Redactor. Nada de permisos a la
+   carta por usuario.
+2. **Alta con contraseña inicial puesta por el admin.** Sin invitaciones por
+   correo: el SMTP es opcional por sitio (`MailSettings::isConfigured()`) y no
+   queremos que dar de alta a alguien dependa de que esté configurado.
+3. **Sin «he olvidado mi contraseña»** en el login. El admin la restablece desde
+   la ficha del usuario.
+4. **Un Editor** puede tocar contenido, el asistente y el conocimiento del
+   sitio, y la apariencia y visibilidad. **No** ve mensajes, reservas ni tienda.
+
+### Key Challenges and Analysis (EQUIPO)
+
+**1. El reparto de permisos, en áreas y no en rutas.**
+Hay ~183 rutas bajo `/admin` más las de los cuatro módulos. Un permiso por ruta
+sería inmantenible. La suerte es que el panel **ya está agrupado en seis
+bloques conceptuales** en `AdminNavigation::groupDefinitions()`, y esos grupos
+son exactamente las áreas que queremos repartir. El mapa queda así:
+
+| Capacidad | Qué abarca | Admin | Editor | Redactor |
+|---|---|:--:|:--:|:--:|
+| `content` | Páginas, blog, Studio de canvas, secciones, medios, enlaces, recursos | ✅ | ✅ | ✅ |
+| `forms` | Constructor de formularios (`/admin/formularios`) | ✅ | ✅ | ❌ |
+| `assistant` | Asistente, memoria del sitio, documentos | ✅ | ✅ | ❌ |
+| `appearance` | Diseño, header y pie | ✅ | ✅ | ❌ |
+| `visibility` | SEO, marketing, analítica | ✅ | ✅ | ❌ |
+| `clients` | Mensajes de formulario, reservas, tienda | ✅ | ❌ | ❌ |
+| `settings` | Ajustes, correo, IA, gasto de IA, módulos, privacidad, **usuarios** | ✅ | ❌ | ❌ |
+
+Dos matices que asumo y conviene confirmar al revisar:
+- El **Redactor** se queda sin el constructor de formularios: crear un
+  formulario es configuración, no redacción. Sí conserva **medios**, porque sin
+  la biblioteca de imágenes no puede escribir una página.
+- `clients` incluye los mensajes recibidos (`/admin/forms`), que hoy están
+  pegados a formularios en la navegación pero son datos de personas reales.
+
+**2. Dónde se aplica de verdad.**
+La única barrera que cuenta es la del servidor. `Auth::requireOnboarding()` ya
+enseña el patrón: un middleware de grupo que lee `Request::path()` y decide.
+Copiamos ese truco con `Auth::requireCapability()`, colgado del grupo `/admin`
+y de los middlewares que `ModuleRegistry::registerRoutes()` reparte a los
+módulos. Un solo sitio donde mirar, un solo sitio donde equivocarse.
+
+**3. El default tiene que ser «no», y eso muerde.**
+Si una ruta no está en el mapa, lo seguro es denegarla. Pero entonces una ruta
+nueva escrita dentro de seis meses se rompe en silencio para todo el que no sea
+admin. Solución: **denegar por defecto + un test que recorre las rutas
+registradas y falla si alguna se ha quedado sin área**. El aviso llega al
+escribir la ruta, no cuando un cliente se queja.
+
+**4. Ocultar no es proteger, pero hay que ocultar igual.**
+Además del guard: filtrar `AdminNavigation` (ya sabe filtrar por módulo, es
+añadir un campo `cap` al catálogo), el dashboard (tiene accesos directos a
+diseño, memoria y ajustes en `views/admin/dashboard.php:140-152`) y la barra de
+admin de la web pública (`AdminBar::shouldRender()` hoy solo mira que haya
+sesión).
+
+**5. Reglas que impiden dejar el panel sin dueño.**
+No borrarte a ti mismo, no quitarte tu propio rol de admin y **nunca cero
+administradores**. Las tres van en el servicio, no en la vista, y con test.
+
+**6. Sesiones abiertas de un usuario al que le cambias algo.**
+`auth_tokens` («mantener la sesión iniciada», SESION-RECUERDA) tiene
+`ON DELETE CASCADE`, así que borrar la cuenta ya limpia sus tokens. Lo que no
+está resuelto: si le cambias el rol o le restableces la contraseña, sus
+navegadores recordados siguen entrando con el permiso viejo. Hay que revocarlos
+a mano en esos dos casos.
+
+**7. Código que aún asume un solo usuario.**
+`FormSubmissionService.php:102` manda el aviso de formulario a
+`SELECT email FROM users ORDER BY id ASC LIMIT 1`. Es el último recurso (antes
+mira el email de contacto de la memoria del sitio), pero con equipo puede
+acabar avisando al último redactor que entró. Basta con acotarlo a
+`role='admin'`.
+
+**8. Instalación nueva vs. instalación existente.**
+El ENUM cambia, así que hacen falta las dos cosas a la vez: la migración en
+`database/migrations/` y el `install/schema.sql` puesto al día — véase la
+lección de INSTALL-MIGRATION. El default del ENUM pasa de `admin` a `editor`:
+si algún día se inserta una fila sin rol, que salga la menos peligrosa.
+
+### High-level Task Breakdown (EQUIPO)
+
+**T1 — Tres roles en la base de datos.**
+Migración `2026_09_10_user_roles.php`: `ALTER TABLE users MODIFY role
+ENUM('admin','editor','redactor') NOT NULL DEFAULT 'editor'`. Mismo cambio en
+`install/schema.sql:32`.
+*Criterio:* la migración corre sobre la BD dev y sobre una BD recién creada
+desde el instalador; el usuario que ya existe sigue siendo `admin`; el ENUM
+acepta `redactor` y rechaza cualquier otra cosa.
+
+**T2 — El mapa de permisos, aislado y probado.**
+`app/Services/Permissions.php`: la matriz rol×capacidad, el mapa
+prefijo-de-ruta → capacidad, y `Permissions::allows(string $role, string
+$path): bool`. Sin tocar todavía ni una vista.
+*Criterio:* `tests/permissions.php` verifica la matriz entera, que un prefijo
+desconocido devuelve `false` para todos menos admin, y los casos frontera
+(`/admin` a secas, `/admin/forms` vs `/admin/formularios`, rutas con `{id}`).
+
+**T3 — El guard donde importa: el router.**
+`Auth::requireCapability()` añadido a los middlewares del grupo `/admin` en
+`app/routes.php:376` y a los que se pasan a `ModuleRegistry::registerRoutes()`.
+Responde 403 con `Response::forbidden(__('common.access_denied'))`.
+*Criterio:* test HTTP con los tres roles: un editor pide `/admin/settings` → 403;
+un redactor pide `/admin/design` → 403; un redactor pide `/admin/pages` → 200;
+admin todo 200. Más un test de cobertura que recorre las rutas registradas y
+falla si alguna ruta de `/admin` no tiene capacidad asignada.
+
+**T4 — Que no se vea lo que no se puede tocar.**
+Campo `cap` en el catálogo de `AdminNavigation` y filtrado por rol; dashboard
+sin los accesos directos prohibidos; `AdminBar::shouldRender()` mirando también
+la capacidad de editar esa página.
+*Criterio:* `tests/admin_navigation.php` ampliado — el redactor no ve el grupo
+Configuración ni Clientes; el editor no ve Clientes; el admin lo ve todo. Y una
+comprobación en navegador con los tres roles.
+
+**T5 — Gestión de usuarios (solo admin).**
+`UserService` (validación y reglas) + `UserController` + vistas
+`views/admin/users/{index,form}.php` + CSS en `admin/assets/css/admin.css`.
+Rutas: listar, crear, editar, borrar, restablecer contraseña. Entrada nueva en
+la navegación, dentro de Configuración.
+*Criterio:* crear un editor y entrar con él; usuario y email duplicados dan
+error legible; contraseña mínima de 8 (igual que el instalador); borrarse a uno
+mismo, quitarse el propio admin y dejar el sitio sin administradores están
+bloqueados **y tienen test**; cambiar rol o contraseña tira las sesiones
+recordadas de esa persona.
+
+**T6 — Mi cuenta.**
+`/admin/profile`: nombre, email, contraseña (pidiendo la actual) e idioma del
+panel — que hoy vive suelto en Ajustes (`SettingsController::panelLanguage`) y
+es lo más personal que hay. Enlace desde el nombre del topbar
+(`views/admin/layout.php:132`).
+*Criterio:* cambiar mi contraseña sin acertar la actual falla; al acertarla, mis
+otras sesiones recordadas se caen y la actual sigue viva; cualquier rol puede
+entrar a su perfil.
+
+**T7 — Los cuatro idiomas.**
+Claves nuevas en `lang/admin/{es,en,fr,pt}.php`.
+*Criterio:* `php scripts/i18n_lint.php` sin claves usadas-y-no-definidas, sin
+huérfanas y sin castellano colado en ficheros ya migrados.
+
+**T8 — La deuda del aviso de formulario.**
+`FormSubmissionService.php:102` → primer usuario **con rol admin**.
+*Criterio:* con varios usuarios en la BD y sin email de contacto en la memoria
+del sitio, el aviso va al admin, no al último creado.
+
+**T9 — Cierre.**
+Suite completa en verde y repaso en navegador entrando con los tres roles.
+*Criterio:* los 129 tests de `tests/` pasan; el recorrido manual no encuentra
+ningún sitio donde un rol vea algo que no le toca.
+
+### Project Status Board (EQUIPO)
+
+- [x] T1 — Tres roles en la base de datos
+- [x] T2 — Mapa de permisos aislado y probado
+- [x] T3 — Guard en el router (403 de verdad)
+- [x] T4 — Navegación, dashboard y barra de admin filtrados
+- [x] T5 — Gestión de usuarios (solo admin)
+- [x] T6 — Mi cuenta
+- [x] T7 — Los cuatro idiomas
+- [x] T8 — Deuda: destinatario del aviso de formulario
+- [x] T9 — Suite completa + repaso con los tres roles
+
+### Executor's Feedback or Assistance Requests (EQUIPO)
+
+Pendiente de que el Planner (usuario) revise el plan antes de ejecutar.
+
+Dos asunciones marcadas arriba que conviene confirmar de paso:
+1. El **Redactor** no entra al constructor de formularios, pero sí a medios.
+2. Los **mensajes recibidos** (`/admin/forms`) cuentan como «Clientes», o sea
+   solo admin — el Editor no los ve.
+
+### Current Status / Progress Tracking (EQUIPO) — T1 a T4
+
+**T1.** `database/migrations/2026_09_10_user_roles.php` + `install/schema.sql`.
+El ENUM pasa a `('admin','editor','redactor')` y el default de `admin` a
+`editor`: si algún día entra una fila sin rol, que entre con el permiso menos
+peligroso. Comprobado sobre la BD dev — la columna es la nueva y el usuario que
+ya existía sigue siendo `admin`.
+
+**T2.** `app/Services/Permissions.php`: siete capacidades, la matriz por rol y
+el mapa de rutas. El área de una ruta la decide su PRIMER SEGMENTO tras
+`/admin`, lo que además separa gratis `/admin/forms` (mensajes recibidos) de
+`/admin/formularios` (el constructor). `tests/permissions.php` — 78
+comprobaciones.
+
+`tests/permissions_coverage.php` es la red del «denegar por defecto»: monta el
+router de verdad y falla si una ruta de `/admin` se quedó sin área. En su
+primera ejecución ya cazó `/admin/login`, que vive fuera del grupo autenticado
+y no tenía sitio en el mapa. También avisa al revés, de segmentos mapeados sin
+ninguna ruta detrás.
+
+**T3.** `Auth::requireCapability()` colgado del grupo `/admin` y de los
+middlewares de los módulos, entre `requireAuth` y `requireOnboarding`. Contesta
+JSON cuando la petición viene por fetch — media panel habla así, y un `<h1>`
+dentro de un `response.json()` manda a quien lo depure al sitio equivocado.
+`Auth::role()` ahora memoriza el rol durante la petición: el guard corre en
+todas y antes eso era una consulta por cada pregunta.
+
+`tests/permissions_http.php` levanta un servidor, crea un editor y un redactor
+de verdad, entra con cada uno y comprueba 36 respuestas reales.
+
+**T4.** La capacidad de cada entrada del menú NO se declara: se deduce de su
+propio destino con `Permissions`. Así el menú y el guard no pueden contradecirse
+— el fallo clásico es que el menú esconda algo que la URL sí abre. Un grupo que
+se queda sin destinos no se pinta (al redactor le sobra Configuración entera).
+También filtrados el escritorio y el botón de editar de la barra pública.
+
+Verificado en navegador con los tres roles:
+- **Redactor**: solo Escritorio y Contenido (Páginas, Entradas, Medios,
+  Recursos — sin Formularios). Stats de Páginas y Medios. Escribir
+  `/admin/design` o `/admin/settings` a mano da 403.
+- **Editor**: Asistente IA, Contenido (ya con Formularios), Apariencia y
+  Visibilidad. Ni Clientes ni Configuración. Sin el panel de gasto de IA.
+- **Admin**: todo, como antes.
+
+**De paso:** el escritorio enlazaba a `/admin/ai-usage` en dos sitios, y esa
+ruta no existe — la real es `/admin/ai/usage`. Enlace roto preexistente,
+arreglado al tocar esas líneas.
+
+Suite completa: 123 tests en verde. `update_from_zip` se salta solo (solo corre
+con `PP_ENV=development`, porque despliega archivos sobre la instalación).
+
+### Current Status / Progress Tracking (EQUIPO) — T5
+
+`UserService` + `UserController` + `views/admin/users/{index,form}.php` + estilos
+y el icono del menú en `admin.css`. Entrada nueva en Configuración → Usuarios.
+
+Las tres reglas viven en el servicio y tienen test (`tests/users_service.php`,
+30 comprobaciones): nadie se borra a sí mismo, nadie se quita su propio rol de
+administrador, y nunca quedan cero administradores. La tercera es la que
+importa de verdad: las dos primeras se esquivan entre dos administradores que
+se degraden mutuamente, y sin ella el panel quedaría cerrado para siempre.
+
+El listado enseña el botón de borrar en gris —con el motivo en el `title`— en
+vez de esconderlo: una fila a la que le falta un botón parece rota.
+
+Cambiar rol o contraseña revoca los `auth_tokens` de esa persona. Sin eso, a
+quien acabas de bajar de administrador le siguen valiendo los permisos viejos
+en cada navegador donde marcó «mantener la sesión iniciada».
+
+**Dos cosas que se corrigieron sobre la marcha:**
+
+1. Escribí los marcadores de posición como `:nombre` (costumbre de Laravel) y
+   este proyecto usa `{nombre}`. Se veía literalmente «Cuenta creada para
+   :nombre.» en pantalla. Corregido en los cuatro idiomas.
+2. Había hecho una ruta aparte `/users/{id}/password` para restablecer
+   contraseñas. Sobra: el propio formulario de edición ya lo hace (en blanco =
+   no tocar) y pasa por el mismo `setPassword`. Ruta, método y clave de
+   traducción retirados antes de que fuesen código muerto.
+
+Verificado en navegador como admin: alta con validación (los datos tecleados se
+conservan al volver con errores, rol incluido), borrado con confirmación por
+nombre, y el intento de quitarse a uno mismo el administrador cortado con su
+mensaje.
+
+`i18n_lint` sigue en las mismas 42 pendientes de antes de esta rama, todas de
+ficheros ajenos. Las claves `users.err.*` y `users.role.*` salen en «definidas
+sin uso literal», que es correcto y el propio lint no cuenta: las primeras se
+devuelven como DATO desde el servicio y las segundas se componen
+(`'users.role.' . $role`).
+
+### Current Status / Progress Tracking (EQUIPO) — T6 a T9
+
+**T6.** `ProfileController` + `views/admin/profile/index.php`, en `/admin/profile`.
+Es la única pantalla abierta a cualquier rol. El nombre de la barra superior
+lleva ahí.
+
+El idioma del panel **se ha mudado aquí desde Ajustes**, y no por gusto: desde
+que Ajustes es solo para administradores, un editor no podía cambiar el idioma
+de SU panel — y es la opción más personal que hay en toda la configuración. Se
+retiran de `SettingsController` el método `panelLanguage()`, sus dos ayudantes
+y los datos que alimentaban ese bloque (77 líneas menos).
+
+Cambiar la propia contraseña pide la actual: sin eso, cualquiera que se
+encuentre una sesión abierta se queda con la cuenta. Revoca todos los tokens
+—que es lo que se quiere si te han robado la cuenta— pero reemite el del
+navegador desde el que la estás cambiando, porque ahí no has desmarcado nada.
+
+**T7.** 57 claves nuevas en los cuatro idiomas, a la par (0 faltan, 0 sobran).
+
+**T8.** El aviso de formulario cae ahora en el administrador más antiguo y no
+en «el primer usuario de la tabla». Comprobado con tres usuarios en la base y
+sin email de contacto en la memoria del sitio: sale `admin@example.com`.
+
+**T9.** 124 tests en verde, 0 fallos.
+
+**Dos fallos preexistentes que salieron al tirar del hilo:**
+
+1. **La barra superior ponía «Admin» en todas las pantallas menos el
+   escritorio.** El layout esperaba un `$userName` que solo le pasaba
+   `DashboardController`; en el resto caía al literal por defecto. Con una sola
+   cuenta llamada `admin` no se notaba; con equipo, cada editor veía el nombre
+   de otro. Ahora lo resuelve `Auth::username()`, sobre la misma fila que ya
+   memoriza el guard, así que además ahorra una consulta.
+2. El escritorio enlazaba a `/admin/ai-usage`, que no existe (es
+   `/admin/ai/usage`). Dos enlaces rotos, arreglados.
+
+### Lessons (EQUIPO)
+
+- Los marcadores de posición de `__()` en este proyecto son `{nombre}`, con
+  llaves. Escribir `:nombre` (costumbre de Laravel) no da error: pinta el
+  literal `:nombre` en pantalla y solo se ve mirando.
+- Cortar un método de un fichero buscando el texto de su docblock es frágil:
+  «Zonas horarias» aparecía dos veces en `SettingsController` (la constante y
+  el método) y el corte se llevó por delante media clase. Al recortar por
+  marcadores, verificar siempre que el trozo eliminado contiene la firma que se
+  quería quitar.
+- `macOS` no trae `timeout`, así que el bucle para pasar la suite entera no lo
+  puede usar. Y la suite no habla con una sola voz: unos tests terminan en
+  `ALL PASS`, otros en `TODO OK` y otros en `OK`. Lo fiable es el **código de
+  salida** más contar líneas `^FAIL`.
+- `tests/update_from_zip.php` se salta solo si `PP_ENV` no es `development`:
+  sale con código 2 y parece un fallo cuando no lo es.

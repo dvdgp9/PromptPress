@@ -99,7 +99,14 @@ final class FormSubmissionService
             return $m[0];
         }
 
-        $user = Database::selectOne('SELECT email FROM users ORDER BY id ASC LIMIT 1');
+        // EQUIPO T8 — Último recurso: el administrador más antiguo. Antes era
+        // «el primer usuario de la tabla», que con una sola cuenta daba igual
+        // pero con equipo acaba mandando los mensajes de clientes al último
+        // redactor que se dio de alta.
+        $user = Database::selectOne(
+            'SELECT email FROM users WHERE role = ? ORDER BY id ASC LIMIT 1',
+            [Permissions::ROLE_ADMIN]
+        );
         $email = (string) ($user['email'] ?? '');
         return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }

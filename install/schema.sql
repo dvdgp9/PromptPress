@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin','editor') NOT NULL DEFAULT 'admin',
+    -- EQUIPO: admin lo puede todo; editor lleva contenido, asistente y
+    -- apariencia; redactor solo escribe. Default = el menos peligroso.
+    role ENUM('admin','editor','redactor') NOT NULL DEFAULT 'editor',
     -- ADMIN-I18N: idioma del PANEL. NULL = heredar el del sitio.
     language VARCHAR(5) DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

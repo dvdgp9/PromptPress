@@ -51,8 +51,8 @@ navCheck(
     navKeys($all) === ['home', 'assistant', 'content', 'clients', 'appearance', 'visibility', 'configuration'],
     json_encode(navKeys($all)) ?: ''
 );
-navCheck('base_destinations_count', count(AdminNavigation::flatten($none)) === 17);
-navCheck('all_modules_destinations_count', count(AdminNavigation::flatten($all)) === 21);
+navCheck('base_destinations_count', count(AdminNavigation::flatten($none)) === 18);
+navCheck('all_modules_destinations_count', count(AdminNavigation::flatten($all)) === 22);
 
 $allFlat = AdminNavigation::flatten($all);
 $allKeys = array_column($allFlat, 'key');
@@ -91,7 +91,7 @@ navCheck(
 );
 navCheck(
     'configuration_group_order',
-    navKeys($groupsByKey['configuration']['items']) === ['privacy', 'modules', 'settings']
+    navKeys($groupsByKey['configuration']['items']) === ['privacy', 'users', 'modules', 'settings']
 );
 
 $resourceOnly = AdminNavigation::build('/admin/resources', ['resources']);
@@ -125,15 +125,71 @@ navCheck(
         'home', 'assistant_home', 'pages', 'posts', 'media', 'forms', 'messages',
         'knowledge', 'documents', 'design', 'chrome', 'seo', 'marketing',
         'analytics', 'bookings', 'shop', 'resources', 'ai_usage', 'privacy',
-        'modules', 'settings',
+        'users', 'modules', 'settings',
     ],
     json_encode($legacyKeys) ?: ''
 );
+
+// ---------------------------------------------------------------------------
+// EQUIPO T4 — El menú, filtrado por rol.
+// ---------------------------------------------------------------------------
+
+$modules = ['analytics' => true, 'booking' => true, 'commerce' => true, 'resources' => true];
+
+$adminNav    = AdminNavigation::build('/admin', $modules, 'admin');
+$editorNav   = AdminNavigation::build('/admin', $modules, 'editor');
+$redactorNav = AdminNavigation::build('/admin', $modules, 'redactor');
+
+$adminSees    = array_column(AdminNavigation::flatten($adminNav), 'key');
+$editorSees   = array_column(AdminNavigation::flatten($editorNav), 'key');
+$redactorSees = array_column(AdminNavigation::flatten($redactorNav), 'key');
+
+navCheck(
+    'admin_sees_the_whole_menu',
+    $adminSees === array_column(AdminNavigation::flatten(AdminNavigation::build('/admin', $modules)), 'key'),
+    json_encode($adminSees) ?: ''
+);
+
+foreach (['settings', 'modules', 'privacy', 'users', 'ai_usage'] as $hidden) {
+    navCheck("editor_no_ve_{$hidden}", !in_array($hidden, $editorSees, true), json_encode($editorSees) ?: '');
+}
+foreach (['messages', 'bookings', 'shop'] as $hidden) {
+    navCheck("editor_no_ve_{$hidden}", !in_array($hidden, $editorSees, true), json_encode($editorSees) ?: '');
+}
+foreach (['pages', 'posts', 'media', 'forms', 'design', 'chrome', 'seo', 'knowledge'] as $visible) {
+    navCheck("editor_si_ve_{$visible}", in_array($visible, $editorSees, true), json_encode($editorSees) ?: '');
+}
+
+foreach (['pages', 'posts', 'media', 'resources'] as $visible) {
+    navCheck("redactor_si_ve_{$visible}", in_array($visible, $redactorSees, true), json_encode($redactorSees) ?: '');
+}
+foreach (['forms', 'design', 'chrome', 'seo', 'marketing', 'knowledge', 'settings', 'users'] as $hidden) {
+    navCheck("redactor_no_ve_{$hidden}", !in_array($hidden, $redactorSees, true), json_encode($redactorSees) ?: '');
+}
+
+// Un grupo que se queda sin destinos no debe salir como encabezado suelto.
+$redactorGroups = array_column(array_filter(
+    $redactorNav,
+    static fn(array $e): bool => ($e['type'] ?? '') === 'group'
+), 'key');
+navCheck(
+    'redactor_no_ve_grupos_vacios',
+    !in_array('configuration', $redactorGroups, true) && !in_array('clients', $redactorGroups, true),
+    json_encode($redactorGroups) ?: ''
+);
+navCheck('redactor_conserva_el_grupo_contenido', in_array('content', $redactorGroups, true));
+navCheck('redactor_siempre_tiene_inicio', in_array('home', $redactorSees, true));
+
+// Un rol inventado no ve nada más que el escritorio.
+$ghost = array_column(AdminNavigation::flatten(AdminNavigation::build('/admin', $modules, 'fantasma')), 'key');
+navCheck('rol_desconocido_solo_ve_inicio', $ghost === ['home'], json_encode($ghost) ?: '');
 
 $layoutSource = (string) file_get_contents(PP_ROOT . '/views/admin/layout.php');
 navCheck('layout_consumes_navigation_builder', str_contains($layoutSource, 'AdminNavigation::build'));
 navCheck('layout_renders_grouped_navigation', str_contains($layoutSource, 'foreach ($navigation as $navEntry)'));
 navCheck('layout_no_longer_defines_destinations', !str_contains($layoutSource, "['url' => 'admin/"));
+// Si el layout deja de pasar el rol, el menú se abre entero: que salte aquí.
+navCheck('layout_pasa_el_rol_al_menu', str_contains($layoutSource, 'AdminNavigation::build($currentPath, $enabledNavModules, \\Core\\Auth::role())'));
 
 echo PHP_EOL . ($failed === 0 ? 'ALL PASS' : $failed . ' FAILED') . PHP_EOL;
 exit($failed === 0 ? 0 : 1);

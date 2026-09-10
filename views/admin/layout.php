@@ -40,7 +40,10 @@
                 }
             }
 
-            $navigation = \App\Services\AdminNavigation::build($currentPath, $enabledNavModules);
+            // EQUIPO T4 — El rol decide qué entradas existen. Ocultar no protege
+            // (de eso va el guard del router), pero enseñar puertas cerradas es
+            // una forma tonta de que el panel parezca roto.
+            $navigation = \App\Services\AdminNavigation::build($currentPath, $enabledNavModules, \Core\Auth::role());
             ?>
             <ul class="pp-nav-list">
             <?php foreach ($navigation as $navEntry): ?>
@@ -131,7 +134,11 @@
 
                 <?php if (\Core\Auth::check()): ?>
                 <div class="pp-topbar__user">
-                    <span class="pp-topbar__username"><?= e($userName ?? 'Admin') ?></span>
+                    <?php /* EQUIPO T6 — El nombre lleva a «Mi cuenta»: es donde
+                             todo el mundo, sea del rol que sea, se cambia la
+                             contraseña y el idioma del panel. */ ?>
+                    <a class="pp-topbar__username" href="<?= e(base_url('admin/profile')) ?>"
+                       title="<?= e(__('profile.title')) ?>"><?= e($userName ?? \Core\Auth::username() ?? '') ?></a>
                     <form method="POST" action="<?= e(base_url('admin/logout')) ?>" class="pp-logout-form">
                         <input type="hidden" name="_csrf" value="<?= e(\Core\CSRF::token()) ?>">
                         <button type="submit" class="pp-topbar__logout" title="<?= e(__('common.logout_title')) ?>"><?= e(__('common.logout')) ?></button>

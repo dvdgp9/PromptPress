@@ -33,7 +33,9 @@ use App\Controllers\Admin\SeoController;
 use App\Controllers\Admin\PrivacyController;
 use App\Controllers\Admin\PrivacyWizardController;
 use App\Controllers\Admin\MarketingController;
+use App\Controllers\Admin\ProfileController;
 use App\Controllers\Admin\SettingsController;
+use App\Controllers\Admin\UserController;
 use App\Controllers\Public\FormController as PublicFormController;
 use App\Controllers\Public\PageController as PublicPageController;
 use App\Controllers\Public\SeoController as PublicSeoController;
@@ -125,6 +127,10 @@ $router->post('/admin/logout', [AuthController::class, 'logout']);
 
 // Rutas admin protegidas por auth
 $requireAuth = [\Core\Auth::class, 'requireAuth'];
+// EQUIPO T3 — Reparto de permisos. Va DESPUÉS de requireAuth (sin sesión no hay
+// rol que mirar) y ANTES de requireOnboarding, para que una ruta prohibida
+// conteste 403 en vez de mandar al onboarding.
+$requireCapability = [\Core\Auth::class, 'requireCapability'];
 $requireOnboarding = [\Core\Auth::class, 'requireOnboarding'];
 $router->group('/admin', function (\Core\Router $r) {
     $r->get('/',  [DashboardController::class, 'index']);
@@ -349,6 +355,23 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/marketing/custom',         [MarketingController::class, 'saveCustom']);
     $r->post('/marketing/custom/delete',  [MarketingController::class, 'deleteCustom']);
 
+    // EQUIPO T6 — Mi cuenta. Sin capacidad: cualquier rol tiene que poder
+    // cambiarse la contraseña y el idioma de su panel.
+    $r->get('/profile',           [ProfileController::class, 'index']);
+    $r->post('/profile',          [ProfileController::class, 'update']);
+    $r->post('/profile/password', [ProfileController::class, 'password']);
+    $r->post('/profile/language', [ProfileController::class, 'language']);
+
+    // EQUIPO T5 — El equipo. Todo cuelga de la capacidad `settings`, o sea
+    // solo administrador: eso lo garantiza el guard, no hace falta repetirlo
+    // en el controlador.
+    $r->get('/users',                  [UserController::class, 'index']);
+    $r->get('/users/create',           [UserController::class, 'create']);
+    $r->post('/users',                 [UserController::class, 'store']);
+    $r->get('/users/{id}/edit',        [UserController::class, 'edit']);
+    $r->post('/users/{id}',            [UserController::class, 'update']);
+    $r->post('/users/{id}/delete',     [UserController::class, 'destroy']);
+
     $r->get('/settings',      [SettingsController::class, 'index']);
     $r->post('/settings',     [SettingsController::class, 'update']);
     $r->post('/settings/check-updates', [SettingsController::class, 'checkUpdates']);
@@ -359,7 +382,6 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/settings/reset-site', [SettingsController::class, 'resetSite']);
     $r->post('/settings/languages/add',    [SettingsController::class, 'addLanguage']);    // I18N-FULL T1.3
     $r->post('/settings/languages/remove', [SettingsController::class, 'removeLanguage']);
-    $r->post('/settings/panel-language',   [SettingsController::class, 'panelLanguage']); // ADMIN-I18N T0.4
     $r->get('/settings/ai',   [SettingsAIController::class, 'index']);
     $r->post('/settings/ai',  [SettingsAIController::class, 'update']);
     $r->post('/settings/images', [SettingsAIController::class, 'updateImages']); // Unsplash key post-install
@@ -373,11 +395,11 @@ $router->group('/admin', function (\Core\Router $r) {
     // FEAT-3 — Módulos (activación por sitio)
     $r->get('/modules',         [ModulesController::class, 'index']);
     $r->post('/modules/toggle', [ModulesController::class, 'toggle']);
-}, [$requireAuth, $requireOnboarding]);
+}, [$requireAuth, $requireCapability, $requireOnboarding]);
 
 // FEAT-3 — Rutas de cada módulo activable. Se registran siempre; el guard
 // requireEnabled() devuelve 404 cuando el módulo está apagado para el sitio.
-\App\Modules\ModuleRegistry::registerRoutes($router, [$requireAuth, $requireOnboarding]);
+\App\Modules\ModuleRegistry::registerRoutes($router, [$requireAuth, $requireCapability, $requireOnboarding]);
 
 // Health check (debug / smoke test)
 $router->get('/_health', function () {

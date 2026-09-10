@@ -10,6 +10,12 @@ namespace App\Services;
  * No lee sesión, BD ni traducciones: recibe los módulos activos y devuelve una
  * estructura determinista que la vista puede renderizar como lista plana (N1)
  * o como grupos progresivos (N2).
+ *
+ * EQUIPO T4 — También filtra por rol. La capacidad de cada entrada NO se
+ * declara aquí: se deduce de su propio destino con `Permissions`. Así el menú
+ * y el guard del router no pueden decir cosas distintas, que es exactamente el
+ * fallo clásico de estos sistemas — el menú esconde algo que la URL sí abre, o
+ * enseña algo que luego contesta 403.
  */
 final class AdminNavigation
 {
@@ -34,15 +40,18 @@ final class AdminNavigation
         'resources',
         'ai_usage',
         'privacy',
+        'users',
         'modules',
         'settings',
     ];
 
     /**
      * @param array<int|string, bool|string> $enabledModules Lista de claves o mapa clave => bool.
+     * @param ?string $role Rol de quien mira. `null` = sin filtrar (tests del
+     *                      contrato puro). El layout SIEMPRE pasa el real.
      * @return array<int, array<string, mixed>>
      */
-    public static function build(string $currentPath, array $enabledModules = []): array
+    public static function build(string $currentPath, array $enabledModules = [], ?string $role = null): array
     {
         $path = self::normalizePath($currentPath);
         $enabled = self::normalizeModules($enabledModules);
@@ -59,11 +68,15 @@ final class AdminNavigation
                 if (is_string($module) && !isset($enabled[$module])) {
                     continue;
                 }
+                if ($role !== null && !Permissions::allows($role, (string) $item['match'])) {
+                    continue;
+                }
                 $items[] = self::prepareLink($item, $path);
             }
 
-            // Hoy todos los grupos tienen destinos base. Mantener la guarda
-            // evita encabezados vacíos si el catálogo modular crece después.
+            // Un grupo entero puede quedarse vacío para un redactor (le sobra
+            // Configuración al completo). Sin esta guarda saldría el encabezado
+            // solo, que es peor que no salir.
             if ($items === []) {
                 continue;
             }
@@ -150,6 +163,7 @@ final class AdminNavigation
             'seo' => self::link('seo', 'admin/seo', 'seo', 'nav.seo', '/admin/seo'),
             'marketing' => self::link('marketing', 'admin/marketing', 'marketing', 'nav.marketing', '/admin/marketing'),
             'privacy' => self::link('privacy', 'admin/privacy', 'privacy', 'nav.privacy', '/admin/privacy'),
+            'users' => self::link('users', 'admin/users', 'users', 'nav.users', '/admin/users'),
             'modules' => self::link('modules', 'admin/modules', 'settings', 'nav.modules', '/admin/modules'),
             'settings' => self::link('settings', 'admin/settings', 'settings', 'nav.settings', '/admin/settings'),
         ];
@@ -187,7 +201,7 @@ final class AdminNavigation
             'configuration' => [
                 'label_key' => 'nav.group.configuration',
                 'icon' => 'settings',
-                'items' => ['privacy', 'modules', 'settings'],
+                'items' => ['privacy', 'users', 'modules', 'settings'],
             ],
         ];
     }

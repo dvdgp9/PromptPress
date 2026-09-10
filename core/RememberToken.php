@@ -93,6 +93,20 @@ final class RememberToken
     }
 
     /** Cierre de sesión: el token de ESTE navegador deja de valer. */
+    /**
+     * ¿Este navegador tiene puesta la cookie de «mantener la sesión iniciada»?
+     *
+     * EQUIPO T6 — Al cambiar uno su propia contraseña se revocan TODOS sus
+     * tokens, que es justo lo que se quiere si a alguien le han robado la
+     * cuenta. Pero entonces el navegador desde el que la está cambiando también
+     * pierde el suyo, y volvería a pedirle la contraseña en unos días sin que
+     * él haya desmarcado nada. Con esto se sabe si hay que emitirle uno nuevo.
+     */
+    public static function hasCookie(): bool
+    {
+        return self::readCookie() !== null;
+    }
+
     public static function revokeCurrent(): void
     {
         $parsed = self::readCookie();
