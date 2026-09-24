@@ -2330,8 +2330,40 @@
               enlace: '<a href="' + body.dataset.publicUrl + '" target="_blank" rel="noopener">' + pp.t('js.cv.see_it') + '</a>'
             })
           : pp.t('js.cv.now_draft'));
+        if (publishing && data.menu_hint) showMenuHint(data.menu_hint);
       })
       .finally(function () { if (triggerBtn) triggerBtn.disabled = false; });
+  }
+
+  // MENU-PAGES T5 — «Publicada, pero no sale en el menú» + botón para
+  // añadirla ahí mismo (solo si quien publica es admin).
+  function showMenuHint(hint) {
+    var msg = addMsg('assistant', '<p>' + esc(hint.message || '') + '</p>'
+      + (hint.can_add && body.dataset.menuUrl
+        ? '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-menu-hint-add>' + esc(pp.t('js.map.menu_add')) + '</button>'
+        : ''));
+    var btn = msg.querySelector('[data-menu-hint-add]');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      var fd = new FormData();
+      fd.append('_csrf', csrf);
+      fd.append('action', 'add');
+      fetch(body.dataset.menuUrl, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'fetch' }
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.error || '');
+          btn.remove();
+          addMsg('assistant', esc(res.message || ''));
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          addMsg('assistant', esc((err && err.message) || pp.t('js.map.menu_failed')));
+        });
+    });
   }
 
   function closeMoreMenu() {

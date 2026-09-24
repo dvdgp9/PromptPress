@@ -3,6 +3,7 @@
 namespace App\Controllers\Admin;
 
 use App\Services\LanguageService;
+use App\Services\HeaderMenuService;
 use App\Services\TranslationJobs;
 use App\Services\TranslationWriter;
 use App\Services\PageTranslator;
@@ -76,6 +77,10 @@ class PageController
         $data['csrf']        = CSRF::token();
         $data['aiMeta']      = AIProviderFactory::currentMeta($siteId);
         $data['hasMemory']   = self::siteHasMemory($siteId);
+        // MENU-PAGES — qué páginas salen hoy en el header, y si quien mira
+        // puede cambiarlo (el mismo permiso que «Cabecera y pie»).
+        $data['inMenuIds']   = HeaderMenuService::siteInMenuIds($siteId);
+        $data['canEditMenu'] = Auth::role() === 'admin';
 
         // I18N-FULL T5.3 — estado de traducción por página. Solo se calcula (y
         // solo se muestra) si el sitio tiene más de un idioma: quien no usa
@@ -1721,11 +1726,19 @@ class PageController
             $warning = __('page_ctrl.was_home');
         }
 
+        // MENU-PAGES — al publicar, si no sale en el menú, se avisa. Y el chip
+        // se refresca: en automático, publicar puede meterla (o sacar otra).
+        $menuHint = ($status === 'published' && ($page['status'] ?? '') !== 'published')
+            ? HeaderMenuService::publishHint($siteId, (int) $page['id'], Auth::role() === 'admin')
+            : null;
+
         Response::json([
             'ok' => true,
             'status' => $status,
             'message' => $status === 'published' ? __('page_ctrl.published') : __('page_ctrl.back_to_draft'),
             'warning' => $warning,
+            'menu_hint' => $menuHint,
+            'in_menu_ids' => array_keys(HeaderMenuService::siteInMenuIds($siteId)),
         ]);
     }
 

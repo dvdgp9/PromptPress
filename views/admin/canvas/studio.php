@@ -60,6 +60,7 @@ $icon = static function (string $name): string {
       data-versions-url="<?= e(base_url('admin/canvas/' . $pageId . '/versions')) ?>"
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
       data-publish-url="<?= e(base_url('admin/canvas/' . $pageId . '/publish')) ?>"
+      data-menu-url="<?= e(base_url('admin/pages/' . $pageId . '/menu')) ?>"
       data-lock-url="<?= e(base_url('admin/canvas/' . $pageId . '/lock')) ?>"
       data-section-url="<?= e(base_url('admin/canvas/' . $pageId . '/section')) ?>"
       data-structure-url="<?= e(base_url('admin/canvas/' . $pageId . '/structure')) ?>"

@@ -75,6 +75,7 @@ $borderControls = static function (string $prefix, array $border) use ($sel, $bo
   window.PP_PAGES  = <?= json_encode($pages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   window.PP_BASEURL = "<?= e(rtrim(base_url(''), '/')) ?>";
   window.PP_CSRF = "<?= e($csrf) ?>";
+  window.PP_CHROME_FP = "<?= e($fingerprint ?? '') ?>";
 </script>
 <?php \Core\View::end(); ?>
 

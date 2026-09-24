@@ -11985,6 +11985,20 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 .pp-page-menu__item:hover{background:#f3f4f6}
 .pp-page-menu__item.is-danger{color:#b91c1c}
 .pp-page-menu__item.is-danger:hover{background:#fef2f2}
+/* MENU-PAGES — «sale en el menú del header», en tarjetas y filas. */
+.pp-badge--menu{background:#ecfeff;color:#0e7490}
+.pp-badge--menu[hidden]{display:none}
+/* Acción no disponible (p. ej. añadir un borrador al menú): se ve para que se
+   sepa que existe, pero no se puede pulsar. */
+.pp-page-menu__item:disabled{color:var(--pp-muted,#9ca3af);cursor:not-allowed}
+.pp-page-menu__item:disabled:hover{background:none}
+a.pp-page-menu__item{text-decoration:none}
+/* MENU-PAGES T5 — «Publicada, pero no sale en el menú». Encima de los toasts
+   (que salen a la vez, abajo a la derecha) y sin caducar. */
+.pp-menu-hint{position:fixed;right:24px;bottom:84px;z-index:301;max-width:360px;padding:14px 16px;border:1px solid #a5f3fc;border-radius:var(--pp-radius,12px);background:#ecfeff;color:#164e63;box-shadow:0 10px 30px -12px rgba(15,23,42,.35);font-size:.9rem}
+.pp-menu-hint p{margin:0 0 10px}
+.pp-menu-hint__actions{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:600px){.pp-menu-hint{left:16px;right:16px;max-width:none}}
 
 /* Barra de la lista: buscador + filtros + contador */
 .pp-pages-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}

@@ -7,6 +7,8 @@
  * @var array $pageOptions
  * @var string $csrf
  * @var array $aiMeta
+ * @var array<int,true> $inMenuIds
+ * @var bool $canEditMenu
  */
 \Core\View::extend('admin/layout');
 
@@ -41,6 +43,15 @@ $homeBadge = function (array $p): string {
         : '';
 };
 
+// MENU-PAGES — ¿sale en el menú del header? El chip se pinta SIEMPRE (oculto si
+// no sale) para que el JS lo muestre u oculte al añadir/quitar sin recargar.
+$inMenuIds = $inMenuIds ?? [];
+$menuBadge = function (array $p) use ($inMenuIds): string {
+    $in = isset($inMenuIds[(int) $p['id']]);
+    return ' <span class="pp-badge pp-badge--menu" data-menu-chip' . ($in ? '' : ' hidden') . '>'
+        . e(__('js.map.in_menu')) . '</span>';
+};
+
 // Adónde lleva "Ver": a la URL pública si está publicada, y al preview del
 // panel si es un borrador (que en la web pública daría 404).
 $viewUrl = function (array $p): string {
@@ -57,9 +68,10 @@ $viewUrl = function (array $p): string {
  * en el contenedor (fila o tarjeta) y los lee el mismo JS para las dos vistas:
  * si cada vista tuviera su propio marcado, acabarían divergiendo.
  */
-$actionData = function (array $p) use ($viewUrl): string {
+$actionData = function (array $p) use ($viewUrl, $inMenuIds): string {
     $id = (int) $p['id'];
     return ' data-page-id="' . $id . '"'
+        . ' data-page-in-menu="' . (isset($inMenuIds[$id]) ? '1' : '0') . '"'
         . ' data-page-title="' . e((string) $p['title']) . '"'
         . ' data-page-status="' . e((string) ($p['status'] ?? 'draft')) . '"'
         . ' data-page-type="' . e((string) ($p['page_type'] ?? '')) . '"'
@@ -80,7 +92,7 @@ $parentOptions = function (?int $currentId, ?int $selectedId) use ($pageOptions)
     return $html;
 };
 
-$renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge, $canvasBadge, $homeBadge, $parentOptions, $typeInitial, $actionData, $viewUrl) {
+$renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge, $canvasBadge, $homeBadge, $menuBadge, $parentOptions, $typeInitial, $actionData, $viewUrl) {
     $id = (int) $node['id'];
     $label = (string) (($node['nav_label'] ?? '') ?: $node['title']);
     $children = (array) ($node['children'] ?? []);
@@ -105,7 +117,7 @@ $renderNode = function (array $node) use (&$renderNode, $pageTypes, $statusBadge
                         <span class="pp-map-card__type"><?= e($pageTypes[$node['page_type']] ?? $node['page_type']) ?></span>
                         <h3><?= e($label) ?></h3>
                     </div>
-                    <?= $statusBadge($node) . $homeBadge($node) . $canvasBadge($node) ?>
+                    <?= $statusBadge($node) . $homeBadge($node) . $canvasBadge($node) . $menuBadge($node) ?>
                 </div>
                 <div class="pp-map-card__meta">
                     <code>/<?= e($node['slug']) ?></code>
@@ -160,6 +172,8 @@ $pageMapPayload = array_map(fn($p) => [
          id="pp-site-map"
          data-csrf="<?= e($csrf) ?>"
          data-base-url="<?= e(base_url('')) ?>"
+         data-can-edit-menu="<?= !empty($canEditMenu) ? '1' : '0' ?>"
+         data-chrome-url="<?= e(base_url('admin/chrome')) ?>"
          data-ai-configured="<?= !empty($aiMeta['configured']) ? '1' : '0' ?>">
     <script type="application/json" id="pp-map-pages-data"><?= json_encode($pageMapPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
@@ -395,7 +409,7 @@ $pageMapPayload = array_map(fn($p) => [
                             <td><a href="<?= e(base_url('admin/pages/' . $p['id'] . '/edit')) ?>"><strong><?= e($p['title']) ?></strong></a></td>
                             <td><code>/<?= e($p['slug']) ?></code></td>
                             <td><?= e($pageTypes[$p['page_type']] ?? $p['page_type']) ?></td>
-                            <td><?= $statusBadge($p) . $homeBadge($p) . $canvasBadge($p) ?></td>
+                            <td><?= $statusBadge($p) . $homeBadge($p) . $canvasBadge($p) . $menuBadge($p) ?></td>
                             <?php if (!empty($isMultilingual)): ?>
                                 <td class="pp-tr-cell">
                                     <span class="pp-tr-own"><?= e($languageLabels[$p['language'] ?? ''] ?? ($p['language'] ?? '')) ?></span>

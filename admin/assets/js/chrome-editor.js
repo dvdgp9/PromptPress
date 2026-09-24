@@ -72,22 +72,41 @@
         requestAnimationFrame(function () { elx.classList.add('is-visible'); });
         setTimeout(function () { elx.classList.remove('is-visible'); setTimeout(function () { elx.remove(); }, 240); }, 3200);
     }
+    // MENU-PAGES T4 — huella de la config que se cargó. Si otro la cambia
+    // (otra pestaña, «Añadir al menú» desde Páginas), el servidor contesta 409
+    // en vez de dejar que esta pestaña lo pise.
+    var baseFp = window.PP_CHROME_FP || '';
     function saveConfig() {
         if (saveBtn) saveBtn.disabled = true;
         var body = new URLSearchParams();
         body.set('_csrf', csrf);
+        body.set('base_fp', baseFp);
         body.set('config_json', JSON.stringify(buildConfig()));
         fetch(baseUrl + '/admin/chrome', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch' },
             body: body.toString(), credentials: 'same-origin'
         }).then(function (r) {
+            if (r.status === 409) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    var err = new Error((data && data.error) || pp.t('js.chrome.save_failed'));
+                    err.conflict = true;
+                    throw err;
+                });
+            }
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json().catch(function () { return {}; });
         }).then(function (data) {
+            if (data && data.fingerprint) baseFp = data.fingerprint;
             setDirty(false);
             showToast((data && data.message) || pp.t('js.chrome.saved'), 'success');
-        }).catch(function () {
+        }).catch(function (err) {
+            if (err && err.conflict) {
+                // Recargar pierde lo no guardado de aquí; no recargar deja
+                // al usuario decidir (p. ej. copiar algo antes).
+                if (window.confirm(err.message)) window.location.reload();
+                return;
+            }
             showToast(pp.t('js.chrome.save_failed'), 'error');
         }).then(function () { if (saveBtn) saveBtn.disabled = false; });
     }

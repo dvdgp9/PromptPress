@@ -26,6 +26,7 @@ use App\Controllers\Admin\ModulesController;
 use App\Controllers\Admin\OnboardingController;
 use App\Controllers\Admin\CanvasController;
 use App\Controllers\Admin\PageController;
+use App\Controllers\Admin\PageMenuController;
 use App\Controllers\Admin\LinkController;
 use App\Controllers\Admin\PostController;
 use App\Controllers\Admin\SectionController;
@@ -187,6 +188,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/pages/{id}/status',    [PageController::class, 'updateStatus']);
     $r->post('/pages/{id}/duplicate', [PageController::class, 'duplicate']);
     $r->post('/pages/{id}/set-home',  [PageController::class, 'setHome']);
+    $r->post('/pages/{id}/menu',      [PageMenuController::class, 'toggle']);   // MENU-PAGES
     $r->get('/pages/{id}/delete-info', [PageController::class, 'deleteInfo']);
     $r->post('/pages/{id}/move',      [PageController::class, 'move']);
     $r->post('/pages/translate-job/{id}/step', [PageController::class, 'translateJobStep']);

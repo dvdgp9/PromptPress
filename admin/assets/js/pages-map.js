@@ -6,6 +6,9 @@
 
     var baseUrl = (root.dataset.baseUrl || '').replace(/\/$/, '');
     var csrf = root.dataset.csrf || '';
+    // MENU-PAGES — solo un admin puede tocar el menú del header.
+    var canEditMenu = root.dataset.canEditMenu === '1';
+    var chromeUrl = root.dataset.chromeUrl || '';
     var configured = root.dataset.aiConfigured === '1';
     var architectPanel = document.getElementById('pp-architect-panel');
     var architectBody = document.getElementById('pp-architect-body');
@@ -218,6 +221,24 @@
         if (!isHome && data.pageType !== 'article') {
             items.push(menuItem(id, 'set-home', 'Marcar como inicio'));
         }
+        // MENU-PAGES — añadir/quitar del header. Un borrador no se puede
+        // añadir (sería un enlace a una página que no se ve), pero la opción se
+        // enseña desactivada para que se sepa que existe.
+        if (canEditMenu) {
+            items.push('<hr>');
+            if (data.pageInMenu === '1') {
+                items.push(menuItem(id, 'menu-remove', pp.t('js.map.menu_remove')));
+            } else if (published) {
+                items.push(menuItem(id, 'menu-add', pp.t('js.map.menu_add')));
+            } else {
+                items.push('<button type="button" role="menuitem" class="pp-page-menu__item" disabled>'
+                    + escapeHtml(pp.t('js.map.menu_publish_first')) + '</button>');
+            }
+            if (chromeUrl) {
+                items.push('<a role="menuitem" class="pp-page-menu__item" href="' + escapeHtml(chromeUrl) + '">'
+                    + escapeHtml(pp.t('js.map.menu_order')) + '</a>');
+            }
+        }
         items.push('<hr>');
         items.push(menuItem(id, 'delete', 'Eliminar', 'is-danger'));
 
@@ -269,8 +290,10 @@
             postForm('/admin/pages/' + id + '/status', { status: next }, 20000)
                 .then(function (body) {
                     applyStatusToUi(id, next);
+                    if (Array.isArray(body.in_menu_ids)) syncMenuChips(body.in_menu_ids);
                     showToast(body.message || 'Estado actualizado.', 'success');
                     if (body.warning) showToast(body.warning, 'error');
+                    if (body.menu_hint) showMenuHint(body.menu_hint);
                 })
                 .catch(function (err) { showToast(err.message || 'No se pudo cambiar el estado.', 'error'); });
             return;
@@ -300,9 +323,79 @@
             return;
         }
 
+        if (action === 'menu-add' || action === 'menu-remove') {
+            setPageMenu(id, action === 'menu-add' ? 'add' : 'remove');
+            return;
+        }
+
         if (action === 'delete') {
             openDeleteDialog(id, title, sourceEl);
         }
+    }
+
+    /** MENU-PAGES — añade/quita la página del menú del header. */
+    function setPageMenu(id, action) {
+        return postForm('/admin/pages/' + id + '/menu', { action: action }, 20000)
+            .then(function (body) {
+                applyMenuToUi(id, !!body.in_menu);
+                showToast(body.message, 'success');
+                return body;
+            })
+            .catch(function (err) {
+                showToast(err.message, 'error');
+                throw err;
+            });
+    }
+
+    /** Refresca TODOS los chips: en automático, publicar una puede sacar otra. */
+    function syncMenuChips(ids) {
+        var inMenu = {};
+        ids.forEach(function (x) { inMenu[String(x)] = true; });
+        Array.prototype.forEach.call(document.querySelectorAll('[data-page-id][data-page-in-menu]'), function (holder) {
+            var on = !!inMenu[holder.dataset.pageId];
+            holder.dataset.pageInMenu = on ? '1' : '0';
+            var chip = holder.querySelector('[data-menu-chip]');
+            if (chip) chip.hidden = !on;
+        });
+    }
+
+    /**
+     * MENU-PAGES T5 — «Publicada, pero no sale en el menú». Se queda hasta que
+     * se cierra o se actúa: un toast de 3 s se pierde justo cuando importa.
+     */
+    function showMenuHint(hint) {
+        var old = document.querySelector('.pp-menu-hint');
+        if (old) old.remove();
+        var el = document.createElement('div');
+        el.className = 'pp-menu-hint';
+        el.setAttribute('role', 'status');
+        el.innerHTML = '<p>' + escapeHtml(hint.message || '') + '</p>'
+            + '<div class="pp-menu-hint__actions">'
+            + (hint.can_add ? '<button type="button" class="pp-btn pp-btn--primary pp-btn--sm" data-menu-hint-add>' + escapeHtml(pp.t('js.map.menu_add')) + '</button>' : '')
+            + '<button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-menu-hint-close>' + escapeHtml(pp.t('js.common.close')) + '</button>'
+            + '</div>';
+        document.body.appendChild(el);
+        el.addEventListener('click', function (event) {
+            if (event.target.closest('[data-menu-hint-close]')) {
+                el.remove();
+                return;
+            }
+            var add = event.target.closest('[data-menu-hint-add]');
+            if (add) {
+                add.disabled = true;
+                setPageMenu(String(hint.page_id), 'add')
+                    .then(function () { el.remove(); })
+                    .catch(function () { add.disabled = false; });
+            }
+        });
+    }
+
+    function applyMenuToUi(id, inMenu) {
+        holdersFor(id).forEach(function (holder) {
+            holder.dataset.pageInMenu = inMenu ? '1' : '0';
+            var chip = holder.querySelector('[data-menu-chip]');
+            if (chip) chip.hidden = !inMenu;
+        });
     }
 
     function applyStatusToUi(id, status) {
@@ -909,6 +1002,7 @@
                 + ' data-page-id="' + escapeHtml(String(id)) + '"'
                 + ' data-page-title="' + escapeHtml(data.pageTitle || '') + '"'
                 + ' data-page-status="' + escapeHtml(data.pageStatus || 'draft') + '"'
+                + ' data-page-in-menu="' + escapeHtml(data.pageInMenu || '0') + '"'
                 + ' data-page-type="' + escapeHtml(data.pageType || '') + '">',
                 '<button type="button" class="pp-map-inspector__close" data-close-inspector aria-label="Cerrar">&times;</button>',
                 '<div class="pp-map-inspector__head">',

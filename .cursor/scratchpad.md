@@ -9715,3 +9715,216 @@ haya dueño no es motivo para rechazar a nadie; que lo tenga otro, sí.
   control» + soltar en `pagehide`.
 - Al desalojado se le ofrece «Recargar», nunca «volver a tomarla»: recuperarla
   escribiría encima de quien está trabajando ahora.
+
+---
+
+# [MENU-PAGES] Gestionar «sale en el menú» desde la vista de páginas — PLAN (24/09/2026, Planner)
+
+## Background and Motivation (MENU-PAGES)
+
+Una clienta (margo.naturo) creó y publicó la página «Méthode & Outils» y no
+aparece en el menú del header. Su sitio tiene **menú personalizado** (se ve por
+«Home» y «Contact» como enlaces normales; el modo automático quita la home y
+convierte contacto en CTA), y en ese modo una página nueva nunca entra sola ni
+nada lo avisa. Hoy solo se arregla desde «Header y pie».
+
+Objetivo: que desde la vista de páginas se vea qué páginas salen en el menú y se
+pueda añadir/quitar con un click. El orden, los desplegables, las etiquetas y los
+enlaces externos **siguen en el editor de header** (no se duplica ese editor).
+
+Fuera de alcance (v1): el menú del pie (`footer.nav`), reordenar desde páginas.
+
+## Key Challenges and Analysis (MENU-PAGES)
+
+Mapa del código actual:
+- Config: `ChromeService` (setting `SETTING_KEY`), `header.menu` = lista de
+  ítems `{type: page|link|dropdown, page_id, label, visible, target, children}`.
+  Vacío ⇒ modo automático. Cap 14 ítems / 8 hijos (`sanitizeMenu`).
+- Render: `BrandService::headerNav()` (`app/Services/BrandService.php:365`).
+  Auto = `navPages()` (publicadas, primer nivel, sin legal/article/home, del
+  idioma servido, LIMIT 6); la de tipo `contact` pasa a CTA **solo en auto**.
+- Idiomas: `ChromeService::localized()` — un idioma secundario usa
+  `i18n[lang].header.menu` si existe (sustituye el menú ENTERO); si no, cae al
+  menú base (que apunta a páginas del idioma principal).
+- Guardado del editor: `ChromeController::save()` guarda la config COMPLETA que
+  cargó la pestaña; solo rol `admin`; hace `CacheService::flush()`.
+- Vista de páginas: `views/admin/pages/index.php` (mapa + lista) y el menú «⋯»
+  se monta en JS en `admin/assets/js/pages-map.js` (`togglePageMenu`).
+
+Retos y decisiones propuestas:
+
+1. **Qué menú toca una página.** El de su idioma: idioma principal ⇒
+   `header.menu`; secundario ⇒ `i18n[lang].header.menu`.
+2. **Pasar de automático a personalizado sin que cambie lo que se ve.** Al
+   primer «añadir/quitar» sobre un menú automático se «materializa»: se copian
+   las páginas de `navPages()` como ítems `page` (en su orden) y luego se aplica
+   el cambio. Trampa: con menú personalizado el CTA `auto` desaparece (queda
+   vacío). Para no perder el botón de contacto, si en auto había CTA de contacto
+   se fija `cta.mode = custom` con su título y su URL.
+   ⚠️ La URL del CTA custom es texto: si luego cambia el slug de contacto, el
+   botón se rompe. Aceptable (es lo que ya pasa si alguien lo pone a mano), pero
+   lo dejo dicho.
+3. **Idioma secundario sin capa de menú propia.** Hoy muestra el menú base
+   (páginas en otro idioma). Al añadir/quitar ahí se crea su capa partiendo de la
+   lista automática de ESE idioma (materializar como en el punto 2). Caso raro;
+   solo afecta a webs multidioma.
+4. **«Está en el menú»** = su `page_id` aparece en el menú efectivo de su idioma
+   (arriba o dentro de un desplegable, y `visible`). En auto: está si sale en
+   `navPages()` (contacto cuenta, sale como botón). Quitar una página que está
+   dentro de un desplegable la quita del desplegable; si el desplegable se queda
+   vacío, se elimina (como ya hace `sanitizeMenu`).
+5. **Solo páginas publicadas.** `BrandService::pageById()` no filtra por estado:
+   meter un borrador pintaría un enlace a una página no visible. En borradores la
+   acción sale desactivada con «Publícala primero».
+6. **Límite de 14 ítems.** Si está lleno, error claro y enlace al editor.
+7. **Permisos:** igual que el editor, solo `admin`. Para otros roles no se
+   muestra la acción (el chip sí).
+8. **Que no se pisen.** Si el editor de header está abierto en otra pestaña y
+   alguien añade una página desde la vista de páginas, al guardar el editor
+   borraría el cambio (guarda la config entera). Solución simple: el editor
+   manda una huella (hash) de la config que cargó; si ya no coincide, 409 y
+   aviso «Alguien ha cambiado el header; recarga». El toggle lee-modifica-guarda
+   en el mismo request, así que no necesita más.
+9. **Caché:** tras cada cambio, `CacheService::flush($siteId)` (el header va
+   dentro del HTML cacheado).
+
+Lógica pura (sin BD) en un servicio nuevo `HeaderMenuService` con funciones
+que reciben arrays: `contains()`, `add()`, `remove()`, `materialize()`. Así se
+testea sin servidor, y el controlador solo carga, llama y guarda.
+
+## High-level Task Breakdown (MENU-PAGES)
+
+- [ ] **T1 — Lógica del menú + tests (TDD).** `tests/header_menu_pages.php`
+  primero, luego `app/Services/HeaderMenuService.php`.
+  Éxito: tests en verde que cubran: añadir al final; no duplicar; quitar de
+  arriba y de un desplegable (y desplegable vacío eliminado); materializar desde
+  auto conservando el CTA de contacto; capa de idioma secundario creada desde su
+  lista automática sin tocar la base; límite 14 ⇒ error; `contains` en auto y en
+  personalizado. Suite completa sigue en verde.
+- [ ] **T2 — Endpoint.** `POST /admin/pages/{id}/menu` con `action=add|remove`
+  (CSRF, solo admin, solo publicadas, página del sitio). Guarda con
+  `ChromeService::save` + `flush`. Devuelve JSON `{ok, in_menu, message}`.
+  Éxito: con curl, añadir «Méthode & Outils» en el entorno local ⇒ el HTML
+  público del header la muestra; quitarla ⇒ desaparece; borrador ⇒ 422;
+  no-admin ⇒ 403.
+- [ ] **T3 — Interfaz en la vista de páginas.** Chip «En el menú» en tarjetas
+  (mapa) y filas (lista); en «⋯» «Añadir al menú» / «Quitar del menú»
+  (desactivado en borradores, oculto a no-admin) + enlace «Ordenar en Header y
+  pie». Textos en `lang/admin/{es,en,fr,pt}.php`; CSS en `styles.css`.
+  Éxito: en el navegador, el chip y la acción funcionan sin recargar, sin
+  errores de consola, en móvil y escritorio.
+- [ ] **T4 — El editor de header no pisa cambios.** Huella de la config al
+  cargar el editor; `save()` responde 409 si cambió; el JS muestra el aviso.
+  Éxito: editor abierto → añadir página desde la vista de páginas → guardar en
+  el editor ⇒ aviso y el cambio se conserva.
+- [ ] **T5 (opcional, segunda fase) — Aviso al publicar.** Al publicar desde la
+  vista de páginas una página que no está en un menú personalizado, aviso
+  «No sale en el menú · Añadir». (Studio/editor clásico: más adelante si hace
+  falta.)
+
+## Project Status Board (MENU-PAGES)
+
+- [x] T1 Lógica + tests
+- [x] T2 Endpoint
+- [x] T3 Interfaz
+- [x] T4 Protección del editor
+- [x] T5 Aviso al publicar (vista de Páginas + Studio)
+
+## Decisiones pendientes del usuario (MENU-PAGES)
+
+- ¿Vale convertir el CTA automático de contacto en CTA personalizado al
+  materializar (punto 2)? Alternativa: meter «Contacto» como enlace normal del
+  menú (cambia el aspecto del header).
+- ¿T5 entra ya o la dejamos para después?
+
+## Decisiones cerradas (usuario, 24/09/2026) (MENU-PAGES)
+
+- Al materializar desde auto, **Contacto entra como enlace normal del menú**
+  (no se convierte en CTA custom). El header cambia de aspecto: aceptado.
+  ⇒ El punto 2 de Key Challenges queda así: se copian TODAS las páginas de
+  `navPages()` (contacto incluida) como ítems `page`; el CTA `auto` queda vacío.
+- **T5 entra ya** (aviso al publicar).
+
+## Current Status / Progress Tracking (MENU-PAGES)
+
+Plan aprobado. Executor empieza por T1.
+
+**T1 hecho.** `app/Services/HeaderMenuService.php` (lógica pura + dos helpers
+con BD: `autoByLang()`, `siteInMenuIds()`) y `BrandService::autoNavPageIds()`
+(la misma consulta que pinta el header automático, ahora con `id` y un `$lang`
+explícito). `tests/header_menu_pages.php`: 47/47, incluida una comprobación con
+BD de que materializar enlaza exactamente lo mismo que el automático.
+`chrome_config`, `site_language_chrome*`, `admin_i18n` siguen en verde.
+
+Añadido al plan durante T1 (ver Lessons):
+- Materializar la base en web multidioma congela cada idioma secundario en su
+  lista automática.
+- No se puede quitar el último elemento (`menu_last_item`).
+- Una página nueva entra antes de Contacto si Contacto cierra el menú.
+
+**T2 hecho.** `PageMenuController::toggle` en `POST /admin/pages/{id}/menu`.
+Comprobado con curl en local: añadir/quitar cambia el header público al
+momento (flush de caché); borrador ⇒ 422; acción rara ⇒ 422; id inexistente ⇒
+404; usuario editor (temporal, ya borrado) ⇒ 403. Log `[PageMenu]` por cambio.
+`chrome_config` de dev restaurado a su estado original.
+
+**T3 hecho.** Chip «En el menú» (`.pp-badge--menu`) en tarjetas del mapa y
+filas de la lista (se pinta siempre, con `hidden` si no sale, para poder
+alternarlo sin recargar). `data-page-in-menu` en `$actionData` y en el
+inspector. En «⋯» (solo admin): Añadir/Quitar, desactivado en borradores, y
+«Ordenar el menú…» → `admin/chrome`. CSS en `admin/assets/css/admin.css` (en
+este proyecto no hay `styles.css`). Comprobado en navegador: los 6 chips
+coinciden con los 6 enlaces del header público; añadir desde la tarjeta, quitar
+desde el inspector; tarjeta, fila e inspector se actualizan sin recargar y el
+header público cambia al momento; sin errores de consola; móvil sin scroll
+horizontal de página.
+
+**T4 hecho.** `ChromeService::fingerprint()` (sha1 del valor guardado). El
+editor la recibe (`PP_CHROME_FP`), la manda como `base_fp` y la renueva con la
+respuesta. Si no coincide ⇒ 409 + `confirm()` «¿Recargar?». Sin `base_fp`
+(formulario sin JS) se guarda como antes. Comprobado: editor abierto → «Añadir
+al menú» por otra sesión → guardar en el editor ⇒ aviso y la página añadida
+sigue en BD; tras recargar, dos guardados seguidos ⇒ 200 y 200 (sin conflictos
+falsos).
+
+**T5 hecho.** `HeaderMenuService::publishHint()`: solo páginas de primer nivel
+que no sean portada/legal/entrada y que de verdad no salgan en el menú. Se
+pregunta SOLO al pasar de borrador a publicada (no en cada «Publicar cambios»).
+- Vista de Páginas (`updateStatus`): devuelve `menu_hint` + `in_menu_ids` (en
+  automático, publicar puede meter una y sacar otra: se refrescan todos los
+  chips). Aviso fijo `.pp-menu-hint` con «Añadir al menú» / «Cerrar».
+- Studio (`CanvasController::publish`): **ampliado sobre el plan** porque es
+  donde publicó la clienta (su página es Canvas). El aviso sale como mensaje
+  del chat con el botón. `data-menu-url` en el `<body>` del Studio.
+- Editor clásico y publicación en lote: sin aviso (fuera de alcance).
+Comprobado en navegador con menú personalizado: publicar «Canvas Test» desde
+Páginas ⇒ aviso ⇒ «Añadir» ⇒ chip + header público; lo mismo desde el Studio.
+Datos de prueba revertidos (146/147 a borrador, `chrome_config` restaurado).
+Nota: 146 conserva `published_at` porque despublicar desde Páginas no lo borra
+(comportamiento previo, inocuo).
+
+**Suite completa:** 137 en verde (incluida la nueva `tests/header_menu_pages.php`,
+47 comprobaciones). `update_from_zip` se salta sola, como siempre (solo corre
+con `PP_ENV=development`).
+
+Fuera de alcance, apuntado como tarea aparte: el menú «⋯» de Páginas tiene
+textos en castellano escritos en el JS (Publicar, Duplicar, Eliminar…), así que
+en un panel en francés salen en castellano.
+
+Observación (sin tocar): un menú personalizado puede apuntar a una página en
+borrador y el header la enlaza igualmente (`BrandService::pageById()` no mira el
+estado) ⇒ enlace a una página que no se ve. Pasaba antes de MENU-PAGES.
+
+## Executor's Feedback or Assistance Requests (MENU-PAGES)
+
+(vacío)
+
+## Lessons (MENU-PAGES)
+
+- Un menú de header VACÍO significa «automático». Nunca dejar que una acción
+  lo vacíe: volverían a aparecer todas las páginas.
+- `ChromeService::localized()`: un idioma secundario SIN capa de menú hereda el
+  menú base, que apunta a páginas del idioma principal. Por eso, al pasar la
+  base de automático a personalizado, hay que fijar también los secundarios.
+- En castellano la sección se llama «Cabecera y pie» (`nav.chrome`), no
+  «Header y pie».

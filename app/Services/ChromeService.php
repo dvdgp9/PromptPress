@@ -115,6 +115,25 @@ final class ChromeService
         return $raw !== '' && $raw !== '[]' && $raw !== '{}';
     }
 
+    /**
+     * MENU-PAGES T4 — Huella de la config GUARDADA. El editor la recibe al
+     * abrirse y la devuelve al guardar: si ya no coincide, alguien la cambió
+     * mientras tanto (otra pestaña, o «Añadir al menú» desde Páginas) y guardar
+     * la config entera que tiene el editor lo borraría.
+     */
+    public static function fingerprint(int $siteId): string
+    {
+        try {
+            $row = Database::selectOne(
+                'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+                [$siteId, self::SETTING_KEY]
+            );
+        } catch (\Throwable $e) {
+            return '';
+        }
+        return sha1((string) ($row['setting_value'] ?? ''));
+    }
+
     public static function save(int $siteId, array $config): void
     {
         $json = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

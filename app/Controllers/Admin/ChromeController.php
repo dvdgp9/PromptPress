@@ -30,6 +30,7 @@ class ChromeController
         $data = DashboardController::getCommonData();
         $data['csrf'] = CSRF::token();
         $data['config'] = ChromeService::load($siteId);
+        $data['fingerprint'] = ChromeService::fingerprint($siteId);
         $data['pages'] = $this->sitePages($siteId);
         // I18N-FULL T5.7 — idiomas en los que se puede editar el texto del chrome.
         $data['isMultilingual'] = LanguageService::isMultilingual($siteId);
@@ -46,6 +47,13 @@ class ChromeController
             Response::forbidden('Solo un administrador puede editar el header y el pie.');
         }
         $siteId = $this->requireSiteId();
+        // MENU-PAGES T4 — no pisar un cambio hecho desde otro sitio. Sin
+        // `base_fp` (formulario sin JS) se guarda como siempre.
+        $baseFp = (string) (Request::post('base_fp') ?? '');
+        if ($baseFp !== '' && !hash_equals(ChromeService::fingerprint($siteId), $baseFp)) {
+            error_log('[Chrome] conflicto al guardar site=' . $siteId);
+            Response::json(['ok' => false, 'conflict' => true, 'error' => __('chrome.conflict')], 409);
+        }
         $config = ChromeService::sanitize($this->decodePayload());
         ChromeService::save($siteId, $config);
         // El header y el pie van dentro del HTML cacheado de cada página, así
@@ -54,7 +62,11 @@ class ChromeController
         // viejo hasta que caduca el TTL.
         CacheService::flush($siteId);
         if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch') {
-            Response::json(['ok' => true, 'message' => 'Header y pie actualizados.']);
+            Response::json([
+                'ok' => true,
+                'message' => 'Header y pie actualizados.',
+                'fingerprint' => ChromeService::fingerprint($siteId),
+            ]);
         }
         Session::flash('success', 'Header y pie actualizados.');
         Response::redirect(base_url('admin/chrome'));

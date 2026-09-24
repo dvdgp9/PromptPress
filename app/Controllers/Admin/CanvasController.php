@@ -896,10 +896,16 @@ final class CanvasController
         // Despublicar suelta el puntero: la página deja de tener versión viva.
         $publish ? CanvasService::markPublished($pageId) : CanvasService::clearPublished($pageId);
         \App\Services\CacheService::flush($siteId);
+        // MENU-PAGES T5 — solo al pasar de borrador a publicada, no en cada
+        // «Publicar cambios».
+        $menuHint = ($publish && ($page['status'] ?? '') !== 'published')
+            ? \App\Services\HeaderMenuService::publishHint($siteId, $pageId, \Core\Auth::role() === 'admin')
+            : null;
         Response::json([
             'ok' => true,
             'status' => $publish ? 'published' : 'draft',
             'history' => CanvasService::historyState($pageId),
+            'menu_hint' => $menuHint,
         ]);
     }
 

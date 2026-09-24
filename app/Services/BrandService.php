@@ -200,16 +200,17 @@ final class BrandService
      * D-MB2 R4 — Páginas publicadas de primer nivel para la navegación
      * (excluye legales y la home, que ya es el enlace de marca).
      *
-     * @return array<int,array{title:string,slug:string,page_type:string}>
+     * @return array<int,array{id:int,title:string,slug:string,page_type:string}>
      */
-    private static function navPages(int $siteId, int $limit = 6): array
+    private static function navPages(int $siteId, int $limit = 6, ?string $lang = null): array
     {
+        $lang ??= self::$lang;
         try {
             // El menú es el del idioma que se está sirviendo: en `/fr/` no
             // pueden colarse las páginas castellanas. Se excluye además la home
             // del propio idioma, cuyo slug es el prefijo (`fr`).
             $rows = Database::select(
-                "SELECT title, slug, page_type FROM pages
+                "SELECT id, title, slug, page_type FROM pages
                  WHERE site_id = ? AND status = 'published'
                    AND language = ?
                    AND page_type NOT IN ('legal', 'article')
@@ -217,16 +218,31 @@ final class BrandService
                    AND slug NOT IN ('', 'inicio', 'home', ?)
                  ORDER BY tree_sort_order ASC, sort_order ASC, id ASC
                  LIMIT " . (int) $limit,
-                [$siteId, self::$lang, self::$lang]
+                [$siteId, $lang, $lang]
             );
         } catch (\Throwable $e) {
             return [];
         }
         return array_map(static fn(array $r) => [
+            'id' => (int) $r['id'],
             'title' => (string) $r['title'],
             'slug' => (string) $r['slug'],
             'page_type' => (string) $r['page_type'],
         ], $rows);
+    }
+
+    /**
+     * MENU-PAGES — page_id que el header AUTOMÁTICO pinta en ese idioma, en
+     * orden (la de contacto incluida: en automático sale como botón).
+     *
+     * @return int[]
+     */
+    public static function autoNavPageIds(int $siteId, string $lang): array
+    {
+        return array_map(
+            static fn(array $p) => $p['id'],
+            self::navPages($siteId, 6, LanguageService::normalize($lang))
+        );
     }
 
     public static function publicHeader(int $siteId, ?array $config = null, ?string $lang = null): string
