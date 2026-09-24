@@ -183,6 +183,31 @@ if ($siteId > 0) {
     $matHrefs = $hrefs(\App\Services\BrandService::publicHeader($siteId, ChromeService::sanitize($matCfg), $lang));
     check_hm('BD: el menú materializado enlaza las mismas páginas que el automático', $autoHrefs === $matHrefs,
         json_encode(['auto' => $autoHrefs, 'mat' => $matHrefs]));
+
+    // Un borrador en un menú personalizado no se enlaza: sería una página que
+    // el visitante no puede ver. Vuelve solo al publicarla.
+    $pub = \Core\Database::selectOne("SELECT id, slug FROM pages WHERE site_id = ? AND status = 'published' AND page_type NOT IN ('home','legal','article') ORDER BY id LIMIT 1", [$siteId]);
+    $drafts = \Core\Database::select("SELECT id, slug FROM pages WHERE site_id = ? AND status = 'draft' AND slug NOT LIKE '\\_\\_%' ORDER BY id LIMIT 2", [$siteId]);
+    if ($pub && count($drafts) === 2) {
+        $cfg = ChromeService::sanitize([
+            'header' => ['menu' => [
+                page((int) $pub['id']),
+                page((int) $drafts[0]['id']),
+                ['type' => 'dropdown', 'label' => 'SoloBorradores', 'visible' => true, 'children' => [page((int) $drafts[1]['id'])]],
+            ]],
+            'footer' => ['nav' => [page((int) $pub['id']), page((int) $drafts[0]['id'])]],
+        ]);
+        $h = \App\Services\BrandService::publicHeader($siteId, $cfg, $lang);
+        $f = \App\Services\BrandService::publicFooter($siteId, $cfg, $lang, false);
+        $hasSlug = static fn(string $html, string $slug): bool => (bool) preg_match('~href="[^"]*/' . preg_quote($slug, '~') . '"~', $html);
+        check_hm('borrador: el header enlaza la publicada', $hasSlug($h, (string) $pub['slug']));
+        check_hm('borrador: el header NO enlaza el borrador', !$hasSlug($h, (string) $drafts[0]['slug']));
+        check_hm('borrador: desplegable solo con borradores no se pinta', !str_contains($h, 'SoloBorradores'));
+        check_hm('borrador: el pie enlaza la publicada', $hasSlug($f, (string) $pub['slug']));
+        check_hm('borrador: el pie NO enlaza el borrador', !$hasSlug($f, (string) $drafts[0]['slug']));
+    } else {
+        check_hm('BD: hay una publicada y dos borradores para probar', false);
+    }
 }
 
 echo PHP_EOL . ($failed === 0 ? 'OK' : $failed . ' FALLO(S)') . PHP_EOL;

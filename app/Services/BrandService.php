@@ -462,7 +462,9 @@ final class BrandService
         }
 
         $page = self::pageById($siteId, (int) ($item['page_id'] ?? 0));
-        if ($page === null) return ['', '', $target];
+        // Un borrador no se enlaza: el visitante caería en una página que no
+        // puede ver. El ítem se queda en el menú y vuelve solo al publicarla.
+        if ($page === null || (string) ($page['status'] ?? '') !== 'published') return ['', '', $target];
         $label = trim((string) ($item['label'] ?? '')) ?: (string) $page['title'];
         $href = htmlspecialchars(base_url(ltrim((string) $page['slug'], '/')), ENT_QUOTES, 'UTF-8');
         return [$href, htmlspecialchars($label, ENT_QUOTES, 'UTF-8'), $target];

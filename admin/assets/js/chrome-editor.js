@@ -152,7 +152,9 @@
         var s = el('select', { class: 'pp-chrome-page' });
         pages.forEach(function (p) {
             var o = el('option', { value: String(p.id) });
-            o.textContent = p.title + (p.status === 'published' ? '' : ' (borrador)');
+            // Un borrador se puede elegir, pero no se enlaza hasta publicarlo (ni en
+            // la web ni en la vista previa): que se sepa antes de extrañarse.
+            o.textContent = p.title + (p.status === 'published' ? '' : pp.t('js.chrome.draft_suffix'));
             if (String(p.id) === String(selectedId)) o.selected = true;
             s.appendChild(o);
         });

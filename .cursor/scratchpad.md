@@ -9915,6 +9915,43 @@ Observación (sin tocar): un menú personalizado puede apuntar a una página en
 borrador y el header la enlaza igualmente (`BrandService::pageById()` no mira el
 estado) ⇒ enlace a una página que no se ve. Pasaba antes de MENU-PAGES.
 
+**Publicado como v1.7.0** (commit `c3ea485`, release creada por Actions). El seguimiento de abajo sale como v1.7.1.
+
+### MENU-PAGES · seguimiento (24/09/2026, Executor)
+
+Pedido por el usuario tras la 1.7.0: traducir el menú «⋯» y arreglar los
+enlaces a borradores.
+
+- **Borradores en el menú:** `BrandService::resolveItem()` ya no enlaza una
+  página que no esté publicada (header y navegación personalizada del pie). El
+  ítem se queda en la config y vuelve solo al publicarla; un desplegable cuyos
+  hijos son todos borradores no se pinta. En el editor de Cabecera y pie el
+  selector lo explica: «(borrador: no sale hasta publicarla)», traducido.
+  Tests nuevos en `tests/header_menu_pages.php` (5), escritos antes del arreglo
+  y vistos fallar.
+  Decisión: el chip «En el menú» de un borrador sigue saliendo (está en la
+  config y volverá al publicarlo; el «⋯» ofrece «Quitar del menú»).
+- **Traducción:** `pages-map.js` — opciones del «⋯» (Publicar / Volver a
+  borrador / Duplicar / Marcar como inicio / Eliminar), sus toasts de respaldo,
+  la etiqueta de estado al cambiarla sin recargar y el «Eliminando…» del
+  diálogo. 16 claves nuevas × 4 idiomas.
+  Comprobado en navegador con el panel en francés (`users.language='fr'`,
+  restaurado a NULL después): menú, chip, toasts, etiqueta y diálogo de borrar
+  en francés.
+- Siguen en castellano fijo en `pages-map.js`, fuera de lo pedido: análisis de
+  arquitectura («Analizando», «Analizar sitio», «Reanalizar», «No se pudo
+  analizar la arquitectura.», «Arquitectura en progreso», «Nueva rama»), guardar
+  estructura del inspector («Guardando», «Guardar estructura»), el
+  `aria-label="Cerrar"` y el «Preview» del inspector. También el título
+  «Mapa del sitio» de la vista.
+- Suite: 137 en verde (`update_from_zip` se salta sola). `admin_i18n` en verde.
+
+### Lessons (MENU-PAGES · seguimiento)
+
+- Las páginas públicas llevan el header dentro del HTML cacheado y el
+  actualizador NO vacía la caché: un cambio de render tarda hasta
+  `CacheService::DEFAULT_TTL` (1 h) en verse en páginas ya cacheadas.
+
 ## Executor's Feedback or Assistance Requests (MENU-PAGES)
 
 (vacío)

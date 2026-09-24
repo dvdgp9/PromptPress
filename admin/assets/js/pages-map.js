@@ -215,11 +215,11 @@
         var isHome = data.pageType === 'home';
         var items = [];
 
-        items.push(menuItem(id, 'status', published ? 'Volver a borrador' : 'Publicar'));
-        items.push(menuItem(id, 'duplicate', 'Duplicar'));
+        items.push(menuItem(id, 'status', pp.t(published ? 'js.map.back_to_draft' : 'js.map.publish')));
+        items.push(menuItem(id, 'duplicate', pp.t('js.map.duplicate')));
         // Una entrada del blog no puede ser portada, y la home ya lo es.
         if (!isHome && data.pageType !== 'article') {
-            items.push(menuItem(id, 'set-home', 'Marcar como inicio'));
+            items.push(menuItem(id, 'set-home', pp.t('js.map.set_home')));
         }
         // MENU-PAGES — añadir/quitar del header. Un borrador no se puede
         // añadir (sería un enlace a una página que no se ve), pero la opción se
@@ -240,7 +240,7 @@
             }
         }
         items.push('<hr>');
-        items.push(menuItem(id, 'delete', 'Eliminar', 'is-danger'));
+        items.push(menuItem(id, 'delete', pp.t('js.map.delete'), 'is-danger'));
 
         var menu = document.createElement('div');
         menu.className = 'pp-page-menu';
@@ -291,23 +291,23 @@
                 .then(function (body) {
                     applyStatusToUi(id, next);
                     if (Array.isArray(body.in_menu_ids)) syncMenuChips(body.in_menu_ids);
-                    showToast(body.message || 'Estado actualizado.', 'success');
+                    showToast(body.message || pp.t('js.map.status_updated'), 'success');
                     if (body.warning) showToast(body.warning, 'error');
                     if (body.menu_hint) showMenuHint(body.menu_hint);
                 })
-                .catch(function (err) { showToast(err.message || 'No se pudo cambiar el estado.', 'error'); });
+                .catch(function (err) { showToast(err.message || pp.t('js.map.status_failed'), 'error'); });
             return;
         }
 
         if (action === 'duplicate') {
             postForm('/admin/pages/' + id + '/duplicate', {}, 30000)
                 .then(function (body) {
-                    showToast(body.message || 'Copia creada.', 'success');
+                    showToast(body.message || pp.t('js.map.copy_created'), 'success');
                     // La copia tiene que aparecer en el árbol y en la tabla: se
                     // recarga en vez de inventarse el marcado de una página nueva.
                     window.location.reload();
                 })
-                .catch(function (err) { showToast(err.message || 'No se pudo duplicar.', 'error'); });
+                .catch(function (err) { showToast(err.message || pp.t('js.map.duplicate_failed'), 'error'); });
             return;
         }
 
@@ -315,11 +315,11 @@
             if (!window.confirm(pp.t('js.map.confirm_home', { titulo: title }) + '\n\n' + pp.t('js.map.confirm_home_note'))) return;
             postForm('/admin/pages/' + id + '/set-home', {}, 20000)
                 .then(function (body) {
-                    showToast(body.message || 'Inicio actualizado.', 'success');
+                    showToast(body.message || pp.t('js.map.home_updated'), 'success');
                     if (body.warning) showToast(body.warning, 'error');
                     window.location.reload();
                 })
-                .catch(function (err) { showToast(err.message || 'No se pudo marcar como inicio.', 'error'); });
+                .catch(function (err) { showToast(err.message || pp.t('js.map.set_home_failed'), 'error'); });
             return;
         }
 
@@ -409,7 +409,7 @@
             var badge = holder.querySelector('.pp-badge--success, .pp-badge--muted');
             if (badge) {
                 badge.className = 'pp-badge ' + (status === 'published' ? 'pp-badge--success' : 'pp-badge--muted');
-                badge.textContent = status === 'published' ? 'Publicada' : 'Borrador';
+                badge.textContent = pp.t(status === 'published' ? 'js.map.status_published' : 'js.map.status_draft');
             }
         });
     }
@@ -503,14 +503,14 @@
             if (wantsRedirect && wantsRedirect.checked && target && target.value) {
                 payload.redirect_to = target.value;
             }
-            setButtonBusy(button, true, 'Eliminando…');
+            setButtonBusy(button, true, pp.t('js.map.deleting'));
             postForm('/admin/pages/' + id + '/delete', payload, 25000)
                 .then(function (body) {
                     showToast(body.message || pp.t('js.map.page_deleted'), 'success');
                     window.location.reload();
                 })
                 .catch(function (err) {
-                    showToast(err.message || 'No se pudo eliminar.', 'error');
+                    showToast(err.message || pp.t('js.map.delete_failed'), 'error');
                     setButtonBusy(button, false, pp.t('js.map.delete_page'));
                 });
         });
