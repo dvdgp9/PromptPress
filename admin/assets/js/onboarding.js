@@ -94,7 +94,18 @@
                     return body;
                 });
             }).then(function (body) {
-                applyMemoryFields(body.fields || {});
+                // DOCX-TABLES — Si la IA no ha encontrado nada, decirlo y NO
+                // vaciar lo que el usuario ya hubiera escrito.
+                var fields = body.fields || {};
+                var found = Object.keys(fields).filter(function (key) {
+                    return String(fields[key] || '').trim() !== '';
+                });
+                if (!found.length && !body.company_name) {
+                    status.textContent = pp.t('js.onb.nothing_found');
+                    status.className = 'is-error';
+                    return;
+                }
+                applyMemoryFields(fields);
                 var msg = 'Campos rellenados. Revisa y ajusta lo que quieras antes de continuar.';
                 if (body.company_name) msg += ' Empresa detectada: ' + body.company_name + '.';
                 if (body.documents && body.documents.length > 1) msg += ' ' + pp.t('js.onb.docs_read', { n: body.documents.length });

@@ -3806,6 +3806,7 @@ return [
     'js.onb.not_json'       => 'el servidor no devolvió JSON.',
     'js.onb.timeout'        => 'La operación ha tardado demasiado. Prueba de nuevo.',
     'js.onb.docs_read'      => 'Documentos leídos: {n}.',
+    'js.onb.nothing_found'  => 'No hemos encontrado datos del negocio en el documento. Si las respuestas están en un formato raro, prueba a exportarlo a PDF o rellena los campos a mano.',
     'js.onb.logo_color_one'    => 'Añadido 1 color del logo.',
     'js.onb.logo_colors_other' => 'Añadidos {n} colores del logo.',
     'js.onb.deriving_palettes' => 'Derivando paletas de tus colores y comprobando contrastes.',

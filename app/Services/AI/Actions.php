@@ -1050,7 +1050,9 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.2,
-                    'max_tokens'      => 1200,
+                    // DOCX-TABLES — Con un briefing completo (ocho campos con
+                    // contenido) 1200 se quedaba corto y el JSON llegaba cortado.
+                    'max_tokens'      => 3000,
                 ],
             ],
 

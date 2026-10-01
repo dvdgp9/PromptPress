@@ -10164,3 +10164,74 @@ Pendiente / apuntado (no tocado):
   con `Listen 127.0.0.1:PUERTO`, `AllowOverride All` y módulos de
   `/usr/libexec/apache2/` (mpm_prefork, authz_core, rewrite, dir, mime, unixd,
   log_config, headers). Sin PHP: vale para 200/403.
+
+**Publicado como v1.7.2** (commit `4752dee`, release creada por Actions con
+`instalar.php`, `promptpress.zip` y los versionados). E2E real tras publicar:
+`instalar.php` bajado de `releases/latest/download/` (idéntico al del repo) →
+carpeta tipo cPanel → clic → `/install/` v1.7.2 con el paso 1 todo en verde;
+`instalar.php` borrado, bloque cPanel conservado, regla de storage en el
+`.htaccess`, los 6 `.htaccess` de `storage/` presentes.
+
+Lesson: no sondear un enlace de descarga de GitHub antes de que exista el
+asset: la CDN cachea el 404 unos minutos. Preguntar a la API
+(`/releases/tags/vX`) y descargar después.
+
+---
+
+# [DOCX-TABLES] Briefing en Word que no rellena nada (01/10/2026) → v1.7.3
+
+## Background and Motivation (DOCX-TABLES)
+
+Instalación nueva (1.7.2), paso 1 del onboarding: el usuario sube un briefing
+DOCX «súper completo» y «Rellenar con IA» dice «Campos rellenados» sin rellenar
+nada. Con el mismo briefing en PDF sí funciona. Pidió además confirmar el
+recorte de 9.000 caracteres. Aprobó las dos correcciones («Correcto las dos
+cosas») como 1.7.3.
+
+## Key Challenges and Analysis (DOCX-TABLES)
+
+- `TextExtractor::walkElements` solo bajaba por `getElements()`/`getText()`.
+  En PhpWord una `Table` no tiene ninguno (`getRows()`→`getCells()`): todas
+  las tablas se perdían. El briefing (31 tablas, respuestas en tablas de una
+  celda) daba 3.318 de 25.400 caracteres: solo las preguntas.
+- Además metía `\n` entre cada trozo de un TextRun: «Qué / debería / hacer».
+- `combineDocumentTexts`: 9.000 caracteres por documento (+22.000 total): el
+  corte caía en la sección 3 de 10 (sin keywords, contacto, confianza…).
+- `max_tokens` 1200 para ocho campos: justo.
+- JS: «Campos rellenados» aunque todo viniera vacío, y vaciaba los campos.
+- Observado (no tocado): la acción recibe la memoria del sitio como contexto;
+  si el documento no trae nada, la IA rellena desde la memoria (lo dice en
+  `notes`). En una instalación nueva la memoria está vacía → todo vacío.
+
+## Project Status Board (DOCX-TABLES)
+
+- [x] Extractor DOCX: tablas (filas de una línea → `celda | celda`, para
+      casillas «X | opción»), trozos de párrafo seguidos, títulos con TextRun
+- [x] Presupuesto de texto: `PROFILE_TEXT_BUDGET` 60.000 repartido entre docs
+- [x] `max_tokens` 3000 en EXTRACT_BUSINESS_PROFILE
+- [x] Aviso `js.onb.nothing_found` (4 idiomas) y no tocar los campos
+
+## Current Status / Progress Tracking (DOCX-TABLES)
+
+- `tests/document_text_docx.php` (15): DOCX generado con la forma del
+  briefing (el real NO es fixture: datos de cliente). Vistos fallar; ALL PASS.
+- Briefing real: 3.318 → 24.187 caracteres. Autofill real (dev, gemini
+  flash-lite, 6.586 tokens de entrada): 8/8 campos, keywords de la sección 8 y
+  tono «profesional» gracias a «X | Profesional y cercano».
+- UI (navegador, paso 1, fetch simulado): respuesta vacía → aviso en rojo y
+  campos intactos; con datos → «Campos rellenados» y rellena.
+- Limpieza: documentos 30–33 y sus archivos borrados; `ai_logs` 1556–1557
+  (con el briefing del cliente) borrados. Memoria del sitio intacta.
+- Suite: 137 OK, 0 fallos (`update_from_zip` se salta). i18n_lint: 42, igual.
+
+## Lessons (DOCX-TABLES)
+
+- PhpWord: `Table` no es contenedor (`getRows()`/`getCells()`); `TextRun` es
+  un párrafo (sus hijos van seguidos); `Title::getText()` puede ser TextRun.
+- Las pruebas de IA con documentos reales dejan el texto en `ai_logs`
+  (request_data): borrarlas si llevan datos de clientes.
+- En zsh `$M -e …` con `M="mysql …"` no parte palabras (exit 127): usar un
+  script PHP con `Core\Database`.
+- Volver al onboarding tras «Salir al panel»: `/admin/onboarding` siempre
+  está abierto (Ajustes → «Revisar onboarding»); «Salir» no guarda el paso
+  actual; repetir «Rellenar con IA» sobrescribe los campos.

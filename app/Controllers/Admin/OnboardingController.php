@@ -50,6 +50,13 @@ final class OnboardingController
     public const BRAND_PALETTE_MAX = BrandPaletteService::BRAND_COLORS_MAX;
 
     /**
+     * DOCX-TABLES — Caracteres de documento (en total) que ve la IA al rellenar
+     * la memoria del paso 1. ~15k tokens: cabe un briefing completo y sigue
+     * siendo barato con el modelo ligero.
+     */
+    public const PROFILE_TEXT_BUDGET = 60000;
+
+    /**
      * Parejas tipográficas. La clave y los nombres de familia son datos (viajan
      * al design system); `label` es una CLAVE de traducción que se resuelve al
      * pintar el desplegable — una constante se evalúa antes de saber el idioma.
@@ -231,7 +238,7 @@ final class OnboardingController
             }
 
             $result = AIActionRunner::run(Actions::EXTRACT_BUSINESS_PROFILE, [
-                'document_text' => mb_substr(self::combineDocumentTexts($docs), 0, 22000),
+                'document_text' => self::combineDocumentTexts($docs),
                 'field_schema' => self::memoryFieldSchema(),
             ], $siteId);
             $profile = self::normalizeBusinessProfile((array) ($result['data'] ?? []));
@@ -1427,14 +1434,23 @@ final class OnboardingController
         return $out;
     }
 
-    /** @param array<int,array{id:int,title:string,text:string,summary:string}> $docs */
+    /**
+     * DOCX-TABLES — Texto de los documentos que se manda a la IA para rellenar
+     * la memoria. Antes eran 9.000 caracteres POR documento (y 22.000 en total):
+     * un briefing completo de 25.000 se cortaba en la sección 3 de 10 y la IA
+     * nunca veía palabras clave, contacto ni datos de confianza. Ahora el tope
+     * es para el conjunto y se reparte entre los documentos subidos.
+     *
+     * @param array<int,array{id:int,title:string,text:string,summary:string}> $docs
+     */
     private static function combineDocumentTexts(array $docs): string
     {
+        $share = intdiv(self::PROFILE_TEXT_BUDGET, max(1, count($docs)));
         $chunks = [];
         foreach ($docs as $i => $doc) {
             $chunks[] = "Documento " . ($i + 1) . ': ' . $doc['title']
                 . "\n---\n"
-                . mb_substr((string) $doc['text'], 0, 9000)
+                . mb_substr((string) $doc['text'], 0, $share)
                 . "\n---";
         }
         return implode("\n\n", $chunks);
