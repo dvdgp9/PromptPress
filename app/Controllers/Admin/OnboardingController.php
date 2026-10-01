@@ -8,6 +8,7 @@ use App\Services\AI\AIException;
 use App\Services\BrandColorExtractor;
 use App\Services\BrandPaletteService;
 use App\Services\CacheService;
+use App\Services\Canvas\ReferenceHtml;
 use App\Services\CustomFontService;
 use App\Services\DesignSystem;
 use App\Services\DocumentSummarizer;
@@ -272,7 +273,10 @@ final class OnboardingController
         $reason = null;
         $saved = self::saveReferenceImages($siteId, $reason);
         $refs = self::loadReferenceValues($siteId);
-        if ($saved <= 0 && ($refs['count'] ?? 0) <= 0) {
+        // REF-HTML — Si no se ha guardado nada y hay motivo, se dice aunque
+        // queden referencias de antes: si no, el panel anunciaba «N referencias
+        // guardadas» (las viejas) y el usuario creía que su archivo había entrado.
+        if ($saved <= 0 && ($reason !== null || ($refs['count'] ?? 0) <= 0)) {
             $message = $reason ?: __('onb.err.references');
             Response::json(['ok' => false, 'error' => $message], 422);
         }
@@ -280,6 +284,8 @@ final class OnboardingController
             'ok' => true,
             'saved' => $saved,
             'count' => (int) ($refs['count'] ?? 0),
+            // Se guardó algo, pero algún archivo se quedó fuera (y por qué).
+            'warning' => $saved > 0 ? $reason : null,
         ]);
     }
 
@@ -718,6 +724,7 @@ final class OnboardingController
         $context = trim((string) ($homeItem['architecture_context'] ?? $homeItem['reason'] ?? ''));
         $referenceImages = self::loadReferenceImagesForVision($siteId);
 
+        // REF-HTML — La maqueta del cliente es su home: aquí manda la estructura.
         $created = self::createReferenceCanvasPage(
             $siteId,
             $homeItem !== [] ? $homeItem : ['reason' => $goal],
@@ -726,7 +733,8 @@ final class OnboardingController
             $goal,
             $context,
             0,
-            $referenceImages
+            $referenceImages,
+            ['reference_html' => self::loadReferenceHtml($siteId), 'reference_html_mode' => 'structure']
         );
         $pageId = (int) ($created['id'] ?? 0);
         if ($pageId > 0) {
@@ -1556,6 +1564,9 @@ final class OnboardingController
         $maxCount = 4;
         $saved = [];
         $count = 0;
+        // REF-HTML — Además de hasta 4 capturas, UNA maqueta .html (no cuenta
+        // para el tope de imágenes).
+        $htmlName = null;
 
         foreach ($tmpNames as $i => $tmp) {
             $err = $errors[$i] ?? UPLOAD_ERR_NO_FILE;
@@ -1572,7 +1583,6 @@ final class OnboardingController
                 continue;
             }
             if ($err !== UPLOAD_ERR_OK) continue;
-            if (++$count > $maxCount) break;
             if (($sizes[$i] ?? 0) <= 0 || ($sizes[$i] ?? 0) > $maxBytes) {
                 $reason = '«' . mb_substr((string) ($names[$i] ?? 'la imagen'), 0, 80) . '» supera los 8 MB.';
                 continue;
@@ -1581,10 +1591,29 @@ final class OnboardingController
 
             $finfo = new \finfo(FILEINFO_MIME_TYPE);
             $mime = (string) $finfo->file((string) $tmp);
-            if (!isset($allowed[$mime])) {
-                $reason = '«' . mb_substr((string) ($names[$i] ?? 'la imagen'), 0, 80) . '» no es PNG, JPG ni WebP.';
+            $name = (string) ($names[$i] ?? '');
+
+            // REF-HTML — La maqueta se guarda LIMPIA y fuera de lo público
+            // (ver ReferenceHtml); el archivo subido no se mueve a ningún sitio.
+            if (ReferenceHtml::isHtmlUpload($name, $mime)) {
+                if ($htmlName !== null) {
+                    $reason = __('onboarding.error.ref_html_one', ['archivo' => mb_substr($htmlName, 0, 80)]);
+                    continue;
+                }
+                try {
+                    $saved[] = ReferenceHtml::store($siteId, (string) file_get_contents((string) $tmp), $name);
+                    $htmlName = $name;
+                } catch (\RuntimeException $e) {
+                    $reason = $e->getMessage();
+                }
                 continue;
             }
+
+            if (!isset($allowed[$mime])) {
+                $reason = __('onboarding.error.ref_bad_type', ['archivo' => mb_substr($name !== '' ? $name : 'la imagen', 0, 80)]);
+                continue;
+            }
+            if (++$count > $maxCount) continue;
 
             $dir = PP_ROOT . '/storage/uploads/' . $siteId . '/references';
             if (!is_dir($dir)) mkdir($dir, 0775, true);
@@ -1675,7 +1704,12 @@ final class OnboardingController
         // secciones (más abajo).
         if ($type !== 'article') {
             try {
-                return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages);
+                // REF-HTML — En el resto de páginas la maqueta aporta aire y los
+                // textos de su tema, no el orden de secciones de la home.
+                return self::createReferenceCanvasPage($siteId, $item, $title, $type, $goal, $context, $parentId, $referenceImages, [
+                    'reference_html' => self::loadReferenceHtml($siteId),
+                    'reference_html_mode' => $type === 'home' ? 'structure' : 'style',
+                ]);
             } catch (\Throwable $e) {
                 error_log('[createAiPage] canvas falló, fallback: ' . get_class($e) . ': ' . $e->getMessage());
                 if ($referenceImages !== []) {
@@ -1900,18 +1934,22 @@ final class OnboardingController
      * @return array{design_language:string, plan:array<int,array{role:string,goal:string}>}
      */
     // i18n-ignore-end
-    private static function describeReferenceLayout(int $siteId, string $title, string $goal, string $context, array $referenceImages): array
+    private static function describeReferenceLayout(int $siteId, string $title, string $goal, string $context, array $referenceImages, string $referenceHtml = ''): array
     {
-        if ($referenceImages === []) {
+        if ($referenceImages === [] && $referenceHtml === '') {
             return ['design_language' => '', 'plan' => []];
         }
 
+        // REF-HTML — Con maqueta, el plan sale del CÓDIGO (mismo JSON que el de
+        // capturas, así que el resto del camino no cambia).
+        $action = $referenceHtml !== '' ? Actions::DESCRIBE_REFERENCE_HTML : Actions::DESCRIBE_REFERENCE_LAYOUT;
         try {
-            $result = AIActionRunner::run(Actions::DESCRIBE_REFERENCE_LAYOUT, [
+            $result = AIActionRunner::run($action, [
                 'page_title' => $title,
                 'block_goal' => $goal,
                 'language' => LanguageService::promptLabelFor($siteId),
                 'extra_context' => $context,
+                'reference_html' => $referenceHtml,
                 '_images' => $referenceImages,
             ], $siteId);
         } catch (\Throwable $e) {
@@ -1972,7 +2010,9 @@ final class OnboardingController
         }
 
         // Acotar para controlar latencia/coste sin perder la forma de la referencia.
-        $plan = array_slice($plan, 0, 7);
+        // Una maqueta HTML dice exactamente cuántas secciones tiene: más margen
+        // para no comerse las últimas (contacto, cuestionario…).
+        $plan = array_slice($plan, 0, $referenceHtml !== '' ? 9 : 7);
 
         return ['design_language' => $designLanguage, 'plan' => $plan];
     }
@@ -2189,8 +2229,14 @@ final class OnboardingController
     // directrices para el modelo), no interfaz. Traducirlo rompe la generación.
     private static function createReferenceCanvasPage(int $siteId, array $item, string $title, string $type, string $goal, string $context, int $parentId, array $referenceImages, array $options = []): array
     {
-        $hasRefs = $referenceImages !== [];
-        $layout = self::describeReferenceLayout($siteId, $title, $goal, $context, $referenceImages);
+        // REF-HTML — Maqueta HTML del cliente. En modo `structure` (la home)
+        // manda la estructura sección a sección; en modo `style` (el resto de
+        // páginas) solo aporta aire y los textos de su tema, no el orden.
+        $referenceHtml = (string) ($options['reference_html'] ?? '');
+        $htmlMode = $referenceHtml === '' ? '' : ((($options['reference_html_mode'] ?? '') === 'structure') ? 'structure' : 'style');
+        $htmlStructure = $htmlMode === 'structure';
+        $hasRefs = $referenceImages !== [] || $htmlStructure;
+        $layout = self::describeReferenceLayout($siteId, $title, $goal, $context, $referenceImages, $htmlStructure ? $referenceHtml : '');
         $designLanguage = (string) ($layout['design_language'] ?? '');
         $plan = $layout['plan'];
         // Sin referencia, DESCRIBE devuelve plan vacío → usamos un plan opinado
@@ -2242,7 +2288,16 @@ final class OnboardingController
             $outline[] = $line;
         }
 
-        if ($hasRefs) {
+        if ($htmlStructure) {
+            array_unshift($outline, $outline === []
+                ? "MODO MAQUETA HTML DIRECTO:\n"
+                    . "- No se pudo derivar un outline previo: lee la REFERENCIA EN CÓDIGO y replica su arquitectura sección a sección (mismo orden, misma composición, mismo número de elementos).\n"
+                    . "- No uses una landing genérica ni añadas secciones que la maqueta no tiene."
+                : "MODO MAQUETA HTML:\n"
+                    . "- Este outline sale del CÓDIGO de la maqueta del cliente (REFERENCIA EN CÓDIGO, más abajo): es la fuente principal de estructura.\n"
+                    . "- Respeta su número y orden de secciones y, dentro de cada una, la composición y el número de elementos que tiene la maqueta.\n"
+                    . "- No añadas secciones que la maqueta no tiene.");
+        } elseif ($hasRefs) {
             if ($outline === []) {
                 $outline[] = "MODO REFERENCIAS VISUALES DIRECTO:\n"
                     . "- Hay capturas adjuntas, pero no se pudo convertirlas en un outline previo fiable.\n"
@@ -2287,12 +2342,17 @@ final class OnboardingController
             'extra_context' => trim(
                 "Tipo de página: {$type}\n"
               . "Página propuesta por onboarding: " . (string) ($item['reason'] ?? '') . "\n"
-              . ($hasRefs ? "Referencias visuales adjuntas: " . count($referenceImages) . " captura(s). Úsalas como fuente principal de layout.\n" : "Referencias visuales adjuntas: ninguna.\n")
+              . ($referenceImages !== []
+                    ? "Referencias visuales adjuntas: " . count($referenceImages) . " captura(s). "
+                        . ($htmlStructure ? "Complementan a la maqueta HTML, que manda en la estructura.\n" : "Úsalas como fuente principal de layout.\n")
+                    : "Referencias visuales adjuntas: ninguna.\n")
               . $context . "\n"
               . self::heroDifferentiationContext($siteId, $type)
               . self::existingCanvasPagesContext($siteId)
             ),
             'reference_images' => $referenceImages,
+            'reference_html' => $referenceHtml,
+            'reference_html_mode' => $htmlMode,
         ], 2);
 
         // STUDIO-UX F9 — En modo `compose_only` se devuelve la composición SIN
@@ -3083,8 +3143,9 @@ final class OnboardingController
     private static function loadReferenceImagesForVision(int $siteId): array
     {
         $refs = self::loadReferenceValues($siteId);
+        $images = array_values(array_filter($refs['items'], static fn(array $item): bool => !ReferenceHtml::isHtmlItem($item)));
         $out = [];
-        foreach (array_slice($refs['items'], 0, 4) as $item) {
+        foreach (array_slice($images, 0, 4) as $item) {
             $path = PP_ROOT . '/' . ltrim((string) ($item['path'] ?? ''), '/');
             if (!is_file($path)) continue;
             $raw = (string) @file_get_contents($path);
@@ -3093,6 +3154,12 @@ final class OnboardingController
             if ($normalized !== null) $out[] = $normalized;
         }
         return $out;
+    }
+
+    /** REF-HTML — La maqueta HTML (limpia) de las referencias del onboarding, o ''. */
+    private static function loadReferenceHtml(int $siteId): string
+    {
+        return ReferenceHtml::load(self::loadReferenceValues($siteId)['items']);
     }
 
     private static function hasReferencePreview(int $siteId): bool

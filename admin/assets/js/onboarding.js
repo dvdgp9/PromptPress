@@ -620,8 +620,9 @@
                 });
             }).then(function (body) {
                 var count = Number(body.count || files.length);
-                referenceState.textContent = pp.t(count === 1 ? 'js.onb.refs_saved_one' : 'js.onb.refs_saved_other', { n: count });
-                referenceState.className = 'is-success';
+                referenceState.textContent = pp.t(count === 1 ? 'js.onb.refs_saved_one' : 'js.onb.refs_saved_other', { n: count })
+                    + (body.warning ? ' ' + body.warning : '');
+                referenceState.className = body.warning ? 'is-error' : 'is-success';
                 referenceInput.value = '';
             }).catch(function (err) {
                 referenceState.textContent = err.message || 'No se pudieron guardar las referencias.';

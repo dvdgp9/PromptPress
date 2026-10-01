@@ -204,7 +204,7 @@ $groups = [
                             <section class="pp-onboarding-block">
                                 <h2><?= e(__('onboarding.inspiration.title')) ?></h2>
                                 <label class="pp-onboarding-reference-field pp-onboarding-reference-field--hero" data-reference-dropzone>
-                                    <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp" multiple>
+                                    <input type="file" name="visual_references[]" accept="image/png,image/jpeg,image/webp,.html,.htm,text/html" multiple>
                                     <span aria-hidden="true"></span>
                                     <strong><?= e(__('onboarding.inspiration.label')) ?></strong>
                                     <small><?= e(__('onboarding.inspiration.help')) ?></small>

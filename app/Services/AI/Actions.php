@@ -49,6 +49,7 @@ final class Actions
     public const EDIT_CANVAS_SECTION = 'edit_canvas_section';
     public const EDIT_CANVAS_PAGE = 'edit_canvas_page';
     public const DESCRIBE_REFERENCE_LAYOUT  = 'describe_reference_layout';
+    public const DESCRIBE_REFERENCE_HTML    = 'describe_reference_html';
     public const DESIGN_FORM                = 'design_form';                 // FORMS F4
     public const DRAFT_FORM_AUTORESPONDER   = 'draft_form_autoresponder';    // FORMS F4
     public const PLAN_SITE_CHANGES          = 'plan_site_changes';           // FEAT-5 asistente central
@@ -593,6 +594,54 @@ final class Actions
                 ],
             ],
 
+            // REF-HTML — Lo mismo que DESCRIBE_REFERENCE_LAYOUT, pero leyendo el
+            // CÓDIGO de una maqueta HTML del cliente (más fiel que una captura:
+            // el número de elementos y las columnas vienen escritos). Mismo JSON
+            // de salida, para que el resto del camino no cambie.
+            self::DESCRIBE_REFERENCE_HTML => [
+                'label'        => 'Describir la estructura de una maqueta HTML',
+                'output'       => 'json',
+                'required'     => ['page_title', 'reference_html'],
+                'instruction'  =>
+                    "Eres un director de arte de una agencia TOP. Estás leyendo el CÓDIGO HTML de una maqueta web que el cliente aporta como REFERENCIA (puede venir acompañada de capturas).\n"
+                  . "Tu tarea: leer la maqueta de ARRIBA A ABAJO y describir su ESTRUCTURA y su AIRE, para que otra IA construya después la página siguiéndola sección a sección.\n"
+                  . "Devuelve ÚNICAMENTE JSON válido con esta forma exacta:\n"
+                  . "{\n"
+                  . "  \"design_language\": \"2-4 frases sobre el aire general: densidad, espacio en blanco, alineación dominante, uso de tarjetas/paneles, ritmo, contraste de tamaños, sensación (sobrio, cálido, editorial, premium...).\",\n"
+                  . "  \"sections\": [\n"
+                  . "    {\n"
+                  . "      \"role\": \"qué es la sección y de qué trata (p. ej. 'servicios de cirugía con 4 especialidades', 'proceso de 5 pasos de la valoración al seguimiento')\",\n"
+                  . "      \"composition\": \"cómo está dispuesta según el código y su CSS: nº de columnas, qué va a cada lado, nº exacto de tarjetas/pasos/ítems, carrusel, formulario (nº de campos), cuestionario (nº de preguntas)...\",\n"
+                  . "      \"density\": \"holgada | media | densa\",\n"
+                  . "      \"emphasis\": \"qué destaca visualmente en esta sección\",\n"
+                  . "      \"background\": \"clara | suave | tintada | intensa | oscura | foto\",\n"
+                  . "      \"image_brief\": {\"subject\": \"<stock photo search query IN ENGLISH, 3-6 words, a REAL scene about the business>\", \"orientation\": \"landscape | portrait | squarish\", \"count\": <1-4>}  // null si la sección no lleva fotografía\n"
+                  . "    }\n"
+                  . "  ]\n"
+                  . "}\n\n"
+                  . "REGLAS:\n"
+                  . "- Cuenta SOLO las secciones de contenido, en su orden REAL. NO cuentes la cabecera ni el menú (<header>, <nav>) ni el pie (<footer>): el sitio ya los pone. Una franja estrecha entre secciones (p. ej. una banda de iconos o datos de confianza) SÍ es una sección.\n"
+                  . "- `composition`: léela del HTML y del CSS (display:grid, grid-template-columns, flex, hijos repetidos). Di cuántos elementos hay y cómo se reparten, p. ej. 'texto a la izquierda y carrusel de 4 diapositivas a la derecha; debajo, rejilla de 4 tarjetas con foto'.\n"
+                  . "- `role`: puedes nombrar el TEMA de la sección; no transcribas sus textos.\n"
+                  . "- `background`: según el fondo de la sección en el CSS (el de la página, un gris suave, un tinte claro, un color saturado, oscuro o una foto a sangre). Es ritmo, no un color concreto.\n"
+                  . "- NO menciones colores, tipografías ni sombras concretas: la marca la pone el usuario.\n"
+                  . "- Las imágenes de la maqueta no vienen (src=\"data:…\"): usa su `alt` y su posición para saber si la sección lleva foto y para escribir el `image_brief`.\n"
+                  . "- `image_brief.subject`: escena REAL y concreta (personas, manos, espacios, objetos). PROHIBIDO lo abstracto ('abstract', 'background', '3d render', 'pattern'). `count`: 1, o el nº de tarjetas con foto de una rejilla (máx. 4).\n"
+                  . "- Si hay capturas adjuntas, sirven para confirmar el aire; la estructura la manda el código.",
+                'user_template' =>
+                    "Página que voy a crear: \"{page_title}\"\n"
+                  . "Objetivo de la página: {block_goal}\n"
+                  . "Idioma del contenido: {language}\n"
+                  . "{extra_context}\n\n"
+                  . "MAQUETA (código HTML limpio: sin scripts y sin sus imágenes):\n"
+                  . "```html\n{reference_html}\n```",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.2,
+                    'max_tokens'      => 3500,
+                ],
+            ],
+
             // ===============================================================
             // I18N-FULL T5.2 — Traducción de páginas (motor híbrido).
             // El MODO (fiel vs adaptación nativa) llega en {translation_mode}:
@@ -812,7 +861,7 @@ final class Actions
                 'output'       => 'json',
                 'required'     => ['page_title', 'page_goal'],
                 'instruction'  =>
-                    "Eres director de arte y maquetador senior de una agencia web TOP. Vas a diseñar y construir UNA página completa, única y profesional, en HTML+CSS libres. Si hay capturas adjuntas, son la REFERENCIA visual del cliente: hereda su estructura, ritmo, densidad y aire — nunca sus textos, colores, tipografías ni marca.\n"
+                    "Eres director de arte y maquetador senior de una agencia web TOP. Vas a diseñar y construir UNA página completa, única y profesional, en HTML+CSS libres. Si hay capturas adjuntas, son la REFERENCIA visual del cliente: hereda su estructura, ritmo, densidad y aire — nunca sus textos, colores, tipografías ni marca. Si hay una REFERENCIA EN CÓDIGO (maqueta HTML), sigue además su regla propia (más abajo).\n"
                   . "Devuelve ÚNICAMENTE JSON válido con esta forma exacta:\n"
                   . "{\n"
                   . "  \"html\": \"<section data-pp-section=\\\"hero\\\">...</section><section data-pp-section=\\\"...\\\">...</section>\",\n"
@@ -845,9 +894,17 @@ final class Actions
                   . "- Si hay capturas adjuntas, son la fuente principal de arquitectura visual. El resultado debe reconocerse por composición y ritmo, no por copiar textos, colores ni marca.\n"
                   . "- No generes una landing estándar por defecto. Prohibido caer en la secuencia automática hero centrado + tarjetas + testimonios + CTA si esa secuencia no aparece en las capturas.\n"
                   . "- Ajusta el número de secciones al ritmo de la referencia. No añadas testimonios, logos de clientes, métricas, FAQ, carruseles o galerías si no aparecen claramente en las capturas o no hay datos reales del negocio.\n"
-                  . "- PROHIBIDO inventar citas inspiracionales, blockquotes, frases tipo manifiesto, reseñas o 'lo que dicen nuestros clientes'. Solo pueden aparecer si el usuario aportó ese texto o la captura muestra inequívocamente ese módulo.\n"
+                  . "- PROHIBIDO inventar citas inspiracionales, blockquotes, frases tipo manifiesto, reseñas o 'lo que dicen nuestros clientes'. Solo pueden aparecer si el usuario aportó ese texto, la captura muestra inequívocamente ese módulo o la maqueta HTML lo tiene.\n"
                   . "- No conviertas cualquier página en 'proceso por fases'. Si la referencia no muestra una secuencia temporal/pasos, evita secciones de Fase 1/Fase 2/Paso 1/Paso 2.\n"
                   . "- En `rationale.reference_applied`, enumera decisiones verificables tomadas de las capturas. Si no puedes verlas, diseña una página más simple y dilo ahí; no inventes una referencia.\n\n"
+                  . "REFERENCIA EN CÓDIGO (regla dura cuando 'REFERENCIA EN CÓDIGO' no diga 'ninguna'):\n"
+                  . "- Es la maqueta HTML que ha preparado el propio cliente. Llega limpia: sin scripts y sin sus imágenes (src=\"data:…\"); para fotos usa SOLO las de `available_images`/el outline.\n"
+                  . "- Modo `structure`: es la fuente PRINCIPAL de la página. Reproduce sus secciones en el MISMO orden y, dentro de cada una, la misma composición y el mismo número de elementos (columnas, tarjetas, pasos, ítems). Su <header>, <nav> y <footer> NO se reproducen: el sitio ya los pone. Si su última sección es de contacto o formulario, ese es el cierre comercial.\n"
+                  . "- Modo `style`: es la maqueta de OTRA página del sitio (normalmente la home). NO copies su orden de secciones: toma su aire (densidad, tratamiento de tarjetas y titulares) y, si trata el tema de ESTA página, sus textos sobre ese tema.\n"
+                  . "- Su CSS solo te sirve para entender la composición (rejillas, proporciones, espaciados). IGNORA sus colores, fuentes y sombras: la marca va SIEMPRE por tokens.\n"
+                  . "- TEXTOS: si la maqueta es de ESTE mismo negocio (mismo nombre de empresa o, claramente, sus mismos servicios), sus textos son el contenido base: consérvalos (titulares, listas, pasos, preguntas) y púlelos si hace falta, sin inventar datos nuevos. Si es de OTRO negocio, no copies ningún texto ni su marca.\n"
+                  . "- Lo interactivo se traduce a lo que tiene la plataforma: carrusel → `data-pp-behavior=\"slider\"`; acordeón → `data-pp-behavior=\"accordion\"`; formularios y cuestionarios → `{{form:TIPO}}` (nunca dibujados). Las preguntas de un cuestionario pueden ir como texto de apoyo junto al formulario.\n"
+                  . "- Los enlaces de la maqueta siguen la regla de ENLACES: solo destinos reales.\n\n"
                   . "SEMILLA DE COHERENCIA (regla dura cuando exista 'ADN VISUAL DEL SITIO'):\n"
                   . "- Ese ADN viene de una página REAL de este mismo sitio. Es tu BASE: respeta su tratamiento (escala de espaciados, radios, sombras, estilo de tarjetas y botones, escala tipográfica, aire). La página nueva debe sentirse HERMANA de esa, no solo 'de la misma marca'.\n"
                   . "- La referencia visual aporta la ESTRUCTURA y los elementos (qué secciones, en qué orden, con qué composición); la semilla aporta el ESTILO. Si la referencia pide un patrón o componente que la semilla no tiene, puedes introducirlo, pero adáptalo al ADN de la semilla. Ante la duda, prioriza la COHERENCIA con la semilla sobre la fidelidad literal a la referencia.\n\n"
@@ -879,6 +936,7 @@ final class Actions
                   . "LENGUAJE DE DISEÑO DEL SITIO (derivado de la referencia): {design_language}\n\n"
                   . "ADN VISUAL DEL SITIO — SEMILLA DE COHERENCIA (de una página real ya existente; esta es tu BASE de estilo):\n{base_design}\n\n"
                   . "ESTRUCTURA SUGERIDA (de la referencia; nº y orden de secciones, fondo e imágenes por sección):\n{sections_outline}\n\n"
+                  . "REFERENCIA EN CÓDIGO (maqueta HTML del cliente; modo: {reference_html_mode}):\n{reference_html}\n\n"
                   . "CONTENIDO APORTADO POR EL USUARIO (úsalo como ÚNICA fuente de hechos; ver regla 'CONTENIDO APORTADO'):\n{source_content}\n\n"
                   . "FORMULARIOS DISPONIBLES (para {{form:REF}}):\n{available_forms}\n\n"
                   . "BLOQUES DE MÓDULOS DEL SITIO:\n{modules_hint}\n\n"

@@ -27,7 +27,8 @@ final class CanvasGenerator
      * @param array{
      *   title:string, goal:string, language?:string, design_language?:string,
      *   sections_outline?:string, extra_context?:string,
-     *   reference_images?:array<int,array{mime:string,data:string}>
+     *   reference_images?:array<int,array{mime:string,data:string}>,
+     *   reference_html?:string, reference_html_mode?:string
      * } $input
      * @return array{html:string,css:string,rationale:array<string,mixed>,warnings:array<int,string>,model:?string,provider:?string}
      */
@@ -65,6 +66,13 @@ final class CanvasGenerator
                     'source_content' => trim((string) ($input['source_content'] ?? '')) !== ''
                         ? (string) $input['source_content']
                         : '(el usuario no aportó contenido propio: redacta tú el contenido para el negocio, sin inventar datos concretos como precios, nombres, cifras o contacto)',
+                    // REF-HTML — La maqueta del cliente, si la hay (ver ReferenceHtml).
+                    'reference_html' => trim((string) ($input['reference_html'] ?? '')) !== ''
+                        ? "```html\n" . (string) $input['reference_html'] . "\n```"
+                        : 'ninguna',
+                    'reference_html_mode' => (string) ($input['reference_html_mode'] ?? '') !== ''
+                        ? (string) $input['reference_html_mode']
+                        : '-',
                     'available_forms' => self::availableForms($siteId),
                     'modules_hint' => CanvasService::modulesHint($siteId),
                     'available_pages' => self::availablePages($siteId),
@@ -91,7 +99,7 @@ final class CanvasGenerator
             $referenceWarnings = self::referenceDriftWarnings(
                 $probe['html'],
                 (string) ($input['sections_outline'] ?? ''),
-                !empty($input['reference_images'])
+                self::shouldCheckDrift($input)
             );
             if ($referenceWarnings !== [] && $attempt < $maxAttempts) {
                 $validationFeedback = "- La generación anterior parecía una plantilla genérica y no una adaptación de las capturas.\n"
@@ -226,6 +234,20 @@ final class CanvasGenerator
      *
      * @return string[]
      */
+    /**
+     * El control de deriva existe porque la lectura de CAPTURAS a veces se
+     * inventa secciones genéricas (testimonios, «proceso por fases»…). Cuando la
+     * estructura sale del CÓDIGO de una maqueta no hay nada que adivinar, y el
+     * control le borraría secciones que la maqueta SÍ tiene (REF-HTML: el
+     * proceso de 5 pasos de la maqueta caía como «no justificado»).
+     */
+    public static function shouldCheckDrift(array $input): bool
+    {
+        if (empty($input['reference_images'])) return false;
+        return !(trim((string) ($input['reference_html'] ?? '')) !== ''
+            && ($input['reference_html_mode'] ?? '') === 'structure');
+    }
+
     private static function referenceDriftWarnings(string $html, string $outline, bool $hasReferences): array
     {
         if (!$hasReferences) return [];

@@ -10235,3 +10235,139 @@ cosas») como 1.7.3.
 - Volver al onboarding tras «Salir al panel»: `/admin/onboarding` siempre
   está abierto (Ajustes → «Revisar onboarding»); «Salir» no guarda el paso
   actual; repetir «Rellenar con IA» sobrescribe los campos.
+
+---
+
+# [REF-HTML] Subir un HTML como referencia (01/10/2026, Planner)
+
+## Background and Motivation (REF-HTML)
+
+Los clientes pasan una maqueta en HTML hecha por ellos (con una IA) y piden
+«algo lo más parecido a esto». Hoy no se puede subir: las referencias solo
+aceptan PNG/JPG/WebP (onboarding paso 2 y «Crear página»), documentos y
+asistente solo PDF/DOCX/TXT, el chat del canvas tiene 1.200 caracteres y no
+hay editor de código. El usuario fija: colores y tipografía siguen siendo de la
+marca (los configura él); hay que poder SUBIR EL ARCHIVO; las imágenes del HTML
+no importan («son regulares»).
+
+Caso real: `YROA_Web_Final_Autocontenida.html` (NO es fixture: datos de
+cliente). 755 KB, de los que 730 KB son 11 imágenes base64; sin ellas 24.600
+caracteres (CSS 8.700, HTML 13.900, texto visible 3.800), 1 script (carrusel +
+cuestionario). Estructura: header+menú, hero, franja de confianza (4), cirugía
+(copy + carrusel 4 + 4 tarjetas), proceso 5 pasos, Skin, Pack, contacto con
+formulario, cuestionario 5 preguntas, footer.
+
+## Key Challenges and Analysis (REF-HTML)
+
+- Las dos vías acaban en el mismo motor:
+  `OnboardingController::generateCanvasPageForPanel` →
+  `createReferenceCanvasPage` → `describeReferenceLayout` (visión, devuelve
+  plan + design_language; SALE en vacío si no hay imágenes) →
+  `CanvasGenerator::generate` (COMPOSE_CANVAS_PAGE: sections_outline,
+  design_language, source_content, `_images`). El chequeo de deriva
+  (`referenceDriftWarnings`) solo se activa con imágenes.
+- Leer el CÓDIGO es más fiel que una captura: orden de secciones, número de
+  elementos, columnas y textos vienen escritos.
+- Limpieza obligatoria antes de la IA: fuera `<script>`, comentarios, base64
+  (→ placeholder conservando `alt`), `d=` de SVG largos; espacios colapsados;
+  tope de tamaño. Conservar `<style>` (dice rejillas/columnas), con la orden
+  expresa de NO copiar colores ni fuentes: van por tokens de marca.
+- SEGURIDAD: un .html subido NUNCA puede quedar en `storage/uploads` (público:
+  sería XSS servido desde el dominio del panel). Guardar solo la versión
+  limpia, fuera de lo público (`storage/documents/{site}/references/`).
+- Lo interactivo no se puede copiar (el canvas no lleva JS): carrusel → rejilla
+  o tarjetas; cuestionario/formulario → formularios del sitio (embeds).
+- Textos: la regla actual («el texto se escribe para el negocio, nunca se copia
+  de la referencia») se pensó para webs AJENAS. Aquí la maqueta es del propio
+  cliente. Propuesta: si la referencia habla del mismo negocio, sus textos son
+  contenido base (mejorables); si es de otro, no se copia nada.
+  → DECISIÓN DEL USUARIO.
+
+## High-level Task Breakdown (REF-HTML)
+
+- **RH1 — Limpiador** `ReferenceHtmlCleaner::clean()`. Éxito: test con HTML
+  sintético tipo maqueta (scripts, base64, SVG, comentarios): sin `<script`,
+  sin base64, conserva secciones/encabezados/textos/clases, ≤ tope.
+- **RH2 — Motor**: `reference_html` en `generateCanvasPageForPanel` →
+  `describeReferenceLayout` (plan desde el código, con o sin capturas) y
+  COMPOSE_CANVAS_PAGE (bloque «Referencia en código»); deriva activa también
+  con HTML. Éxito: tests de la carga del prompt + generación real local con
+  la maqueta YROA: secciones en el mismo orden, colores/fuentes de la marca.
+- **RH3 — «Crear página»**: el input de referencias acepta `.html/.htm`
+  (1 archivo, ≤ 5 MB), se limpia al vuelo, no se guarda. Éxito: E2E en
+  navegador.
+- **RH4 — Onboarding paso 2**: acepta `.html`; guarda la versión limpia fuera
+  de lo público; aparece en la lista y se puede quitar; la home del paso 5 la
+  usa. Éxito: E2E en navegador + test de que nada acaba en `uploads/`.
+- **RH5 — Publicar** como 1.8.0 (función nueva).
+
+## Project Status Board (REF-HTML)
+
+- [x] RH1 Limpiador + tests
+- [x] RH2 Motor (describe + compose + deriva)
+- [ ] RH3 «Crear página» acepta .html (APARCADA por decisión del usuario)
+- [x] RH4 Onboarding paso 2 acepta .html
+- [x] RH5 Publicar 1.8.0
+
+## Decisiones pendientes del usuario (REF-HTML)
+
+1. Textos de la maqueta: ¿base del contenido cuando es del mismo negocio
+   (propuesta) o solo estructura como hasta ahora?
+2. Alcance: ¿las dos vías (onboarding + «Crear página») o solo una primero?
+
+## Decisiones cerradas (usuario, 01/10/2026) (REF-HTML)
+
+1. Textos: SÍ, base del contenido si la referencia es del mismo negocio; de
+   otro negocio no se copia nada.
+2. Alcance: SOLO onboarding de momento (RH3 «Crear página» aparcada).
+3. Modo Executor.
+
+## Current Status / Progress Tracking (REF-HTML) — 01/10/2026, Executor
+
+- `app/Services/Canvas/ReferenceHtml.php`: `clean()` (fuera scripts, base64,
+  comentarios, on*, iframes, trazos SVG; tope 40.000), `store()` (limpia →
+  `storage/documents/{site}/references/*.txt`), `isHtmlUpload()` (extensión Y
+  tipo real), `isHtmlItem()`, `load()`.
+- Onboarding: `saveReferenceImages` acepta UNA maqueta además de hasta 4
+  capturas; `loadReferenceImagesForVision` la salta; `loadReferenceHtml()`.
+  Home (`ensureHomeCanvasDraft` y `createAiPage` con type home) → modo
+  `structure`; resto de páginas → modo `style`.
+- Motor: `describeReferenceLayout` usa la acción nueva DESCRIBE_REFERENCE_HTML
+  (mismo JSON) y deja hasta 9 secciones con maqueta; COMPOSE_CANVAS_PAGE recibe
+  `{reference_html}`/`{reference_html_mode}` y la regla «REFERENCIA EN CÓDIGO»
+  (textos del mismo negocio como base; colores/fuentes por tokens; carrusel →
+  slider; formularios → {{form:}}). `CanvasGenerator::shouldCheckDrift()`: sin
+  control de deriva en modo structure (borraba el proceso de 5 pasos real).
+- `uploadReferences`: si no se guarda nada y hay motivo → error aunque queden
+  referencias viejas (antes decía «N guardadas» y se callaba); si se guarda
+  algo con avisos → `warning`. «capturas» → «referencias» en el mensaje.
+- Tests: `tests/reference_html.php` (36), vistos fallar. Suite 138 OK, 0
+  fallos. i18n_lint 42 (igual).
+- E2E real (dev, memoria YROA temporal y restaurada, compose_only +
+  borrador temporal): maqueta 755 KB → 20.101 car.; describe+compose 110 s;
+  8 secciones en el mismo orden que la maqueta (hero, confianza, cirugía,
+  proceso, skin, pack, contacto, cuestionario), titulares de la maqueta
+  conservados, carrusel → slider, 5 pasos, {{form:contact}}. Colores: 0
+  hex propios salvo blanco/negro (51 hex son respaldos dentro de
+  var(--pp-…)); en pantalla, la marca del sitio. Limpieza: página 4378, 6
+  fotos Unsplash, 1 form_placement y 2 ai_logs borrados; ajustes intactos.
+- E2E subida (navegador, paso 2; referencias y borrador 2192 de dev
+  respaldados y restaurados): html+png → 2 guardadas (html limpio en
+  documents como .txt, png en uploads); pdf → error; maqueta vacía → error;
+  dos maquetas → guarda la primera y lo avisa.
+
+Observado (no tocado): la IA pone en los `var(--pp-x, #hex)` de respaldo los
+colores de la maqueta; no se ven (los tokens siempre existen). En la
+composición, el formulario quedó dentro de otra tarjeta (dos titulares).
+
+## Lessons (REF-HTML)
+
+- Subir referencias en el onboarding BORRA las anteriores e invalida (borra)
+  el borrador de la home: para probar en dev, respaldar
+  `onboarding_visual_references`/`onboarding_home_draft` y los archivos.
+- `php -S` sirve `storage/` aunque haya .htaccess: un 200 ahí no es un fallo
+  de producción (Apache: 403, verificado en 1.7.2).
+- Para un E2E de generación sin crear páginas: `createReferenceCanvasPage`
+  con `compose_only` + `persistCanvasComposition` para verla, y borrar por ids
+  > máximo anotado antes (pages, page_versions, media, form_placements,
+  ai_logs).
