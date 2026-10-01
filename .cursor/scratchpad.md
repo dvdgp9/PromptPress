@@ -9965,3 +9965,69 @@ enlaces a borradores.
   base de automático a personalizado, hay que fijar también los secundarios.
 - En castellano la sección se llama «Cabecera y pie» (`nav.chrome`), no
   «Header y pie».
+
+---
+
+# [INSTALL-EASY] Instalar una web nueva con menos pasos (01/10/2026)
+
+## Background and Motivation (INSTALL-EASY)
+
+El usuario va a montar una web nueva y el proceso «no es horrible pero tampoco
+es sencillo». La fricción está antes de `/install/`: buscar el zip en GitHub
+(lleva la versión en el nombre, sin enlace fijo), descomprimir y subir cientos
+de archivos por FTP, y un `chmod` manual que casi nunca hace falta. El README
+además listaba un paso del instalador que ya no existe.
+
+## High-level Task Breakdown (INSTALL-EASY)
+
+- **A — Instalador de un solo archivo** (`instalar.php`: descarga la última
+  release, verifica sha256, descomprime, se borra y lleva a `/install/`).
+  PENDIENTE: el usuario pidió solo B y C. Cuidado de seguridad: negarse si ya
+  hay instalación y borrarse siempre.
+- **B — Enlace fijo a la última versión.** Éxito: cada release lleva también
+  `promptpress.zip` (+ `.sha256`) y
+  `https://github.com/dvdgp9/PromptPress/releases/latest/download/promptpress.zip`
+  descarga la última.
+- **C — README al día.** Éxito: pasos reales del instalador, chmod solo si el
+  paso 1 lo pide, enlace de B, aviso de `.htaccess` por FTP, cómo actualizar.
+
+## Project Status Board (INSTALL-EASY)
+
+- [ ] A Instalador de un solo archivo (no pedido todavía)
+- [x] B Copia sin versión en cada release + backfill de la vigente
+- [x] C README de instalación
+
+## Current Status / Progress Tracking (INSTALL-EASY)
+
+- **B:** `.github/workflows/release.yml`
+  - «Publicar la release» copia el zip a `promptpress.zip` (mismo archivo,
+    `cp`), le escribe su `.sha256` y sube los cuatro assets.
+  - Paso nuevo «Copia sin versión en la release vigente» (solo cuando no hay
+    versión nueva): si la release de `PP_VERSION` no tiene `promptpress.zip`,
+    descarga el versionado y sube la copia. Así la v1.7.1 lo recibe en el
+    primer push, sin esperar a la 1.7.2. Si ya lo tiene, no hace nada.
+  - El actualizador (`UpdateService::parseGithubRelease`) coge el PRIMER
+    `.zip`; es seguro porque los dos son idénticos byte a byte.
+- **C:** `README.md` reescrito en «Requisitos» e «Instalación» + línea de
+  estado (ya no «Fase 0»).
+- **Tests:** `tests/updates_github.php` +3 (release con cuatro assets; el
+  workflow copia el mismo zip; el README enlaza a latest). Vistos fallar sin
+  los cambios; ALL PASS con ellos.
+- **Verificado en local:** YAML se parsea; simulada la parte de archivos con
+  el zip real de v1.7.1 (copia idéntica con `cmp`, `.sha256` verifica, la
+  regex del actualizador lee el hash). Lo que no se puede probar en local:
+  las llamadas `gh` del runner → se comprueba tras el push con
+  `curl -sIL .../releases/latest/download/promptpress.zip`.
+
+## Executor's Feedback or Assistance Requests (INSTALL-EASY)
+
+- Falta commit + push a `main` para que B tenga efecto (no sube versión, así
+  que no publica release nueva; solo añade el asset a la v1.7.1).
+
+## Lessons (INSTALL-EASY)
+
+- El zip de release es plano (sin carpeta envolvente), ~2,9 MB, e incluye
+  `.htaccess` (raíz, `app/`, `config/`, `storage/form_uploads/`): por FTP hay
+  que subir los ocultos.
+- `gh` fuera del checkout (p. ej. `cd $RUNNER_TEMP`) no sabe el repo: pasar
+  `GH_REPO: ${{ github.repository }}`.

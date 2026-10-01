@@ -140,6 +140,32 @@ check_upd('el orden de los assets da igual',
     str_ends_with((string) $mixed['download_url'], '.zip') && str_ends_with((string) $mixed['checksum_url'], '.sha256'),
     json_encode([$mixed['download_url'], $mixed['checksum_url']]));
 
+// INSTALL-EASY B: desde la 1.7.1 cada release lleva además `promptpress.zip`
+// (copia sin versión, para el enlace fijo `releases/latest/download/...`). El
+// cliente sigue encontrando paquete y checksum con los cuatro assets.
+$withStable = UpdateService::parseGithubRelease(
+    $release('v1.8.0', [
+        $asset('promptpress-1.8.0.zip'), $asset('promptpress-1.8.0.zip.sha256'),
+        $asset('promptpress.zip'), $asset('promptpress.zip.sha256'),
+    ]),
+    '1.7.1'
+);
+check_upd('con la copia sin versión sigue habiendo paquete y checksum',
+    $withStable['has_update'] === true
+        && str_ends_with((string) $withStable['download_url'], '.zip')
+        && str_ends_with((string) $withStable['checksum_url'], '.sha256'),
+    json_encode($withStable));
+
+// Que el cliente coja cualquiera de los dos `.zip` solo es seguro porque son el
+// mismo archivo: el workflow tiene que COPIAR el paquete, no armar otro.
+$workflow = (string) file_get_contents(PP_ROOT . '/.github/workflows/release.yml');
+check_upd('el workflow publica la copia sin versión copiando el mismo zip',
+    str_contains($workflow, 'cp "$ZIP" "$DIR/promptpress.zip"')
+        && str_contains($workflow, '"$DIR/promptpress.zip" "$DIR/promptpress.zip.sha256"'), '');
+check_upd('el README enlaza a la última versión',
+    str_contains((string) file_get_contents(PP_ROOT . '/README.md'),
+        'https://github.com/dvdgp9/PromptPress/releases/latest/download/promptpress.zip'), '');
+
 // ---------------------------------------------------------------------------
 // 4. Los mensajes existen en los cuatro idiomas del panel
 // ---------------------------------------------------------------------------

@@ -92,19 +92,50 @@ jobs:
       # El `.sha256` lo escribe `build_package.php` al lado del zip; sin él la
       # actualización se instalaría igual, pero dejaría de comprobarse que la
       # descarga llegó entera.
+      #
+      # INSTALL-EASY B — además va una copia SIN versión en el nombre
+      # (`promptpress.zip`), para que este enlace valga siempre:
+      #   https://github.com/<repo>/releases/latest/download/promptpress.zip
+      # Es el mismo archivo byte a byte, así que da igual cuál de los dos `.zip`
+      # coja `UpdateService::parseGithubRelease()` (se queda con el primero).
       - name: Publicar la release
         if: steps.comprobar.outputs.publicar == 'si'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ZIP="${{ steps.paquete.outputs.zip }}"
+          DIR="$(dirname "$ZIP")"
+          cp "$ZIP" "$DIR/promptpress.zip"
+          (cd "$DIR" && sha256sum promptpress.zip > promptpress.zip.sha256)
           gh release create "v${{ steps.version.outputs.version }}" \
             "$ZIP" "$ZIP.sha256" \
+            "$DIR/promptpress.zip" "$DIR/promptpress.zip.sha256" \
             --target "${{ github.sha }}" \
             --title "v${{ steps.version.outputs.version }}" \
             --generate-notes
           echo "### Publicada v${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Las instalaciones ya la ven en Ajustes → Actualizaciones." >> "$GITHUB_STEP_SUMMARY"
+
+      # Releases publicadas antes de que existiera la copia sin versión: se la
+      # añade a la release vigente para que el enlace fijo funcione ya, sin
+      # esperar a la siguiente versión. Si ya la tiene, no hace nada.
+      - name: Copia sin versión en la release vigente
+        if: steps.comprobar.outputs.publicar == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'promptpress.zip'; then
+            echo "$TAG ya tiene promptpress.zip."
+            exit 0
+          fi
+          cd "$RUNNER_TEMP"
+          gh release download "$TAG" --pattern "promptpress-${{ steps.version.outputs.version }}.zip"
+          cp "promptpress-${{ steps.version.outputs.version }}.zip" promptpress.zip
+          sha256sum promptpress.zip > promptpress.zip.sha256
+          gh release upload "$TAG" promptpress.zip promptpress.zip.sha256
+          echo "Añadido promptpress.zip a $TAG." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Sin cambios de versión
         if: steps.comprobar.outputs.publicar == 'no'

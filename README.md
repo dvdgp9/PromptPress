@@ -2,7 +2,7 @@
 
 CMS ligero tipo WordPress enfocado en la creación de páginas web asistidas por IA.
 
-> **Estado actual:** En desarrollo (Fase 0 — Bootstrap). Ver `.cursor/scratchpad.md` para el plan completo y el progreso.
+> **Estado actual:** en producción, con versiones publicadas en [GitHub Releases](https://github.com/dvdgp9/PromptPress/releases). Ver `.cursor/scratchpad.md` para el plan y el progreso.
 
 ---
 
@@ -24,33 +24,42 @@ CMS ligero tipo WordPress enfocado en la creación de páginas web asistidas por
 - **MySQL 5.7+** o **MariaDB 10.3+**
 - Extensiones PHP: `pdo_mysql`, `json`, `mbstring`, `fileinfo`, `curl`, `zip`, `openssl`
 - **Apache** con `mod_rewrite` activado, o **Nginx** (ver `nginx.conf.example`)
-- Permisos de escritura en `/config/`, `/storage/`
+- Una base de datos vacía y un usuario con acceso a ella (en hosting compartido se crean desde el panel del proveedor)
 
 ---
 
 ## 🚀 Instalación
 
-### 1. Subir archivos al servidor
-Sube todos los archivos al directorio público de tu hosting (`public_html`, `www`, `htdocs`…).
+### 1. Descargar la última versión
+**https://github.com/dvdgp9/PromptPress/releases/latest/download/promptpress.zip**
 
-### 2. Asegurar permisos
-```bash
-chmod -R 755 .
-chmod -R 775 storage config
-```
+Este enlace apunta siempre a la última versión publicada.
+
+### 2. Subirla al servidor
+Descomprime el zip en el directorio público del dominio (`public_html`, `www`, `htdocs`…). Los archivos van directamente ahí: el zip no trae una carpeta envolvente.
+
+Lo más rápido es subir el zip tal cual y descomprimirlo desde el administrador de archivos del hosting. Si lo subes por FTP ya descomprimido, asegúrate de que se suben también los archivos ocultos (`.htaccess`): algunos clientes FTP no los muestran.
 
 ### 3. Ejecutar el instalador
 Abre en el navegador: `https://tudominio.com/install/`
 
 El instalador te guiará por:
-1. Verificación de requisitos
-2. Configuración de la base de datos
-3. Creación del usuario administrador
-4. Configuración inicial del sitio
-5. Configuración del proveedor de IA (API Key)
+1. Comprobación de requisitos (incluye permisos de escritura en `config/` y `storage/`)
+2. Base de datos (crea las tablas)
+3. Usuario administrador
+4. Proveedor de IA (API Key) y, opcionalmente, Unsplash
+5. Fin
+
+Normalmente los permisos ya vienen bien. Solo si el paso 1 marca `config/` o `storage/` como no escribibles:
+```bash
+chmod -R 775 storage config
+```
 
 ### 4. Listo
-Al finalizar, accede al panel: `https://tudominio.com/admin/`
+Al finalizar, accede al panel: `https://tudominio.com/admin/`. Ahí empieza el onboarding del sitio (identidad, materiales y primeras páginas).
+
+### Actualizar
+Desde el propio panel: **Ajustes → Actualizaciones → «Comprobar ahora» → «Aplicar actualización»**. Hace copia de seguridad, verifica el paquete y migra la base de datos solo.
 
 ---
 
