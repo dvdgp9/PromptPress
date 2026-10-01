@@ -32,6 +32,7 @@ $exclude = [
     '/.cursor',
     '/cursor',
     '/deliverables',
+    '/dist',                // instalar.php viaja como asset propio de la release, nunca dentro
     '/skill-web-compliance',
     '/iaia-analytics',
     '/node_modules',
@@ -49,6 +50,15 @@ $exclude = [
 
 /** Nombres de fichero que se caen estén donde estén. */
 $excludeNames = ['.DS_Store', 'Thumbs.db', '.t13-test.sh'];
+
+/**
+ * STORAGE-SKEL — De estas carpetas excluidas SÍ viaja el esqueleto: la carpeta
+ * y sus `.htaccess`/`.gitkeep` (nada más). Sin ellas el paso 1 del instalador
+ * fallaba («storage/uploads no escribible») y las carpetas nacían sin su
+ * `Require all denied` cuando la app las creaba.
+ */
+$skeletonDirs = ['/storage/uploads', '/storage/documents', '/storage/resources', '/storage/logs', '/storage/cache'];
+$skeletonFiles = ['.htaccess', '.gitkeep'];
 
 // El instalador rechaza cualquier ZIP al que le falte algo de esto.
 $fingerprint = ['index.php', 'app', 'core', 'config/constants.php', 'database/migrations'];
@@ -71,10 +81,15 @@ $opts = getopt('', ['out::']);
 $out  = (string) ($opts['out'] ?? $root . '/deliverables/promptpress-' . $version . '-' . date('Ymd-Hi') . '.zip');
 @mkdir(dirname($out), 0775, true);
 
-$isExcluded = static function (string $rel) use ($exclude, $excludeNames): bool {
+$isExcluded = static function (string $rel) use ($exclude, $excludeNames, $skeletonDirs, $skeletonFiles): bool {
     foreach ($excludeNames as $name) {
         if (basename($rel) === $name) {
             return true;
+        }
+    }
+    foreach ($skeletonDirs as $dir) {
+        if ($rel === $dir || (dirname($rel) === $dir && in_array(basename($rel), $skeletonFiles, true))) {
+            return false;
         }
     }
     foreach ($exclude as $ex) {

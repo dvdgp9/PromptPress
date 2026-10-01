@@ -449,10 +449,40 @@ final class UpdateInstallerService
                 // i18n-ignore: detalle técnico del instalador de updates.
             throw new RuntimeException('No se pudo crear directorio padre: ' . $parent);
             }
+            if ($rel === '/.htaccess') {
+                self::deployHtaccess($abs, $dest);
+                continue;
+            }
             if (!@copy($abs, $dest)) {
                 // i18n-ignore: detalle técnico del instalador de updates.
             throw new RuntimeException('No se pudo copiar archivo: ' . $rel);
             }
+        }
+    }
+
+    /**
+     * STORAGE-SKEL — Despliega el `.htaccess` raíz del paquete conservando los
+     * bloques que escribe cPanel en el que había (`# … BEGIN cPanel-generated …`
+     * hasta su `END`). El de MultiPHP fija la versión de PHP del sitio: copiar
+     * el nuevo a pelo lo borraba en cada actualización y el sitio podía volver
+     * a la versión por defecto del hosting. Lo demás del anterior no se
+     * conserva: el `.htaccess` raíz es de PromptPress.
+     */
+    public static function deployHtaccess(string $source, string $dest): void
+    {
+        $new = (string) file_get_contents($source);
+        $old = is_file($dest) ? (string) file_get_contents($dest) : '';
+
+        preg_match_all('/^#[^\n]*BEGIN cPanel-generated[^\n]*\n.*?^#[^\n]*END cPanel-generated[^\n]*$/ms', $old, $m);
+        foreach ($m[0] as $block) {
+            if (!str_contains($new, $block)) {
+                $new = rtrim($new, "\r\n") . "\n\n" . $block . "\n";
+            }
+        }
+
+        if (@file_put_contents($dest, $new) === false) {
+            // i18n-ignore: detalle técnico del instalador de updates.
+            throw new RuntimeException('No se pudo copiar archivo: /.htaccess');
         }
     }
 

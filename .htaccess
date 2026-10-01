@@ -1,5 +1,13 @@
 RewriteEngine On
 
+# storage/ nunca se sirve tal cual, salvo uploads/ (las imágenes del sitio).
+# Cubre también carpetas que nacen sin su propio .htaccess, como updates/
+# (copias de seguridad con config.php dentro). Este archivo lo despliega el
+# actualizador, así que la protección llega también a instalaciones existentes.
+RewriteRule ^storage/(?!uploads/) - [F,L]
+# Y en uploads/ no se ejecuta nada.
+RewriteRule ^storage/uploads/.+\.(php[0-9]?|phtml|phar|pl|py|cgi|sh)$ - [F,NC,L]
+
 # Front controller: enviar todas las peticiones a index.php
 # excepto archivos reales. Directorios como /admin/ también son rutas de app;
 # sus assets se siguen sirviendo directamente porque sí son archivos reales.

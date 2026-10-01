@@ -30,17 +30,23 @@ CMS ligero tipo WordPress enfocado en la creación de páginas web asistidas por
 
 ## 🚀 Instalación
 
-### 1. Descargar la última versión
-**https://github.com/dvdgp9/PromptPress/releases/latest/download/promptpress.zip**
+### 1. Poner los archivos en el servidor
 
-Este enlace apunta siempre a la última versión publicada.
+**Opción rápida (recomendada): un solo archivo**
 
-### 2. Subirla al servidor
-Descomprime el zip en el directorio público del dominio (`public_html`, `www`, `htdocs`…). Los archivos van directamente ahí: el zip no trae una carpeta envolvente.
+1. Descarga **https://github.com/dvdgp9/PromptPress/releases/latest/download/instalar.php**
+2. Súbelo al directorio público del dominio (`public_html`, `www`, `htdocs`…).
+3. Abre `https://tudominio.com/instalar.php` y pulsa «Descargar e instalar».
+
+Él descarga la última versión, comprueba su checksum, la descomprime ahí, se borra solo y te lleva al instalador del paso 2. Si la carpeta tiene archivos que no son del hosting, te los enseña y pide confirmación. Conserva la versión de PHP elegida en cPanel (`.htaccess`) y aparta la página de bienvenida del hosting (`index.html` → `index.html.antes-de-promptpress`).
+
+**Opción manual: el zip**
+
+Descarga **https://github.com/dvdgp9/PromptPress/releases/latest/download/promptpress.zip** (siempre la última versión) y descomprímelo en el directorio público del dominio. Los archivos van directamente ahí: el zip no trae una carpeta envolvente.
 
 Lo más rápido es subir el zip tal cual y descomprimirlo desde el administrador de archivos del hosting. Si lo subes por FTP ya descomprimido, asegúrate de que se suben también los archivos ocultos (`.htaccess`): algunos clientes FTP no los muestran.
 
-### 3. Ejecutar el instalador
+### 2. Ejecutar el instalador
 Abre en el navegador: `https://tudominio.com/install/`
 
 El instalador te guiará por:
@@ -55,7 +61,7 @@ Normalmente los permisos ya vienen bien. Solo si el paso 1 marca `config/` o `st
 chmod -R 775 storage config
 ```
 
-### 4. Listo
+### 3. Listo
 Al finalizar, accede al panel: `https://tudominio.com/admin/`. Ahí empieza el onboarding del sitio (identidad, materiales y primeras páginas).
 
 ### Actualizar

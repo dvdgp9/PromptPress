@@ -98,6 +98,9 @@ jobs:
       #   https://github.com/<repo>/releases/latest/download/promptpress.zip
       # Es el mismo archivo byte a byte, así que da igual cuál de los dos `.zip`
       # coja `UpdateService::parseGithubRelease()` (se queda con el primero).
+      #
+      # INSTALL-EASY A — y `dist/instalar.php`, el instalador de un solo archivo:
+      #   https://github.com/<repo>/releases/latest/download/instalar.php
       - name: Publicar la release
         if: steps.comprobar.outputs.publicar == 'si'
         env:
@@ -110,6 +113,7 @@ jobs:
           gh release create "v${{ steps.version.outputs.version }}" \
             "$ZIP" "$ZIP.sha256" \
             "$DIR/promptpress.zip" "$DIR/promptpress.zip.sha256" \
+            dist/instalar.php \
             --target "${{ github.sha }}" \
             --title "v${{ steps.version.outputs.version }}" \
             --generate-notes
@@ -136,6 +140,18 @@ jobs:
           sha256sum promptpress.zip > promptpress.zip.sha256
           gh release upload "$TAG" promptpress.zip promptpress.zip.sha256
           echo "Añadido promptpress.zip a $TAG." >> "$GITHUB_STEP_SUMMARY"
+
+      # instalar.php no depende de la versión: en cada push sin versión nueva se
+      # re-sube a la release vigente (`--clobber`), así el enlace fijo siempre da
+      # el de `main`. Antes, `php -l`: un instalador roto no puede publicarse.
+      - name: instalar.php al día en la release vigente
+        if: steps.comprobar.outputs.publicar == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          php -l dist/instalar.php
+          gh release upload "v${{ steps.version.outputs.version }}" dist/instalar.php --clobber
+          echo "instalar.php actualizado en v${{ steps.version.outputs.version }}." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Sin cambios de versión
         if: steps.comprobar.outputs.publicar == 'no'

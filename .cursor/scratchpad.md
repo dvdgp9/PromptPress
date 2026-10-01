@@ -9993,7 +9993,7 @@ además listaba un paso del instalador que ya no existe.
 
 ## Project Status Board (INSTALL-EASY)
 
-- [ ] A Instalador de un solo archivo (no pedido todavía)
+- [x] A Instalador de un solo archivo (hecho y verificado; SIN commitear, ver bloqueo)
 - [x] B Copia sin versión en cada release + backfill de la vigente
 - [x] C README de instalación
 
@@ -10031,3 +10031,136 @@ además listaba un paso del instalador que ya no existe.
   que subir los ocultos.
 - `gh` fuera del checkout (p. ej. `cd $RUNNER_TEMP`) no sabe el repo: pasar
   `GH_REPO: ${{ github.repository }}`.
+
+### Plan A — Instalador de un solo archivo (01/10/2026, Planner → Executor)
+
+B y C publicados (commit `9c6e138`); la v1.7.1 ya tiene `promptpress.zip`
+idéntico (hash comprobado).
+
+Decisiones (tomadas por el Executor, sin bloquear al usuario):
+- Vive en `dist/instalar.php`, fuera del paquete (`/dist` excluido en
+  `build_package.php`) y se publica como asset `instalar.php` de cada release:
+  `https://github.com/dvdgp9/PromptPress/releases/latest/download/instalar.php`.
+  En la release vigente se re-sube (`--clobber`) en cada push sin versión
+  nueva, para que siempre sea el de `main`.
+- Descarga `releases/latest/download/promptpress.zip` + `.sha256` (el enlace
+  de B). El checksum es OBLIGATORIO aquí: sin él no instala.
+- Sintaxis compatible con PHP 7.1: si el hosting está en PHP 7 tiene que
+  poder decirlo, no morir con un error de sintaxis.
+- 4 idiomas (es/en/fr/pt) por Accept-Language, como el instalador.
+- CSS en un `<style>` dentro del propio archivo: es un instalador de UN
+  archivo, no puede llevar `styles.css` aparte (excepción consciente a la
+  regla de CSS).
+
+Seguridad:
+- GET solo muestra; instala únicamente por POST (sin prefetch/crawlers).
+- Si ya hay PromptPress (`config/constants.php`) no descarga nada: enlaza a
+  `/install/` o `/admin/` e intenta borrarse.
+- Carpeta con archivos ajenos → los lista y exige casilla de confirmación.
+- Valida cada entrada del zip (sin `..`, rutas absolutas ni unidades) y la
+  huella de PromptPress ANTES de extraer.
+- Lock para que dos POST no instalen a la vez; `ignore_user_abort`.
+- Se borra al terminar; si no puede, lo dice. Si se queda, no hace daño (ve
+  PromptPress y no hace nada).
+- `.htaccess` previo: copia `.htaccess.antes-de-promptpress` y conserva los
+  bloques `cPanel-generated` (el selector de versión de PHP de cPanel vive ahí;
+  perderlo puede dejar el sitio en PHP 7 → 500).
+- Páginas de bienvenida del hosting (`index.html`, `default.html`…) se
+  renombran con sufijo `.antes-de-promptpress`, no se borran.
+
+Tareas:
+- A1 Tests `tests/bootstrap_installer.php` (entradas de zip, huella, checksum,
+  htaccess, archivos ajenos, idiomas, exclusión del paquete, workflow).
+- A2 `dist/instalar.php`.
+- A3 Workflow + `build_package.php` + README.
+- A4 E2E real: carpeta vacía + `php -S` + POST → baja la release de GitHub,
+  extrae, se borra y `/install/` responde.
+
+### A · estado (01/10/2026, Executor)
+
+- A1 `tests/bootstrap_installer.php`: 52 checks, ALL PASS (los 3 de
+  distribución vistos fallar antes de A3). `tests/updates_github.php` ALL PASS.
+- A2 `dist/instalar.php` (php -l OK en 8.4; escrito para 7.1+, no probado en 7).
+- A3 `/dist` excluido en `build_package.php` (build local: 0 entradas dist/);
+  workflow sube `dist/instalar.php` al crear release y, en pushes sin versión,
+  lo re-sube con `--clobber` tras `php -l`; README con «opción rápida».
+- A4 E2E real (navegador integrado, `php -S` sobre carpeta que imita cPanel:
+  `.htaccess` con handler ea-php82, `index.html`, `cgi-bin/`): sin aviso de
+  carpeta ajena → clic → descarga v1.7.1 de GitHub → redirige a `/install/`
+  (asistente v1.7.1). Carpeta: `instalar.php` borrado, sin `.pp-*`, `.htaccess`
+  de PromptPress + bloque cPanel, copias `.antes-de-promptpress` de
+  `.htaccess` e `index.html`; resto idéntico al zip (`diff -rq`). Volver a
+  subirlo con PromptPress puesto: GET y POST no descargan y se borra (en
+  francés con Accept-Language fr).
+
+## Executor's Feedback or Assistance Requests (INSTALL-EASY) — 01/10/2026
+
+**BLOQUEO encontrado en A4 (anterior a esta tarea, afecta también al zip
+manual):** `build_package.php` excluye ENTERAS `storage/uploads`,
+`storage/documents`, `storage/resources`, `storage/logs`, `storage/cache`.
+Consecuencias en una instalación nueva desde la release:
+1. El paso 1 del instalador falla: `storage/uploads` y `storage/logs` no
+   existen → «no escribible» (crítico). Nadie puede instalar desde el zip sin
+   crear carpetas a mano.
+2. Faltan sus `.htaccess`: `Require all denied` en logs/documents/resources/
+   cache y el bloqueo de ejecución PHP en uploads. Cuando la app crea esas
+   carpetas, nacen públicas (logs con trazas, documentos privados, ebooks
+   saltándose el formulario).
+El actualizador (`UpdateInstallerService`, exclusiones de deploy) tampoco
+despliega nada bajo esas rutas → instalaciones existentes hechas desde zip
+seguirían sin las protecciones aunque se arregle el paquete.
+Propuesta (pendiente de OK del usuario porque exige release 1.7.2):
+- build_package: excluir el CONTENIDO de esas carpetas pero conservar
+  `.htaccess` y `.gitkeep` (esqueleto).
+- deploy del actualizador: escribir el `.htaccess` de esas carpetas si falta
+  (nunca tocar el resto de su contenido).
+- Tests + subir PP_VERSION a 1.7.2.
+Aparte (menor): con la web sin instalar, `/` da 500 en vez de llevar a
+`/install/` (solo `/admin*` redirige, `core/App.php`).
+
+### STORAGE-SKEL — arreglo del bloqueo (01/10/2026, Executor) → v1.7.2
+
+Usuario: «Arregla antes de subir, sí».
+- `scripts/build_package.php`: de `storage/{uploads,documents,resources,logs,
+  cache}` viaja el esqueleto (carpeta + `.htaccess` + `.gitkeep`), nada más.
+- `.htaccess` raíz: `RewriteRule ^storage/(?!uploads/) - [F,L]` y bloqueo de
+  scripts en `storage/uploads/`, ANTES del front controller. Sustituye a la idea
+  de que el actualizador escribiera los `.htaccess` sueltos: el raíz sí lo
+  despliega el actualizador, así que protege también instalaciones existentes.
+- **Hallazgo extra:** `storage/updates/` (backups del actualizador, con
+  `config/config.php`) NUNCA tuvo `.htaccess` → en Apache, descargable en
+  cualquier instalación que haya actualizado (nombre adivinable por fecha, o
+  listado si el hosting tiene Indexes). Lo cubre la regla raíz.
+- `UpdateInstallerService::deployHtaccess()`: el deploy del `.htaccess` raíz
+  conserva los bloques `cPanel-generated` (antes se los llevaba en cada
+  actualización → el sitio podía perder su versión de PHP).
+- `PP_VERSION` 1.7.2.
+
+Verificación:
+- `tests/install_package.php` (21): vistos fallar antes; ALL PASS.
+- Apache 2.4 real (httpd del Mac, config aislada, puerto 8811), paquete nuevo
+  con archivos de pega: ANTES backups/logs/documents/cache = 200 y `.php` en
+  uploads = 200; DESPUÉS todo 403, `uploads/*.jpg` y `public/css` = 200. Solo
+  con el `.htaccess` raíz nuevo (instalación existente) = igual de protegido.
+- Rama `/.htaccess` de `deploy()` ejecutada por reflexión con una copia exacta
+  del actual: archivo intacto.
+- Paquete 1.7.2 local + `php -S` → `/install/` paso 1 todo en verde.
+- Suite: 136 OK, 0 fallos, `update_from_zip` se salta sola. i18n_lint: 42
+  pendientes, los mismos que sin los cambios.
+
+Pendiente / apuntado (no tocado):
+- `nginx.conf.example`: la `location ~ ^/(…|storage)/` (regex) gana a
+  `location /storage/uploads/` (prefijo) → probablemente bloquea las imágenes
+  de uploads en Nginx. No verificable aquí (sin nginx).
+- Con la web sin instalar, `/` da 500 en vez de ir a `/install/`.
+
+## Lessons (STORAGE-SKEL)
+
+- `timeout` no existe en macOS: para la suite usar
+  `perl -e 'alarm 180; exec @ARGV' php test.php`.
+- Excluir una carpeta del paquete se lleva también su `.htaccess`: las
+  exclusiones de datos tienen que dejar pasar el esqueleto.
+- Para probar reglas de `.htaccess` hay Apache en el Mac: `httpd -f conf`
+  con `Listen 127.0.0.1:PUERTO`, `AllowOverride All` y módulos de
+  `/usr/libexec/apache2/` (mpm_prefork, authz_core, rewrite, dir, mime, unixd,
+  log_config, headers). Sin PHP: vale para 200/403.
