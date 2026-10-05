@@ -37,5 +37,10 @@ check_canvas_image('bank_explicit_stock', CanvasChatService::requestsImageBank('
 check_canvas_image('bank_explicit_internet', CanvasChatService::requestsImageBank('coge una foto de internet') === true);
 check_canvas_image('bank_not_implied', CanvasChatService::requestsImageBank('pon una foto de fondo en el hero') === false);
 
+// El asistente central deja palabras clave en inglés al final de la instrucción.
+check_canvas_image('bank_query_from_marker', CanvasChatService::imageSearchQuery("Añade una imagen de fondo del banco de imágenes (Unsplash) en el hero.\nBuscar fotos: modern dental clinic") === 'modern dental clinic');
+check_canvas_image('bank_query_marker_mid_text', CanvasChatService::imageSearchQuery("Pon una foto.\nBuscar fotos: surgeon, operating room!\n\n[Contenido]") === 'surgeon operating room');
+check_canvas_image('bank_query_without_marker', CanvasChatService::imageSearchQuery('Pon una foto de fondo en el hero') === null);
+
 echo $failed === 0 ? "\nOK\n" : "\n{$failed} FALLOS\n";
 exit($failed === 0 ? 0 : 1);

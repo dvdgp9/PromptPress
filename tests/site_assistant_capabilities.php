@@ -237,6 +237,48 @@ checkAssistantCapability(
             'capability_id' => 'forms.manage',
         ])
 );
+// Sin esta nota el planificador pedía «enlaces o IDs de Unsplash» aunque el
+// editor Canvas busca y descarga las fotos él solo (yroa.es, 2026-10).
+$withBank = AssistantCapabilityRegistry::renderForPrompt(
+    AssistantCapabilityRegistry::catalogForState([], ['pages' => 3, 'media' => 5, 'image_bank' => 1])
+);
+$noBank = AssistantCapabilityRegistry::renderForPrompt(
+    AssistantCapabilityRegistry::catalogForState([], ['pages' => 3, 'media' => 5, 'image_bank' => 0])
+);
+$nothing = AssistantCapabilityRegistry::renderForPrompt(
+    AssistantCapabilityRegistry::catalogForState([], ['pages' => 3, 'media' => 0, 'image_bank' => 0])
+);
+$canvasLine = static function (string $map): string {
+    foreach (explode("\n", $map) as $line) {
+        if (str_starts_with($line, '- pages.canvas.edit |')) return $line;
+    }
+    return '';
+};
+checkAssistantCapability(
+    'canvas_edit_declares_it_fetches_bank_photos',
+    str_contains($canvasLine($withBank), 'Unsplash')
+        && str_contains($canvasLine($withBank), 'no hacen falta enlaces'),
+    $canvasLine($withBank)
+);
+checkAssistantCapability(
+    'canvas_edit_without_bank_uses_library_only',
+    str_contains($canvasLine($noBank), 'biblioteca del sitio (5 archivos)')
+        && str_contains($canvasLine($noBank), 'no puede traer fotos nuevas'),
+    $canvasLine($noBank)
+);
+checkAssistantCapability(
+    'canvas_edit_without_any_image_asks_to_upload',
+    str_contains($canvasLine($nothing), 'hay que subirlas'),
+    $canvasLine($nothing)
+);
+$planPrompt = (string) (Actions::get(Actions::PLAN_SITE_CHANGES)['instruction'] ?? '');
+checkAssistantCapability(
+    'planner_treats_photo_requests_as_automatic_when_editor_can_fetch',
+    str_contains($planPrompt, 'FOTOS SIN ARCHIVOS')
+        && str_contains($planPrompt, 'NO pidas enlaces, IDs ni archivos')
+        && str_contains($planPrompt, 'Buscar fotos:')
+);
+
 $assistantJs = (string) file_get_contents(PP_ROOT . '/admin/assets/js/assistant.js');
 checkAssistantCapability(
     'missing_information_cannot_be_promoted_by_confirmation',

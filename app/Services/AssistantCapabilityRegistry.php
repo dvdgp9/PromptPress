@@ -49,6 +49,7 @@ final class AssistantCapabilityRegistry
             'booking_services' => self::count('SELECT COUNT(*) AS n FROM booking_services WHERE site_id = ?', $siteId),
             'resources'        => self::count('SELECT COUNT(*) AS n FROM resources WHERE site_id = ?', $siteId),
             'commerce_products'=> self::count('SELECT COUNT(*) AS n FROM commerce_products WHERE site_id = ?', $siteId),
+            'image_bank'       => ImageBankService::isAvailable() ? 1 : 0,
         ]);
     }
 
@@ -61,16 +62,19 @@ final class AssistantCapabilityRegistry
      */
     public static function catalogForState(array $moduleStates = [], array $counts = []): array
     {
+        $canvasEdit = self::capability(
+            'pages.canvas.edit',
+            'Editar contenido o estructura de una página Canvas existente',
+            'automatic',
+            '/admin/pages',
+            'canvas_edit',
+            (int) ($counts['pages'] ?? 0),
+            ['Página existente', 'contenido o decisión concreta cuando el cambio lo requiera']
+        );
+        $canvasEdit['notes'] = self::canvasImageNote($counts);
+
         $capabilities = [
-            self::capability(
-                'pages.canvas.edit',
-                'Editar contenido o estructura de una página Canvas existente',
-                'automatic',
-                '/admin/pages',
-                'canvas_edit',
-                (int) ($counts['pages'] ?? 0),
-                ['Página existente', 'contenido o decisión concreta cuando el cambio lo requiera']
-            ),
+            $canvasEdit,
             self::capability(
                 'pages.create',
                 'Crear una página nueva',
@@ -212,6 +216,27 @@ final class AssistantCapabilityRegistry
         return $capabilities;
     }
 
+    /**
+     * Lo que el editor Canvas puede hacer con fotos sin que nadie le dé
+     * archivos. Sin esta nota el planificador pedía «enlaces o IDs de
+     * Unsplash» aunque el editor busca y descarga las fotos él solo.
+     *
+     * @param array<string,int> $counts
+     */
+    private static function canvasImageNote(array $counts): string
+    {
+        $media = (int) ($counts['media'] ?? 0);
+        if ((int) ($counts['image_bank'] ?? 0) === 1) {
+            return 'fotos: el editor las consigue solo, buscando y descargando del banco de imágenes (Unsplash)'
+                . ($media > 0 ? ' o usando la biblioteca del sitio (' . $media . ' archivos)' : '')
+                . '; para poner fotos no hacen falta enlaces, IDs ni archivos';
+        }
+        if ($media > 0) {
+            return 'fotos: el editor usa la biblioteca del sitio (' . $media . ' archivos); no hay banco de imágenes configurado, así que no puede traer fotos nuevas de internet';
+        }
+        return 'fotos: no hay imágenes en la biblioteca ni banco de imágenes configurado; para poner fotos hay que subirlas antes en /admin/media';
+    }
+
     /** @param array<int,array<string,mixed>> $catalog */
     public static function renderForPrompt(array $catalog): string
     {
@@ -230,6 +255,9 @@ final class AssistantCapabilityRegistry
             }
             if ($required !== '') {
                 $line .= ' | datos=' . $required;
+            }
+            if (($capability['notes'] ?? '') !== '') {
+                $line .= ' | notas=' . $capability['notes'];
             }
             $lines[] = $line;
         }
@@ -272,6 +300,7 @@ final class AssistantCapabilityRegistry
             'required_inputs'    => $requiredInputs,
             'sensitive'          => $sensitive,
             'module'             => $module,
+            'notes'              => '',
         ];
     }
 

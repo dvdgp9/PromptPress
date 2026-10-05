@@ -56,14 +56,17 @@ final class CanvasChatService
         }
 
         $requiresImages = self::requestsImages($instruction);
+        $wantsBank = $requiresImages && self::requestsImageBank($instruction);
+        $bankImages = [];
         if ($requiresImages) {
             // STUDIO-2 C2 — Las fotos del negocio son la PRIMERA opción. Antes se
             // llamaba a Unsplash en cuanto la petición mencionaba una foto, así
             // que el material propio del cliente quedaba enterrado bajo stock
             // recién importado. Ahora solo se recurre al banco si no hay fotos
             // propias o si el usuario lo pide explícitamente.
-            if (self::requestsImageBank($instruction) || !MediaLibraryService::hasOwnImages($siteId)) {
+            if ($wantsBank || !MediaLibraryService::hasOwnImages($siteId)) {
                 $prepared = self::prepareRequestedImages($siteId, (string) $page['title'], $instruction);
+                $bankImages = $prepared['images'];
                 // Si Unsplash falla pero el sitio YA tiene imágenes en su biblioteca,
                 // no bloqueamos: la IA puede usar esas (van en `available_images`).
                 // Solo bloqueamos si no hay ninguna imagen utilizable en absoluto.
@@ -109,7 +112,18 @@ final class CanvasChatService
         // grandes solo para una imagen de FONDO es lento y trunca: con CSS es
         // instantáneo. La verificación posterior cuenta imágenes en HTML y en CSS.
         if ($requiresImages) {
-            $effectiveInstruction .= MediaLibraryService::hasOwnImages($siteId)
+            // Si el usuario pidió el banco, las fotos recién traídas van por
+            // delante: la lista de la biblioteca pone las propias primero y,
+            // con muchas, las del banco ni siquiera llegaban al modelo.
+            if ($bankImages !== []) {
+                $effectiveInstruction .= "\n\nFOTOS TRAÍDAS DEL BANCO PARA ESTA PETICIÓN"
+                    . ($wantsBank ? " (el usuario ha pedido fotos del banco: usa estas)" : '')
+                    . ":\n" . implode("\n", array_map(
+                        static fn (array $img): string => '- /' . ltrim($img['path'], '/') . ' | ' . ($img['description'] !== '' ? $img['description'] : 'sin descripción'),
+                        $bankImages
+                    ));
+            }
+            $effectiveInstruction .= MediaLibraryService::hasOwnImages($siteId) && !$wantsBank
                 ? "\n\nPRIORIDAD DE IMÁGENES: este negocio tiene fotos propias en su biblioteca. Usa una de ellas siempre que encaje razonablemente, aunque no sea perfecta; una foto real del negocio vale más que una de banco. Recurre al banco solo si ninguna propia tiene sentido para lo que se pide."
                 : '';
             $effectiveInstruction .= "\n\nHay imágenes disponibles para esta petición. Si es una imagen de FONDO, aplícala con CSS (`background-image: url(...)` apuntando a una ruta de las imágenes disponibles) sobre la sección o el elemento, y deja \"html\":\"\" (NO reescribas el HTML, sobre todo si hay ilustraciones o SVG). Si la imagen forma parte del CONTENIDO (una foto dentro del texto), devuelve el HTML con la etiqueta <img>.";
@@ -489,35 +503,55 @@ final class CanvasChatService
     // i18n-ignore-end
     }
 
-    /** @return array{ok:bool,error:?string} */
+    /**
+     * Palabras clave que el asistente central deja al final de la instrucción
+     * («Buscar fotos: dental clinic interior»). Unsplash busca mucho mejor así
+     * que con el principio de una frase larga en castellano.
+     */
+    public static function imageSearchQuery(string $instruction): ?string
+    {
+        if (preg_match('/^\s*Buscar fotos:\s*(.+)$/mu', $instruction, $m) !== 1) {
+            return null;
+        }
+        $query = trim((string) preg_replace('/[^\p{L}\p{N}\s-]+/u', ' ', $m[1]));
+        $query = trim((string) preg_replace('/\s+/u', ' ', mb_substr($query, 0, 80)));
+        return $query !== '' ? $query : null;
+    }
+
+    /** @return array{ok:bool,error:?string,images:array<int,array{path:string,description:string}>} */
     private static function prepareRequestedImages(int $siteId, string $pageTitle, string $instruction): array
     {
         if (!ImageBankService::isAvailable()) {
-            return ['ok' => false, 'error' => __('canvas.err.unsplash_off')];
+            return ['ok' => false, 'error' => __('canvas.err.unsplash_off'), 'images' => []];
         }
 
         ImageBankService::resetDiagnostics();
-        $query = trim($pageTitle . ' ' . preg_replace('/\s+/', ' ', mb_substr($instruction, 0, 100)));
+        $query = self::imageSearchQuery($instruction)
+            ?? trim($pageTitle . ' ' . preg_replace('/\s+/', ' ', mb_substr($instruction, 0, 100)));
         $search = ImageBankService::searchDetailed($query, 6, 'landscape');
         if (!$search['ok']) {
-            return ['ok' => false, 'error' => (string) ($search['message'] ?? __('unsplash.err.unavailable'))];
+            return ['ok' => false, 'error' => (string) ($search['message'] ?? __('unsplash.err.unavailable')), 'images' => []];
         }
         if ($search['items'] === []) {
-            return ['ok' => false, 'error' => __('canvas.err.no_matches')];
+            error_log('[canvas chat] provider=unsplash operation=search site=' . $siteId . ' no_matches query="' . $query . '"');
+            return ['ok' => false, 'error' => __('canvas.err.no_matches'), 'images' => []];
         }
 
-        $imported = 0;
+        $images = [];
         foreach (array_slice($search['items'], 0, 3) as $item) {
             try {
-                ImageBankService::downloadToMedia($item, $siteId, \Core\Auth::id(), $pageTitle);
-                $imported++;
+                $row = ImageBankService::downloadToMedia($item, $siteId, \Core\Auth::id(), $pageTitle);
+                $images[] = [
+                    'path' => (string) $row['path'],
+                    'description' => mb_substr(trim((string) ($item['alt'] ?? $item['description'] ?? '')), 0, 160),
+                ];
             } catch (\Throwable $e) {
                 error_log('[canvas chat] provider=unsplash operation=download site=' . $siteId . ' error=' . get_class($e) . ': ' . $e->getMessage());
             }
         }
-        return $imported > 0
-            ? ['ok' => true, 'error' => null]
-            : ['ok' => false, 'error' => __('canvas.err.download_failed')];
+        return $images !== []
+            ? ['ok' => true, 'error' => null, 'images' => $images]
+            : ['ok' => false, 'error' => __('canvas.err.download_failed'), 'images' => []];
     }
 
     private static function imageCount(string $html): int
