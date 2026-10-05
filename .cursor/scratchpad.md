@@ -54,6 +54,7 @@ Pendiente de verificación manual del usuario: flujo completo de generación 8 p
 
 # Lessons
 
+- (2026-10-05) Producción puede correr PHP 8.0 (yroa.es) y local es 8.4: `array_is_list()` tumbó el asistente con 502 en el hosting. Nada de `array_is_list`/`readonly`/`enum`/`f(...)`; `php tests/php80_compat.php` lo vigila.
 - `ai_logs` no tiene columna `action`: es `action_type`. Un `2>/dev/null` en mysql dentro de un until-loop puede convertir ese error en bucle infinito silencioso.
 - El atributo `hidden` no basta si el elemento tiene `display:grid/flex` por CSS: añadir regla `[hidden]{display:none}` explícita.
 - `preview_click` sobre tarjetas con overlay/posicionamiento especial puede no disparar el listener; usar `el.click()` vía eval para verificar.

@@ -79,6 +79,12 @@ jobs:
                  -name '*.php' -print0 \
             | xargs -0 -n1 -P4 php -l > /dev/null
 
+      # El CI usa un PHP moderno, pero hay hostings con 8.0: una función o
+      # sintaxis de 8.1+ pasaría `php -l` aquí y reventaría allí.
+      - name: Comprobar compatibilidad con PHP 8.0
+        if: steps.comprobar.outputs.publicar == 'si'
+        run: php tests/php80_compat.php
+
       - name: Armar el paquete
         id: paquete
         if: steps.comprobar.outputs.publicar == 'si'

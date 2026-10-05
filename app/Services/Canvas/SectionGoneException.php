@@ -11,7 +11,8 @@ namespace App\Services\Canvas;
  */
 final class SectionGoneException extends \RuntimeException
 {
-    public function __construct(public readonly string $sectionId)
+    // Sin `readonly`: es de PHP 8.1 y composer.json admite 8.0.
+    public function __construct(public string $sectionId)
     {
         parent::__construct('La sección "' . $sectionId . '" ya no existe.');
     }

@@ -279,14 +279,15 @@ final class AIActionRunner
      * Algunos modelos Gemini envuelven ocasionalmente un único plan en
      * `[{...}]` aun usando json_object. Solo se tolera esa forma inequívoca
      * para el planner; listas múltiples o cualquier otro shape siguen fallando.
+     * Sin `array_is_list()`: es de PHP 8.1 y composer.json admite 8.0.
      */
     private static function normalizeActionData(string $action, mixed $data): mixed
     {
         if (
             $action === Actions::PLAN_SITE_CHANGES
             && is_array($data)
-            && array_is_list($data)
             && count($data) === 1
+            && array_key_exists(0, $data)
             && is_array($data[0])
             && array_key_exists('items', $data[0])
         ) {

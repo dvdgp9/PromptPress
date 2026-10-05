@@ -14,8 +14,9 @@ namespace App\Modules\Commerce\Payments;
 final class PaymentStart
 {
     private function __construct(
-        public readonly ?string $redirectUrl,
-        public readonly ?string $instructionsHtml
+        // Sin `readonly`: es de PHP 8.1 y composer.json admite 8.0.
+        public ?string $redirectUrl,
+        public ?string $instructionsHtml
     ) {
     }
 

@@ -16,8 +16,9 @@ use RuntimeException;
 final class CanvasConflictException extends RuntimeException
 {
     public function __construct(
-        public readonly int $currentVersionId,
-        public readonly int $baseVersionId
+        // Sin `readonly`: es de PHP 8.1 y composer.json admite 8.0.
+        public int $currentVersionId,
+        public int $baseVersionId
     ) {
         parent::__construct('canvas_conflict');
     }
