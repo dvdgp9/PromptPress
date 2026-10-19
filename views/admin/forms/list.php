@@ -36,6 +36,8 @@ $templates = $templates ?? [];
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="pp-alert pp-alert--error"><?= e($error) ?></div><?php endif; ?>
 
+<?php $aiEditor = false; require __DIR__ . '/ai-composer.php'; ?>
+
 <?php if (empty($forms)): ?>
     <div class="pp-empty-state">
         <p><strong><?= e(__('forms.empty_title')) ?></strong></p>
@@ -83,3 +85,7 @@ $templates = $templates ?? [];
     </div>
 <?php endif; ?>
 </div>
+
+<?php \Core\View::start('scripts'); ?>
+<script src="<?= e(base_url('admin/assets/js/forms-ai.js')) ?>?v=<?= e((string) filemtime(PP_ROOT . '/admin/assets/js/forms-ai.js')) ?>"></script>
+<?php \Core\View::end(); ?>

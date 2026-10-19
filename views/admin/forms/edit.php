@@ -15,6 +15,8 @@ $fieldTypes = [
     'textarea' => __('field.textarea'),
     'checkbox' => __('field.checkbox'),
     'select'   => __('field.select'),
+    'radio'    => __('field.radio'),
+    'checkbox_group' => __('field.checkbox_group'),
     'number'   => __('field.number'),
     'date'     => __('field.date'),
     'url'      => 'URL',
@@ -48,11 +50,16 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             <span class="pp-fb-row__drag" aria-hidden="true">⠿</span>
             <div class="pp-fb-row__identity">
                 <strong data-fb-title><?= e($label !== '' ? $label : __('form_edit.untitled_field')) ?></strong>
-                <span><b data-fb-type-label><?= e($typeLabel) ?></b><i data-fb-required><?= $req ? 'Obligatorio' : 'Opcional' ?></i></span>
+                <span><b data-fb-type-label><?= e($typeLabel) ?></b><i data-fb-required><?= e(__($req ? 'forms.ai.required' : 'forms.ai.optional')) ?></i></span>
             </div>
-            <button type="button" class="pp-fb-row__remove" data-fb-remove title="<?= e(__('form_edit.remove_field')) ?>" aria-label="<?= e(__('form_edit.remove_field')) ?>">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-            </button>
+            <div class="pp-fb-row__actions">
+                <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" data-fb-up aria-label="<?= e(__('forms.ai.move_up')) ?>" title="<?= e(__('forms.ai.move_up')) ?>">↑</button>
+                <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" data-fb-down aria-label="<?= e(__('forms.ai.move_down')) ?>" title="<?= e(__('forms.ai.move_down')) ?>">↓</button>
+                <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" data-fb-copy><?= e(__('forms.ai.duplicate')) ?></button>
+                <button type="button" class="pp-fb-row__remove" data-fb-remove title="<?= e(__('form_edit.remove_field')) ?>" aria-label="<?= e(__('form_edit.remove_field')) ?>">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
         </div>
         <div class="pp-fb-row__grid">
             <label class="pp-fb-control">
@@ -76,7 +83,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
                 <input type="checkbox" name="fields[<?= $i ?>][required]" value="1" <?= $req ? 'checked' : '' ?>>
                 <span><?= e(__('form_edit.required')) ?></span>
             </label>
-            <label class="pp-fb-control pp-fb-row__options" data-fb-options-wrap <?= $type === 'select' ? '' : 'hidden' ?>>
+            <label class="pp-fb-control pp-fb-row__options" data-fb-options-wrap <?= in_array($type, \App\Services\FormDefinition::CHOICE_TYPES, true) ? '' : 'hidden' ?>>
                 <span><?= e(__('form_edit.select_options')) ?></span>
                 <textarea name="fields[<?= $i ?>][options]" rows="3" placeholder="<?= e(__('form_edit.options_placeholder')) ?>" data-fb-options><?= e($optionsText) ?></textarea>
             </label>
@@ -116,7 +123,11 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
 (function () {
     var RUN_URL = <?= json_encode(base_url('admin/ai/actions/run')) ?>;
     var CSRF = <?= json_encode($csrf) ?>;
-    var ALLOWED_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox', 'select', 'number', 'date', 'url', 'file'];
+    var ALLOWED_TYPES = <?= json_encode(\App\Services\FormDefinition::TYPES) ?>;
+    var REQUIRED_TEXT = <?= json_encode(__('forms.ai.required')) ?>;
+    var OPTIONAL_TEXT = <?= json_encode(__('forms.ai.optional')) ?>;
+    var COPY_TEXT = <?= json_encode(__('forms.ai.copy')) ?>;
+    var LIMIT_TEXT = <?= json_encode(__('forms.ai.too_many_fields')) ?>;
 
     var list = document.getElementById('pp-fb-list');
     var addBtn = document.getElementById('pp-fb-add');
@@ -152,7 +163,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         function syncSummary() {
             if (title) title.textContent = (label && label.value.trim()) ? label.value.trim() : pp.t('js.form_edit.untitled_field');
             if (typeLabel) typeLabel.textContent = selectedText(type) || 'Texto';
-            if (requiredLabel) requiredLabel.textContent = requiredInput && requiredInput.checked ? 'Obligatorio' : 'Opcional';
+            if (requiredLabel) requiredLabel.textContent = requiredInput && requiredInput.checked ? REQUIRED_TEXT : OPTIONAL_TEXT;
         }
         if (drag) {
             drag.addEventListener('mousedown', function () { row.draggable = true; });
@@ -170,15 +181,16 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             row.classList.remove('is-dragging');
             row.draggable = false;
         });
+        if (name && name.value) name.dataset.touched = '1';
         if (label && name) {
             label.addEventListener('input', function () {
-                if (!name.dataset.touched) name.value = slugify(label.value);
+                if (!name.dataset.touched) { name.value = ''; name.value = uniqueName(slugify(label.value) || 'field'); }
                 syncSummary();
             });
         }
         if (type && options) {
             var syncOptions = function () {
-                if (optionsWrap) optionsWrap.hidden = type.value !== 'select';
+                if (optionsWrap) optionsWrap.hidden = ['select', 'radio', 'checkbox_group'].indexOf(type.value) === -1;
                 if (fileConfig) fileConfig.hidden = type.value !== 'file';
                 syncSummary();
             };
@@ -194,6 +206,19 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             syncCustom();
         }
         syncSummary();
+        row.querySelector('[data-fb-up]').addEventListener('click', function () { if (row.previousElementSibling) row.previousElementSibling.before(row); });
+        row.querySelector('[data-fb-down]').addEventListener('click', function () { if (row.nextElementSibling) row.nextElementSibling.after(row); });
+        row.querySelector('[data-fb-copy]').addEventListener('click', function () {
+            if (list.children.length >= 50) { showLimit(); return; }
+            var values = readRow(row);
+            values.label = COPY_TEXT.replace('{label}', values.label).slice(0, 120);
+            // A second copy also needs a distinct visible label (inbox keys are labels).
+            var labels = Array.prototype.map.call(list.querySelectorAll('[data-fb-label]'), function (input) { return input.value; });
+            var baseLabel = values.label.slice(0, 110), suffix = 2;
+            while (labels.indexOf(values.label) !== -1) values.label = baseLabel + ' ' + suffix++;
+            values.name = uniqueName(values.name + '_copy');
+            row.after(makeRow(values));
+        });
         var rm = row.querySelector('[data-fb-remove]');
         if (rm) rm.addEventListener('click', function () {
             if (list.querySelectorAll('[data-fb-row]').length <= 1) {
@@ -208,6 +233,24 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         });
     }
 
+    function uniqueName(base) {
+        base = base.slice(0, 50);
+        var names = Array.prototype.map.call(list.querySelectorAll('[data-fb-name]'), function (input) { return input.value; });
+        var name = base, suffix = 2;
+        while (names.indexOf(name) !== -1) name = base + '_' + suffix++;
+        return name;
+    }
+    function readRow(row) {
+        function val(key) { var input = row.querySelector('[name$="[' + key + ']"]'); return input ? input.value : ''; }
+        return { label: val('label'), name: val('name'), field_type: val('field_type'),
+            required: row.querySelector('.pp-fb-row__req input').checked ? '1' : '0', placeholder: val('placeholder'),
+            options: val('options').split(/\r?\n/).filter(function (option) { return option.trim(); }),
+            file_accept: val('file_accept'), file_max_mb: val('file_max_mb'), file_custom_ext: val('file_custom_ext') };
+    }
+    function showLimit() {
+        var status = document.querySelector('[data-ai-status]');
+        if (status) { status.hidden = false; status.textContent = LIMIT_TEXT; status.classList.add('is-error'); status.scrollIntoView({ block: 'nearest' }); }
+    }
     // Crea una fila (opcionalmente con valores) y la añade al final.
     function makeRow(values) {
         var html = tpl.innerHTML.replace(/9999/g, String(counter++));
@@ -224,9 +267,11 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
             var fileMax = row.querySelector('input[type=number]');
             var fileCustom = row.querySelector('[data-fb-file-custom]');
             if (label) label.value = values.label || '';
-            if (name) name.value = slugify(values.label || '');
+            if (name) name.value = values.name || uniqueName(slugify(values.label || '') || 'field');
             if (sel) sel.value = (ALLOWED_TYPES.indexOf(values.field_type) !== -1) ? values.field_type : 'text';
-            if (req) req.checked = !!values.required;
+            if (req) req.checked = values.required === true || values.required === 1 || values.required === '1';
+            var ph = row.querySelector('input[name$="[placeholder]"]');
+            if (ph) ph.value = values.placeholder || '';
             if (options && Array.isArray(values.options)) options.value = values.options.join('\n');
             if (fileAccept && values.file_accept) fileAccept.value = values.file_accept;
             if (fileMax && values.file_max_mb) fileMax.value = values.file_max_mb;
@@ -251,6 +296,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     });
 
     addBtn.addEventListener('click', function () {
+        if (list.children.length >= 50) { showLimit(); return; }
         var row = makeRow(null);
         var l = row.querySelector('[data-fb-label]');
         if (l) l.focus();
@@ -274,43 +320,50 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
     function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
 
-    var designBtn = document.getElementById('pp-ai-design');
-    var descIn = document.getElementById('pp-ai-desc');
-    var designStatus = document.getElementById('pp-ai-design-status');
-    if (designBtn) {
-        designBtn.addEventListener('click', function () {
-            var desc = (descIn.value || '').trim();
-            if (desc.length < 5) { descIn.focus(); return; }
-            designBtn.disabled = true;
-            designStatus.hidden = false; designStatus.classList.remove('is-error');
-            designStatus.textContent = pp.t('js.form_edit.generating');
-            runAction('design_form', { description: desc })
-                .then(function (res) {
-                    if (!res || !res.ok || !res.data) throw new Error((res && res.error) || pp.t('js.form_edit.generate_failed'));
-                    var d = res.data;
-                    setVal('pp-f-heading', d.heading);
-                    setVal('pp-f-desc', d.description);
-                    setVal('pp-f-submit', d.submit_text);
-                    setVal('pp-f-success', d.success_message);
-                    if (Array.isArray(d.fields) && d.fields.length) {
-                        list.innerHTML = '';
-                        d.fields.forEach(function (f) { makeRow(f); });
-                    }
-                    if (d.autoresponder_subject || d.autoresponder_body) {
-                        setVal('pp-f-ar-subject', d.autoresponder_subject);
-                        setVal('pp-f-ar-body', d.autoresponder_body);
-                        // Si la IA propone autorrespuesta, la dejamos activada y visible.
-                        if (arToggle && !arToggle.checked) { arToggle.checked = true; arFields.hidden = false; }
-                    }
-                    designStatus.textContent = pp.t('js.form_edit.generated_ok');
-                })
-                .catch(function (e) {
-                    designStatus.classList.add('is-error');
-                    designStatus.textContent = pp.t('js.form_edit.generate_error', { error: e.message });
-                })
-                .finally(function () { designBtn.disabled = false; });
-        });
+    var composer = document.querySelector('[data-form-ai]');
+    var undoState = null;
+    var headerIds = ['pp-f-heading','pp-f-desc','pp-f-submit','pp-f-success','pp-f-ar-subject','pp-f-ar-body'];
+    function snapshot() {
+        return { fields: Array.prototype.map.call(list.children, readRow), headers: headerIds.map(function (id) { return document.getElementById(id).value; }), autoresponder: arToggle.checked };
     }
+    composer.addEventListener('form-ai-context', function (event) {
+        var current = snapshot();
+        event.detail.data.append('current_form', JSON.stringify({ heading: current.headers[0], description: current.headers[1], fields: current.fields }));
+    });
+    composer.addEventListener('form-ai-apply', function (event) {
+        var draft = event.detail.draft;
+        var append = event.detail.mode === 'append';
+        if ((append ? list.children.length : 0) + draft.fields.length > 50) return;
+        undoState = snapshot();
+        if (!append) {
+            list.replaceChildren();
+            if (!draft.fields.some(function (field) { return field.field_type === 'email'; })) { arToggle.checked = false; arFields.hidden = true; }
+            var values = [draft.heading, draft.description, draft.submit_text, draft.success_message, draft.autoresponder_subject, draft.autoresponder_body];
+            headerIds.forEach(function (id, index) { document.getElementById(id).value = values[index] || ''; });
+        }
+        var labels = Array.prototype.map.call(list.querySelectorAll('[data-fb-label]'), function (input) { return input.value; });
+        draft.fields.forEach(function (field) {
+            var copy = Object.assign({}, field);
+            var previous = !append && undoState.fields.find(function (field) { return field.label === copy.label; });
+            copy.name = uniqueName((previous && previous.name) || copy.name || slugify(copy.label) || 'field');
+            var base = copy.label.slice(0, 110), suffix = 2;
+            while (labels.indexOf(copy.label) !== -1) copy.label = base + ' ' + suffix++;
+            labels.push(copy.label);
+            makeRow(copy);
+        });
+        composer.querySelector('[data-ai-undo]').hidden = false;
+        event.detail.applied = true;
+    });
+    composer.addEventListener('form-ai-undo', function () {
+        if (!undoState) return;
+        list.replaceChildren();
+        undoState.fields.forEach(makeRow);
+        arToggle.checked = undoState.autoresponder;
+        arFields.hidden = !arToggle.checked;
+        headerIds.forEach(function (id, index) { document.getElementById(id).value = undoState.headers[index]; });
+        undoState = null;
+        composer.querySelector('[data-ai-undo]').hidden = true;
+    });
 
     var arBtn = document.getElementById('pp-ai-autoresp');
     if (arBtn) {
@@ -335,6 +388,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
 })();
 </script>
+<script src="<?= e(base_url('admin/assets/js/forms-ai.js')) ?>?v=<?= e((string) filemtime(PP_ROOT . '/admin/assets/js/forms-ai.js')) ?>"></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-forms-wrap pp-forms-wrap--editor">
@@ -417,15 +471,7 @@ $baseIsWrong = $baseLang !== $primaryLang;
 <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id)) ?>" class="pp-form" id="pp-form-editor" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
-    <section class="pp-ai-config-panel pp-form-ai-box">
-        <div class="pp-ai-section-head"><div><h3>✨ <?= e(__('form_edit.ai_create')) ?></h3><p><?= e(__('form_edit.ai_create_help')) ?></p></div></div>
-        <div class="pp-form-ai-row">
-            <input type="text" id="pp-ai-desc" maxlength="300"
-                   placeholder="<?= e(__('form_edit.ai_placeholder')) ?>">
-            <button type="button" class="pp-btn pp-btn--secondary" id="pp-ai-design"><?= e(__('form_edit.generate')) ?></button>
-        </div>
-        <small id="pp-ai-design-status" class="pp-design-hint" hidden></small>
-    </section>
+    <?php $aiEditor = true; require __DIR__ . '/ai-composer.php'; ?>
 
     <section class="pp-ai-config-panel">
         <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.header')) ?></h3><p><?= e(__('form_edit.header_help')) ?></p></div></div>

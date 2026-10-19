@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\FormI18n;
+use App\Services\FormDefinition;
+use App\Services\AI\Actions;
+use App\Services\AI\AIActionRunner;
+use App\Services\AI\AIException;
 use App\Services\FormStore;
 use App\Services\FormTemplates;
 use App\Services\FormTranslator;
@@ -26,7 +30,7 @@ use Core\View;
  */
 class FormsController
 {
-    private const FIELD_TYPES = ['text', 'email', 'tel', 'textarea', 'checkbox', 'select', 'number', 'date', 'url', 'file'];
+    private const FIELD_TYPES = FormDefinition::TYPES;
     private const FILE_PRESETS = ['documents', 'images', 'cv', 'custom'];
 
     public function index(): void
@@ -55,6 +59,84 @@ class FormsController
             : FormStore::create($siteId);
         Session::flash('notice', __('forms.created', ['plantilla' => FormTemplates::label($template)]));
         Response::redirect(base_url('admin/formularios/' . $id));
+    }
+
+    /** Generate a validated draft; only the list's create action persists a new form. */
+    public function design(): void
+    {
+        $this->generateWithAI();
+    }
+
+    public function createWithAI(): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        try {
+            $raw = Request::post('draft_json', '');
+            if (!is_string($raw) || strlen($raw) > 100000) throw new \InvalidArgumentException(__('forms.ai.invalid_output'));
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) throw new \InvalidArgumentException(__('forms.ai.invalid_output'));
+            $draft = FormDefinition::fromAI($decoded);
+            $content = array_replace(FormTemplates::content('contact', LanguageService::primaryFor($siteId)), $draft);
+            $content['autoresponder_enabled'] = '0';
+            $content['form_type'] = 'custom';
+            $id = FormStore::create($siteId, $content);
+            Session::flash('notice', __('forms.ai.created'));
+            Response::json(['ok'=>true, 'edit_url'=>base_url('admin/formularios/' . $id)]);
+        } catch (\InvalidArgumentException $e) {
+            Response::json(['ok'=>false, 'error'=>$e->getMessage()], 422);
+        }
+    }
+
+    private function generateWithAI(): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        try {
+            $lang = LanguageService::primaryFor($siteId);
+            $formId = (int) Request::post('form_id', 0);
+            if ($formId > 0) {
+                $existing = FormStore::find($siteId, $formId);
+                if ($existing === null) Response::json(['ok'=>false, 'error'=>__('forms.error.not_found')], 404);
+                $lang = FormI18n::baseLanguage($existing);
+            }
+            $description = Request::post('description', '');
+            if (!is_string($description) || mb_strlen($description) > 12000) throw new AIException(__('forms.ai.description_error'));
+            $description = trim($description);
+            $image = $this->referenceImage();
+            if (mb_strlen($description) < 5 && $image === null) throw new AIException(__('forms.ai.description_error'));
+            $current = Request::post('current_form', '');
+            if (!is_string($current) || strlen($current) > 60000) throw new AIException(__('forms.ai.invalid_output'));
+            $input = [
+                'description' => $description ?: 'Reproduce las preguntas y opciones del formulario de la imagen adjunta.',
+                'extra_context' => 'Idioma del formulario: ' . LanguageService::promptLabel($lang)
+                    . ($current !== '' ? "\nFormulario actual (datos de referencia para aplicar los cambios pedidos):\n" . $current : ''),
+            ];
+            if ($image !== null) $input['_images'] = [$image];
+            $result = AIActionRunner::run(Actions::DESIGN_FORM, $input, $siteId);
+            $draft = FormDefinition::fromAI($result['data']);
+            Response::json(['ok'=>true, 'data'=>$draft]);
+        } catch (AIException | \InvalidArgumentException $e) {
+            Response::json(['ok'=>false, 'error'=>$e->getMessage()], 422);
+        }
+    }
+
+    /** A single temporary upload, verified by content; never saved to the media library. */
+    private function referenceImage(): ?array
+    {
+        $file = Request::file('reference');
+        if ($file === null || ($file['error'] ?? null) === UPLOAD_ERR_NO_FILE) return null;
+        if (($file['error'] ?? null) !== UPLOAD_ERR_OK || !is_string($file['tmp_name'] ?? null)
+            || !is_uploaded_file($file['tmp_name']) || (int) ($file['size'] ?? 0) > 8 * 1024 * 1024) {
+            throw new AIException(__('forms.ai.image_error'));
+        }
+        $info = @getimagesize($file['tmp_name']);
+        $mime = $info['mime'] ?? '';
+        if (!is_array($info) || !in_array($mime, ['image/png', 'image/jpeg', 'image/webp'], true)
+            || $info[0] * $info[1] > 20000000) throw new AIException(__('forms.ai.image_error'));
+        $raw = file_get_contents($file['tmp_name']);
+        if ($raw === false || $raw === '') throw new AIException(__('forms.ai.image_error'));
+        return ['mime'=>$mime, 'data'=>base64_encode($raw)];
     }
 
     public function edit(array $params = []): void
@@ -193,7 +275,7 @@ class FormsController
                     'required'    => ((string) ($f['required'] ?? '0')) === '1' ? '1' : '0',
                     'placeholder' => mb_substr(trim((string) ($f['placeholder'] ?? '')), 0, 160),
                 ];
-                if ($type === 'select') {
+                if (in_array($type, FormDefinition::CHOICE_TYPES, true)) {
                     $field['options'] = $this->normalizeOptions($f['options'] ?? '');
                 }
                 if ($type === 'file') {
@@ -234,9 +316,15 @@ class FormsController
         if (!is_array($c['fields']) || count($c['fields']) === 0) {
             $errors[] = __('forms.error.need_field');
         }
+        $names = array_column((array) $c['fields'], 'name');
+        $labels = array_column((array) $c['fields'], 'label');
+        if (count($labels) !== count(array_unique($labels)) || count($names) !== count(array_unique($names)) || array_intersect($names, ['company_url', '_csrf', '_return', '_lang', '_pp_ts', '_pp_pow', '_marketing_consent']) !== []) {
+            $errors[] = __('forms.ai.duplicate_names');
+        }
+        if (count((array) $c['fields']) > FormDefinition::MAX_FIELDS) $errors[] = __('forms.ai.too_many_fields');
         foreach ((array) $c['fields'] as $f) {
-            if (($f['field_type'] ?? '') === 'select' && empty($f['options'])) {
-                $errors[] = __('forms.error.select_needs_option');
+            if (in_array($f['field_type'] ?? '', FormDefinition::CHOICE_TYPES, true) && empty($f['options'])) {
+                $errors[] = __('forms.ai.invalid_options');
                 break;
             }
         }

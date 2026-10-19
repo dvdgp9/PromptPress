@@ -430,12 +430,25 @@ final class SectionRenderer
             $ftype       = self::str($f, 'field_type', 'text');
             $required    = self::str($f, 'required', '0') === '1';
             $placeholder = self::str($f, 'placeholder');
-            $options     = is_array($f['options'] ?? null) ? array_values(array_filter(array_map('strval', $f['options']))) : [];
+            $options     = is_array($f['options'] ?? null) ? array_values(array_filter(array_map('strval', $f['options']), static fn(string $option): bool => trim($option) !== '')) : [];
 
             $nameSafe = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $name) ?? ('field_' . $idx);
             $id = 'f_' . $sectionId . '_' . $nameSafe;
             $req = $required ? ' required' : '';
 
+            if (in_array($ftype, ['radio', 'checkbox_group'], true)) {
+                $multiple = $ftype === 'checkbox_group';
+                $html .= '<fieldset class="pp-form__row pp-form__choice-group"' . ($required ? ' data-pp-choice-required' : '') . '>';
+                $html .= '<legend class="pp-form__label">' . self::e($label) . ($required ? ' <span class="pp-form__req" aria-hidden="true">*</span>' : '') . '</legend>';
+                if ($placeholder !== '') $html .= '<small class="pp-form__help">' . self::e($placeholder) . '</small>';
+                $html .= '<div class="pp-form__choices">';
+                foreach ($options as $optionIndex => $option) {
+                    $optionId = $id . '_' . $optionIndex;
+                    $html .= '<label class="pp-form__choice" for="' . self::e($optionId) . '"><input id="' . self::e($optionId) . '" type="' . ($multiple ? 'checkbox' : 'radio') . '" name="' . self::e($nameSafe) . ($multiple ? '[]' : '') . '" value="' . self::e($option) . '"' . (!$multiple ? $req : '') . '><span>' . self::e($option) . '</span></label>';
+                }
+                $html .= '</div></fieldset>';
+                continue;
+            }
             $html .= '<div class="pp-form__row">';
             if ($label !== '') {
                 $html .= '<label class="pp-form__label" for="' . self::e($id) . '">' . self::e($label)

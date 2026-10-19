@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Public;
 
 use App\Services\FormI18n;
+use App\Services\FormDefinition;
 use App\Services\FormSubmissionService;
 use App\Services\LanguageService;
 use App\Services\Microcopy;
@@ -383,8 +384,19 @@ final class FormController
                 $payload[$label] = $stored['file'] ?? [];
                 continue;
             }
+            if ($type === 'checkbox_group') {
+                $options = is_array($field['options'] ?? null) ? array_map('strval', $field['options']) : [];
+                [$values, $valid] = FormDefinition::multipleValues(Request::post($name, []), $options, $required);
+                if (!$valid) $errors[] = $label;
+                elseif ($values !== []) $payload[$label] = $values;
+                continue;
+            }
             $value = Request::post($name, '');
-            $value = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
+            if (!is_scalar($value)) {
+                $errors[] = $label;
+                continue;
+            }
+            $value = (string) $value;
             $value = trim(mb_substr($value, 0, 5000));
 
             if ($required && $value === '') {
@@ -407,9 +419,9 @@ final class FormController
                 $errors[] = $label;
                 continue;
             }
-            if ($value !== '' && $type === 'select') {
+            if ($value !== '' && in_array($type, ['select', 'radio'], true)) {
                 $options = is_array($field['options'] ?? null) ? array_map('strval', $field['options']) : [];
-                if ($options !== [] && !in_array($value, $options, true)) {
+                if (!in_array($value, $options, true)) {
                     $errors[] = $label;
                     continue;
                 }

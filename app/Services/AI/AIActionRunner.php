@@ -111,6 +111,9 @@ final class AIActionRunner
         // cuando la API de modelos no confirmó esa modalidad.
         if (!empty($input['_images']) && is_array($input['_images'])) {
             $vision = AIProviderCapabilities::forProvider($provider);
+            if ($action === Actions::DESIGN_FORM && !$vision['supports_vision']) {
+                throw new AIException(__('forms.ai.vision_unavailable'));
+            }
             $vision['requested_images'] = count($input['_images']);
             $vision['sent_images'] = 0;
             if ($vision['supports_vision']) {
@@ -283,6 +286,13 @@ final class AIActionRunner
      */
     private static function normalizeActionData(string $action, mixed $data): mixed
     {
+        if ($action === Actions::DESIGN_FORM && is_array($data)) {
+            try {
+                return \App\Services\FormDefinition::fromAI($data);
+            } catch (\InvalidArgumentException $e) {
+                throw new AIException($e->getMessage());
+            }
+        }
         if (
             $action === Actions::PLAN_SITE_CHANGES
             && is_array($data)

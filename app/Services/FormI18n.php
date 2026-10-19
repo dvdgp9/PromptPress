@@ -165,7 +165,7 @@ final class FormI18n
                 }
             }
             $options = is_array($field['options'] ?? null)
-                ? array_values(array_filter(array_map('strval', $field['options'])))
+                ? array_values(array_filter(array_map('strval', $field['options']), static fn(string $option): bool => trim($option) !== ''))
                 : [];
             if ($options !== []) {
                 $entry['options'] = $options;

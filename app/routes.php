@@ -282,6 +282,8 @@ $router->group('/admin', function (\Core\Router $r) {
     // Formularios (FORMS F2/F3) — apartado de creación/edición
     $r->get('/formularios',              [FormsController::class, 'index']);
     $r->post('/formularios/create',      [FormsController::class, 'create']);
+    $r->post('/formularios/design', [FormsController::class, 'design']);
+    $r->post('/formularios/create-ai', [FormsController::class, 'createWithAI']);
     $r->get('/formularios/{id}',         [FormsController::class, 'edit']);
     $r->post('/formularios/{id}',        [FormsController::class, 'update']);
     $r->post('/formularios/{id}/delete', [FormsController::class, 'destroy']);

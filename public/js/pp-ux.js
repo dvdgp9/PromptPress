@@ -407,6 +407,16 @@
     all('[data-pp-behavior]').forEach(mount);
     initSiteNav();
     all('[data-pp-file-field]').forEach(initFormFile);
+    all('.pp-form__choice-group[data-pp-choice-required]').forEach(function (group) {
+      var checks = Array.prototype.slice.call(group.querySelectorAll('input[type="checkbox"]'));
+      if (!checks.length) return;
+      function syncRequired() {
+        checks[0].required = !checks.some(function (input) { return input.checked; });
+      }
+      checks.forEach(function (input) { input.addEventListener('change', syncRequired); });
+      group.closest('form').addEventListener('reset', function () { setTimeout(syncRequired, 0); });
+      syncRequired();
+    });
     all('.pp-form__form[data-pp-form-id]').forEach(initAjaxForm);
   });
 })();

@@ -12360,3 +12360,32 @@ a.pp-page-menu__item{text-decoration:none}
     pointer-events: none;
     opacity: 0.55;
 }
+
+/* Form AI composer: draft, review, then apply. */
+.pp-form-ai-composer{margin:0 0 24px;border:1px solid #d8dee5;border-radius:12px;background:#fff;overflow:hidden}
+.pp-form-ai-composer>summary{padding:18px 22px;font-size:1rem;font-weight:700;cursor:pointer;color:#1e293b}
+.pp-form-ai-composer[open]>summary{border-bottom:1px solid #e5e7eb}
+.pp-form-ai-composer__body{padding:20px 22px;display:grid;gap:18px}
+.pp-form-ai-composer__body>p{margin:0;color:#64748b;max-width:85ch;line-height:1.6}
+.pp-form-ai-composer textarea,.pp-form-ai-composer select{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font:inherit;color:#1e293b;background:#fff;line-height:1.5}
+.pp-form-ai-composer textarea{resize:vertical;min-height:116px}
+.pp-form-ai-composer :is(textarea,select):focus{outline:2px solid #c2410c;outline-offset:2px}
+.pp-form-ai-composer .pp-fb-control{gap:8px}
+.pp-form-ai-composer small{color:#64748b;font-size:.8rem;line-height:1.5}
+.pp-form-ai-composer__reference{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px}
+.pp-form-ai-composer input[type=file]{max-width:100%;font-size:.85rem}
+.pp-form-ai-composer__actions{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.pp-form-ai-composer [hidden]{display:none!important}
+.pp-form-ai-composer [data-ai-status].is-error{color:#b91c1c}
+.pp-form-ai-composer[aria-busy=true] [data-ai-status]{border-left:3px solid #c2410c;padding-left:12px}
+.pp-form-ai-review{border-top:1px solid #e5e7eb;padding-top:20px;min-width:0}
+.pp-form-ai-review h3{margin:0 0 18px;font-size:.92rem;color:#64748b;font-weight:600}
+.pp-form-ai-review h4{font-size:1.25rem;margin:0 0 8px;color:#1e293b;overflow-wrap:anywhere}
+.pp-form-ai-review ol{padding-left:24px;max-height:540px;overflow:auto;overscroll-behavior:contain;margin:20px 0}
+.pp-form-ai-review li{padding:14px 8px 14px 0;border-top:1px solid #e5e7eb;overflow-wrap:anywhere}
+.pp-form-ai-review li small{display:block;margin-top:4px}
+.pp-form-ai-review p{color:#64748b;line-height:1.5;overflow-wrap:anywhere}
+.pp-form-ai-review__choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pp-form-ai-review__choices span{border:1px solid #cbd5e1;padding:7px 13px;border-radius:999px;font-size:.85rem;line-height:1.5}
+.pp-fb-row__actions{display:flex;gap:3px;align-items:center}
+@media(max-width:700px){.pp-form-ai-composer__body{padding:16px}.pp-form-ai-composer__reference{grid-template-columns:1fr}.pp-fb-row__head{grid-template-columns:auto minmax(0,1fr)}.pp-fb-row__actions{grid-column:1/-1;justify-content:flex-end}.pp-form-create{flex-wrap:wrap}.pp-fb-control--wide{min-width:0}}
