@@ -11,7 +11,8 @@ namespace App\Services;
  */
 final class AssistantVisionImages
 {
-    public const MAX_IMAGES = 4;
+    /** ASST-CONV AC4: varias capturas + páginas de un PDF (antes 4). */
+    public const MAX_IMAGES = 8;
     public const MAX_DIMENSION = 1600;
     private const MAX_FILE_BYTES = 10485760;
     private const MAX_PIXELS = 25000000;

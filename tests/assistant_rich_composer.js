@@ -147,6 +147,38 @@ test('remote_import_results_are_indexed_without_trusting_unknown_ids', () => {
     assert.equal(indexed.size, 2);
 });
 
+test('attachments_are_split_into_images_pdfs_and_documents', () => {
+    const files = [
+        { type: 'image/png', size: 10, name: 'portada.png' },
+        { type: '', size: 10, name: 'captura.JPG' },
+        { type: 'application/pdf', size: 50, name: 'diseño.pdf' },
+        { type: '', size: 50, name: 'briefing.PDF' },
+        { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 20, name: 'textos.docx' },
+        { type: 'text/plain', size: 5, name: 'notas.txt' },
+        { type: 'image/svg+xml', size: 5, name: 'logo.svg' },
+        { type: 'application/x-msdownload', size: 5, name: 'virus.exe' },
+        { type: 'application/pdf', size: 500, name: 'enorme.pdf' }
+    ];
+    const result = Rich.classifyAttachments(files, { docExtensions: ['pdf', 'docx', 'txt'], maxDocBytes: 100 });
+    assert.deepEqual(result.images.map((file) => file.name), ['portada.png', 'captura.JPG']);
+    assert.deepEqual(result.pdfs.map((file) => file.name), ['diseño.pdf', 'briefing.PDF']);
+    assert.deepEqual(result.docs.map((file) => file.name), ['textos.docx', 'notas.txt']);
+    assert.deepEqual(result.rejected.map((entry) => [entry.file.name, entry.reason]), [
+        ['logo.svg', 'type'],
+        ['virus.exe', 'type'],
+        ['enorme.pdf', 'size']
+    ]);
+});
+
+test('image_files_without_mime_are_accepted_by_extension', () => {
+    const result = Rich.selectClipboardImages([
+        { type: '', size: 10, name: 'foto.webp' },
+        { type: '', size: 10, name: 'notas.txt' }
+    ], { maxImages: 4, maxImageBytes: 20 });
+    assert.deepEqual(result.accepted.map((file) => file.name), ['foto.webp']);
+    assert.equal(result.rejected.length, 0);
+});
+
 if (!process.exitCode) {
     process.stdout.write('ALL PASS (' + passed + ')\n');
 }

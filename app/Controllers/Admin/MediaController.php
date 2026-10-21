@@ -26,11 +26,12 @@ class MediaController
     public function index(): void
     {
         $siteId = self::requireSiteId();
+        ImageBankService::ensureSchema();
         $items  = Database::select(
             'SELECT m.*, u.username AS uploader
              FROM media m
              LEFT JOIN users u ON u.id = m.uploaded_by
-             WHERE m.site_id = ?
+             WHERE m.site_id = ? AND m.source <> \'' . MediaService::SOURCE_ASSISTANT . '\'
              ORDER BY m.id DESC',
             [$siteId]
         );
@@ -56,8 +57,9 @@ class MediaController
         $siteId = self::requireSiteId();
         $q = trim((string) Request::get('q', ''));
 
-        $where = 'WHERE m.site_id = ?';
-        $params = [$siteId];
+        // ASST-CONV AC2 — las referencias del Asistente no son de la biblioteca.
+        $where = 'WHERE m.site_id = ? AND m.source <> ?';
+        $params = [$siteId, MediaService::SOURCE_ASSISTANT];
         if ($q !== '') {
             $where .= ' AND (m.original_name LIKE ? OR m.alt_text LIKE ?)';
             $needle = '%' . $q . '%';
@@ -134,8 +136,9 @@ class MediaController
         }
 
         $alt = trim((string) Request::post('alt_text', ''));
+        $source = MediaService::sourceForPurpose((string) Request::post('purpose', ''));
         try {
-            $row = MediaService::store($file, $siteId, $userId, $alt !== '' ? $alt : null);
+            $row = MediaService::store($file, $siteId, $userId, $alt !== '' ? $alt : null, $source);
             // STUDIO-2 C4 — sin descripción, la foto se describe con IA tras
             // responder: es lo que permite priorizarla luego en generación/chat.
             if ($alt === '') {
@@ -191,7 +194,8 @@ class MediaController
         }
 
         @set_time_limit(180);
-        $results = (new RemoteImageImporter())->importBatch($candidates, $siteId, Auth::id());
+        $source = MediaService::sourceForPurpose((string) Request::post('purpose', ''));
+        $results = (new RemoteImageImporter())->importBatch($candidates, $siteId, Auth::id(), $source);
         $imported = count(array_filter($results, static fn (array $result): bool => ($result['ok'] ?? false) === true));
         Response::json([
             'ok' => true,

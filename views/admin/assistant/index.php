@@ -8,7 +8,8 @@
  */
 \Core\View::extend('admin/layout');
 $maxMb = round($maxSize / 1024 / 1024);
-$accept = '.' . implode(',.', $allowedExt);
+// ASST-CONV AC1 — el clip admite también imágenes (varias a la vez).
+$accept = '.' . implode(',.', $allowedExt) . ',.jpg,.jpeg,.png,.webp,.gif';
 ?>
 
 <?php \Core\View::start('title'); ?>Asistente<?php \Core\View::end(); ?>
@@ -27,11 +28,16 @@ window.PPA = {
     richMaxImageBytes: <?= (int) \App\Services\AssistantContentNormalizer::DEFAULT_MAX_IMAGE_BYTES ?>,
     mediaUploadUrl: <?= json_encode(base_url('admin/media')) ?>,
     remoteImportUrl: <?= json_encode(base_url('admin/media/import-remote')) ?>,
-    mediaLibraryUrl: <?= json_encode(base_url('admin/media/library')) ?>
+    mediaLibraryUrl: <?= json_encode(base_url('admin/media/library')) ?>,
+    // ASST-CONV AC3 — pdf.js vendorizado (versión fija; ver vendor/pdfjs/VERSION.txt).
+    pdfLibUrl: <?= json_encode(base_url('admin/assets/vendor/pdfjs/pdf.min.js') . '?v=6.4.299') ?>,
+    pdfWorkerUrl: <?= json_encode(base_url('admin/assets/vendor/pdfjs/pdf.worker.min.js') . '?v=6.4.299') ?>
 };
 </script>
 <?php $richJsPath = PP_ROOT . '/admin/assets/js/assistant-rich-composer.js'; $richJsVer = file_exists($richJsPath) ? filemtime($richJsPath) : PP_VERSION; ?>
+<?php $pdfJsPath = PP_ROOT . '/admin/assets/js/assistant-pdf-pages.js'; $pdfJsVer = file_exists($pdfJsPath) ? filemtime($pdfJsPath) : PP_VERSION; ?>
 <script src="<?= e(base_url('admin/assets/js/assistant-rich-composer.js')) ?>?v=<?= e($richJsVer) ?>"></script>
+<script src="<?= e(base_url('admin/assets/js/assistant-pdf-pages.js')) ?>?v=<?= e($pdfJsVer) ?>"></script>
 <script src="<?= e(base_url('admin/assets/js/assistant.js')) ?>?v=<?= e($jsVer) ?>"></script>
 <?php \Core\View::end(); ?>
 
@@ -68,15 +74,8 @@ window.PPA = {
         </div>
     </div>
 
-    <div class="ppa-composer">
-        <div class="ppa-attachment" id="ppa-attachment" hidden>
-            <span class="ppa-attachment__icon" aria-hidden="true">DOC</span>
-            <span class="ppa-attachment__name" id="ppa-attachment-name"></span>
-            <span class="ppa-attachment__meta" id="ppa-attachment-meta"></span>
-            <button type="button" class="ppa-attachment__toggle" id="ppa-attachment-toggle"><?= e(__('assistant.see_text')) ?></button>
-            <button type="button" class="ppa-attachment__remove" id="ppa-attachment-remove" title="<?= e(__('assistant.remove_doc')) ?>">&times;</button>
-        </div>
-        <pre class="ppa-attachment-preview" id="ppa-attachment-preview" hidden></pre>
+    <div class="ppa-composer" id="ppa-composer" data-drop-label="<?= e(__('assistant.drop_here')) ?>">
+        <div class="ppa-attachments" id="ppa-attachments" hidden></div>
 
         <div class="ppa-composer__tools" aria-label="<?= e(__('assistant.editor_tools')) ?>">
             <button type="button" class="ppa-composer__attach" id="ppa-attach-btn"
@@ -87,7 +86,10 @@ window.PPA = {
             <button type="button" class="ppa-composer__tool" id="ppa-paste-plain">
                 <?= e(__('assistant.paste_plain')) ?>
             </button>
-            <input type="file" id="ppa-file-input" accept="<?= e($accept) ?>" hidden>
+            <button type="button" class="ppa-composer__tool ppa-composer__tool--end" id="ppa-new-chat" hidden>
+                <?= e(__('assistant.new_conversation')) ?>
+            </button>
+            <input type="file" id="ppa-file-input" accept="<?= e($accept) ?>" multiple hidden>
         </div>
 
         <div class="ppa-composer__row">

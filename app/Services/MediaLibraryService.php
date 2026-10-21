@@ -38,7 +38,8 @@ final class MediaLibraryService
         $sql = "SELECT id, path, alt_text, original_name, width, height, source
                 FROM media
                 WHERE site_id = ? AND mime_type LIKE 'image/%'
-                  AND path NOT LIKE ?";
+                  AND path NOT LIKE ?
+                  AND source <> '" . MediaService::SOURCE_ASSISTANT . "'";
         if ($ownOnly) {
             $sql .= " AND source = 'upload'";
         }
@@ -181,6 +182,7 @@ final class MediaLibraryService
         $row = Database::selectOne(
             "SELECT COUNT(*) AS c FROM media
              WHERE site_id = ? AND mime_type LIKE 'image/%'
+               AND source <> '" . MediaService::SOURCE_ASSISTANT . "'
                AND (alt_text IS NULL OR alt_text = '')",
             [$siteId]
         );
@@ -198,6 +200,7 @@ final class MediaLibraryService
         $rows = Database::select(
             "SELECT id FROM media
              WHERE site_id = ? AND mime_type LIKE 'image/%'
+               AND source <> '" . MediaService::SOURCE_ASSISTANT . "'
                AND (alt_text IS NULL OR alt_text = '')
              ORDER BY id DESC LIMIT " . max(1, min(20, $limit)),
             [$siteId]

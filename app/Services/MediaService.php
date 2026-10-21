@@ -30,6 +30,52 @@ final class MediaService
     ];
 
     /**
+     * ASST-CONV AC2 — material que llega por el Asistente (capturas de otras
+     * webs, páginas de un PDF de diseño, fotos aún sin destino). No sale en
+     * Medios ni se ofrece al editor como foto del negocio hasta que un cambio
+     * aplicado la usa en una página (promoteAssistantMedia).
+     */
+    public const SOURCE_ASSISTANT = 'assistant_ref';
+
+    /** Origen con el que se guarda una subida según quién la pide. */
+    public static function sourceForPurpose(string $purpose): string
+    {
+        return $purpose === 'assistant' ? self::SOURCE_ASSISTANT : 'upload';
+    }
+
+    /**
+     * Pasa a la biblioteca las referencias del Asistente que ya forman parte
+     * de una página: su ruta aparece en el HTML/CSS guardado.
+     *
+     * @param int[] $mediaIds
+     * @return int cuántas se han promocionado
+     */
+    public static function promoteAssistantMedia(int $siteId, array $mediaIds, string $haystack): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $mediaIds), static fn (int $id): bool => $id > 0)));
+        if ($ids === [] || trim($haystack) === '') {
+            return 0;
+        }
+        $rows = Database::select(
+            'SELECT id, path FROM media WHERE site_id = ? AND source = ? AND id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')',
+            array_merge([$siteId, self::SOURCE_ASSISTANT], $ids)
+        );
+        $promoted = 0;
+        foreach ($rows as $row) {
+            $path = ltrim((string) $row['path'], '/');
+            if ($path === '' || !str_contains($haystack, $path)) {
+                continue;
+            }
+            Database::execute(
+                "UPDATE media SET source = 'upload' WHERE id = ? AND site_id = ? AND source = ?",
+                [(int) $row['id'], $siteId, self::SOURCE_ASSISTANT]
+            );
+            $promoted++;
+        }
+        return $promoted;
+    }
+
+    /**
      * Valida un $_FILES item. Devuelve null si OK, o string con el error.
      */
     public static function validate(?array $file): ?string
@@ -67,7 +113,7 @@ final class MediaService
      * @return array fila insertada (con id)
      * @throws \RuntimeException si algo del filesystem o BD falla
      */
-    public static function store(array $file, int $siteId, ?int $userId, ?string $altText = null): array
+    public static function store(array $file, int $siteId, ?int $userId, ?string $altText = null, string $source = 'upload'): array
     {
         $mime = self::detectMime($file);
         if ($mime === null) {
@@ -116,6 +162,12 @@ final class MediaService
         );
 
         $id = (int) Database::lastInsertId();
+        if ($source !== 'upload') {
+            // La columna `source` llega con la migración T18.4; en instalaciones
+            // que aún no la tengan, ensureSchema() la crea antes de marcarla.
+            ImageBankService::ensureSchema();
+            Database::execute('UPDATE media SET source = ? WHERE id = ?', [mb_substr($source, 0, 20), $id]);
+        }
         return Database::selectOne('SELECT * FROM media WHERE id = ?', [$id]) ?? [];
     }
 

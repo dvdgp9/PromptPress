@@ -38,7 +38,7 @@ final class SiteAssistantPlanner
      * }
      * @throws \App\Services\AI\AIException
      */
-    public static function plan(int $siteId, string $requestText, string $docText = '', ?array $sourceBundle = null): array
+    public static function plan(int $siteId, string $requestText, string $docText = '', ?array $sourceBundle = null, string $conversationBlock = ''): array
     {
         $pages = self::sitePages($siteId);
 
@@ -84,6 +84,8 @@ final class SiteAssistantPlanner
             'capability_map' => AssistantCapabilityRegistry::renderForPrompt($capabilities),
             'vision_context' => $visionContext,
             'document_block' => $docBlock,
+            // ASST-CONV AC7 — turnos anteriores y plan pendiente (vacío en el primero).
+            'conversation_block' => $conversationBlock,
         ];
         if ($visionStatus === 'used') {
             $runnerInput['_images'] = $preparedVision['images'];
@@ -92,6 +94,7 @@ final class SiteAssistantPlanner
 
         $data = (array) $result['data'];
         $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle);
+        $conversation = self::normalizeConversation($data, $sourceBundle ?? []);
         $runnerVision = (array) ($result['meta']['vision'] ?? []);
         if ($visionStatus === 'used' && (int) ($runnerVision['sent_images'] ?? 0) === 0) {
             $visionStatus = 'unavailable';
@@ -99,6 +102,9 @@ final class SiteAssistantPlanner
 
         return [
             'summary'        => trim((string) ($data['summary'] ?? '')),
+            'reply'          => $conversation['reply'],
+            'understanding'  => $conversation['understanding'],
+            'media_roles'    => $conversation['media_roles'],
             'items'          => $items,
             'model'          => (string) ($result['model'] ?? ''),
             'estimated_cost' => $result['estimated_cost'] ?? null,
@@ -113,6 +119,68 @@ final class SiteAssistantPlanner
                     : '',
             ],
         ];
+    }
+
+    /**
+     * ASST-CONV AC5 — la parte hablada del plan: qué responde el asistente, qué
+     * ha entendido de lo adjuntado y para qué sirve cada imagen. Toda imagen
+     * guardada recibe un rol; si el modelo no lo dice, es referencia (lo
+     * prudente: una referencia nunca se pega en la página).
+     *
+     * @param array<string,mixed> $data   salida del modelo
+     * @param array<string,mixed> $bundle material fuente normalizado
+     * @return array{reply:string,understanding:string[],media_roles:array<int,string>}
+     */
+    public static function normalizeConversation(array $data, array $bundle): array
+    {
+        $reply = trim((string) ($data['reply'] ?? ''));
+        if (mb_strlen($reply) > 1500) {
+            $reply = mb_substr($reply, 0, 1500);
+        }
+
+        $understanding = array_slice(self::normalizeStringList($data['understanding'] ?? []), 0, 6);
+
+        $stored = [];
+        foreach ((array) ($bundle['media'] ?? []) as $media) {
+            if (is_array($media) && ($media['status'] ?? '') === 'stored' && (int) ($media['media_id'] ?? 0) > 0) {
+                $stored[(int) $media['media_id']] = true;
+            }
+        }
+        $roles = [];
+        foreach (is_array($data['media_roles'] ?? null) ? $data['media_roles'] : [] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $mediaId = (int) ($entry['media_id'] ?? 0);
+            if (!isset($stored[$mediaId]) || isset($roles[$mediaId])) {
+                continue;
+            }
+            $roles[$mediaId] = ($entry['role'] ?? '') === 'asset' ? 'asset' : 'reference';
+        }
+        foreach (array_keys($stored) as $mediaId) {
+            $roles[$mediaId] ??= 'reference';
+        }
+
+        return ['reply' => $reply, 'understanding' => $understanding, 'media_roles' => $roles];
+    }
+
+    /**
+     * Escribe el rol de cada imagen en el material fuente: así viaja firmado en
+     * el token hasta quien aplica el cambio.
+     *
+     * @param array<string,mixed> $bundle
+     * @param array<int,string> $roles media_id => reference|asset
+     * @return array<string,mixed>
+     */
+    public static function applyMediaRoles(array $bundle, array $roles): array
+    {
+        foreach ((array) ($bundle['media'] ?? []) as $index => $media) {
+            $mediaId = is_array($media) ? (int) ($media['media_id'] ?? 0) : 0;
+            if ($mediaId > 0 && isset($roles[$mediaId])) {
+                $bundle['media'][$index]['role'] = $roles[$mediaId];
+            }
+        }
+        return $bundle;
     }
 
     /** @param array<string,mixed> $capability @param array<string,mixed> $prepared @param array<int,array<string,mixed>> $storedMedia */

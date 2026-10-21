@@ -56,14 +56,59 @@
         return { mime: match[1].toLowerCase(), bytes: bytes, base64: base64 };
     }
 
+    const IMAGE_EXTENSIONS = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
+
+    function fileExtension(file) {
+        const match = String((file && file.name) || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+        return match ? match[1] : '';
+    }
+
+    /** Algunos sistemas entregan archivos arrastrados sin MIME: se deduce de la extensión. */
+    function imageMime(file) {
+        const type = String((file && file.type) || '').toLowerCase();
+        if (type !== '') return type;
+        return IMAGE_EXTENSIONS[fileExtension(file)] || '';
+    }
+
+    /**
+     * ASST-CONV AC1 — reparte lo que llega por el clip o arrastrando: imágenes al
+     * composer, PDF a su propio camino (páginas + texto) y el resto de
+     * documentos a la extracción de texto. El servidor vuelve a validar todo.
+     */
+    function classifyAttachments(files, options) {
+        const docExtensions = (options && options.docExtensions) || ['pdf', 'docx', 'txt'];
+        const maxDocBytes = Math.max(1, Number(options && options.maxDocBytes) || Infinity);
+        const result = { images: [], pdfs: [], docs: [], rejected: [] };
+        Array.from(files || []).forEach((file) => {
+            const ext = fileExtension(file);
+            const mime = imageMime(file);
+            if (mime.startsWith('image/')) {
+                if (ALLOWED_IMAGE_MIMES.includes(mime)) result.images.push(file);
+                else result.rejected.push({ file: file, reason: 'type' });
+                return;
+            }
+            const isPdf = ext === 'pdf' || String(file.type || '').toLowerCase() === 'application/pdf';
+            if (!isPdf && !docExtensions.includes(ext)) {
+                result.rejected.push({ file: file, reason: 'type' });
+            } else if (Number(file.size || 0) > maxDocBytes) {
+                result.rejected.push({ file: file, reason: 'size' });
+            } else if (isPdf) {
+                result.pdfs.push(file);
+            } else {
+                result.docs.push(file);
+            }
+        });
+        return result;
+    }
+
     function selectClipboardImages(files, limits) {
         const accepted = [];
         const rejected = [];
         const maxImages = Math.max(0, Number(limits.maxImages) || 0);
         const maxImageBytes = Math.max(1, Number(limits.maxImageBytes) || 1);
         Array.from(files || []).forEach((file) => {
-            if (!String(file.type || '').startsWith('image/')) return;
-            if (!ALLOWED_IMAGE_MIMES.includes(String(file.type || '').toLowerCase())) {
+            if (!imageMime(file).startsWith('image/')) return;
+            if (!ALLOWED_IMAGE_MIMES.includes(imageMime(file))) {
                 rejected.push({ file: file, reason: 'mime' });
             } else if (Number(file.size || 0) > maxImageBytes) {
                 rejected.push({ file: file, reason: 'size' });
@@ -176,6 +221,9 @@
             this.csrf = options.csrf || '';
             this.uploadUrl = options.uploadUrl || '';
             this.remoteImportUrl = options.remoteImportUrl || '';
+            // ASST-CONV AC2 — lo que entra por el asistente se guarda como
+            // referencia: no aparece en Medios hasta que un cambio lo usa.
+            this.purpose = options.purpose || '';
             this.onChooseMedia = options.onChooseMedia || function () {};
             this.images = new Map();
             this.objectUrls = new Set();
@@ -241,6 +289,42 @@
             }
             this.sync();
             if (this.state().blockingImages > 0) this.refreshMediaStatus();
+        }
+
+        /**
+         * ASST-CONV AC1 — imágenes elegidas con el clip, soltadas sobre el
+         * composer o renderizadas desde un PDF. Se añaden al final, en orden,
+         * y se suben igual que las pegadas.
+         */
+        addFiles(files, label) {
+            const selected = selectClipboardImages(Array.from(files || []), {
+                maxImages: Math.max(0, this.maxImages - this.images.size),
+                maxImageBytes: this.maxImageBytes
+            });
+            const fragment = document.createDocumentFragment();
+            selected.accepted.forEach((file) => {
+                fragment.appendChild(this.createCapturedImage(file, label ? label(file) : ''));
+            });
+            if (selected.accepted.length > 0) {
+                this.editor.appendChild(fragment);
+                this.sync();
+            }
+            if (selected.rejected.length > 0) {
+                this.setStatus(this.t('js.as.some_images_rejected', { n: selected.rejected.length }), 'warning');
+            }
+            return { accepted: selected.accepted.length, rejected: selected.rejected.length };
+        }
+
+        /** Imágenes ya guardadas: [{mediaId, url, alt}] (miniaturas del plan). */
+        storedMedia() {
+            return Array.from(this.images.values())
+                .filter((image) => image && image.kind === 'stored')
+                .map((image) => ({ mediaId: image.mediaId, url: image.url, alt: image.alt || '' }));
+        }
+
+        /** Hueco que queda para imágenes en esta petición. */
+        remainingImages() {
+            return Math.max(0, this.maxImages - this.images.size);
         }
 
         sanitizeHtml(html, availableFiles) {
@@ -373,6 +457,7 @@
             const form = new FormData();
             form.append('_csrf', this.csrf);
             form.append('file', item.file);
+            if (this.purpose) form.append('purpose', this.purpose);
             if (item.alt && item.alt !== item.file.name && !/^imagen-pegada\./i.test(item.alt)) {
                 form.append('alt_text', item.alt);
             }
@@ -516,6 +601,7 @@
             const form = new FormData();
             form.append('_csrf', this.csrf);
             form.append('images', JSON.stringify(candidates));
+            if (this.purpose) form.append('purpose', this.purpose);
             try {
                 const response = await fetch(this.remoteImportUrl, {
                     method: 'POST',
@@ -725,6 +811,7 @@
         isEmojiOnlyAlt: isEmojiOnlyAlt,
         parseDataImage: parseDataImage,
         selectClipboardImages: selectClipboardImages,
+        classifyAttachments: classifyAttachments,
         plainTextToHtml: plainTextToHtml,
         normalizeMediaItem: normalizeMediaItem,
         summarizeImageStates: summarizeImageStates,

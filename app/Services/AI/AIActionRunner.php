@@ -28,6 +28,17 @@ use App\Services\SectionSchemas;
 final class AIActionRunner
 {
     /**
+     * ASST-CONV AC4 — cuántas imágenes se mandan como máximo en una acción.
+     * Por defecto 4 (lo probado con capturas de referencia); una acción puede
+     * pedir otro tope con `options.max_images`.
+     */
+    public static function visionImageLimit(string $action): int
+    {
+        $limit = (int) (Actions::get($action)['options']['max_images'] ?? 4);
+        return max(1, min(12, $limit));
+    }
+
+    /**
      * @param string              $action
      * @param array<string,mixed> $input
      * @param int                 $siteId
@@ -117,11 +128,13 @@ final class AIActionRunner
             $vision['requested_images'] = count($input['_images']);
             $vision['sent_images'] = 0;
             if ($vision['supports_vision']) {
-                $built['options']['images'] = array_slice($input['_images'], 0, 4);
+                $built['options']['images'] = array_slice($input['_images'], 0, self::visionImageLimit($action));
                 $vision['sent_images'] = count($built['options']['images']);
             }
             $built['meta']['vision'] = $vision;
         }
+        // `max_images` es configuración de la acción, no parámetro de la API.
+        unset($built['options']['max_images']);
 
         try {
             $responses = self::chatWithPlannerRetry(

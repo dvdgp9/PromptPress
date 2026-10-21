@@ -46,12 +46,12 @@ final class RemoteImageImporter
      * @param array<int,mixed> $raw
      * @return array<int,array{client_id:string,ok:bool,item?:array<string,mixed>,error?:string}>
      */
-    public function importBatch(array $raw, int $siteId, ?int $userId): array
+    public function importBatch(array $raw, int $siteId, ?int $userId, string $source = 'upload'): array
     {
         $results = [];
         foreach (self::normalizeCandidates($raw) as $candidate) {
             try {
-                $row = $this->importOne($candidate['url'], $candidate['alt'], $siteId, $userId);
+                $row = $this->importOne($candidate['url'], $candidate['alt'], $siteId, $userId, $source);
                 $path = '/' . ltrim((string) ($row['path'] ?? ''), '/');
                 $results[] = [
                     'client_id' => $candidate['client_id'],
@@ -81,7 +81,7 @@ final class RemoteImageImporter
         return $results;
     }
 
-    private function importOne(string $url, string $alt, int $siteId, ?int $userId): array
+    private function importOne(string $url, string $alt, int $siteId, ?int $userId, string $source = 'upload'): array
     {
         $download = $this->download($url);
         $tmp = $download['path'];
@@ -101,7 +101,7 @@ final class RemoteImageImporter
             $row = MediaService::storeFromBinary($absolute, $relative, $mime, $siteId, $userId, [
                 'original_name' => 'imagen-correo.' . $ext,
                 'alt_text' => $alt,
-                'source' => 'upload',
+                'source' => $source,
             ]);
             try {
                 self::ensureWebReadable($absolute);

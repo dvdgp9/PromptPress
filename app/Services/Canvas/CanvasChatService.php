@@ -49,6 +49,10 @@ final class CanvasChatService
         // asistente central) no los mandan y siguen funcionando igual.
         $history = is_array($context['history'] ?? null) ? $context['history'] : [];
         $elementPath = trim((string) ($context['element_path'] ?? ''));
+        // ASST-CONV AC6 — el asistente central manda aparte el material fuente
+        // confirmado y las imágenes de referencia del cambio.
+        $sourceContext = (string) ($context['source_context'] ?? '');
+        $referenceImages = is_array($context['reference_images'] ?? null) ? array_values($context['reference_images']) : [];
 
         $canvas = CanvasService::get($pageId);
         if ($canvas === null) {
@@ -91,6 +95,10 @@ final class CanvasChatService
         if ($crossPageReference !== null) {
             $effectiveInstruction .= CanvasCrossPageReference::promptBlock($crossPageReference);
         }
+        $effectiveInstruction .= $sourceContext;
+        if ($referenceImages !== []) {
+            $effectiveInstruction .= self::referenceDirective(count($referenceImages));
+        }
         // i18n-ignore-start: en este bloque no hay interfaz, solo carga que
         // viaja DENTRO del prompt a la IA. Traducirlo rompería la edición del
         // canvas en silencio.
@@ -131,9 +139,9 @@ final class CanvasChatService
 
         // i18n-ignore-end
         if ($sectionId !== '' && !$wantsNewSection) {
-            $result = self::applySectionEdit($siteId, $page, $canvas, $sectionId, $effectiveInstruction, $markTarget ? $elementPath : '');
+            $result = self::applySectionEdit($siteId, $page, $canvas, $sectionId, $effectiveInstruction, $markTarget ? $elementPath : '', $referenceImages);
         } else {
-            $result = self::applyPageEdit($siteId, $page, $canvas, $effectiveInstruction);
+            $result = self::applyPageEdit($siteId, $page, $canvas, $effectiveInstruction, $referenceImages);
         }
 
         // Por si el modelo no quitó la marca: nunca debe llegar a la página.
@@ -180,6 +188,21 @@ final class CanvasChatService
         ];
     }
 
+    /**
+     * ASST-CONV AC6 — cómo debe usar el editor las imágenes de referencia que
+     * se le adjuntan: modelo de composición, nunca contenido ni paleta.
+     */
+    public static function referenceDirective(int $count): string
+    {
+        // i18n-ignore-start: texto que viaja dentro del prompt, no interfaz.
+        return "\n\nREFERENCIA VISUAL ADJUNTA: se adjunta" . ($count === 1 ? ' 1 imagen' : 'n ' . $count . ' imágenes')
+            . " de la web o maqueta que el cliente toma como modelo para este cambio. Míralas e imita lo que muestran: composición y distribución (columnas, alineación, imagen a sangre o en tarjeta), jerarquía y tamaño de los titulares, aire y espaciado, ritmo de fondos claros y oscuros, forma de botones y tarjetas."
+            . " NO insertes estas imágenes en la página: son un modelo, no contenido."
+            . " NO copies sus textos, logos, nombres ni fotos: conserva el contenido actual salvo que la instrucción pida otro."
+            . " Colores y tipografías: SIEMPRE los tokens de marca del sitio (var(--pp-...)), aunque la referencia use otros.";
+        // i18n-ignore-end
+    }
+
     /** Etiqueta legible de una sección ("cta-final" → "Cta final"). */
     public static function sectionLabel(string $id): string
     {
@@ -192,7 +215,7 @@ final class CanvasChatService
     // ==================================================================
 
     /** @return array{html:string,css:string,reply:string} */
-    private static function applySectionEdit(int $siteId, array $page, array $canvas, string $sectionId, string $instruction, string $elementPath = ''): array
+    private static function applySectionEdit(int $siteId, array $page, array $canvas, string $sectionId, string $instruction, string $elementPath = '', array $referenceImages = []): array
     {
         $sectionHtml = CanvasService::extractSection($canvas['html'], $sectionId);
         if ($sectionHtml === null) {
@@ -212,7 +235,7 @@ final class CanvasChatService
             'language' => LanguageService::promptLabel(LanguageService::forPage($page, $siteId)),
             'available_images' => self::availableImages($siteId),
             'modules_hint' => CanvasService::modulesHint($siteId),
-        ], $siteId);
+        ] + self::visionInput($referenceImages), $siteId);
 
         // Cambio solo de estilo: el modelo deja "html" vacío y manda únicamente
         // css_append. Conservamos la sección original intacta (no reescribir el
@@ -239,7 +262,7 @@ final class CanvasChatService
     }
 
     /** @return array{html:string,css:string,reply:string} */
-    private static function applyPageEdit(int $siteId, array $page, array $canvas, string $instruction): array
+    private static function applyPageEdit(int $siteId, array $page, array $canvas, string $instruction, array $referenceImages = []): array
     {
         $data = self::runEdit(Actions::EDIT_CANVAS_PAGE, [
             'instruction' => $instruction,
@@ -252,7 +275,7 @@ final class CanvasChatService
             'language' => LanguageService::promptLabel(LanguageService::forPage($page, $siteId)),
             'available_images' => self::availableImages($siteId),
             'modules_hint' => CanvasService::modulesHint($siteId),
-        ], $siteId);
+        ] + self::visionInput($referenceImages), $siteId);
 
         // Cambio global solo de estilo: si el modelo deja "html" vacío, conservamos
         // el HTML actual de la página y aplicamos únicamente el CSS devuelto.
@@ -262,6 +285,18 @@ final class CanvasChatService
             'css' => trim((string) ($data['css'] ?? '')) !== '' ? (string) $data['css'] : $canvas['css'],
             'reply' => self::reply($data),
         ];
+    }
+
+    /**
+     * Imágenes para el runner (`_images`): solo se añade la clave si hay alguna,
+     * para que el chat del Studio siga mandando exactamente lo de siempre.
+     *
+     * @param array<int,array<string,mixed>> $images
+     * @return array<string,mixed>
+     */
+    private static function visionInput(array $images): array
+    {
+        return $images !== [] ? ['_images' => $images] : [];
     }
 
     private static function reply(array $data): string

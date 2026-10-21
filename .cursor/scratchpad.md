@@ -10373,3 +10373,355 @@ composición, el formulario quedó dentro de otra tarjeta (dos titulares).
   con `compose_only` + `persistCanvasComposition` para verla, y borrar por ids
   > máximo anotado antes (pages, page_versions, media, form_placements,
   ai_logs).
+
+---
+
+# [ASST-CONV] Asistente con conversación natural: varias imágenes, PDF de diseño, resumen y aprobar (21/10/2026, Planner)
+
+## Background and Motivation (ASST-CONV)
+
+Petición del usuario (21/10/2026): «Hay que mejorar el asistente de IA para que
+permita una conversación más natural. Que yo pueda mandarle por ejemplo varias
+imágenes, o un PDF que me mande un cliente con el diseño de la web que le gusta,
+el asistente lo entienda, me dé un resumen de los cambios y yo apruebe
+directamente.»
+
+Se trata del **Asistente central** (`/admin/assistant`, FEAT-5 + ASSISTANT-RICH),
+no del chat por página del Studio. El flujo de fondo ya existe y no se cambia:
+proponer plan → confirmar → aplicar como borrador. Lo que falla es la entrada
+(qué se le puede mandar) y la conversación (cada mensaje empieza de cero).
+
+## Key Challenges and Analysis (ASST-CONV)
+
+### Lo que ya existe (comprobado en código)
+
+- Pegar texto enriquecido con imágenes en el composer (`assistant-rich-composer.js`):
+  las imágenes se suben a Medios y se citan como `IMG-n`/`media_id`.
+- El planificador (`SiteAssistantPlanner::plan`) ya manda imágenes al modelo con
+  visión, con gate de capacidad (`AIProviderCapabilities`) y sin base64 en logs.
+- Plan con categorías (se aplicará / manual / falta info / desarrollo / sensible),
+  botón «Aplicar N cambios», jobs paso a paso y borradores por página.
+- Un «sí / vale / adelante» aplica el último plan.
+
+### Huecos reales frente a lo que pide el usuario
+
+1. **No se pueden adjuntar imágenes con el botón ni arrastrarlas.** El clip solo
+   acepta un PDF/DOCX/TXT. Las imágenes solo entran pegándolas (Cmd+V), y eso
+   no se descubre.
+2. **Un PDF de diseño se pierde.** `TextExtractor` lo convierte en texto plano:
+   un PDF con capturas de webs da poco texto o ninguno → error «documento
+   vacío». El modelo nunca ve el diseño.
+3. **La IA solo mira 4 imágenes** (tope fijo en `AIActionRunner`, línea ~120, y
+   `AssistantVisionImages::MAX_IMAGES`). «Varias imágenes» + páginas de un PDF
+   lo supera enseguida, y las sobrantes se descartan en silencio.
+4. **Quien aplica el cambio no ve la referencia.** El planificador ve las
+   imágenes, pero `SiteAssistantJobs::applyWithRetry` → `CanvasChatService::
+   applyInstruction` solo recibe texto (instrucción + ruta/alt del medio). Un
+   «haz la portada como en esta captura» se ejecuta a ciegas, desde la
+   descripción que escribió el planificador. Es la causa principal de que el
+   resultado no se parezca.
+5. **Las capturas de otras webs pueden acabar publicadas como fotos.** Todo lo
+   que se pega va a Medios como subida normal, y el editor Canvas elige fotos de
+   `MediaLibraryService::forAi()` (las más recientes primero). Una captura de la
+   web que le gusta al cliente es material de referencia, no una foto del
+   negocio. La columna `media.source` (VARCHAR 20) ya existe: se puede marcar
+   `assistant_ref` y excluirla de la biblioteca y de `forAi()` sin migración.
+   Si el plan decide usar una imagen como contenido real, se «promociona» a
+   subida normal al aplicar.
+6. **No hay conversación.** Cada mensaje que no sea un «sí» genera un plan nuevo
+   sin contexto: se pierden el plan anterior y los adjuntos. «Quita lo de
+   precios», «lo del hero hazlo también en Servicios» o «¿y los colores?» no
+   funcionan. Además el asistente responde con tarjetas, no con un resumen
+   hablado de lo que ha entendido.
+
+### Decisiones de diseño (propuesta del Planner)
+
+- **PDF → imágenes en el navegador con pdf.js**, no en el servidor. Producción
+  corre en hosting compartido con PHP 8.0 (yroa.es); no se puede contar con
+  Imagick/Ghostscript/pdftoppm. pdf.js renderiza cada página a JPEG en el
+  navegador y las sube por el mismo camino que una imagen pegada, así que
+  reutiliza validación, visión y referencias sin código nuevo en servidor. Se
+  vendoriza una versión fijada (sin CDN) en `admin/assets/vendor/pdfjs/`. El
+  texto del PDF se sigue extrayendo en servidor; un PDF sin texto deja de ser
+  error si trae páginas visuales. Tope: 8 páginas.
+  Alternativa descartada: mandar el PDF crudo al modelo (OpenRouter `file`):
+  depende del modelo, se pagaría en cada llamada y el ejecutor no lo vería.
+- **Memoria de conversación en el navegador (v1, sin tablas nuevas).** El JS
+  guarda los turnos, el plan vigente y el `source_token` firmado de los adjuntos
+  (TTL 2 h, `AssistantSourceEnvelope`). Cada mensaje nuevo manda historial
+  condensado + plan vigente + token; el servidor reabre el token (no acepta ids
+  de medios sueltos del cliente) y suma los adjuntos nuevos. El planificador
+  devuelve el plan COMPLETO actualizado. Al recargar la página se empieza de
+  cero (aceptable en v1; se puede persistir después).
+- **Respuesta en lenguaje natural antes de las tarjetas.** El JSON del plan gana
+  `reply` (2-4 frases: qué ha visto y qué propone) y `understanding` (puntos
+  sobre la referencia: estructura, estilo, tono, qué secciones cambian). Las
+  tarjetas siguen debajo y el botón de aprobar también.
+- **El ejecutor recibe las imágenes de referencia de su item** (máx. 3 por item,
+  ya reducidas a 1.600 px) como `_images` en `EDIT_CANVAS_SECTION/PAGE`, con
+  regla explícita: imitar composición, jerarquía, aire y tratamiento; no copiar
+  textos, logos ni la propia imagen.
+- **Tope de visión por acción**: el runner pasa de 4 fijo a una opción por
+  acción (`max_images`): 8 para el planificador, 3 para las ediciones.
+
+### Riesgos y cómo se cubren
+
+- Coste/latencia con 8 imágenes: con Gemini Flash el plan sigue en céntimos;
+  se medirá en el E2E y se anotará en Lessons.
+- Instrucciones dentro del PDF o las capturas («ignora…»): siguen siendo MATERIAL
+  FUENTE NO CONFIABLE, ya cubierto por el prompt actual. Se añade un test.
+- Proveedores sin visión (Anthropic hoy ignora imágenes): el gate actual ya lo
+  avisa en el plan; el ejecutor caerá a la descripción textual igual que hoy.
+- PHP 8.0: nada de 8.1+ (`tests/php80_compat.php`).
+- i18n: cadenas nuevas en `lang/admin/{es,en,fr,pt}.php`; los prompts no se
+  traducen.
+- Timeouts: ediciones con imágenes tardan más; se mantiene el reintento y se
+  revisa el timeout de `EDIT_CANVAS_SECTION` en el E2E.
+
+## High-level Task Breakdown (ASST-CONV)
+
+- **AC1 · Adjuntar varias imágenes con el clip y arrastrando.** El clip acepta
+  imágenes + PDF/DOCX/TXT, `multiple`; soltar archivos sobre el composer hace lo
+  mismo. Las imágenes entran como miniaturas por el camino de las pegadas.
+  Éxito: con el navegador, adjuntar 3 imágenes y soltar 2 más deja 5 miniaturas
+  subidas; un .exe se rechaza con mensaje; pegar sigue funcionando.
+- **AC2 · Las referencias no acaban en la web.** Lo subido desde el asistente se
+  guarda con `source='assistant_ref'`, fuera de Medios y de `forAi()`; al aplicar
+  un item que usa la imagen como contenido, se promociona a `upload`.
+  Éxito (test PHP): una imagen `assistant_ref` no sale en `forAi()` ni en la
+  biblioteca; tras promocionar, sí.
+- **AC3 · PDF de diseño → páginas como imagen.** pdf.js vendorizado; al adjuntar
+  un PDF se renderizan hasta 8 páginas y se suben como referencia, más el texto.
+  Chip: «PDF · N páginas + texto». Éxito: un PDF visual de prueba sin texto
+  produce N miniaturas y ya no da «documento vacío»; un PDF de texto sigue igual.
+- **AC4 · La IA mira hasta 8 imágenes y lo dice.** Tope por acción en el runner;
+  el aviso de visión indica cuántas vio. Éxito (test): 8 imágenes llegan al
+  provider en el planificador y 3 en ediciones; la 9.ª se avisa, no se calla.
+- **AC5 · Resumen hablado + «lo que he entendido».** `PLAN_SITE_CHANGES` añade
+  `reply`, `understanding` y el rol de cada medio (`reference|asset`); reglas
+  para referencias de diseño (un item por sección a rediseñar). UI: burbuja de
+  texto y lista breve encima de las tarjetas. Éxito: con IA real, 3 capturas de
+  una web → resumen comprensible + items por sección con sus `media_ids`.
+- **AC6 · El ejecutor ve la referencia.** `stepJob` carga las imágenes de
+  referencia del item y las pasa a `applyInstruction` → `_images`. Éxito: E2E
+  real, rediseñar el hero de una página de dev con una captura → borrador cuyo
+  hero cambia de composición; `ai_logs` muestra imágenes enviadas (sin base64).
+- **AC7 · Conversación con memoria.** Historial + plan vigente + token viajan en
+  cada mensaje; el plan se actualiza en vez de rehacerse. Éxito: E2E real
+  «quita el punto de precios» devuelve el mismo plan sin ese item; «hazlo
+  también en Servicios» añade el item; «sí» aplica.
+- **AC8 · (según decisión 3) Publicar desde el informe.** Botón «Publicar los
+  cambios» al terminar, sobre las páginas tocadas, respetando el bloqueo de
+  edición. Éxito: publica solo esas páginas y lo refleja en el informe.
+- **AC9 · QA final.** Suite de tests, `php80_compat`, i18n lint, E2E completo
+  (3 imágenes + PDF → resumen → ajustar hablando → aprobar → borradores) y
+  limpieza del entorno de dev.
+
+## Project Status Board (ASST-CONV)
+
+- [x] AC1 Adjuntar varias imágenes (clip + arrastrar)
+- [x] AC2 Referencias fuera de la biblioteca (`assistant_ref`)
+- [x] AC3 PDF de diseño → páginas como imagen (pdf.js)
+- [x] AC4 Visión hasta 8 imágenes, tope por acción
+- [x] AC5 Resumen hablado + «lo que he entendido»
+- [x] AC6 El ejecutor ve la referencia al aplicar
+- [x] AC7 Conversación con memoria
+- [x] AC8 Publicar desde el informe (según decisión)
+- [x] AC9 QA final
+
+## Decisiones pendientes del usuario (ASST-CONV)
+
+1. Colores y tipografías de la referencia: ¿se respeta la marca del sitio (como
+   en el onboarding) o se adoptan los del diseño del cliente?
+2. ¿La conversación basta con que dure mientras la pestaña está abierta, o hay
+   que guardarla?
+3. «Apruebe directamente»: ¿aprobar = aplicar como borrador (hoy), o también
+   publicar con un clic al final?
+
+## Decisiones cerradas (usuario, 21/10/2026) (ASST-CONV)
+
+1. De la referencia se copia estructura, composición y estilo de secciones; los
+   colores y tipografías siguen siendo los de la marca. Un cambio de colores
+   pedido expresamente va como punto aparte del plan.
+2. La conversación vive mientras la pestaña está abierta (sin tablas nuevas).
+3. Aprobar = aplicar como borrador; al terminar, «Publicar los cambios» con un
+   clic sobre las páginas tocadas (AC8 entra).
+
+## Current Status / Progress Tracking (ASST-CONV)
+
+**AC1 + AC2 (21/10/2026, Executor): hechas y verificadas.**
+- Composer: `classifyAttachments()` (imágenes / PDF / documentos / rechazados,
+  MIME o extensión) y `Composer.addFiles()`; `selectClipboardImages` acepta
+  imágenes sin MIME por extensión. `assistant.js`: varios documentos a la vez
+  (`attachedDocs`, un chip por documento), clip `multiple` con imágenes, zona de
+  arrastre sobre `#ppa-composer` (intercepta también la caída sobre el editor).
+- `MediaService::SOURCE_ASSISTANT='assistant_ref'`, `sourceForPurpose()`,
+  `store(..., $source)`, `promoteAssistantMedia()`; el composer manda
+  `purpose=assistant` en subida e importación remota. Fuera de: Medios (index y
+  library), `MediaLibraryService::images/countMissingAlt/idsMissingAlt`,
+  contador del escritorio y del registro de capacidades. `stepJob` promociona a
+  `upload` las del item cuya ruta acaba en el HTML/CSS de la página.
+- `/admin/assistant/extract` devuelve `code=empty_doc` (lo usará AC3).
+- Tests: `tests/assistant_rich_composer.js` 14/14 (2 nuevos);
+  `tests/assistant_reference_media.php` 9/9 (nuevo, visto fallar antes);
+  media_references, remote_image_import, vision_images en verde; admin_i18n
+  verde; i18n_lint 50 → 50.
+- Navegador (8788): soltar 2 PNG + TXT + EXE → 2 miniaturas `stored`, chip del
+  TXT con 62 caracteres, EXE rechazado con mensaje, overlay de arrastre visible
+  y retirado. Las 2 imágenes (media 879, 880) no salen en `/admin/media/library`.
+- Limpieza pendiente al final del QA: media ≥ 879 `assistant_ref` de pruebas.
+  Bases: pages 4475, page_versions 3862, ai_logs 1582, assistant_jobs 2.
+
+**AC3 (21/10/2026, Executor): hecha y verificada.**
+- pdf.js **6.4.299** (build legacy) vendorizado en `admin/assets/vendor/pdfjs/`
+  como `pdf.min.js` + `pdf.worker.min.js` (+ LICENSE, VERSION.txt). Sin
+  standard_fonts/cmaps/wasm (2,8 MB más; los PDF de diseño traen sus fuentes).
+- `admin/assets/js/assistant-pdf-pages.js`: `pageRenderPlan()` (ancho 1280,
+  trozos 2:3 en páginas largas, tope de lienzo 12.000 px), `tileBudget()`
+  (reparte el cupo de imágenes entre páginas, máx. 4 trozos), `pageFileName()`,
+  `renderPdf()` (sin eval ni XFA, `intent:'print'`, fondo blanco para JPEG).
+- `assistant.js`: `attachPdf()`/`processPdf()` en cola (cada PDF sabe cuánto
+  cupo queda), texto en servidor + páginas en paralelo; sin texto pero con
+  páginas = listo; alt «Página N de X (parte i de n, de arriba abajo)».
+- Tests: `tests/assistant_pdf_pages.js` 8/8 (nuevo, visto fallar antes).
+- Navegador: PDF solo-imagen de 2 páginas (una de 1440×5200) → 4 imágenes en
+  582 ms (3 trozos 1280×1540 + 1280×800, 14-41 KB) y chip «2 páginas como
+  imagen» sin error; PDF de texto → 145 caracteres + 1 página. Fixtures en
+  `storage/cache/qa-asst/` (borrar al final).
+
+**AC4 (21/10/2026, Executor): hecha.** `AIActionRunner::visionImageLimit()` lee
+`options.max_images` de la acción (por defecto 4): PLAN_SITE_CHANGES 8 (timeout
+90→120 s), EDIT_CANVAS_SECTION/PAGE 3. `max_images` se quita de las options antes
+de llamar al provider. `AssistantVisionImages::MAX_IMAGES` 4→8.
+`tests/assistant_vision_limits.php` 6/6 (nuevo, visto fallar antes);
+vision_images, multimodal_planner, truncated_response, section_planning,
+capabilities y edit_envelope en verde.
+
+**AC5 (21/10/2026, Executor): hecha y verificada con IA real.**
+- `PLAN_SITE_CHANGES` devuelve además `reply` (2-4 frases, conversación),
+  `understanding` (2-6 frases) y `media_roles` (`reference|asset`); reglas
+  «REFERENCIAS DE DISEÑO» (un item por sección, qué imitar, media_ids ≤3) y marca
+  por delante (colores y tipografías del sitio; adoptar los de la referencia
+  solo si se pide, como item `design.manage`).
+- `SiteAssistantPlanner::normalizeConversation()` (reply ≤1500, understanding ≤6
+  sin duplicados, rol por defecto `reference`) y `applyMediaRoles()`; el
+  controlador escribe los roles en el material antes de firmar el token
+  (`AssistantSourceEnvelope` conserva `role`). `buildSourceContext()`: una
+  referencia sale como «REFERENCIA VISUAL… no la insertes» y SIN ruta.
+- UI: la respuesta hablada encabeza la burbuja, «Lo que he entendido», en cada
+  tarjeta las miniaturas «Según:»/«Usará:», el aviso de visión al pie y sin
+  «Siguiente paso» en lo aplicable.
+- `tests/assistant_design_reference.php` 13/13 (nuevo, visto fallar antes).
+- E2E real (gemini-3.7-flash, 13 s, $0,0071): PDF de diseño + «quiere que Inicio
+  se parezca» → respuesta natural, 6 puntos entendidos, 4 cambios aplicables
+  (hero, services, presentation, quote) con su imagen y el footer como manual
+  (/admin/chrome). Las 4 imágenes, `reference`. ai_logs sin base64 (15 KB).
+
+**AC6 (21/10/2026, Executor): hecha y verificada con IA real.**
+- `SiteAssistantJobs::referenceImagesFor()` (solo media del item con rol
+  `reference`, máx. 3, preparadas con `AssistantVisionImages`).
+  `applyWithRetry` manda la instrucción LIMPIA y, por contexto,
+  `source_context` + `reference_images` (así una descripción con «imagen» ya
+  no dispara la búsqueda de fotos).
+- `CanvasChatService::applyInstruction` añade el material y
+  `referenceDirective()` (imitar composición; NO insertar ni copiar; tokens de
+  marca) y pasa `_images` a EDIT_CANVAS_SECTION/PAGE (`visionInput()`: el chat
+  del Studio no cambia).
+- `tests/assistant_reference_execution.php` 8/8 (nuevo, visto fallar antes);
+  canvas_runtime 49/49, envelope, image_requests, source_context,
+  cross_page_reference, source_envelope, content_normalizer en verde.
+- E2E real: «Aplicar 4 cambios» sobre Inicio (135) → 4/4 hechos en 56 s
+  ($0,027): cada `edit_canvas_section` con sent_images=1 y la directiva, sin
+  base64 en ai_logs; versiones 3953-3956 origin=assistant, publicada intacta
+  (316); las referencias 890-893 siguen `assistant_ref` y fuera de la página;
+  colores solo por tokens. Copia previa de Inicio en el scratchpad de la sesión
+  (`backup-page135.json`) para restaurar al final.
+
+**AC7 (21/10/2026, Executor): hecha y verificada con IA real.**
+- Nuevo `app/Services/AssistantConversation.php`: `parseHistory()` (10 turnos ×
+  1.500 car., solo user/assistant), `parseCurrentPlan()` (20 items tipados),
+  `renderForPrompt()` («CONVERSACIÓN PREVIA» + «PLAN VIGENTE»; vacío en el
+  primer mensaje) y `mergeBundles()` (lo anterior conserva B#/IMG-#, lo nuevo
+  se numera después, imagen repetida reutiliza su ref, tope 8 imágenes y 60.000
+  car. descartando lo más antiguo: el mensaje nuevo siempre entra).
+- `/admin/assistant/plan` recibe `history`, `current_plan` y el `source_token`
+  anterior (si caducó, sigue sin material y lo registra); en conversación la
+  petición es el último mensaje. `PLAN_SITE_CHANGES` con `{conversation_block}` y
+  regla «CONVERSACIÓN» (plan COMPLETO actualizado, conservar literal lo que no
+  cambia, preguntas → reply sin tocar items, no repetir lo aplicado). `reply`
+  sin ids técnicos.
+- JS: estado `conversation` (turnos, plan vigente, token, miniaturas
+  acumuladas), turno «Cambios aplicados…» tras un job, plan anterior marcado
+  «Sustituido por la propuesta nueva», botón aplicado → «Aplicado», botón
+  «Nueva conversación».
+- `tests/assistant_conversation.php` 23/23 (nuevo, visto fallar antes).
+- E2E real en Servicios (136), ~6-10 s por turno, ~$0,006: (1) PDF + «que se
+  parezca» → 3 cambios; (2) «quita lo de la presentación y portada oscura» → 2
+  cambios, servicios conservado literal, plan anterior sustituido; (3) «¿qué
+  colores?» → explica marca propia y ofrece ajuste global aparte, items
+  iguales; (4) «Sí» → 2/2 aplicados (token del material fusionado válido),
+  versiones 3957-3958; (5) «ahora las FAQ» → 1 cambio nuevo, sin repetir lo
+  aplicado y con 3 miniaturas del PDF. «Nueva conversación» deja solo el saludo.
+
+**AC8 (21/10/2026, Executor): hecha y verificada.**
+- `SiteAssistantJobs::publishDecision()` (pura) + `publishJob()`; endpoint
+  `POST /admin/assistant/jobs/{id}/publish`. Publica solo páginas del trabajo
+  que ya estaban publicadas, que nadie más edita (lock de otra persona) y cuya
+  versión actual es del asistente posterior al trabajo; si no, explica por qué
+  (borrador / la edita X / cambió después / ya estaba así). `markPublished` +
+  `published_at` + `CacheService::flush`, igual que «Publicar cambios» del Studio.
+- UI: «Publicar los cambios» bajo el informe; resultado por página, nota
+  «Publicado: tus visitantes ya ven…», turno en la conversación. Saludo nuevo
+  que menciona imágenes y PDF (4 idiomas).
+- `tests/assistant_publish.php` 8/8 (nuevo, visto fallar antes).
+- E2E: trabajo de Servicios (borrador) → «sin publicar, la página sigue en
+  borrador»; flujo completo en Inicio: «cambia el botón por Empieza hoy» → plan
+  de 1 cambio → «vale» → 1/1 → «Publicar los cambios» → «Inicio: publicada»,
+  published_version_id=current (3959) y la home pública muestra «Empieza hoy».
+
+**AC9 (21/10/2026, Executor): QA final hecha.**
+- Batería completa: 150/151 (PHP + JS). La única «roja» es
+  `tests/update_from_zip.php`, que se niega a correr fuera de PP_ENV=development
+  (salvaguarda: despliega archivos sobre la instalación); no se forzó.
+  Repetidos aislados tras la limpieza: los 13 tests del Asistente/Canvas y
+  `php80_compat` en verde; i18n_lint 50 (igual que al empezar); móvil 375 px sin
+  desbordes.
+- Coste IA de toda la QA: $0,078 (15 llamadas del Asistente) + $0,055 (6 de los
+  scripts de QA de la batería).
+- Limpieza: 19 imágenes `assistant_ref` de prueba (filas y archivos), fixtures de
+  `storage/cache/qa-asst/`, páginas 4554/4566 creadas por `canvas_generate` y
+  `dmb2_reference_regen`, versiones 3953-3959, trabajos 65-67, ai_logs
+  1581-1601; Inicio (135) y Servicios (136) restaurados desde copia (html, css,
+  versión actual y publicada; la home pública vuelve a su texto). Único rastro:
+  `pages.published_at` de Inicio quedó en 2026-10-21 10:08:55 (no se había
+  copiado el valor anterior). Servidor 8788 parado.
+
+## Executor's Feedback or Assistance Requests (ASST-CONV)
+
+- Nada commiteado ni publicado como versión. Para que llegue a las
+  instalaciones: commit + subir `PP_VERSION` + push a `main` (eso publica la
+  release para todos). Pendiente de la decisión del usuario.
+- Posibles siguientes pasos (no hechos): el chat del Studio por página aún no
+  admite adjuntar imágenes/PDF; la conversación se pierde al recargar
+  (decisión v1); pdf.js va sin `standard_fonts`/`cmaps` (PDF sin fuentes
+  incrustadas o en CJK se verían con fuentes del sistema).
+
+## Lessons (ASST-CONV)
+
+- pdf.js `page.render()` con el intent por defecto ('display') avanza con
+  `requestAnimationFrame`: con la pestaña oculta (o en el panel del navegador
+  de pruebas, rAF = 0 fps) se queda colgado sin error. Para sacar imágenes usar
+  `intent: 'print'`.
+- pdf.js 6: `PDFDocumentProxy` ya no tiene `destroy()`; se destruye la tarea de
+  carga (`getDocument(...)`, `task.destroy()`).
+- Los módulos ES exigen MIME JavaScript y el .htaccess manda `nosniff`: servir
+  pdf.js como `.js`, no `.mjs` (hay hostings que dan `.mjs` como octet-stream).
+- El marcador `i18n-ignore` del lint vale en la propia línea o en el comentario
+  pegado ENCIMA de la línea que marca: en un ternario hay que ponerlo justo
+  antes de la rama con el texto, no antes de `$x = …`.
+- La batería completa (`tests/*.php`) incluye scripts de QA con IA real que
+  dejan datos: `canvas_generate.php` crea una página canvas y no la borra.
+  Tras correrla, mirar pages/page_versions/media/ai_logs por encima de la base.
+- No hacer `git stash` con la batería corriendo en segundo plano: los tests de
+  ese instante leen el árbol a medias. Si alguno falla, repetirlo aislado.
+

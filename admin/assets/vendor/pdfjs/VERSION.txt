@@ -1,0 +1,4 @@
+pdfjs-dist 6.4.299 (legacy build) — https://github.com/mozilla/pdf.js
+Copiado sin cambios desde legacy/build/*.min.mjs con extensión .js para que
+cualquier hosting lo sirva como JavaScript (los módulos exigen ese MIME).
+Uso: admin/assets/js/assistant-pdf-pages.js (ASST-CONV AC3).

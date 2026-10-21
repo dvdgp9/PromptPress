@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Services\AI\AIException;
 use App\Services\Canvas\CanvasChatService;
+use App\Services\Canvas\CanvasService;
 use Core\Database;
 
 /**
@@ -192,7 +193,7 @@ final class SiteAssistantJobs
             [$jobId, $siteId]
         );
         if (!$job) {
-            return ['ok' => false, 'error' => 'Trabajo no encontrado.'];
+            return ['ok' => false, 'error' => __('asst.err.job_not_found')];
         }
         if ($job['status'] === 'done') {
             return ['ok' => true, 'job' => self::jobState($jobId, $siteId)];
@@ -227,6 +228,7 @@ final class SiteAssistantJobs
                     'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
                     [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
                 );
+                self::promoteUsedMedia($siteId, (int) $page['id'], $item);
             } else {
                 Database::execute(
                     'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
@@ -272,15 +274,23 @@ final class SiteAssistantJobs
      */
     private static function applyWithRetry(int $siteId, array $page, array $item, array $job): array
     {
-        $instruction = (string) $item['instruction'] . self::buildSourceContext($job, $item, $siteId);
+        // ASST-CONV AC6 — el material fuente y la referencia visual viajan aparte
+        // de la instrucción: así lo que diga una descripción («captura con una
+        // imagen de fondo») no se toma como si el usuario pidiera fotos.
+        $context = [
+            'source_context' => self::buildSourceContext($job, $item, $siteId),
+            'reference_images' => self::referenceImagesFor($job, $item, $siteId),
+        ];
         $attempt = static fn (): array => CanvasChatService::applyInstruction(
             $siteId,
             $page,
-            $instruction,
+            (string) $item['instruction'],
             (string) $item['section'],
             '',
             'assistant',
-            'Asistente'
+            'Asistente',
+            '',
+            $context
         );
 
         try {
@@ -294,6 +304,74 @@ final class SiteAssistantJobs
             error_log('[assistant job] retry item page=' . $page['id'] . ' tras fallo transitorio (status=' . $status . '): ' . $e->getMessage());
             sleep(2);
             return $attempt();
+        }
+    }
+
+    /**
+     * ASST-CONV AC6 — imágenes de referencia de un item, listas para visión:
+     * solo las que el plan le asignó y con rol `reference` (las fotos para
+     * publicar van por ruta en el material fuente). Máximo 3 por cambio.
+     *
+     * @param array<string,mixed> $job
+     * @param array<string,mixed> $item
+     * @return array<int,array<string,mixed>>
+     */
+    public static function referenceImagesFor(array $job, array $item, int $siteId): array
+    {
+        $rawBundle = json_decode((string) ($job['source_bundle_json'] ?? ''), true);
+        if (!is_array($rawBundle)) {
+            return [];
+        }
+        $wanted = array_fill_keys(array_map('intval', self::jsonArray((string) ($item['media_ids_json'] ?? ''))), true);
+        if ($wanted === []) {
+            return [];
+        }
+        $bundle = AssistantMediaReferences::resolve(AssistantSourceEnvelope::sanitizeBundle($rawBundle), $siteId);
+        $references = [];
+        foreach ((array) ($bundle['media'] ?? []) as $media) {
+            if (isset($wanted[(int) ($media['media_id'] ?? 0)]) && ($media['role'] ?? '') === 'reference') {
+                $references[] = $media;
+            }
+            if (count($references) >= 3) {
+                break;
+            }
+        }
+        if ($references === []) {
+            return [];
+        }
+        try {
+            return AssistantVisionImages::prepare(['media' => $references], $siteId)['images'];
+        } catch (\Throwable $e) {
+            // Sin la imagen el cambio aún puede hacerse con la descripción escrita.
+            error_log('[assistant job] reference images unavailable: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * ASST-CONV AC2 — una imagen adjunta al Asistente que el cambio ha puesto
+     * en la página deja de ser referencia y pasa a Medios. Las que solo
+     * sirvieron de modelo siguen ocultas.
+     *
+     * @param array<string,mixed> $item
+     */
+    private static function promoteUsedMedia(int $siteId, int $pageId, array $item): void
+    {
+        $mediaIds = array_map('intval', self::jsonArray((string) ($item['media_ids_json'] ?? '')));
+        if ($mediaIds === []) {
+            return;
+        }
+        try {
+            $canvas = CanvasService::get($pageId);
+            if ($canvas !== null) {
+                MediaService::promoteAssistantMedia(
+                    $siteId,
+                    $mediaIds,
+                    (string) ($canvas['html'] ?? '') . "\n" . (string) ($canvas['css'] ?? '')
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[assistant job] promote media page=' . $pageId . ': ' . $e->getMessage());
         }
     }
 
@@ -323,7 +401,12 @@ final class SiteAssistantJobs
             $mediaId = (int) ($media['media_id'] ?? 0);
             if (!isset($mediaSet[$mediaId]) || ($media['status'] ?? '') !== 'stored') continue;
             $mediaByRef[(string) $media['ref']] = $media;
-            $line = '- media_id=' . $mediaId . ' path=' . (string) $media['source'];
+            // ASST-CONV AC5 — una referencia es un modelo visual (la imagen se
+            // adjunta a la llamada): sin ruta, para que no acabe pegada en la web.
+            $line = ($media['role'] ?? '') === 'reference'
+                // i18n-ignore: línea del material que viaja dentro del prompt.
+                ? '- media_id=' . $mediaId . ' REFERENCIA VISUAL: imita lo que muestra, no la insertes en la página'
+                : '- media_id=' . $mediaId . ' path=' . (string) $media['source'];
             if (trim((string) ($media['alt'] ?? '')) !== '') $line .= ' alt=' . json_encode($media['alt'], JSON_UNESCAPED_UNICODE);
             $mediaLines[] = $line;
         }
@@ -340,7 +423,10 @@ final class SiteAssistantJobs
                 $ref = (string) ($block['media_ref'] ?? '');
                 $meta .= ' ref=' . $ref;
                 if (isset($mediaByRef[$ref])) {
-                    $meta .= ' media_id=' . (int) $mediaByRef[$ref]['media_id'] . ' path=' . (string) $mediaByRef[$ref]['source'];
+                    $meta .= ' media_id=' . (int) $mediaByRef[$ref]['media_id']
+                        . (($mediaByRef[$ref]['role'] ?? '') === 'reference'
+                            ? ' REFERENCIA VISUAL'
+                            : ' path=' . (string) $mediaByRef[$ref]['source']);
                 }
             }
             $blockLines[] = '[' . (string) $block['id'] . ' ' . $meta . '] ' . (string) ($block['text'] ?? '');
@@ -411,6 +497,105 @@ final class SiteAssistantJobs
      *
      * @return array<string,mixed>|null
      */
+    /**
+     * ASST-CONV AC8 — ¿se puede publicar esta página desde el informe?
+     * Solo si ya estaba publicada (publicar un borrador es sacar la página
+     * entera al público: eso se decide en su editor), nadie más la está
+     * editando y lo último que cambió fue el asistente en este trabajo.
+     *
+     * @param array<string,mixed> $page    fila de pages (status)
+     * @param array<string,mixed>|null $current current/published_version_id + origin/created_at de la versión actual
+     * @param array<string,mixed> $lock    EditLock::status()
+     * @return array{publish:bool,reason:string,username:string}
+     */
+    public static function publishDecision(array $page, ?array $current, array $lock, int $userId, string $jobCreatedAt): array
+    {
+        $no = static fn (string $reason, string $username = ''): array => ['publish' => false, 'reason' => $reason, 'username' => $username];
+        if (($page['status'] ?? '') !== 'published') {
+            return $no('draft');
+        }
+        if (!empty($lock['held']) && (int) ($lock['user_id'] ?? 0) !== $userId) {
+            return $no('locked', (string) ($lock['username'] ?? ''));
+        }
+        if ($current === null
+            || ($current['origin'] ?? '') !== 'assistant'
+            || strcmp((string) ($current['created_at'] ?? ''), $jobCreatedAt) < 0) {
+            return $no('changed');
+        }
+        if ((int) ($current['published_version_id'] ?? 0) === (int) ($current['current_version_id'] ?? -1)) {
+            return $no('already');
+        }
+        return ['publish' => true, 'reason' => '', 'username' => ''];
+    }
+
+    /**
+     * Publica las páginas que un trabajo terminado dejó en borrador, con las
+     * cautelas de publishDecision(). Devuelve qué pasó con cada una.
+     *
+     * @return array{ok:bool,error?:string,pages?:array<int,array<string,mixed>>}
+     */
+    public static function publishJob(int $jobId, int $siteId, int $userId): array
+    {
+        $job = Database::selectOne(
+            'SELECT id, status, created_at FROM assistant_jobs WHERE id = ? AND site_id = ? LIMIT 1',
+            [$jobId, $siteId]
+        );
+        if (!$job) {
+            return ['ok' => false, 'error' => __('asst.err.job_not_found')];
+        }
+        if ($job['status'] !== 'done') {
+            return ['ok' => false, 'error' => __('asst.publish.not_done')];
+        }
+        $pageIds = array_map('intval', array_column(Database::select(
+            'SELECT DISTINCT page_id FROM assistant_job_items WHERE job_id = ? AND status = "done" ORDER BY page_id',
+            [$jobId]
+        ), 'page_id'));
+
+        $results = [];
+        $published = false;
+        foreach ($pageIds as $pageId) {
+            $page = Database::selectOne(
+                "SELECT id, title, status FROM pages WHERE id = ? AND site_id = ? AND render_mode = 'canvas' LIMIT 1",
+                [$pageId, $siteId]
+            );
+            if ($page === null) {
+                continue;
+            }
+            $current = Database::selectOne(
+                'SELECT pc.current_version_id, pc.published_version_id, v.origin, v.created_at
+                 FROM page_canvas pc
+                 LEFT JOIN page_versions v ON v.id = pc.current_version_id
+                 WHERE pc.page_id = ?',
+                [$pageId]
+            );
+            $decision = self::publishDecision(
+                $page,
+                $current,
+                EditLock::status(EditLock::ENTITY_PAGE, $pageId),
+                $userId,
+                (string) $job['created_at']
+            );
+            if ($decision['publish']) {
+                Database::execute(
+                    'UPDATE pages SET published_at = ?, updated_at = NOW() WHERE id = ?',
+                    [date('Y-m-d H:i:s'), $pageId]
+                );
+                CanvasService::markPublished($pageId);
+                $published = true;
+            }
+            $results[] = [
+                'page_id' => $pageId,
+                'title' => (string) $page['title'],
+                'published' => $decision['publish'],
+                'reason' => $decision['publish'] ? '' : __('asst.publish.' . $decision['reason'], ['nombre' => $decision['username']]),
+            ];
+        }
+        if ($published) {
+            CacheService::flush($siteId);
+        }
+        return ['ok' => true, 'pages' => $results];
+    }
+
     public static function jobState(int $jobId, int $siteId): ?array
     {
         $job = Database::selectOne(

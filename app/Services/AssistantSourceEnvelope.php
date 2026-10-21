@@ -153,6 +153,8 @@ final class AssistantSourceEnvelope
             ];
             $mediaId = (int) ($raw['media_id'] ?? 0);
             if ($mediaId > 0) $entry['media_id'] = $mediaId;
+            // ASST-CONV AC5 — referencia (modelo visual) o foto para publicar.
+            if (in_array($raw['role'] ?? '', ['reference', 'asset'], true)) $entry['role'] = (string) $raw['role'];
             $media[] = $entry;
             $seenRefs[$ref] = true;
         }

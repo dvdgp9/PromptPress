@@ -165,6 +165,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/assistant/plan',     [AssistantController::class, 'plan']);
     $r->post('/assistant/apply',    [AssistantController::class, 'apply']);
     $r->post('/assistant/jobs/{id}/step', [AssistantController::class, 'step']);
+    $r->post('/assistant/jobs/{id}/publish', [AssistantController::class, 'publish']);
 
     // Páginas (CRUD)
     $r->get('/pages',                [PageController::class, 'index']);

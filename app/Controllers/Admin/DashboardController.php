@@ -72,7 +72,8 @@ class DashboardController
             $defaults['countDrafts']    = (int) ($row['drafts']    ?? 0);
 
             $defaults['countMedia']     = (int) (Database::selectOne(
-                'SELECT COUNT(*) AS n FROM media WHERE site_id = ?', [$siteId]
+                'SELECT COUNT(*) AS n FROM media WHERE site_id = ? AND source <> ?',
+                [$siteId, \App\Services\MediaService::SOURCE_ASSISTANT]
             )['n'] ?? 0);
 
             $defaults['countDocuments'] = (int) (Database::selectOne(

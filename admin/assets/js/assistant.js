@@ -17,19 +17,19 @@
     const sendBtn = document.getElementById('ppa-send');
     const attachBtn = document.getElementById('ppa-attach-btn');
     const fileInput = document.getElementById('ppa-file-input');
-    const attachment = document.getElementById('ppa-attachment');
-    const attachmentName = document.getElementById('ppa-attachment-name');
-    const attachmentMeta = document.getElementById('ppa-attachment-meta');
-    const attachmentToggle = document.getElementById('ppa-attachment-toggle');
-    const attachmentRemove = document.getElementById('ppa-attachment-remove');
-    const attachmentPreview = document.getElementById('ppa-attachment-preview');
+    const composerBox = document.getElementById('ppa-composer');
+    const attachmentList = document.getElementById('ppa-attachments');
     const mediaPicker = document.getElementById('ppa-media-picker');
     const mediaPickerClose = document.getElementById('ppa-media-picker-close');
     const mediaPickerStatus = document.getElementById('ppa-media-picker-status');
     const mediaPickerGrid = document.getElementById('ppa-media-picker-grid');
 
-    /** Documento extraído pendiente de enviar: {filename, chars, truncated, text} | null */
-    let attachedDoc = null;
+    /**
+     * Documentos pendientes de enviar (ASST-CONV AC1: pueden ser varios).
+     * Cada uno: {id, filename, kind:'doc'|'pdf', status:'working'|'ready', chars, truncated, text, pages}
+     */
+    let attachedDocs = [];
+    let nextDocId = 1;
     let extracting = false;
     let richComposer = null;
     let mediaTargetId = null;
@@ -108,71 +108,253 @@
     }
 
     // ------------------------------------------------------------------
-    // Adjunto: subir + extraer texto
+    // Adjuntos: documentos (texto) e imágenes (al composer)
     // ------------------------------------------------------------------
-    function setAttachment(doc) {
-        attachedDoc = doc;
-        if (doc) {
-            attachmentName.textContent = doc.filename;
-            attachmentMeta.textContent = pp.t('js.as.chars_extracted', { n: doc.chars.toLocaleString() })
-                + (doc.truncated ? ' (recortado)' : '');
-            attachment.hidden = false;
-        } else {
-            attachment.hidden = true;
-            attachmentPreview.hidden = true;
-            attachmentToggle.textContent = 'Ver texto';
-            fileInput.value = '';
+    function readyDocs() {
+        return attachedDocs.filter((doc) => doc.status === 'ready');
+    }
+
+    function docMeta(doc) {
+        if (doc.status === 'working') return doc.progress || pp.t('js.as.doc_extracting');
+        const parts = [];
+        if (doc.pages > 0 && doc.totalPages > doc.pages) {
+            parts.push(pp.t('js.as.pdf_pages_partial', { n: doc.pages, total: doc.totalPages }));
+        } else if (doc.pages > 0) {
+            parts.push(pp.t(doc.pages === 1 ? 'js.as.pdf_pages_one' : 'js.as.pdf_pages_other', { n: doc.pages }));
         }
+        if (doc.renderFailed) parts.push(pp.t('js.as.pdf_render_failed'));
+        if (doc.chars > 0) {
+            parts.push(pp.t('js.as.chars_extracted', { n: doc.chars.toLocaleString() })
+                + (doc.truncated ? ' ' + pp.t('js.as.doc_truncated') : ''));
+        }
+        return parts.join(' · ');
+    }
+
+    function renderAttachments() {
+        attachmentList.replaceChildren();
+        attachedDocs.forEach((doc) => {
+            const chip = document.createElement('div');
+            chip.className = 'ppa-attachment' + (doc.status === 'working' ? ' is-working' : '');
+            const icon = document.createElement('span');
+            icon.className = 'ppa-attachment__icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = doc.kind === 'pdf' ? 'PDF' : 'DOC';
+            chip.appendChild(icon);
+            const name = document.createElement('span');
+            name.className = 'ppa-attachment__name';
+            name.textContent = doc.filename;
+            chip.appendChild(name);
+            const meta = document.createElement('span');
+            meta.className = 'ppa-attachment__meta';
+            meta.textContent = docMeta(doc);
+            chip.appendChild(meta);
+
+            const preview = document.createElement('pre');
+            preview.className = 'ppa-attachment-preview';
+            preview.hidden = true;
+            if (doc.status === 'ready' && doc.text) {
+                preview.textContent = doc.text;
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'ppa-attachment__toggle';
+                toggle.textContent = pp.t('js.as.see_text');
+                toggle.addEventListener('click', () => {
+                    preview.hidden = !preview.hidden;
+                    toggle.textContent = pp.t(preview.hidden ? 'js.as.see_text' : 'js.as.hide_text');
+                });
+                chip.appendChild(toggle);
+            }
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'ppa-attachment__remove';
+            remove.title = pp.t('js.as.remove_doc');
+            remove.setAttribute('aria-label', pp.t('js.as.remove_doc'));
+            remove.textContent = '×';
+            remove.addEventListener('click', () => removeDoc(doc.id));
+            chip.appendChild(remove);
+
+            attachmentList.appendChild(chip);
+            attachmentList.appendChild(preview);
+        });
+        attachmentList.hidden = attachedDocs.length === 0;
         refreshSendState();
+    }
+
+    function updateDoc(id, changes) {
+        const doc = attachedDocs.find((item) => item.id === id);
+        if (doc) Object.assign(doc, changes);
+        renderAttachments();
+    }
+
+    function removeDoc(id) {
+        attachedDocs = attachedDocs.filter((doc) => doc.id !== id);
+        renderAttachments();
+    }
+
+    function clearDocs() {
+        attachedDocs = [];
+        fileInput.value = '';
+        renderAttachments();
     }
 
     function refreshSendState() {
         const richState = richComposer ? richComposer.state() : null;
         const hasContent = richState ? !richState.empty : input.value.trim() !== '';
         const valid = richState ? richState.valid : true;
-        sendBtn.disabled = (!hasContent && attachedDoc === null) || !valid || extracting || planning;
+        extracting = attachedDocs.some((doc) => doc.status === 'working');
+        attachBtn.classList.toggle('is-busy', extracting);
+        sendBtn.disabled = (!hasContent && readyDocs().length === 0) || !valid || extracting || planning;
     }
 
-    async function extractFile(file) {
-        if (file.size > cfg.maxSize) {
-            addMessage('assistant', 'Ese archivo supera los ' + Math.round(cfg.maxSize / 1048576) + ' MB permitidos.', 'ppa-msg--error');
-            fileInput.value = '';
-            return;
-        }
-        extracting = true;
-        refreshSendState();
-        attachBtn.classList.add('is-busy');
-        attachmentName.textContent = file.name;
-        attachmentMeta.textContent = 'Extrayendo texto…';
-        attachment.hidden = false;
-
+    /** Extrae el texto en el servidor. Devuelve {ok, data} o {ok:false, error, empty}. */
+    async function requestExtract(file) {
         const form = new FormData();
         form.append('_csrf', cfg.csrf);
         form.append('file', file);
-
         try {
             const res = await fetch(cfg.baseUrl + '/extract', { method: 'POST', body: form });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.ok) {
-                setAttachment(null);
-                addMessage('assistant', data.error || pp.t('js.as.doc_failed'), 'ppa-msg--error');
-                return;
+                return { ok: false, error: data.error || pp.t('js.as.doc_failed'), empty: data.code === 'empty_doc' };
             }
-            setAttachment({
-                filename: data.filename,
-                chars: data.chars,
-                truncated: !!data.truncated,
-                text: data.text
-            });
-            attachmentPreview.textContent = data.text;
+            return { ok: true, data: data };
         } catch (err) {
-            setAttachment(null);
-            addMessage('assistant', pp.t('js.as.upload_network'), 'ppa-msg--error');
-        } finally {
-            extracting = false;
-            attachBtn.classList.remove('is-busy');
-            refreshSendState();
+            return { ok: false, error: pp.t('js.as.upload_network'), empty: false };
         }
+    }
+
+    async function extractFile(file, kind) {
+        const doc = { id: nextDocId++, filename: file.name, kind: kind || 'doc', status: 'working', chars: 0, truncated: false, text: '', pages: 0 };
+        attachedDocs.push(doc);
+        renderAttachments();
+        const result = await requestExtract(file);
+        if (!result.ok) {
+            removeDoc(doc.id);
+            addMessage('assistant', file.name + ': ' + result.error, 'ppa-msg--error');
+            return;
+        }
+        updateDoc(doc.id, {
+            status: 'ready',
+            chars: result.data.chars,
+            truncated: !!result.data.truncated,
+            text: result.data.text
+        });
+    }
+
+    /**
+     * ASST-CONV AC3 — un PDF aporta su texto (servidor) y sus páginas como
+     * imagen (navegador, pdf.js). Un PDF de diseño sin texto ya no es un error:
+     * lo que cuenta son sus páginas. Los PDF se procesan de uno en uno para que
+     * cada uno sepa cuánto cupo de imágenes queda.
+     */
+    let pdfQueue = Promise.resolve();
+
+    function attachPdf(file) {
+        const doc = { id: nextDocId++, filename: file.name, kind: 'pdf', status: 'working', chars: 0, truncated: false, text: '', pages: 0, totalPages: 0, renderFailed: false };
+        attachedDocs.push(doc);
+        renderAttachments();
+        pdfQueue = pdfQueue.then(() => processPdf(file, doc)).catch(() => {});
+    }
+
+    async function processPdf(file, doc) {
+        const budget = richComposer ? richComposer.remainingImages() : 0;
+        const canRender = budget > 0 && window.PPAPdfPages && cfg.pdfLibUrl;
+        const rendering = canRender
+            ? window.PPAPdfPages.renderPdf(file, {
+                libUrl: cfg.pdfLibUrl,
+                workerUrl: cfg.pdfWorkerUrl,
+                budget: budget,
+                onProgress: (n, total) => updateDoc(doc.id, { progress: pp.t('js.as.pdf_rendering', { n: n, total: total }) })
+            }).catch((error) => {
+                console.warn('[assistant] PDF render failed', error);
+                return null;
+            })
+            : Promise.resolve(null);
+        const [text, pages] = await Promise.all([requestExtract(file), rendering]);
+        if (!attachedDocs.some((item) => item.id === doc.id)) return; // quitado mientras se procesaba
+
+        let pageCount = 0;
+        if (pages && pages.files.length > 0 && richComposer) {
+            richComposer.addFiles(pages.files, (image) => {
+                const where = pages.pageOf.get(image.name) || { page: 1, part: 1, parts: 1 };
+                return where.parts > 1
+                    ? pp.t('js.as.pdf_page_part_alt', { pagina: where.page, parte: where.part, partes: where.parts, archivo: file.name })
+                    : pp.t('js.as.pdf_page_alt', { pagina: where.page, archivo: file.name });
+            });
+            pageCount = pages.renderedPages;
+        }
+        if (!text.ok && pageCount === 0) {
+            removeDoc(doc.id);
+            addMessage('assistant', file.name + ': ' + text.error, 'ppa-msg--error');
+            return;
+        }
+        updateDoc(doc.id, {
+            status: 'ready',
+            chars: text.ok ? text.data.chars : 0,
+            truncated: text.ok ? !!text.data.truncated : false,
+            text: text.ok ? text.data.text : '',
+            pages: pageCount,
+            totalPages: pages ? pages.totalPages : 0,
+            renderFailed: !!canRender && pages === null
+        });
+    }
+
+    /** Reparte lo que llega por el clip o arrastrando (ASST-CONV AC1). */
+    function handleFiles(fileList) {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) return;
+        const groups = window.PPARichComposer.classifyAttachments(files, {
+            docExtensions: cfg.allowedExt,
+            maxDocBytes: cfg.maxSize
+        });
+        if (groups.rejected.length > 0) {
+            const names = groups.rejected.map((entry) => entry.file.name).join(', ');
+            addMessage('assistant', pp.t('js.as.files_rejected', {
+                archivos: names,
+                mb: Math.round(cfg.maxSize / 1048576)
+            }), 'ppa-msg--error');
+        }
+        if (groups.images.length > 0) {
+            if (richComposer) {
+                richComposer.addFiles(groups.images);
+            } else {
+                addMessage('assistant', pp.t('js.as.images_need_editor'), 'ppa-msg--error');
+            }
+        }
+        groups.pdfs.forEach((file) => attachPdf(file));
+        groups.docs.forEach((file) => extractFile(file, 'doc'));
+        fileInput.value = '';
+    }
+
+    function setupDropZone() {
+        if (!composerBox) return;
+        let depth = 0;
+        const hasFiles = (event) => Array.from((event.dataTransfer && event.dataTransfer.types) || []).includes('Files');
+        composerBox.addEventListener('dragenter', (event) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            depth += 1;
+            composerBox.classList.add('is-dragover');
+        });
+        composerBox.addEventListener('dragover', (event) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+        composerBox.addEventListener('dragleave', () => {
+            depth = Math.max(0, depth - 1);
+            if (depth === 0) composerBox.classList.remove('is-dragover');
+        });
+        // Se intercepta también la caída sobre el editor: si no, el navegador
+        // inserta la imagen tal cual (blob sin subir) o abre el PDF.
+        composerBox.addEventListener('drop', (event) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            depth = 0;
+            composerBox.classList.remove('is-dragover');
+            if (planning) return;
+            handleFiles(event.dataTransfer.files);
+        });
     }
 
     // ------------------------------------------------------------------
@@ -187,6 +369,59 @@
     };
     let lastPlanContext = null;
 
+    // ------------------------------------------------------------------
+    // ASST-CONV AC7 — memoria de la conversación (vive mientras la pestaña
+    // está abierta). Cada mensaje manda los turnos anteriores, el plan aún sin
+    // aplicar y el token del material ya adjuntado.
+    // ------------------------------------------------------------------
+    const MAX_TURNS = 10;
+    const conversation = { turns: [], plan: null, sourceToken: '', thumbs: new Map() };
+    const newChatBtn = document.getElementById('ppa-new-chat');
+
+    function rememberTurn(role, text) {
+        const clean = String(text || '').trim();
+        if (clean === '') return;
+        conversation.turns.push({ role: role, text: clean.slice(0, 1500) });
+        conversation.turns = conversation.turns.slice(-MAX_TURNS);
+        if (newChatBtn) newChatBtn.hidden = false;
+    }
+
+    function condensePlan(plan) {
+        if (!plan || !Array.isArray(plan.items)) return [];
+        return plan.items.map((it) => ({
+            page_id: it.page_id,
+            page_title: it.page_title,
+            section: it.section,
+            capability_id: it.capability_id,
+            category: it.category,
+            instruction: it.instruction,
+            media_ids: it.media_ids || [],
+            source_block_ids: it.source_block_ids || []
+        }));
+    }
+
+    /** Un plan nuevo sustituye al anterior: su botón deja de aplicar. */
+    function supersedePreviousPlans() {
+        thread.querySelectorAll('.ppa-plan__apply:not([disabled])').forEach((button) => {
+            button.disabled = true;
+            button.textContent = pp.t('js.as.plan_superseded');
+        });
+    }
+
+    function resetConversation() {
+        if (planning || applying) return;
+        conversation.turns = [];
+        conversation.plan = null;
+        conversation.sourceToken = '';
+        conversation.thumbs = new Map();
+        lastPlanContext = null;
+        Array.from(thread.children).slice(1).forEach((node) => node.remove());
+        if (newChatBtn) newChatBtn.hidden = true;
+        if (richComposer) richComposer.reset();
+        else input.value = '';
+        clearDocs();
+    }
+
     function itemCategory(it) {
         if (CATEGORY_META[it.category]) return it.category;
         if (it.status === 'aplicar') return 'automatable_now';
@@ -194,30 +429,75 @@
         return 'requires_development';
     }
 
+    /** Rol de cada imagen según el plan: media_id => 'reference' | 'asset'. */
+    function mediaRoleMap(plan) {
+        const roles = new Map();
+        (plan.media_roles || []).forEach((entry) => {
+            if (entry && entry.media_id) roles.set(Number(entry.media_id), entry.role === 'asset' ? 'asset' : 'reference');
+        });
+        return roles;
+    }
+
+    /** Miniaturas de las imágenes en que se basa un punto del plan. */
+    function renderItemMedia(it, plan) {
+        const ids = Array.isArray(it.media_ids) ? it.media_ids.map(Number) : [];
+        const thumbs = plan._thumbs instanceof Map ? plan._thumbs : new Map();
+        const known = ids.filter((id) => thumbs.has(id));
+        if (known.length === 0) return null;
+        const roles = mediaRoleMap(plan);
+        const wrap = document.createElement('div');
+        wrap.className = 'ppa-item__media';
+        const label = document.createElement('span');
+        label.className = 'ppa-item__media-label';
+        label.textContent = known.every((id) => roles.get(id) === 'asset')
+            ? pp.t('js.as.media_asset_label')
+            : pp.t('js.as.media_reference_label');
+        wrap.appendChild(label);
+        known.forEach((id) => {
+            const thumb = thumbs.get(id);
+            const image = document.createElement('img');
+            image.src = thumb.url;
+            image.alt = thumb.alt || '';
+            image.title = thumb.alt || '';
+            image.loading = 'lazy';
+            wrap.appendChild(image);
+        });
+        return wrap;
+    }
+
     function renderPlan(plan) {
+        supersedePreviousPlans();
         const msg = document.createElement('div');
         msg.className = 'ppa-msg ppa-msg--assistant';
         const bubble = document.createElement('div');
         bubble.className = 'ppa-msg__bubble ppa-msg__bubble--plan';
         msg.appendChild(bubble);
 
-        if (plan.vision && plan.vision.status && plan.vision.status !== 'not_needed') {
-            const vision = document.createElement('p');
-            vision.className = 'ppa-plan__vision ppa-plan__vision--' + plan.vision.status;
-            const visionCount = plan.vision.status === 'used'
-                ? Number(plan.vision.sent_images || 0)
-                : Number(plan.vision.ready_images || 0);
-            vision.textContent = plan.vision.status === 'used'
-                ? pp.t(visionCount === 1 ? 'js.as.vision_used_one' : 'js.as.vision_used_other', { n: visionCount, modelo: plan.vision.model || '' })
-                : pp.t(visionCount === 1 ? 'js.as.vision_unavailable_one' : 'js.as.vision_unavailable_other', { n: visionCount, modelo: plan.vision.model || '' });
-            bubble.appendChild(vision);
-        }
-
-        if (plan.summary) {
+        // ASST-CONV AC5 — primero la respuesta hablada; el resumen técnico
+        // solo si el modelo no la dio.
+        const replyText = plan.reply || plan.summary;
+        if (replyText) {
             const p = document.createElement('p');
             p.className = 'ppa-plan__summary';
-            p.textContent = plan.summary;
+            p.textContent = replyText;
             bubble.appendChild(p);
+        }
+
+        if (Array.isArray(plan.understanding) && plan.understanding.length > 0) {
+            const box = document.createElement('div');
+            box.className = 'ppa-plan__understanding';
+            const title = document.createElement('p');
+            title.className = 'ppa-plan__understanding-title';
+            title.textContent = pp.t('js.as.understood_title');
+            box.appendChild(title);
+            const list = document.createElement('ul');
+            plan.understanding.forEach((line) => {
+                const li = document.createElement('li');
+                li.textContent = line;
+                list.appendChild(li);
+            });
+            box.appendChild(list);
+            bubble.appendChild(box);
         }
 
         const items = plan.items || [];
@@ -253,21 +533,37 @@
                     missing.textContent = pp.t('js.as.missing_data', { datos: it.required_inputs.join(' · ') });
                     card.appendChild(missing);
                 }
-                if (it.next_action) {
+                // En lo aplicable el siguiente paso es siempre «confirmar»: no aporta.
+                if (it.next_action && category !== 'automatable_now') {
                     const next = document.createElement('div');
                     next.className = 'ppa-plan__note';
                     next.textContent = pp.t('js.as.next_action', { accion: it.next_action });
                     card.appendChild(next);
                 }
+                const media = renderItemMedia(it, plan);
+                if (media) card.appendChild(media);
 
                 bubble.appendChild(card);
             });
         });
 
-        if (items.length === 0) {
+        if (items.length === 0 && !plan.reply) {
             const p = document.createElement('p');
             p.textContent = pp.t('js.as.no_changes');
             bubble.appendChild(p);
+        }
+
+        // Qué imágenes ha mirado la IA: dato útil, pero secundario.
+        if (plan.vision && plan.vision.status && plan.vision.status !== 'not_needed') {
+            const vision = document.createElement('p');
+            vision.className = 'ppa-plan__vision ppa-plan__vision--' + plan.vision.status;
+            const visionCount = plan.vision.status === 'used'
+                ? Number(plan.vision.sent_images || 0)
+                : Number(plan.vision.ready_images || 0);
+            vision.textContent = plan.vision.status === 'used'
+                ? pp.t(visionCount === 1 ? 'js.as.vision_used_one' : 'js.as.vision_used_other', { n: visionCount, modelo: plan.vision.model || '' })
+                : pp.t(visionCount === 1 ? 'js.as.vision_unavailable_one' : 'js.as.vision_unavailable_other', { n: visionCount, modelo: plan.vision.model || '' });
+            bubble.appendChild(vision);
         }
 
         const actionable = items.filter((it) => itemCategory(it) === 'automatable_now');
@@ -426,10 +722,57 @@
             note.className = 'ppa-plan__note';
             note.textContent = pp.t('js.as.saved_note');
             bubble.appendChild(note);
+
+            // ASST-CONV AC8 — aprobar de un clic lo que ya se ha revisado.
+            const foot = document.createElement('div');
+            foot.className = 'ppa-plan__foot';
+            const publishBtn = document.createElement('button');
+            publishBtn.type = 'button';
+            publishBtn.className = 'pp-btn pp-btn--primary ppa-plan__publish';
+            publishBtn.textContent = pp.t('js.as.publish_changes');
+            publishBtn.addEventListener('click', () => publishJob(job, publishBtn, foot, note));
+            foot.appendChild(publishBtn);
+            bubble.appendChild(foot);
         }
 
         thread.appendChild(msg);
         thread.scrollTop = thread.scrollHeight;
+    }
+
+    async function publishJob(job, button, container, note) {
+        if (button.disabled) return;
+        button.disabled = true;
+        button.textContent = pp.t('js.as.publishing');
+        try {
+            const res = await fetch(cfg.baseUrl + '/jobs/' + job.id + '/publish', {
+                method: 'POST',
+                body: new URLSearchParams({ _csrf: cfg.csrf })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) throw new Error(data.error || pp.t('js.as.publish_failed'));
+            const pages = data.pages || [];
+            const live = pages.filter((page) => page.published);
+            button.textContent = live.length > 0 ? pp.t('js.as.published_btn') : pp.t('js.as.publish_changes');
+            button.disabled = live.length > 0;
+            if (live.length > 0 && note) note.textContent = pp.t('js.as.published_note');
+            const list = document.createElement('ul');
+            list.className = 'ppa-plan__publish-result';
+            pages.forEach((page) => {
+                const li = document.createElement('li');
+                li.textContent = page.published
+                    ? pp.t('js.as.page_published', { pagina: page.title })
+                    : pp.t('js.as.page_not_published', { pagina: page.title, motivo: page.reason });
+                list.appendChild(li);
+            });
+            container.after(list);
+            rememberTurn('assistant', live.length > 0
+                ? pp.t('js.as.turn_published', { paginas: live.map((page) => page.title).join(', ') })
+                : pp.t('js.as.turn_not_published'));
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = pp.t('js.as.publish_changes');
+            addMessage('assistant', error.message || pp.t('js.as.publish_failed'), 'ppa-msg--error');
+        }
     }
 
     let applying = false;
@@ -485,7 +828,13 @@
             }
 
             if (job.status === 'done') {
+                btn.textContent = pp.t('js.as.plan_applied');
                 renderReport(job);
+                // La IA debe saber en el siguiente mensaje que esto ya está hecho.
+                const done = job.items.filter((it) => it.status === 'done').map(itemLabel);
+                const failed = job.items.filter((it) => it.status === 'failed').map(itemLabel);
+                rememberTurn('assistant', pp.t('js.as.turn_applied', { hechos: done.join(', ') || '-', fallidos: failed.join(', ') || '-' }));
+                if (conversation.plan === plan) conversation.plan = null;
             }
         } catch (err) {
             addMessage('assistant', pp.t('js.as.exec_network'), 'ppa-msg--error');
@@ -513,13 +862,14 @@
         const text = richComposer ? richComposer.getPlainText() : input.value.trim();
         const richHtml = richComposer ? richComposer.getRichHtml() : '';
         const richState = richComposer ? richComposer.state() : null;
-        if ((text === '' && (!richState || richState.images === 0) && !attachedDoc) || extracting || planning) return;
+        const docs = readyDocs();
+        if ((text === '' && (!richState || richState.images === 0) && docs.length === 0) || extracting || planning) return;
         if (richState && !richState.valid) return;
 
         // Continuación natural del plan mostrado: una confirmación breve
         // aplica el último plan en vez de pedir a la IA que planifique la frase
         // aislada "sí, procede" (que lógicamente no contiene cambios).
-        if (!attachedDoc && (!richState || richState.images === 0) && lastPlanContext && isAffirmativeReply(text)) {
+        if (docs.length === 0 && (!richState || richState.images === 0) && lastPlanContext && isAffirmativeReply(text)) {
             addMessage('user', text);
             if (richComposer) richComposer.reset();
             else input.value = '';
@@ -530,17 +880,22 @@
             return;
         }
 
-        let userLabel = text !== '' ? text : 'Aplica los cambios descritos en el documento adjunto.';
-        if (attachedDoc) {
-            userLabel += '\n[Documento] ' + attachedDoc.filename;
+        let userLabel = text !== '' ? text : pp.t('js.as.default_request');
+        docs.forEach((doc) => {
+            userLabel += '\n[' + (doc.kind === 'pdf' ? 'PDF' : pp.t('js.as.doc_label')) + '] ' + doc.filename;
+        });
+        if (richState && richState.images > 0) {
+            userLabel += '\n' + pp.t(richState.images === 1 ? 'js.as.images_attached_one' : 'js.as.images_attached_other', { n: richState.images });
         }
         addMessage('user', userLabel);
-        lastPlanContext = null;
 
-        const docText = attachedDoc ? attachedDoc.text : '';
+        const docText = docs.length === 1
+            ? docs[0].text
+            : docs.filter((doc) => doc.text).map((doc) => '[' + doc.filename + ']\n' + doc.text).join('\n\n');
+        (richComposer ? richComposer.storedMedia() : []).forEach((media) => conversation.thumbs.set(Number(media.mediaId), media));
         if (richComposer) richComposer.reset();
         else input.value = '';
-        setAttachment(null);
+        clearDocs();
 
         planning = true;
         refreshSendState();
@@ -550,7 +905,10 @@
             _csrf: cfg.csrf,
             instruction: text,
             doc_text: docText,
-            rich_html: richHtml
+            rich_html: richHtml,
+            history: JSON.stringify(conversation.turns),
+            current_plan: JSON.stringify(condensePlan(conversation.plan)),
+            source_token: conversation.sourceToken
         });
         try {
             const res = await fetch(cfg.baseUrl + '/plan', { method: 'POST', body });
@@ -561,7 +919,12 @@
                 return;
             }
             data.plan._request = text !== '' ? text : userLabel;
+            data.plan._thumbs = conversation.thumbs;
             renderPlan(data.plan);
+            rememberTurn('user', userLabel);
+            rememberTurn('assistant', data.plan.reply || data.plan.summary || '');
+            conversation.plan = (data.plan.items || []).length > 0 ? data.plan : null;
+            if (data.plan.source_token) conversation.sourceToken = data.plan.source_token;
         } catch (err) {
             thinking.closest('.ppa-msg').remove();
             addMessage('assistant', pp.t('js.as.plan_network'), 'ppa-msg--error');
@@ -583,6 +946,7 @@
             maxImages: cfg.richMaxImages,
             maxImageBytes: cfg.richMaxImageBytes,
             csrf: cfg.csrf,
+            purpose: 'assistant',
             uploadUrl: cfg.mediaUploadUrl,
             remoteImportUrl: cfg.remoteImportUrl,
             t: (key, vars) => pp.t(key, vars),
@@ -591,6 +955,7 @@
         }).enhance();
         richInput.addEventListener('ppa:send', sendRequest);
         if (pastePlainBtn) pastePlainBtn.addEventListener('click', () => richComposer.armPlainPaste());
+        if (newChatBtn) newChatBtn.addEventListener('click', resetConversation);
     } else if (pastePlainBtn) {
         pastePlainBtn.hidden = true;
     }
@@ -604,15 +969,8 @@
         });
     }
     attachBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => {
-        if (fileInput.files && fileInput.files[0]) extractFile(fileInput.files[0]);
-    });
-    attachmentRemove.addEventListener('click', () => setAttachment(null));
-    attachmentToggle.addEventListener('click', () => {
-        const show = attachmentPreview.hidden;
-        attachmentPreview.hidden = !show;
-        attachmentToggle.textContent = show ? 'Ocultar texto' : 'Ver texto';
-    });
+    fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+    setupDropZone();
     input.addEventListener('input', refreshSendState);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

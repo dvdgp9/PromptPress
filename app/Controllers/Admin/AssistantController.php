@@ -4,6 +4,7 @@ namespace App\Controllers\Admin;
 
 use App\Services\AI\AIException;
 use App\Services\AssistantContentNormalizer;
+use App\Services\AssistantConversation;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantSourceEnvelope;
 use App\Services\SiteAssistantJobs;
@@ -105,7 +106,9 @@ class AssistantController
             $truncated = true;
         }
         if (trim($text) === '') {
-            Response::json(['ok' => false, 'error' => __('asst.err.empty_doc')], 422);
+            // `code` deja al navegador distinguir un PDF que solo trae imágenes
+            // (un diseño): sus páginas ya viajan como imagen y no es un error.
+            Response::json(['ok' => false, 'error' => __('asst.err.empty_doc'), 'code' => 'empty_doc'], 422);
         }
 
         Response::json([
@@ -136,15 +139,34 @@ class AssistantController
             Response::json(['ok' => false, 'error' => __('asst.err.too_long')], 422);
         }
 
+        // ASST-CONV AC7 — lo ya hablado en esta pestaña: turnos, plan pendiente
+        // y el material adjuntado antes (firmado; si caducó, se sigue sin él).
+        $history = AssistantConversation::parseHistory((string) Request::post('history', ''));
+        $currentPlan = AssistantConversation::parseCurrentPlan((string) Request::post('current_plan', ''));
+        $followUp = $history !== [] || $currentPlan !== [];
+        $previousBundle = null;
+        $previousToken = trim((string) Request::post('source_token', ''));
+        if ($previousToken !== '') {
+            try {
+                $previousBundle = AssistantSourceEnvelope::open($previousToken, $siteId)['bundle'];
+            } catch (\InvalidArgumentException $e) {
+                error_log('[assistant plan] site=' . $siteId . ' previous material discarded: ' . $e->getMessage());
+            }
+        }
+
         $normalized = null;
         if (trim($richHtml) !== '') {
-            $normalized = AssistantMediaReferences::resolve(
-                AssistantContentNormalizer::normalize($richHtml, $instruction),
-                $siteId
-            );
+            $normalized = AssistantContentNormalizer::normalize($richHtml, $instruction);
+        }
+        if ($previousBundle !== null) {
+            $normalized = AssistantConversation::mergeBundles($previousBundle, $normalized);
+        }
+        if ($normalized !== null) {
+            $normalized = AssistantMediaReferences::resolve($normalized, $siteId);
             $richContext = trim((string) ($normalized['prompt_text'] ?? ''));
             if ($richContext !== '') {
-                $docText = "[Contenido enriquecido pegado]\n" . $richContext
+                // i18n-ignore: etiquetas del material que viaja dentro del prompt.
+                $docText = ($followUp ? "[Material de la conversación]\n" : "[Contenido enriquecido pegado]\n") . $richContext
                     . (trim($docText) !== '' ? "\n\n[Documento adjunto]\n" . $docText : '');
             }
         }
@@ -156,16 +178,36 @@ class AssistantController
             Response::json(['ok' => false, 'error' => __('asst.err.empty_request')], 422);
         }
 
-        $requestText = $normalized !== null
+        // En una conversación, el último mensaje es la petición: el material
+        // acumulado ya va aparte. En el primero, lo pegado es la petición.
+        $requestText = $followUp && $instruction !== ''
+            ? mb_substr($instruction, 0, 4000)
+            : ($normalized !== null
             ? 'Analiza y clasifica la petición pegada respetando su estructura y el orden de sus referencias.'
             : ($instruction !== ''
             ? $instruction
-            : 'Aplica los cambios descritos en el documento adjunto.');
+            : 'Aplica los cambios descritos en el documento adjunto.'));
 
         @set_time_limit(180);
         try {
-            $plan = SiteAssistantPlanner::plan($siteId, $requestText, $docText, $normalized);
+            $plan = SiteAssistantPlanner::plan(
+                $siteId,
+                $requestText,
+                $docText,
+                $normalized,
+                AssistantConversation::renderForPrompt($history, $currentPlan)
+            );
+            $roles = (array) ($plan['media_roles'] ?? []);
+            // Al navegador como lista: un mapa id => rol con ids sueltos sería un
+            // objeto JSON con claves numéricas, incómodo de recorrer.
+            $plan['media_roles'] = array_map(
+                static fn (int $mediaId, string $role): array => ['media_id' => $mediaId, 'role' => $role],
+                array_keys($roles),
+                array_values($roles)
+            );
             if ($normalized !== null) {
+                // ASST-CONV AC5 — el rol de cada imagen viaja firmado hasta el ejecutor.
+                $normalized = SiteAssistantPlanner::applyMediaRoles($normalized, $roles);
                 $plan['source_token'] = AssistantSourceEnvelope::issue(
                     $siteId,
                     $normalized,
@@ -260,6 +302,21 @@ class AssistantController
             Response::json(['ok' => false, 'error' => (string) $result['error']], 404);
         }
         Response::json(['ok' => true, 'job' => $result['job']]);
+    }
+
+    // ----------------------------------------------------------------------
+    // POST /admin/assistant/jobs/{id}/publish — ASST-CONV AC8: publica de una
+    // vez las páginas que dejó el trabajo, con las cautelas del servicio.
+    // ----------------------------------------------------------------------
+    public function publish(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        CSRF::check();
+        $result = SiteAssistantJobs::publishJob((int) ($params['id'] ?? 0), $siteId, (int) Auth::id());
+        if (!$result['ok']) {
+            Response::json(['ok' => false, 'error' => (string) $result['error']], 422);
+        }
+        Response::json(['ok' => true, 'pages' => $result['pages']]);
     }
 
     // ======================================================================

@@ -44,7 +44,7 @@ final class AssistantCapabilityRegistry
                    AND ps.section_type = 'form' AND ps.status != 'deleted'",
                 $siteId
             ),
-            'media'            => self::count('SELECT COUNT(*) AS n FROM media WHERE site_id = ?', $siteId),
+            'media'            => self::count("SELECT COUNT(*) AS n FROM media WHERE site_id = ? AND source <> '" . MediaService::SOURCE_ASSISTANT . "'", $siteId),
             'legal_pages'      => self::count("SELECT COUNT(*) AS n FROM pages WHERE site_id = ? AND page_type = 'legal'", $siteId),
             'booking_services' => self::count('SELECT COUNT(*) AS n FROM booking_services WHERE site_id = ?', $siteId),
             'resources'        => self::count('SELECT COUNT(*) AS n FROM resources WHERE site_id = ?', $siteId),
