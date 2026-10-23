@@ -7,6 +7,7 @@ use App\Services\BrandService;
 use App\Services\CacheService;
 use App\Services\CustomFontService;
 use App\Services\DesignSystem;
+use App\Services\LogoTrimmer;
 use App\Services\VisualStyleService;
 use Core\Auth;
 use Core\CSRF;
@@ -246,16 +247,25 @@ class DesignController
             Response::redirect(base_url('admin/design'));
         }
 
+        // LOGO-TRIM — Fuera el margen vacío del lienzo: si no, el logo se ve
+        // pequeño en todos los sitios que lo limitan por alto.
+        LogoTrimmer::trim($absolute, $mime);
+        clearstatcache(true, $absolute);
+
         $size = @getimagesize($absolute);
         $relative = 'storage/uploads/' . $siteId . '/brand/' . $filename;
         try {
             Database::execute(
                 'INSERT INTO media (site_id, filename, original_name, mime_type, file_size, path, alt_text, width, height, uploaded_by)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$siteId, $filename, mb_substr((string) $file['name'], 0, 255), $mime, (int) $file['size'], $relative, 'Logo', (int) ($size[0] ?? 0) ?: null, (int) ($size[1] ?? 0) ?: null, Auth::id()]
+                [$siteId, $filename, mb_substr((string) $file['name'], 0, 255), $mime, (int) filesize($absolute), $relative, 'Logo', (int) ($size[0] ?? 0) ?: null, (int) ($size[1] ?? 0) ?: null, Auth::id()]
             );
+            // El id se lee ANTES de guardar ajustes: tras el upsert de
+            // `settings`, lastInsertId() devuelve el id de esa fila y
+            // «Eliminar» acababa borrando un medio cualquiera con ese número.
+            $mediaId = (string) Database::lastInsertId();
             self::storeSiteSetting($siteId, $settingKey, $relative);
-            self::storeSiteSetting($siteId, $settingKey . '_media_id', (string) Database::lastInsertId());
+            self::storeSiteSetting($siteId, $settingKey . '_media_id', $mediaId);
         } catch (\Throwable $e) {
             @unlink($absolute);
             error_log('[design logo] site=' . $siteId . ' save failed: ' . $e->getMessage());

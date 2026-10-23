@@ -1519,6 +1519,9 @@ final class OnboardingController
         $width = null;
         $height = null;
         if ($ext !== 'svg') {
+            // LOGO-TRIM — Mismo recorte del margen vacío que en Diseño.
+            \App\Services\LogoTrimmer::trim($dest, $mime);
+            clearstatcache(true, $dest);
             $size = @getimagesize($dest);
             if (is_array($size)) {
                 $width = (int) ($size[0] ?? 0) ?: null;
@@ -1529,10 +1532,12 @@ final class OnboardingController
         Database::execute(
             'INSERT INTO media (site_id, filename, original_name, mime_type, file_size, path, alt_text, width, height, uploaded_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$siteId, $filename, mb_substr($original, 0, 255), $allowed[$ext], (int) $file['size'], $rel, 'Logo', $width, $height, Auth::id()]
+            [$siteId, $filename, mb_substr($original, 0, 255), $allowed[$ext], (int) (filesize($dest) ?: $file['size']), $rel, 'Logo', $width, $height, Auth::id()]
         );
+        // Antes de tocar `settings`: después, lastInsertId() es el del ajuste.
+        $mediaId = (string) Database::lastInsertId();
         self::storeSetting($siteId, $settingKey, $rel);
-        self::storeSetting($siteId, $settingKey . '_media_id', (string) Database::lastInsertId());
+        self::storeSetting($siteId, $settingKey . '_media_id', $mediaId);
     }
 
     private static function saveReferenceImages(int $siteId, ?string &$reason = null): int

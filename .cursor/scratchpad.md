@@ -10803,3 +10803,37 @@ aviso desaparece. Ajustes de dev limpiados al terminar.
   modo en construcción (comprobado con `git stash`), pero conviene saberlo si
   algún día se revisa el banner de cookies.
 - `.pp-badge` va en mayúsculas: textos largos ahí se leen mal; usar etiquetas de una palabra.
+
+---
+
+## Background and Motivation (LOGO-TRIM) — 23/10/2026
+
+El usuario subió el logo de un cliente (YROÄ) y salía muy pequeño en la
+portada de construcción y en la web. Los PNG miden 596×596 pero el dibujo
+ocupa 430×269 en el centro: el resto es margen transparente, y cabecera, pie
+y portada limitan el logo por ALTO, así que el dibujo se quedaba en ~45 %.
+
+## Project Status Board (LOGO-TRIM)
+
+- [x] `App\Services\LogoTrimmer`: recorta el margen vacío (transparente, o fondo liso si las 4 esquinas coinciden) dejando un 2 % de aire. Sin GD o ante fallo, deja el archivo como estaba.
+- [x] Aplicado al subir logo en Diseño y en el onboarding.
+- [x] Portada de construcción: logo hasta 140 px de alto (antes 96).
+- [x] Bug previo arreglado: `{clave}_media_id` del logo guardaba el id de la fila de `settings` (lastInsertId tras el upsert), no el del medio → «Eliminar logo» podía borrar de la biblioteca un medio ajeno con ese número.
+- [x] `tests/logo_trimmer.php` (15 PASS).
+
+## Current Status / Progress Tracking (LOGO-TRIM) — 23/10/2026, Executor
+
+Probado en local con los PNG reales del cliente: quedan en 448×287; en la
+portada el logo pasa de ~43 px de dibujo a 140 px; en la cabecera llena los
+42 px (antes ~19). `_media_id` ya coincide con el medio (941/942). Sitio de
+dev restaurado (logo original, sin modo construcción). **Sin commit.**
+
+Los logos ya subidos NO se recortan solos: hay que volver a subirlos («Sustituir»).
+
+## Lessons (LOGO-TRIM)
+
+- `Database::lastInsertId()` hay que leerlo justo tras el INSERT: un
+  `INSERT … ON DUPLICATE KEY UPDATE` posterior (settings) lo pisa.
+- zsh no parte en palabras una variable sin comillas: `M="mysql -u…"; $M -e …`
+  da «command not found» (exit 127). Escribir el comando entero o usar un array.
+- La cabecera pública limita el logo a 42 px de alto (`DesignSystem.php`, `.pp-site-header__logo-img`) sin ajuste en el panel.
