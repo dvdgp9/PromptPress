@@ -47,6 +47,42 @@
     </div>
 <?php endif; ?>
 
+<?php /* CONSTRUCCION — Formulario propio: encenderlo es una decisión aparte
+          de guardar el nombre o el idioma. */ ?>
+<form method="POST" action="<?= e(base_url('admin/settings/construction')) ?>" class="pp-form" id="pp-construction">
+    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+    <div class="pp-form-card">
+        <h3><?= e(__('construction.title')) ?></h3>
+        <p class="pp-construction-card__status">
+            <?php if ($construction['enabled']): ?>
+                <span class="pp-badge pp-badge--warning"><?= e(__('construction.status_on')) ?></span>
+            <?php else: ?>
+                <span class="pp-badge pp-badge--success"><?= e(__('construction.status_off')) ?></span>
+            <?php endif; ?>
+        </p>
+
+        <div class="pp-form-group">
+            <label class="pp-construction-card__toggle">
+                <input type="checkbox" name="enabled" value="1" <?= $construction['enabled'] ? 'checked' : '' ?>>
+                <span><?= e(__('construction.toggle')) ?></span>
+            </label>
+            <small><?= e(__('construction.help')) ?></small>
+        </div>
+
+        <div class="pp-form-group">
+            <label for="pp-construction-message"><?= e(__('construction.message')) ?></label>
+            <textarea id="pp-construction-message" name="message" rows="3"
+                      maxlength="<?= (int) \App\Services\ConstructionMode::MESSAGE_MAX ?>"
+                      placeholder="<?= e(\App\Services\Microcopy::t('construction.default_message', $primaryLanguage)) ?>"><?= e($construction['message']) ?></textarea>
+            <small><?= e(__('construction.message_help')) ?></small>
+        </div>
+
+        <div class="pp-form-actions">
+            <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('construction.save')) ?></button>
+        </div>
+    </div>
+</form>
+
 <form method="POST" action="<?= e(base_url('admin/settings')) ?>" class="pp-form" novalidate>
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 

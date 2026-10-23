@@ -522,7 +522,12 @@ final class DesignSystem
         // genérica a la de marca.
         $preload = CustomFontService::renderPreloadLinks($siteId, $tokens);
 
-        return $preload
+        // FAVICON — Va aquí porque esta cabecera la comparten todas las páginas
+        // públicas (y los previews del panel, que así enseñan el mismo icono).
+        $favicon = BrandService::faviconTags($siteId);
+
+        return ($favicon !== '' ? $favicon . "\n" : '')
+             . $preload
              . ($fonts !== '' ? $fonts . "\n" : '')
              . $cssLink
              . ($skinCss !== '' ? "\n" . $skinCss : '')

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\CacheService;
+use App\Services\ConstructionMode;
 use App\Services\ArticleTemplateService;
 use App\Services\LanguageService;
 use App\Services\SiteResetService;
@@ -147,6 +148,24 @@ class SettingsController
         Auth::logout();
         Session::flash('success', __('settings.reset.done'));
         Response::redirect(base_url('admin/login'));
+    }
+
+    /** POST /admin/settings/construction — CONSTRUCCION: activar la portada y su mensaje. */
+    public function updateConstruction(): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+
+        $enabled = Request::post('enabled') === '1';
+        $message = mb_substr(trim((string) Request::post('message', '')), 0, ConstructionMode::MESSAGE_MAX);
+        $this->saveSetting($siteId, ConstructionMode::SETTING_ENABLED, $enabled ? '1' : '0');
+        $this->saveSetting($siteId, ConstructionMode::SETTING_MESSAGE, $message);
+
+        // La caché pública guarda páginas enteras: al desactivar, que nadie
+        // reciba una copia hecha antes de tiempo.
+        CacheService::flush($siteId);
+        Session::flash('notice', __($enabled ? 'construction.flash.on' : 'construction.flash.off'));
+        Response::redirect(base_url('admin/settings#pp-construction'));
     }
 
     public function checkUpdates(): void
@@ -307,6 +326,7 @@ class SettingsController
                 'timezones' => $this->timezoneOptions(),
                 'articleTemplate' => $ctx['articleTemplate'] ?? ArticleTemplateService::forSite((int) $ctx['site']['id']),
                 'articleTemplateOptions' => $this->articleTemplateOptions(),
+                'construction' => ConstructionMode::settings((int) $ctx['site']['id']),
                 'errors'    => $ctx['errors'],
                 'notice'    => $ctx['notice'],
                 'csrf'      => CSRF::token(),

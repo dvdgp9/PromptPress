@@ -71,6 +71,10 @@ $router->get('/brand-assets/{site}/logo/dark', [BrandAssetController::class, 'lo
 // FONTS — Los archivos de fuente viven fuera del docroot (storage/), igual que
 // el logo: se sirven por PHP con su MIME real y cabeceras de caché largas.
 $router->get('/brand-assets/{site}/font/{id}', [BrandAssetController::class, 'font']);
+// FAVICON — El de la etiqueta del <head> y el que los navegadores piden solos
+// (PDFs, el panel…). Un favicon.ico real en la raíz gana a esta ruta.
+$router->get('/brand-assets/{site}/favicon', [BrandAssetController::class, 'favicon']);
+$router->get('/favicon.ico', [BrandAssetController::class, 'faviconRoot']);
 
 // Home pública (fallback demo) — conservado para instalación nueva sin home
 $router->get('/__demo', function () {
@@ -310,6 +314,8 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/design/logo',  [DesignController::class, 'updateLogo']);
     $r->post('/design/logo/delete', [DesignController::class, 'deleteLogo']);
     $r->post('/design/logo/primary', [DesignController::class, 'updateLogoPrimary']);
+    $r->post('/design/favicon',        [DesignController::class, 'updateFavicon']);
+    $r->post('/design/favicon/delete', [DesignController::class, 'deleteFavicon']);
     // FONTS — Tipografías propias del cliente (brandbook).
     $r->post('/design/fonts',              [DesignController::class, 'uploadFont']);
     $r->post('/design/fonts/role',         [DesignController::class, 'updateFontRole']);
@@ -382,6 +388,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/settings',      [SettingsController::class, 'index']);
     $r->post('/settings',     [SettingsController::class, 'update']);
     $r->post('/settings/check-updates', [SettingsController::class, 'checkUpdates']);
+    $r->post('/settings/construction',  [SettingsController::class, 'updateConstruction']); // CONSTRUCCION
     $r->post('/settings/apply-update', [SettingsController::class, 'applyUpdate']);
     // UPD — Actualizar subiendo el ZIP a mano + volver a una copia de seguridad.
     $r->post('/settings/upload-update',  [SettingsController::class, 'uploadUpdate']);

@@ -178,6 +178,62 @@ final class BrandService
         return base_url('brand-assets/' . $siteId . '/logo' . ($variant === 'dark' ? '/dark' : ''));
     }
 
+    /** FAVICON — Ajuste con la ruta del icono de la web. */
+    public const FAVICON_SETTING = 'site_favicon_path';
+
+    /** FAVICON — Extensión → MIME con el que se sirve. */
+    public const FAVICON_TYPES = ['png' => 'image/png', 'ico' => 'image/x-icon'];
+
+    /**
+     * FAVICON — Ruta relativa del icono, solo si es nuestra y existe en disco
+     * ('' si no). Mismo criterio que el logo: un ajuste huérfano no pinta nada.
+     */
+    public static function faviconPath(int $siteId): string
+    {
+        if ($siteId <= 0) return '';
+        try {
+            $row = Database::selectOne(
+                'SELECT setting_value FROM settings WHERE site_id = ? AND setting_key = ? LIMIT 1',
+                [$siteId, self::FAVICON_SETTING]
+            );
+        } catch (\Throwable $e) {
+            return '';
+        }
+        $path = ltrim(trim((string) ($row['setting_value'] ?? '')), '/');
+        if (!str_starts_with($path, 'storage/uploads/' . $siteId . '/brand/')) return '';
+        if (preg_match('/^favicon-[a-f0-9]{16}\.(?:png|ico)$/', basename($path)) !== 1) return '';
+        return is_file(PP_ROOT . '/' . $path) ? $path : '';
+    }
+
+    /**
+     * FAVICON — URL pública del icono. Lleva `?v=` con el hash del nombre:
+     * cada subida crea un archivo nuevo, así que la URL cambia y el navegador
+     * no se queda con el icono anterior.
+     */
+    public static function faviconUrl(int $siteId, ?string $path = null): string
+    {
+        $path ??= self::faviconPath($siteId);
+        if ($path === '' || preg_match('/-([a-f0-9]{16})\./', $path, $m) !== 1) return '';
+        return base_url('brand-assets/' . $siteId . '/favicon') . '?v=' . $m[1];
+    }
+
+    /**
+     * FAVICON — Etiquetas del `<head>`. Un PNG sirve además de icono de
+     * pantalla de inicio en iOS; un .ico no (Safari lo ignora ahí).
+     * Cadena vacía si el sitio no tiene icono: el navegador pide entonces
+     * `/favicon.ico`, que sigue funcionando si alguien lo subió por FTP.
+     */
+    public static function faviconTags(int $siteId): string
+    {
+        $path = self::faviconPath($siteId);
+        if ($path === '') return '';
+        $url = htmlspecialchars(self::faviconUrl($siteId, $path), ENT_QUOTES, 'UTF-8');
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $tags = '<link rel="icon" href="' . $url . '" type="' . self::FAVICON_TYPES[$ext] . '">';
+        if ($ext === 'png') $tags .= '<link rel="apple-touch-icon" href="' . $url . '">';
+        return $tags;
+    }
+
     /**
      * D-MB2 R4 — Logo solo si el archivo existe en disco (un path huérfano en
      * settings producía un <img> roto + alt duplicando el nombre del sitio).

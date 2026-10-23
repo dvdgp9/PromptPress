@@ -1390,6 +1390,25 @@ input[name="model"], input[name="model_light"], input#pp-ai-model {
     font-size: 0.85rem;
 }
 .pp-topbar__site:hover { color: var(--pp-primary); }
+/* CONSTRUCCION — Píldora de aviso mientras la web está en construcción. */
+.pp-topbar__construction {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.pp-topbar__construction:hover { background: #fde68a; }
+.pp-construction-card__toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-weight: 600;
+}
+.pp-construction-card__toggle input { margin-top: 3px; }
+.pp-construction-card__status { margin: 0 0 14px; }
 .pp-topbar__user {
     display: flex;
     align-items: center;
@@ -11955,6 +11974,10 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 .pp-logo-link{border:0;background:none;padding:0;color:var(--pp-text-muted,#6b7280);font-size:.82rem;text-decoration:underline;cursor:pointer}
 .pp-logo-link:hover{color:var(--pp-text,#1f2937)}
 .pp-logo-link--danger:hover{color:var(--pp-danger,#dc2626)}
+/* FAVICON — Se enseña a 64 px: lo bastante para ver si se lee de pequeño. */
+.pp-logo-slot--favicon{max-width:420px}
+.pp-logo-slot--favicon .pp-logo-slot__preview{background:#f8fafc;border:1px solid #eef2f7}
+.pp-logo-slot--favicon .pp-logo-slot__preview img{width:64px;height:64px}
 
 /* CANCEL — Botón "Parar" del chat del Studio (solo visible mientras genera) */
 .cvstudio-cancel-btn{

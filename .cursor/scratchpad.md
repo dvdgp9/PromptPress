@@ -10698,9 +10698,12 @@ capabilities y edit_envelope en verde.
 
 ## Executor's Feedback or Assistance Requests (ASST-CONV)
 
-- Nada commiteado ni publicado como versión. Para que llegue a las
-  instalaciones: commit + subir `PP_VERSION` + push a `main` (eso publica la
-  release para todos). Pendiente de la decisión del usuario.
+- **Publicada v1.10.0 (21/10/2026)** a petición del usuario: commit 69f7c1b,
+  push a `main`, workflow «Publicar release» en verde; la release trae
+  `promptpress-1.10.0.zip` (+ .sha256, `instalar.php`) y el zip incluye
+  `admin/assets/vendor/pdfjs/`, `assistant-pdf-pages.js` y
+  `AssistantConversation.php`. Las instalaciones la verán en Ajustes →
+  Actualizaciones.
 - Posibles siguientes pasos (no hechos): el chat del Studio por página aún no
   admite adjuntar imágenes/PDF; la conversación se pierde al recargar
   (decisión v1); pdf.js va sin `standard_fonts`/`cmaps` (PDF sin fuentes
@@ -10725,3 +10728,78 @@ capabilities y edit_envelope en verde.
 - No hacer `git stash` con la batería corriendo en segundo plano: los tests de
   ese instante leen el árbol a medias. Si alguno falla, repetirlo aislado.
 
+
+---
+
+## Background and Motivation (FAVICON) — 23/10/2026
+
+El usuario actualizó una instalación antigua a 1.10.0 y vio que su web no
+tenía favicon. PromptPress no tenía ninguna forma de configurarlo: ninguna
+página pintaba `<link rel="icon">` y el panel no tenía dónde subirlo. Pidió
+hacerlo directamente en modo Executor.
+
+## Project Status Board (FAVICON)
+
+- [x] Subir / sustituir / eliminar el icono en Apariencia → Diseño (tarjeta bajo los logos). PNG o ICO, ≤ 1 MB.
+- [x] Etiquetas en todas las páginas públicas vía `DesignSystem::renderHead()` (+ página de cancelar reserva, que tiene `<head>` propio).
+- [x] `/favicon.ico` servido por PHP (lo piden solos el panel, PDFs…). Un `favicon.ico` real en la raíz sigue ganando (regla `!-f` del .htaccess).
+- [x] Traducciones es/en/fr/pt.
+- [x] `tests/brand_favicon.php` (12 PASS) + `admin_i18n` y `php80_compat` en verde.
+
+## Current Status / Progress Tracking (FAVICON) — 23/10/2026, Executor
+
+Hecho y comprobado en local (8788) con curl y navegador: un archivo falso se
+rechaza («El icono debe ser PNG o ICO»), el PNG sale en home, páginas
+sections/canvas, legales, tienda y recursos (`rel="icon"` + `apple-touch-icon`),
+`/favicon.ico` responde 200 con el MIME correcto, sustituir por un .ico borra
+el PNG anterior, y eliminar deja la home sin etiqueta y `/favicon.ico` en 404.
+Sin errores en el log del servidor. **Sin commit ni subida de versión.**
+
+Código: `BrandService::faviconPath/faviconUrl/faviconTags`,
+`DesignController::updateFavicon/deleteFavicon`,
+`BrandAssetController::favicon/faviconRoot`, rutas en `app/routes.php`,
+tarjeta en `views/admin/design/index.php`, CSS en `admin/assets/css/admin.css`.
+
+## Lessons (FAVICON)
+
+- El icono NO entra en la tabla `media` (a diferencia del logo): no pinta nada
+  en la biblioteca ni en lo que ve la IA. Por eso al sustituirlo se borra el archivo viejo.
+- La URL del `<head>` lleva `?v=<hash del nombre>`: cada subida cambia de URL y
+  el navegador no se queda con el icono anterior. `/favicon.ico` no puede
+  versionarse, así que se cachea solo un día.
+- Sin SVG a propósito: un SVG servido desde el propio dominio puede ejecutar JS si se abre directo.
+- La página de mantenimiento no lleva icono: no tiene dependencias por diseño.
+
+---
+
+## Background and Motivation (CONSTRUCCION) — 23/10/2026
+
+El usuario preguntó si había forma de poner la web «en construcción»; no la
+había (solo el 503 de unos segundos del actualizador). Pidió hacerlo y
+publicarlo junto al favicon.
+
+## Project Status Board (CONSTRUCCION)
+
+- [x] Ajustes → General: tarjeta «Web en construcción» (interruptor + mensaje opcional), formulario propio `POST /admin/settings/construction`.
+- [x] `core/App.php`: visitas GET/HEAD a páginas → portada con logo, favicon y colores, HTTP 503 + `Retry-After` + `noindex`. El equipo con sesión (o con «mantener sesión») ve la web real.
+- [x] Pasan siempre: POST (formularios, reservas, anti-bot), `/admin`, `/install`, `/api`, `/brand-assets`, `/public`, `/storage`, `design.css`, `favicon.ico`, `robots.txt`, `_health`.
+- [x] Aviso para no olvidarse: píldora «En construcción» en la barra superior del panel y en la píldora del panel sobre la web.
+- [x] Textos de la portada en Microcopy (7 idiomas); panel en es/en/fr/pt.
+- [x] `tests/construction_mode.php` (34 PASS) + batería relacionada en verde.
+
+## Current Status / Progress Tracking (CONSTRUCCION) — 23/10/2026, Executor
+
+Probado en local (8788): activar → visitante recibe 503 con la portada
+(«Abrimos en noviembre.» + logo + colores de marca), canvas/tienda/sitemap
+también 503; robots, design.css, CSS de la portada, API de reservas y _health
+siguen en 200; un POST a /forms sigue llegando al router; el gestor ve la
+home en 200 con el aviso en la píldora. Desactivar → todo vuelve a 200 y el
+aviso desaparece. Ajustes de dev limpiados al terminar.
+
+## Lessons (CONSTRUCCION)
+
+- `App::boot()` abre sesión en TODAS las peticiones, también las públicas: el
+  visitante ya recibía `PPRESSSESSID` antes de este cambio. No es cosa del
+  modo en construcción (comprobado con `git stash`), pero conviene saberlo si
+  algún día se revisa el banner de cookies.
+- `.pp-badge` va en mayúsculas: textos largos ahí se leen mal; usar etiquetas de una palabra.

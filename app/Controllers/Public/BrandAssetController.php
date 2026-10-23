@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers\Public;
 
+use App\Services\BrandService;
 use App\Services\CustomFontService;
 use Core\Database;
 use Core\Response;
@@ -48,6 +49,39 @@ final class BrandAssetController
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . (string) filesize($absolute));
         header('Cache-Control: no-cache, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        readfile($absolute);
+        exit;
+    }
+
+    /** FAVICON — Icono del sitio indicado en la URL. */
+    public function favicon(array $params = []): void
+    {
+        $this->serveFavicon((int) ($params['site'] ?? 0));
+    }
+
+    /** FAVICON — `/favicon.ico`: la instalación sirve un solo sitio, el primero. */
+    public function faviconRoot(array $params = []): void
+    {
+        $site = Database::selectOne('SELECT id FROM sites ORDER BY id ASC LIMIT 1');
+        $this->serveFavicon((int) ($site['id'] ?? 0));
+    }
+
+    private function serveFavicon(int $siteId): void
+    {
+        Session::close();
+
+        // `faviconPath()` ya comprueba prefijo, nombre y que exista.
+        $relative = BrandService::faviconPath($siteId);
+        if ($relative === '') Response::notFound();
+        $absolute = PP_ROOT . '/' . $relative;
+
+        $mime = BrandService::FAVICON_TYPES[strtolower(pathinfo($relative, PATHINFO_EXTENSION))];
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . (string) filesize($absolute));
+        // Un día: la etiqueta del <head> cambia de URL en cada subida, pero
+        // `/favicon.ico` no, y ahí no conviene que el icono viejo dure más.
+        header('Cache-Control: public, max-age=86400');
         header('X-Content-Type-Options: nosniff');
         readfile($absolute);
         exit;

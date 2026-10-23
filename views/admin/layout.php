@@ -125,6 +125,11 @@
             </button>
 
             <div class="pp-topbar__actions">
+                <?php if (!empty($underConstruction)): ?>
+                <a href="<?= e(base_url('admin/settings#pp-construction')) ?>" class="pp-topbar__construction" title="<?= e(__('construction.topbar_title')) ?>">
+                    <?= e(__('construction.topbar')) ?>
+                </a>
+                <?php endif; ?>
                 <?php if (isset($siteName)): ?>
                 <a href="<?= e(base_url('/')) ?>" class="pp-topbar__site" target="_blank" title="<?= e(__('common.view_site')) ?>">
                     <?= e($siteName) ?>

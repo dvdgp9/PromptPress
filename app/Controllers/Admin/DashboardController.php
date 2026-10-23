@@ -124,6 +124,7 @@ class DashboardController
         $userName = 'Admin';
         $siteName = 'PromptPress';
         $siteLogoUrl = '';
+        $underConstruction = false;
 
         if (is_installed()) {
             try {
@@ -137,6 +138,9 @@ class DashboardController
                         $siteName = $site['name'];
                     }
                     $siteLogoUrl = \App\Services\BrandService::logoUrl((int) $siteId);
+                    // CONSTRUCCION — Aviso permanente en la barra superior: que
+                    // el gestor no se olvide de que el público no ve la web.
+                    $underConstruction = \App\Services\ConstructionMode::isActive((int) $siteId);
                 }
             } catch (\Throwable $e) {
                 // Silently fall back to defaults
@@ -147,6 +151,7 @@ class DashboardController
             'userName' => $userName,
             'siteName' => $siteName,
             'siteLogoUrl' => $siteLogoUrl,
+            'underConstruction' => $underConstruction,
         ];
     }
 }

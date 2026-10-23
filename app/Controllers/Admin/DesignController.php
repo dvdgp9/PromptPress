@@ -346,6 +346,64 @@ class DesignController
     }
 
     // ----------------------------------------------------------------------
+    // FAVICON — Icono de la pestaña del navegador
+    // ----------------------------------------------------------------------
+
+    /** POST /admin/design/favicon */
+    public function updateFavicon(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $file = Request::file('favicon');
+        $error = self::validateFaviconUpload($file);
+        if ($error !== null) {
+            Session::flash('error', $error);
+            Response::redirect(base_url('admin/design'));
+        }
+
+        $tmp = (string) $file['tmp_name'];
+        $ext = self::faviconExtension($tmp);
+        $dir = PP_ROOT . '/storage/uploads/' . $siteId . '/brand';
+        $filename = 'favicon-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $absolute = $dir . '/' . $filename;
+        if ((!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir))
+            || !move_uploaded_file($tmp, $absolute) || !is_file($absolute)
+        ) {
+            Session::flash('error', __('design.error.favicon_save'));
+            Response::redirect(base_url('admin/design'));
+        }
+
+        // El anterior se borra: a diferencia del logo, el icono no vive en la
+        // biblioteca de medios, así que nadie más apunta a ese archivo.
+        $previous = BrandService::faviconPath($siteId);
+        self::storeSiteSetting($siteId, BrandService::FAVICON_SETTING, 'storage/uploads/' . $siteId . '/brand/' . $filename);
+        if ($previous !== '') @unlink(PP_ROOT . '/' . $previous);
+
+        CacheService::flush($siteId);
+        Session::flash('success', __('design.flash.favicon_saved'));
+        Response::redirect(base_url('admin/design'));
+    }
+
+    /** POST /admin/design/favicon/delete */
+    public function deleteFavicon(): void
+    {
+        CSRF::check();
+        $siteId = self::requireSiteId();
+
+        $previous = BrandService::faviconPath($siteId);
+        Database::execute(
+            'DELETE FROM settings WHERE site_id = ? AND setting_key = ?',
+            [$siteId, BrandService::FAVICON_SETTING]
+        );
+        if ($previous !== '') @unlink(PP_ROOT . '/' . $previous);
+
+        CacheService::flush($siteId);
+        Session::flash('success', __('design.flash.favicon_deleted'));
+        Response::redirect(base_url('admin/design'));
+    }
+
+    // ----------------------------------------------------------------------
     // FONTS — Tipografías propias del cliente (brandbook)
     // ----------------------------------------------------------------------
 
@@ -523,6 +581,28 @@ class DesignController
         return @getimagesize($tmp) === false ? __('design.error.not_an_image') : null;
     }
 
+    private static function validateFaviconUpload(mixed $file): ?string
+    {
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return __('design.error.favicon_no_file');
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) return __('design.error.favicon_upload');
+        if (($file['size'] ?? 0) <= 0 || (int) $file['size'] > 1024 * 1024) return __('design.error.favicon_size');
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) return __('documents.error.invalid_upload');
+        if (self::faviconExtension($tmp) === '') return __('design.error.favicon_type');
+        return @getimagesize($tmp) === false ? __('design.error.not_an_image') : null;
+    }
+
+    /**
+     * FAVICON — 'png' | 'ico' según el contenido real ('' si no es ninguno).
+     * Los .ico salen con MIMEs distintos según la versión de libmagic.
+     */
+    private static function faviconExtension(string $path): string
+    {
+        $mime = (string) mime_content_type($path);
+        if ($mime === 'image/png') return 'png';
+        return in_array($mime, ['image/vnd.microsoft.icon', 'image/x-icon', 'image/ico'], true) ? 'ico' : '';
+    }
+
     private static function storeSiteSetting(int $siteId, string $key, string $value): void
     {
         Database::execute(
@@ -659,6 +739,7 @@ class DesignController
         $data = array_merge($data, [
             'logoSlots'    => $logoSlots,
             'logoPrimary'  => (string) $brand['logo_primary'],
+            'faviconUrl'   => BrandService::faviconUrl($siteId),
             'schema'       => DesignSystem::schema(),
             'tokens'       => $ctx['tokens'],
             'errors'       => $ctx['errors'],

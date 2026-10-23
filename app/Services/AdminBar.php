@@ -80,6 +80,11 @@ final class AdminBar
         // web de verdad, ESE es el momento de añadirlo.
         $h  = '<div class="pp-adminbar" id="pp-adminbar" hidden>';
         $h .= '<div class="pp-adminbar__actions">';
+        // CONSTRUCCION — Quien ve la web completa tiene que saber que el público no.
+        if (ConstructionMode::isActive((int) ($page['site_id'] ?? 0))) {
+            $h .= '<a class="pp-adminbar__notice" href="' . e(base_url('admin/settings#pp-construction')) . '">'
+                . e(__('construction.bar')) . '</a>';
+        }
         $h .= '<a class="pp-adminbar__link" href="' . $panelUrl . '">' . self::icon('panel') . '<span>' . e(__('bar.panel')) . '</span></a>';
         // EQUIPO T4 — Hoy los tres roles editan contenido, así que este botón
         // sale siempre. Se pregunta igual para que la barra no pueda prometer
@@ -129,6 +134,8 @@ final class AdminBar
             . '.pp-adminbar__link:hover{background:rgba(255,255,255,.14)}'
             . '.pp-adminbar__link--primary{background:#fff;color:#111827}'
             . '.pp-adminbar__link--primary:hover{background:#e5e7eb;color:#111827}'
+            . '.pp-adminbar__notice{padding:8px 12px;border-radius:999px;background:#fef3c7;color:#92400e;'
+            . 'text-decoration:none;white-space:nowrap}'
             . '.pp-adminbar__toggle{display:grid;place-items:center;width:34px;height:34px;flex:none;border:0;border-radius:999px;'
             . 'background:transparent;color:#fff;cursor:pointer;padding:0}'
             . '.pp-adminbar__toggle:hover{background:rgba(255,255,255,.14)}'

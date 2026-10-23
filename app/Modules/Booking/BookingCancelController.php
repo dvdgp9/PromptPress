@@ -122,6 +122,7 @@ final class BookingCancelController
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="robots" content="noindex">'
             . '<title>' . e($title) . '</title>'
+            . \App\Services\BrandService::faviconTags($siteId)
             . '<style>body{font-family:system-ui,sans-serif;background:#f7f6f3;color:#1f2937;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}'
             . '.card{background:#fff;border:1px solid #e5e2dc;border-radius:14px;padding:32px;max-width:420px;width:100%;box-shadow:0 8px 24px -12px rgba(0,0,0,.15)}'
             . 'h1{font-size:1.25rem;margin:0 0 12px}p{line-height:1.55;margin:0 0 14px}.detail{background:#f7f6f3;border-radius:10px;padding:12px 14px}'

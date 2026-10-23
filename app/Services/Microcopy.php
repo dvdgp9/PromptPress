@@ -504,6 +504,22 @@ final class Microcopy
             'gl' => 'Configurar cookies', 'eu' => 'Cookieen ezarpenak', 'fr' => 'Paramètres des cookies',
             'pt' => 'Configurar cookies',
         ],
+        // --- Web en construcción ---------------------------------------------
+        'construction.title' => [
+            'es' => 'Web en construcción', 'en' => 'Website under construction', 'ca' => 'Web en construcció',
+            'gl' => 'Web en construción', 'eu' => 'Webgunea eraikitzen', 'fr' => 'Site en construction',
+            'pt' => 'Site em construção',
+        ],
+        'construction.default_message' => [
+            'es' => 'Estamos preparando nuestra nueva web. Vuelve pronto.',
+            'en' => 'We are getting our new website ready. Please come back soon.',
+            'ca' => 'Estem preparant la nostra nova web. Torna aviat.',
+            'gl' => 'Estamos preparando a nosa nova web. Volve pronto.',
+            'eu' => 'Gure webgune berria prestatzen ari gara. Itzuli laster.',
+            'fr' => 'Nous préparons notre nouveau site. Revenez bientôt.',
+            'pt' => 'Estamos a preparar o nosso novo site. Volte em breve.',
+        ],
+
         'cookies.reopen' => [
             'es' => 'Configurar cookies', 'en' => 'Cookie settings', 'ca' => 'Configurar les cookies',
             'gl' => 'Configurar cookies', 'eu' => 'Cookieen ezarpenak', 'fr' => 'Paramètres des cookies',

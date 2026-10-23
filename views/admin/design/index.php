@@ -136,6 +136,50 @@ window.PP_CUSTOM_FONTS = <?= json_encode(array_column($customFonts ?? [], 'name'
     </p>
 </section>
 
+<?php /* FAVICON — Icono de la pestaña, favoritos y pantalla de inicio. */ ?>
+<section class="pp-logo-card" aria-labelledby="pp-design-favicon-title">
+    <header class="pp-logo-card__head">
+        <div>
+            <h3 id="pp-design-favicon-title"><?= e(__('design.favicon_title')) ?></h3>
+            <p><?= __('design.favicon_help.html') ?></p>
+        </div>
+    </header>
+
+    <div class="pp-logo-grid">
+        <div class="pp-logo-slot pp-logo-slot--favicon">
+            <div class="pp-logo-slot__preview">
+                <?php if ($faviconUrl !== ''): ?>
+                    <img src="<?= e($faviconUrl) ?>" alt="<?= e(__('design.favicon_title')) ?>">
+                <?php else: ?>
+                    <span><?= e(__('design.no_favicon')) ?></span>
+                <?php endif; ?>
+            </div>
+
+            <form method="POST" action="<?= e(base_url('admin/design/favicon')) ?>" enctype="multipart/form-data" class="pp-logo-slot__form">
+                <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                <label class="pp-logo-picker">
+                    <span><?= e(__('design.choose_file')) ?></span>
+                    <input type="file" name="favicon" accept="image/png,.ico,image/x-icon,image/vnd.microsoft.icon" required data-logo-file>
+                </label>
+                <span class="pp-logo-filename" data-logo-filename><?= e(__('onboarding.type.no_files')) ?></span>
+                <button type="submit" class="pp-btn pp-btn--primary pp-btn--sm" data-logo-submit disabled>
+                    <?= e($faviconUrl !== '' ? __('design.replace') : __('media.upload')) ?>
+                </button>
+            </form>
+
+            <?php if ($faviconUrl !== ''): ?>
+            <div class="pp-logo-slot__actions">
+                <form method="POST" action="<?= e(base_url('admin/design/favicon/delete')) ?>"
+                      onsubmit="return confirm(<?= e(json_encode(__('design.confirm_delete_favicon'), JSON_UNESCAPED_UNICODE)) ?>);">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <button type="submit" class="pp-logo-link pp-logo-link--danger"><?= e(__('common.delete')) ?></button>
+                </form>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</section>
+
 <?php $flashSuccess = \Core\Session::flash('success'); $flashError = \Core\Session::flash('error'); ?>
 <?php /* DESIGN-MANDA T5 — El aviso de contraste no es un error: el color se ha
        guardado. Va aparte para que no se confunda con un fallo de validación. */ ?>

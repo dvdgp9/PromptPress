@@ -103,6 +103,21 @@ final class App
                 return;
             }
 
+            // CONSTRUCCION — «Web en construcción»: el visitante ve la portada;
+            // el equipo, con sesión, sigue viendo la web real.
+            if (is_installed() && \App\Services\ConstructionMode::intercepts(Request::method(), $path)) {
+                $site = Database::selectOne('SELECT id FROM sites ORDER BY id ASC LIMIT 1');
+                $siteId = (int) ($site['id'] ?? 0);
+                if (\App\Services\ConstructionMode::isActive($siteId) && !\App\Services\ConstructionMode::viewerIsTeam()) {
+                    http_response_code(503);
+                    header('Retry-After: 86400');
+                    header('Cache-Control: no-store');
+                    header('Content-Type: text/html; charset=UTF-8');
+                    echo \App\Services\ConstructionMode::render($siteId);
+                    return;
+                }
+            }
+
             $router = new Router();
             require PP_APP . '/routes.php'; // espera $router en scope
             $router->dispatch(Request::method(), Request::path());
