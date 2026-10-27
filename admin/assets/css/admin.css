@@ -12179,6 +12179,16 @@ a.pp-page-menu__item{text-decoration:none}
 .pp-resource-choice small,.pp-resource-status-option small{color:var(--pp-text-muted);font-size:.76rem;line-height:1.4}
 .pp-resource-form-link{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px;padding:15px;border-left:3px solid var(--pp-primary);border-radius:0 10px 10px 0;background:#fffaf7}
 .pp-resource-form-link[hidden]{display:none}
+/* EBOOK-PAGO — tercera forma de entrega («Vender en la tienda») y tipo de producto */
+.pp-resource-choice-grid--3{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.pp-resource-choice.is-disabled{opacity:.55;cursor:not-allowed}
+.pp-resource-sale{display:grid;gap:8px;margin-top:12px;padding:15px;border-left:3px solid var(--pp-primary);border-radius:0 10px 10px 0;background:#fffaf7;font-size:.84rem}
+.pp-resource-sale[hidden]{display:none}
+.pp-resource-sale p{margin:0}
+.pp-resource-sale__actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pp-resource-sale .pp-link[hidden]{display:none}
+.pp-commerce-digital{margin:14px 0 0}
+.pp-order-digital-tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;background:#eef2ff;color:#3730a3;font-size:.72rem;font-weight:600;vertical-align:middle}
 .pp-resource-form-link>.pp-form-group{width:100%;margin:0}
 .pp-resource-form-link p{margin:0}
 .pp-resource-form-link p strong,.pp-resource-form-link p span{display:block}
@@ -12216,7 +12226,7 @@ a.pp-page-menu__item{text-decoration:none}
     .pp-resource-row__titleline{align-items:flex-start;flex-direction:column;gap:5px}
     .pp-resource-row__meta{line-height:1.6}
     .pp-resource-section{padding:18px}
-    .pp-resource-choice-grid{grid-template-columns:1fr}
+    .pp-resource-choice-grid,.pp-resource-choice-grid--3{grid-template-columns:1fr}
     .pp-resource-cover{grid-template-columns:70px minmax(0,1fr)}
     .pp-resource-cover__copy{grid-column:1/-1}
     .pp-resource-current-file{grid-template-columns:44px minmax(0,1fr)}

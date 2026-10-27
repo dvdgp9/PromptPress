@@ -3,6 +3,7 @@
  * @var array $resource @var array $forms @var string[] $languages
  * @var string[] $publicationIssues @var int $maxUploadBytes
  * @var string[] $errors @var ?string $notice @var string $csrf
+ * @var bool $commerceEnabled @var ?array $saleProduct (EBOOK-PAGO)
  */
 \Core\View::extend('admin/layout');
 use App\Services\LanguageService;
@@ -119,7 +120,8 @@ $fileSize = $hasFile ? ($resource['file_size'] >= 1024 * 1024
                 <span class="pp-resource-section__step">03</span>
                 <div><h3 id="pp-resource-access-title"><?= e(__('resource.admin.access_title')) ?></h3><p><?= e(__('resource.admin.access_help')) ?></p></div>
             </header>
-            <div class="pp-resource-choice-grid">
+            <?php $saleAvailable = $commerceEnabled || $accessMode === 'sale'; ?>
+            <div class="pp-resource-choice-grid pp-resource-choice-grid--3">
                 <label class="pp-resource-choice<?= $accessMode === 'direct' ? ' is-selected' : '' ?>">
                     <input type="radio" name="access_mode" value="direct" <?= $accessMode === 'direct' ? 'checked' : '' ?>>
                     <span><strong><?= e(__('resource.admin.access.direct')) ?></strong><small><?= e(__('resource.admin.access.direct_help')) ?></small></span>
@@ -128,6 +130,43 @@ $fileSize = $hasFile ? ($resource['file_size'] >= 1024 * 1024
                     <input type="radio" name="access_mode" value="form" <?= $accessMode === 'form' ? 'checked' : '' ?>>
                     <span><strong><?= e(__('resource.admin.access.form')) ?></strong><small><?= e(__('resource.admin.access.form_help')) ?></small></span>
                 </label>
+                <label class="pp-resource-choice<?= $accessMode === 'sale' ? ' is-selected' : '' ?><?= $saleAvailable ? '' : ' is-disabled' ?>">
+                    <input type="radio" name="access_mode" value="sale" <?= $accessMode === 'sale' ? 'checked' : '' ?> <?= $saleAvailable ? '' : 'disabled' ?>>
+                    <span><strong><?= e(__('resource.admin.access.sale')) ?></strong><small><?= e($saleAvailable ? __('resource.admin.access.sale_help') : __('resource.admin.access.sale_needs_commerce')) ?></small></span>
+                </label>
+            </div>
+            <?php /* EBOOK-PAGO — con qué producto se vende. Crearlo NO cambia la
+               forma de entrega del recurso: eso solo lo hace Guardar. */ ?>
+            <div class="pp-resource-sale" data-sale-settings <?= $accessMode === 'sale' ? '' : 'hidden' ?>>
+                <?php if ($saleProduct !== null): ?>
+                    <?php $saleVars = [
+                        'producto' => (string) $saleProduct['name'],
+                        'precio'   => \App\Modules\Commerce\CommerceSettings::format((int) $saleProduct['price_cents']),
+                    ]; ?>
+                    <p><?= e((int) $saleProduct['active'] === 1
+                        ? __('resource.admin.sale_product', $saleVars)
+                        : __('resource.admin.sale_product_inactive', $saleVars)) ?></p>
+                    <?php if (\Core\Auth::can(\App\Services\Permissions::CAP_CLIENTS)): ?>
+                        <div class="pp-resource-sale__actions">
+                            <a class="pp-link" href="<?= e(base_url('admin/commerce/products/' . (int) $saleProduct['id'])) ?>" target="_blank" rel="noopener"><?= e(__('resource.admin.sale_edit_product')) ?></a>
+                        </div>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <p data-sale-status><?= e(__('resource.admin.sale_no_product')) ?></p>
+                    <?php if ($commerceEnabled && \Core\Auth::can(\App\Services\Permissions::CAP_CLIENTS)): ?>
+                        <div class="pp-resource-sale__actions">
+                            <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm"
+                                    data-create-product
+                                    data-url="<?= e(base_url('admin/resources/' . $id . '/product')) ?>"
+                                    data-busy-label="<?= e(__('resource.admin.sale_creating')) ?>"
+                                    data-done-text="<?= e(__('resource.admin.sale_created')) ?>"
+                                    data-failed-text="<?= e(__('resource.admin.err.sale_create_failed')) ?>">
+                                <?= e(__('resource.admin.sale_create_product')) ?>
+                            </button>
+                            <a class="pp-link" data-product-link target="_blank" rel="noopener" hidden href=""><?= e(__('resource.admin.sale_open_product')) ?></a>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
             <?php /* RSRC-FORM — El desplegable se pinta SIEMPRE, aunque el sitio
                no tenga ni un formulario: así el botón de crear uno vive en el

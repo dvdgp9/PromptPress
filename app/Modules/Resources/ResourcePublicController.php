@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Resources;
 
+use App\Modules\Commerce\CommerceSettings;
+use App\Modules\Commerce\ProductStore;
 use App\Modules\ModuleRegistry;
 use App\Services\LanguageService;
 use App\Services\Microcopy;
 use App\Services\Renderer\SectionRenderer;
+use Core\CSRF;
 use Core\Response;
 
 final class ResourcePublicController
@@ -59,9 +62,11 @@ final class ResourcePublicController
             ? '<img class="pp-resource__cover" src="' . e($cover) . '" alt="' . e((string) ($resource['cover_alt'] ?: $resource['title'])) . '">'
             : '<div class="pp-resource__cover pp-resource__cover--empty" aria-hidden="true"><span>' . e($format) . '</span></div>';
 
-        $action = (string) $resource['access_mode'] === 'direct'
-            ? '<a class="pp-resource__download" href="' . e(self::downloadUrl($siteId, $lang, (string) $resource['slug'])) . '">' . e($tr('resources.download')) . '</a>'
-            : self::conditionedAccess($siteId, $lang, $resource, $tr);
+        $action = match ((string) $resource['access_mode']) {
+            'direct' => '<a class="pp-resource__download" href="' . e(self::downloadUrl($siteId, $lang, (string) $resource['slug'])) . '">' . e($tr('resources.download')) . '</a>',
+            'sale'   => self::saleAccess($siteId, $resource, $tr),
+            default  => self::conditionedAccess($siteId, $lang, $resource, $tr),
+        };
 
         $body = '<div class="pp-resources__container">'
             . '<a class="pp-resource__back" href="' . e($catalogUrl) . '">← ' . e($tr('resources.back')) . '</a>'
@@ -123,6 +128,30 @@ final class ResourcePublicController
         ]);
         return '<div class="pp-resource__access"><p class="pp-resource__access-intro">'
             . e($tr('resources.form_required')) . '</p>' . $form . '</div>';
+    }
+
+    /**
+     * EBOOK-PAGO — recurso a la venta: precio y «Comprar», que lo mete en el
+     * carrito de la Tienda. El archivo nunca se enlaza desde aquí; solo sale
+     * con el enlace firmado de un pedido pagado. Sin Tienda activa o sin
+     * producto a la venta, se dice que no está disponible (nunca se regala).
+     */
+    private static function saleAccess(int $siteId, array $resource, callable $tr): string
+    {
+        $product = ModuleRegistry::isEnabled($siteId, 'commerce')
+            ? ProductStore::forResource($siteId, (int) $resource['id'], true)
+            : null;
+        if ($product === null) {
+            return '<div class="pp-resource__form-note pp-resource__form-note--unavailable"><p>'
+                . e($tr('resources.unavailable')) . '</p></div>';
+        }
+        return '<form class="pp-resource__buy" method="post" action="' . e(base_url('tienda/carrito')) . '">'
+            . '<input type="hidden" name="_csrf" value="' . e(CSRF::token()) . '">'
+            . '<input type="hidden" name="product_id" value="' . (int) $product['id'] . '">'
+            . '<input type="hidden" name="quantity" value="1">'
+            . '<button type="submit" class="pp-resource__download">'
+            . e($tr('resources.buy', ['price' => CommerceSettings::format((int) $product['price_cents'])])) . '</button>'
+            . '<p class="pp-resource__buy-note">' . e($tr('resources.sale_note')) . '</p></form>';
     }
 
     private static function path(int $siteId, string $lang, string $suffix): string

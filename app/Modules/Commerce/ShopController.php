@@ -73,6 +73,7 @@ final class ShopController
         $img = ShopRenderer::imageUrl($p['media_path'] ?? null);
         $stock = $p['stock'] !== null ? (int) $p['stock'] : null;
         $soldOut = $stock !== null && $stock <= 0;
+        $digital = (string) ($p['product_type'] ?? 'physical') === 'digital';
         $includeTax = CommerceSettings::pricesIncludeTax($siteId);
         $taxRate = rtrim(rtrim(number_format((float) $p['tax_rate'], 2, '.', ''), '0'), '.');
 
@@ -97,8 +98,14 @@ final class ShopController
             $body .= '<form method="post" action="' . e(base_url('tienda/carrito')) . '">';
             $body .= '<input type="hidden" name="_csrf" value="' . e(\Core\CSRF::token()) . '">';
             $body .= '<input type="hidden" name="product_id" value="' . (int) $p['id'] . '">';
-            $body .= '<div class="pp-shop-qty"><label for="pp-shop-qty">' . e($tr('shop.quantity')) . '</label>';
-            $body .= '<input type="number" id="pp-shop-qty" name="quantity" value="1" min="1" max="' . $max . '"></div>';
+            if ($digital) {
+                // Un archivo se compra una vez: sin selector de cantidad.
+                $body .= '<input type="hidden" name="quantity" value="1">';
+                $body .= '<p class="pp-shop-digital-note">' . e($tr('shop.digital_note')) . '</p>';
+            } else {
+                $body .= '<div class="pp-shop-qty"><label for="pp-shop-qty">' . e($tr('shop.quantity')) . '</label>';
+                $body .= '<input type="number" id="pp-shop-qty" name="quantity" value="1" min="1" max="' . $max . '"></div>';
+            }
             $body .= '<button type="submit" class="pp-btn pp-btn--lg">' . e($tr('shop.add_to_cart')) . '</button>';
             $body .= '</form>';
             if ($stock !== null && $stock <= 5) {
@@ -142,7 +149,7 @@ final class ShopController
             $body .= '<table class="pp-shop-table"><thead><tr><th>' . e($tr('shop.col_product')) . '</th><th>' . e($tr('shop.col_price'))
             . '</th><th>' . e($tr('shop.quantity')) . '</th><th>' . e($tr('shop.total')) . '</th><th></th></tr></thead><tbody>';
             foreach ($t['lines'] as $line) {
-                $max = $line['available_stock'] !== null ? min($line['available_stock'], 99) : 99;
+                $max = $line['available_stock'] !== null ? min($line['available_stock'], $line['max_quantity']) : $line['max_quantity'];
                 $body .= '<tr>';
                 $body .= '<td><a href="' . e(base_url('tienda/p/' . $line['slug'])) . '">' . e($line['name']) . '</a></td>';
                 $body .= '<td>' . e(CommerceSettings::format($line['unit_price_cents'])) . '</td>';
@@ -260,8 +267,15 @@ final class ShopController
         if ($input['email'] === '' || filter_var($input['email'], FILTER_VALIDATE_EMAIL) === false) {
             $errors[] = $tr('shop.err_email');
         }
-        if (self::shippingNeeded($siteId) && ($input['address'] === '' || $input['city'] === '' || $input['postcode'] === '')) {
+        if (self::shippingNeeded($siteId, $t) && ($input['address'] === '' || $input['city'] === '' || $input['postcode'] === '')) {
             $errors[] = $tr('shop.err_address');
+        }
+        // EBOOK-PAGO — sin este consentimiento expreso no se puede entregar el
+        // archivo al momento sin dejar abierto el desistimiento de 14 días.
+        $digitalConsent = (string) Request::post('digital_consent', '') === '1';
+        $input['digital_consent'] = $digitalConsent ? '1' : '';
+        if ($t['has_digital'] && !$digitalConsent) {
+            $errors[] = $tr('shop.err_digital_consent');
         }
         $method = PaymentMethods::byKey($siteId, $methodKey);
         if ($method === null) {
@@ -274,12 +288,13 @@ final class ShopController
         }
 
         $ipHash = FormSubmissionService::ipHash(Request::ip());
-        $result = OrderStore::createFromCart($siteId, $input, $method->key(), $ipHash);
+        $result = OrderStore::createFromCart($siteId, $input, $method->key(), $ipHash, $digitalConsent);
         if (!$result['ok']) {
             $msg = match ($result['error'] ?? '') {
-                'rate_limited' => $tr('shop.err_rate_limited'),
-                'out_of_stock' => $tr('shop.err_out_of_stock', ['product' => (string) ($result['detail'] ?? '')]),
-                default        => $tr('shop.err_order_failed'),
+                'rate_limited'    => $tr('shop.err_rate_limited'),
+                'out_of_stock'    => $tr('shop.err_out_of_stock', ['product' => (string) ($result['detail'] ?? '')]),
+                'digital_consent' => $tr('shop.err_digital_consent'),
+                default           => $tr('shop.err_order_failed'),
             };
             $this->renderCheckout($siteId, CartService::totals($siteId), $input, [$msg]);
             return;
@@ -336,8 +351,10 @@ final class ShopController
         $body .= '<p>' . e($tr('shop.order')) . ' <strong>' . e((string) $order['order_number']) . '</strong> · '
             . e($tr('shop.thanks_email_sent', ['email' => (string) $order['customer_email']])) . '</p>';
         if ((string) $order['status'] === 'paid') {
-            $body .= '<p class="pp-shop-notice">' . e($tr('shop.payment_confirmed')) . '</p>';
+            $body .= '<p class="pp-shop-notice">' . e($tr(DigitalDelivery::isDigitalOnly($order)
+                ? 'shop.payment_confirmed_digital' : 'shop.payment_confirmed')) . '</p>';
         }
+        $body .= self::downloadsHtml($siteId, $order);
 
         // Estado del pago mientras el pedido siga pendiente (instrucciones de
         // transferencia, o reintento de tarjeta). pendingInstructions es puro:
@@ -397,6 +414,46 @@ final class ShopController
         Response::redirect($start->redirectUrl ?? $thanksUrl);
     }
 
+    /**
+     * GET /tienda/descargar?token=... — archivo de una compra (EBOOK-PAGO).
+     *
+     * Enlace caducado de una compra válida → página que lo explica. NO lleva a
+     * la página del pedido (que firma enlaces nuevos): si lo hiciera, la
+     * caducidad no serviría de nada con un enlace reenviado a terceros. El
+     * comprador pide otro y la tienda se lo reenvía desde el pedido.
+     * Cualquier otra cosa (firma mala, pedido cancelado o sin pagar) → 404.
+     */
+    public function download(): void
+    {
+        $siteId = self::siteId();
+        $token = Request::get('token');
+        $auth = DigitalDelivery::authorize($siteId, is_string($token) ? $token : '');
+        if ($auth['status'] === 'expired') {
+            $tr = self::copy($siteId);
+            ShopRenderer::send($siteId, [
+                'title'   => $tr('shop.download_expired_title'),
+                'noindex' => true,
+                'body'    => '<div class="container"><div class="pp-shop-thanks"><h1>' . e($tr('shop.download_expired_title')) . '</h1>'
+                    . '<p>' . e($tr('shop.download_expired_body', ['number' => (string) $auth['order']['order_number']])) . '</p>'
+                    . '<p><a class="pp-btn pp-btn--ghost" href="' . e(base_url('tienda')) . '">' . e($tr('shop.back_to_shop')) . '</a></p></div></div>',
+            ], 410);
+        }
+        if ($auth['status'] !== 'ok') {
+            Response::notFound();
+        }
+        $prepared = \App\Modules\Resources\ResourceFileService::preparePurchasedDownload($siteId, (int) $auth['resource_id']);
+        if ($prepared === null) {
+            Response::notFound();
+        }
+        if (ModuleRegistry::isEnabled($siteId, 'analytics')) {
+            \App\Modules\Analytics\EventRecorder::record(
+                $siteId, 'resource_download', '/tienda/descargar', null, Request::ip(), Request::userAgent()
+            );
+        }
+        Session::close();
+        \App\Modules\Resources\ResourceFileService::stream($prepared);
+    }
+
     // ======================================================================
     // Helpers
     // ======================================================================
@@ -438,7 +495,7 @@ final class ShopController
     {
         $tr = self::copy($siteId);
         $methods = PaymentMethods::availableFor($siteId);
-        $needShipping = self::shippingNeeded($siteId);
+        $needShipping = self::shippingNeeded($siteId, $t);
         $v = static fn (string $k): string => e((string) ($old[$k] ?? ''));
 
         $body = '<div class="container">';
@@ -478,6 +535,11 @@ final class ShopController
         }
         if ($methods === []) {
             $body .= '<p class="pp-shop-error">' . e($tr('shop.no_payment_methods')) . '</p>';
+        }
+        if (!empty($t['has_digital'])) {
+            $body .= '<label class="pp-shop-consent"><input type="checkbox" name="digital_consent" value="1" required'
+                . (($old['digital_consent'] ?? '') === '1' ? ' checked' : '') . '> '
+                . e($tr('shop.digital_consent')) . '</label>';
         }
         $body .= '<button type="submit" class="pp-btn pp-btn--lg"' . ($methods === [] ? ' disabled' : '') . '>' . e($tr('shop.place_order')) . '</button>';
         $body .= '</form>';
@@ -521,11 +583,47 @@ final class ShopController
         return static fn (string $key, array $vars = []): string => Microcopy::site($siteId, $key, $vars);
     }
 
-    /** ¿El sitio tiene envío configurado (y por tanto pedimos dirección)? */
-    private static function shippingNeeded(int $siteId): bool
+    /**
+     * ¿Pedimos dirección? Solo si el sitio tiene envío configurado y el carrito
+     * lleva algo físico: un ebook no se envía a ninguna parte.
+     *
+     * @param array<string,mixed> $totals
+     */
+    private static function shippingNeeded(int $siteId, array $totals): bool
     {
+        if (empty($totals['needs_shipping'])) {
+            return false;
+        }
         return CommerceSettings::shippingCents($siteId) > 0
             || CommerceSettings::freeShippingOverCents($siteId) !== null;
+    }
+
+    /**
+     * EBOOK-PAGO — bloque «Tus descargas» de la página del pedido (a la que se
+     * llega al volver de Stripe o al confirmar la transferencia). Cada visita
+     * firma enlaces nuevos de 7 días. Pendiente de pago: aviso de que llegarán.
+     *
+     * @param array<string,mixed> $order
+     */
+    private static function downloadsHtml(int $siteId, array $order): string
+    {
+        if (DigitalDelivery::digitalItems($order) === []) {
+            return '';
+        }
+        $tr = self::copy($siteId);
+        if (!DigitalDelivery::isEntitled($order)) {
+            return (string) $order['status'] === 'pending_payment'
+                ? '<p class="pp-shop-downloads__pending">' . e($tr('shop.downloads_pending')) . '</p>'
+                : '';
+        }
+        $h = '<section class="pp-shop-downloads"><h2>' . e($tr('shop.downloads_title')) . '</h2><ul>';
+        foreach (DigitalDelivery::links($siteId, $order) as $link) {
+            $h .= '<li><span>' . e($link['title']) . '</span> <a class="pp-btn" href="' . e($link['url']) . '">'
+                . e($tr('shop.download')) . '</a></li>';
+        }
+        return $h . '</ul><p class="pp-shop-downloads__hint">' . e($tr('shop.downloads_hint', [
+            'days' => (int) round(DigitalDelivery::LINK_TTL / 86400),
+        ])) . '</p></section>';
     }
 
     private static function siteId(): int

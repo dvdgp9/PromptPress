@@ -155,6 +155,16 @@ final class ShopRenderer
 .pp-shop-summary .pp-shop-totals{max-width:none}
 .pp-shop-thanks{max-width:640px}
 .pp-shop-instructions{background:var(--pp-surface);border:1px solid var(--pp-border);border-radius:var(--pp-radius-card);padding:18px 22px;margin:18px 0}
+.pp-shop-digital-note{font-size:.9rem;color:var(--pp-text-muted);margin:0 0 18px}
+.pp-shop-consent{display:flex!important;align-items:flex-start;gap:10px;margin:22px 0 0!important;font-weight:500!important;line-height:1.45}
+.pp-shop-consent input{width:auto!important;margin:3px 0 0!important;display:inline!important;flex:none}
+.pp-shop-downloads{background:var(--pp-surface);border:1px solid var(--pp-border);border-radius:var(--pp-radius-card);padding:18px 22px;margin:18px 0}
+.pp-shop-downloads h2{font-size:1.1rem;margin:0 0 10px}
+.pp-shop-downloads ul{list-style:none;margin:0;padding:0}
+.pp-shop-downloads li{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--pp-border)}
+.pp-shop-downloads li:last-child{border-bottom:0}
+.pp-shop-downloads li span{font-weight:600}
+.pp-shop-downloads__hint,.pp-shop-downloads__pending{font-size:.85rem;color:var(--pp-text-muted);margin:10px 0 0}
 CSS;
     }
 }

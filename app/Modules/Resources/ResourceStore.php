@@ -18,6 +18,12 @@ final class ResourceStore
 {
     public const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
+    /**
+     * Formas de entrega. `sale` (EBOOK-PAGO) = se vende en la Tienda: la ficha
+     * ofrece comprar y el archivo solo sale con un enlace de compra pagada.
+     */
+    public const ACCESS_MODES = ['direct', 'form', 'sale'];
+
     private const DEFAULTS = [
         'title'             => '',
         'description'       => null,
@@ -267,7 +273,7 @@ final class ResourceStore
         }
 
         $accessMode = trim((string) $f['access_mode']);
-        if (!in_array($accessMode, ['direct', 'form'], true)) {
+        if (!in_array($accessMode, self::ACCESS_MODES, true)) {
             throw new InvalidArgumentException(__('resource.err.access_invalid'));
         }
         $status = trim((string) $f['status']);

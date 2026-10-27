@@ -3,6 +3,7 @@
  * Tienda — detalle de un pedido (FEAT-3 C6).
  *
  * @var array    $order       fila de commerce_orders con 'items'
+ * @var array    $digitalItems líneas que entregan un archivo (EBOOK-PAGO)
  * @var string[] $nextStates  estados a los que se puede pasar desde el actual
  * @var ?string  $notice
  * @var ?string  $error
@@ -85,6 +86,7 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
                     <td>
                         <?= e((string) $it['product_name']) ?>
                         <span class="pp-booking-soft">× <?= (int) $it['quantity'] ?></span>
+                        <?php if ((int) ($it['resource_id'] ?? 0) > 0): ?><span class="pp-order-digital-tag"><?= e(__('order.digital_tag')) ?></span><?php endif; ?>
                     </td>
                     <td class="pp-order-num"><?= e(CommerceSettings::format((int) $it['line_total_cents'])) ?></td>
                 </tr>
@@ -135,6 +137,27 @@ $statusUrl = base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/status'
                 <?php endif; ?>
             </p>
         </div>
+
+        <?php if ($digitalItems !== []): ?>
+        <?php /* EBOOK-PAGO — qué ha recibido el comprador y cómo mandarle enlaces nuevos. */ ?>
+        <div class="pp-card pp-order-block">
+            <h3><?= e(__('order.downloads_title')) ?></h3>
+            <?php if (in_array($st, ['paid', 'shipped'], true)): ?>
+                <p class="pp-booking-soft"><?= e(__('order.downloads_help')) ?></p>
+                <form method="post" action="<?= e(base_url('admin/commerce/pedidos/' . (int) $order['id'] . '/downloads')) ?>">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('order.resend_downloads')) ?></button>
+                </form>
+            <?php elseif ($st === 'pending_payment'): ?>
+                <p class="pp-booking-soft"><?= e(__('order.downloads_pending')) ?></p>
+            <?php else: ?>
+                <p class="pp-booking-soft"><?= e(__('order.downloads_cancelled')) ?></p>
+            <?php endif; ?>
+            <?php if (!empty($order['digital_consent_at'])): ?>
+                <p class="pp-booking-soft"><?= e(__('order.digital_consent', ['fecha' => (new DateTimeImmutable((string) $order['digital_consent_at']))->format('d/m/Y H:i')])) ?></p>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
 
         <div class="pp-card pp-order-block">
             <h3><?= e(__('order.internal_notes')) ?></h3>

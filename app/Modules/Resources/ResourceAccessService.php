@@ -91,6 +91,55 @@ final class ResourceAccessService
         return $submission !== null ? $resource : null;
     }
 
+    /**
+     * EBOOK-PAGO — enlace de una compra: liga pedido + línea + recurso. Aquí
+     * solo se firma; si la compra sigue dando derecho (pedido pagado, no
+     * cancelado) lo decide Commerce en cada descarga (DigitalDelivery).
+     */
+    public static function issuePurchaseToken(
+        int $siteId,
+        int $orderId,
+        int $itemId,
+        int $resourceId,
+        int $ttl,
+        ?int $now = null
+    ): string {
+        return self::encode([
+            'v' => 1,
+            'k' => 'purchase',
+            's' => $siteId,
+            'o' => $orderId,
+            'i' => $itemId,
+            'r' => $resourceId,
+            'e' => ($now ?? time()) + max(1, $ttl),
+        ]);
+    }
+
+    /**
+     * Firma válida y del sitio. Devuelve el payload también CADUCADO (con
+     * `expired` a true) para que la tienda pueda explicar qué pasa en vez de
+     * dar un 404 mudo; quien llama decide si sirve o no el archivo.
+     *
+     * @return array{order_id:int,item_id:int,resource_id:int,expires_at:int,expired:bool}|null
+     */
+    public static function readPurchaseToken(string $token, int $siteId, ?int $now = null): ?array
+    {
+        $p = self::decode($token);
+        if ($p === null || ($p['k'] ?? '') !== 'purchase' || (int) ($p['v'] ?? 0) !== 1
+            || (int) ($p['s'] ?? 0) !== $siteId
+            || (int) ($p['o'] ?? 0) <= 0 || (int) ($p['i'] ?? 0) <= 0 || (int) ($p['r'] ?? 0) <= 0) {
+            return null;
+        }
+        $expires = (int) ($p['e'] ?? 0);
+        return [
+            'order_id'    => (int) $p['o'],
+            'item_id'     => (int) $p['i'],
+            'resource_id' => (int) $p['r'],
+            'expires_at'  => $expires,
+            'expired'     => $expires < ($now ?? time()),
+        ];
+    }
+
     /** Devuelve el enlace solo si el contexto corresponde al envío guardado. */
     public static function downloadUrlForSubmission(
         string $context,

@@ -32,6 +32,10 @@
 .pp-resource__download{display:inline-flex;align-items:center;justify-content:center;min-height:3rem;padding:.7rem 1.25rem;border-radius:var(--pp-btn-radius);background:var(--pp-primary);color:#fff;font-weight:var(--pp-btn-weight);text-decoration:none;box-shadow:var(--pp-btn-shadow);transition:transform 140ms ease,filter 140ms ease}
 .pp-resource__download:hover{filter:brightness(.94);transform:translateY(-2px)}
 .pp-resource__download:active{transform:translateY(0) scale(.98)}
+/* EBOOK-PAGO — recurso a la venta: el mismo botón, pero como <button> de un formulario. */
+.pp-resource__buy{display:grid;justify-items:start;gap:.6rem;margin:0}
+button.pp-resource__download{border:0;font:inherit;cursor:pointer}
+.pp-resource__buy-note{margin:0;max-width:32rem;font-size:.92rem;color:var(--pp-text-muted)}
 .pp-resource__form-note{max-width:32rem;padding:1rem 1.15rem;border-left:3px solid var(--pp-primary);background:color-mix(in srgb,var(--pp-primary) 7%,var(--pp-surface))}
 .pp-resource__form-note p{margin:0}
 .pp-resource__form-note--unavailable{border-left-color:var(--pp-text-muted)}

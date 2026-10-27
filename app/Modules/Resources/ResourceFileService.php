@@ -180,6 +180,19 @@ final class ResourceFileService
         return self::prepareResource($siteId, $resource);
     }
 
+    /**
+     * EBOOK-PAGO — archivo de una compra ya autorizada por Commerce. No mira
+     * estado ni forma de entrega: quien pagó conserva la descarga aunque el
+     * recurso pase a borrador o deje de venderse.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function preparePurchasedDownload(int $siteId, int $resourceId): ?array
+    {
+        $resource = ResourceStore::find($siteId, $resourceId);
+        return $resource === null ? null : self::prepareResource($siteId, $resource);
+    }
+
     /** @return array<string,mixed>|null */
     private static function prepareResource(int $siteId, array $resource): ?array
     {

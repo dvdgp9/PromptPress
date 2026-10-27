@@ -426,6 +426,12 @@ final class LegalPageGenerator
         }
         $shipping = \App\Modules\Commerce\CommerceSettings::shippingCents($siteId) > 0
             || \App\Modules\Commerce\CommerceSettings::freeShippingOverCents($siteId) !== null;
+        // EBOOK-PAGO — contenido digital: cambia el desistimiento (consentimiento
+        // expreso en el checkout) y la forma de entrega.
+        $digital = \Core\Database::selectOne(
+            "SELECT id FROM commerce_products WHERE site_id = ? AND product_type = 'digital' AND active = 1 LIMIT 1",
+            [$siteId]
+        ) !== null;
 
         return "- Activa: tienda online propia integrada en la web (PromptCommerce), alojada en el mismo servidor del sitio (no es un marketplace de terceros).\n"
              . "- Compra como invitado: no se crean cuentas de cliente ni contraseñas.\n"
@@ -433,6 +439,7 @@ final class LegalPageGenerator
              . "- El carrito usa la sesión técnica del navegador (cookie de sesión estrictamente necesaria, exenta de consentimiento).\n"
              . "- Métodos de pago configurados: " . ($labels !== [] ? implode('; ', $labels) : 'ninguno todavía') . ".\n"
              . ($shipping ? "- Hay envío físico de productos con gastos de envío mostrados antes de confirmar el pedido.\n" : "- No hay gastos de envío configurados actualmente.\n")
+             . ($digital ? "- Se vende contenido digital descargable (por ejemplo, ebooks en PDF o EPUB) sin soporte material. Se entrega con un enlace de descarga personal enviado por email al confirmarse el pago, válido 7 días. Antes de pagar, el comprador marca una casilla obligatoria en la que da su consentimiento expreso a la entrega inmediata y reconoce que, una vez iniciada la descarga, pierde el derecho de desistimiento; la confirmación del pedido por email recoge ese consentimiento.\n" : '')
              . "- Los precios mostrados " . (\App\Modules\Commerce\CommerceSettings::pricesIncludeTax($siteId) ? 'incluyen IVA' : 'NO incluyen IVA (se añade en el carrito antes de confirmar)') . ".";
     }
 

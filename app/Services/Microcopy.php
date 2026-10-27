@@ -788,6 +788,19 @@ final class Microcopy
             'eu' => '{format} fitxategia · {size}', 'fr' => 'Fichier {format} · {size}',
             'pt' => 'Ficheiro {format} · {size}',
         ],
+        // EBOOK-PAGO — recurso a la venta en la Tienda
+        'resources.buy' => [
+            'es' => 'Comprar · {price}', 'en' => 'Buy · {price}', 'ca' => 'Comprar · {price}',
+            'gl' => 'Mercar · {price}', 'fr' => 'Acheter · {price}', 'pt' => 'Comprar · {price}',
+        ],
+        'resources.sale_note' => [
+            'es' => 'Recibirás el enlace de descarga en cuanto se confirme el pago.',
+            'en' => 'You will receive the download link as soon as payment is confirmed.',
+            'ca' => 'Rebràs l’enllaç de descàrrega tan bon punt es confirmi el pagament.',
+            'gl' => 'Recibirás a ligazón de descarga en canto se confirme o pagamento.',
+            'fr' => 'Vous recevrez le lien de téléchargement dès la confirmation du paiement.',
+            'pt' => 'Receberá a ligação de descarga assim que o pagamento for confirmado.',
+        ],
 
         // ===================================================================
         // Módulo Commerce — escaparate público (I18N-FULL T0.1)
@@ -973,6 +986,76 @@ final class Microcopy
             'gl' => '✓ Pagamento confirmado. Estamos a preparar o teu pedido.',
             'fr' => '✓ Paiement confirmé. Nous préparons votre commande.',
             'pt' => '✓ Pagamento confirmado. Estamos a preparar a sua encomenda.',
+        ],
+        // EBOOK-PAGO — productos digitales (ebooks)
+        'shop.digital_note' => [
+            'es' => 'Producto digital: recibirás el enlace de descarga en cuanto se confirme el pago.',
+            'en' => 'Digital product: you will receive the download link as soon as payment is confirmed.',
+            'ca' => 'Producte digital: rebràs l’enllaç de descàrrega tan bon punt es confirmi el pagament.',
+            'gl' => 'Produto dixital: recibirás a ligazón de descarga en canto se confirme o pagamento.',
+            'fr' => 'Produit numérique : vous recevrez le lien de téléchargement dès la confirmation du paiement.',
+            'pt' => 'Produto digital: receberá a ligação de descarga assim que o pagamento for confirmado.',
+        ],
+        'shop.digital_consent' => [
+            'es' => 'Quiero recibir el contenido digital de inmediato y acepto que, al empezar la descarga, pierdo mi derecho de desistimiento.',
+            'en' => 'I want to receive the digital content immediately and I accept that I lose my right of withdrawal once the download starts.',
+            'ca' => 'Vull rebre el contingut digital immediatament i accepto que, en començar la descàrrega, perdo el meu dret de desistiment.',
+            'gl' => 'Quero recibir o contido dixital de inmediato e acepto que, ao comezar a descarga, perdo o meu dereito de desistencia.',
+            'fr' => 'Je souhaite recevoir le contenu numérique immédiatement et j’accepte de perdre mon droit de rétractation dès le début du téléchargement.',
+            'pt' => 'Quero receber o conteúdo digital de imediato e aceito que, ao iniciar a descarga, perco o meu direito de livre resolução.',
+        ],
+        'shop.err_digital_consent' => [
+            'es' => 'Para comprar contenido digital tienes que aceptar la entrega inmediata.',
+            'en' => 'To buy digital content you need to accept immediate delivery.',
+            'ca' => 'Per comprar contingut digital has d’acceptar el lliurament immediat.',
+            'gl' => 'Para mercar contido dixital tes que aceptar a entrega inmediata.',
+            'fr' => 'Pour acheter un contenu numérique, vous devez accepter la livraison immédiate.',
+            'pt' => 'Para comprar conteúdo digital tem de aceitar a entrega imediata.',
+        ],
+        'shop.payment_confirmed_digital' => [
+            'es' => '✓ Pago confirmado. Ya puedes descargar tu compra.',
+            'en' => '✓ Payment confirmed. You can download your purchase now.',
+            'ca' => '✓ Pagament confirmat. Ja pots descarregar la teva compra.',
+            'gl' => '✓ Pagamento confirmado. Xa podes descargar a túa compra.',
+            'fr' => '✓ Paiement confirmé. Vous pouvez télécharger votre achat.',
+            'pt' => '✓ Pagamento confirmado. Já pode descarregar a sua compra.',
+        ],
+        'shop.downloads_title' => [
+            'es' => 'Tus descargas', 'en' => 'Your downloads', 'ca' => 'Les teves descàrregues',
+            'gl' => 'As túas descargas', 'fr' => 'Vos téléchargements', 'pt' => 'As suas descargas',
+        ],
+        'shop.download' => [
+            'es' => 'Descargar', 'en' => 'Download', 'ca' => 'Descarregar',
+            'gl' => 'Descargar', 'fr' => 'Télécharger', 'pt' => 'Descarregar',
+        ],
+        'shop.downloads_hint' => [
+            'es' => 'También te los hemos enviado por email. Los enlaces caducan en {days} días.',
+            'en' => 'We have also emailed them to you. The links expire in {days} days.',
+            'ca' => 'També te’ls hem enviat per correu. Els enllaços caduquen d’aquí a {days} dies.',
+            'gl' => 'Tamén cho los enviamos por correo. As ligazóns caducan en {days} días.',
+            'fr' => 'Nous vous les avons aussi envoyés par e-mail. Les liens expirent dans {days} jours.',
+            'pt' => 'Também os enviámos por e-mail. As ligações expiram em {days} dias.',
+        ],
+        'shop.downloads_pending' => [
+            'es' => 'En cuanto se confirme el pago te enviaremos por email el enlace de descarga.',
+            'en' => 'As soon as payment is confirmed we will email you the download link.',
+            'ca' => 'Tan bon punt es confirmi el pagament t’enviarem per correu l’enllaç de descàrrega.',
+            'gl' => 'En canto se confirme o pagamento enviarémosche por correo a ligazón de descarga.',
+            'fr' => 'Dès la confirmation du paiement, nous vous enverrons le lien de téléchargement par e-mail.',
+            'pt' => 'Assim que o pagamento for confirmado, enviaremos a ligação de descarga por e-mail.',
+        ],
+        'shop.download_expired_title' => [
+            'es' => 'Este enlace ha caducado', 'en' => 'This link has expired',
+            'ca' => 'Aquest enllaç ha caducat', 'gl' => 'Esta ligazón caducou',
+            'fr' => 'Ce lien a expiré', 'pt' => 'Esta ligação expirou',
+        ],
+        'shop.download_expired_body' => [
+            'es' => 'Por seguridad, los enlaces de descarga duran unos días. Escríbenos indicando tu número de pedido ({number}) y te enviamos uno nuevo.',
+            'en' => 'For security, download links only last a few days. Write to us with your order number ({number}) and we will send you a new one.',
+            'ca' => 'Per seguretat, els enllaços de descàrrega duren uns quants dies. Escriu-nos amb el número de comanda ({number}) i te n’enviarem un de nou.',
+            'gl' => 'Por seguridade, as ligazóns de descarga duran uns días. Escríbenos co teu número de pedido ({number}) e enviámosche unha nova.',
+            'fr' => 'Par sécurité, les liens de téléchargement ne durent que quelques jours. Écrivez-nous en indiquant votre numéro de commande ({number}) et nous vous en enverrons un nouveau.',
+            'pt' => 'Por segurança, as ligações de descarga duram poucos dias. Escreva-nos com o número da encomenda ({number}) e enviamos-lhe uma nova.',
         ],
         'shop.back_to_shop' => [
             'es' => 'Volver a la tienda', 'en' => 'Back to the shop', 'ca' => 'Torna a la botiga',
@@ -1485,6 +1568,49 @@ final class Microcopy
             'gl' => 'Recibimos o pagamento do teu pedido. Estámolo a preparar.',
             'fr' => 'Nous avons reçu le paiement de votre commande. Nous la préparons.',
             'pt' => 'Recebemos o pagamento da sua encomenda. Estamos a prepará-la.',
+        ],
+        // EBOOK-PAGO — entrega de productos digitales por email
+        'mail.shop.paid_body_digital' => [
+            'es' => 'Hemos recibido el pago de tu pedido. Ya puedes descargar tu compra.',
+            'en' => 'We have received payment for your order. You can download your purchase now.',
+            'ca' => 'Hem rebut el pagament de la teva comanda. Ja pots descarregar la teva compra.',
+            'gl' => 'Recibimos o pagamento do teu pedido. Xa podes descargar a túa compra.',
+            'fr' => 'Nous avons reçu le paiement de votre commande. Vous pouvez télécharger votre achat.',
+            'pt' => 'Recebemos o pagamento da sua encomenda. Já pode descarregar a sua compra.',
+        ],
+        'mail.shop.downloads_subject' => [
+            'es' => 'Tus descargas: pedido {number}', 'en' => 'Your downloads: order {number}',
+            'ca' => 'Les teves descàrregues: comanda {number}', 'gl' => 'As túas descargas: pedido {number}',
+            'fr' => 'Vos téléchargements : commande {number}', 'pt' => 'As suas descargas: encomenda {number}',
+        ],
+        'mail.shop.downloads_intro' => [
+            'es' => 'Descarga tu compra aquí:', 'en' => 'Download your purchase here:',
+            'ca' => 'Descarrega la teva compra aquí:', 'gl' => 'Descarga a túa compra aquí:',
+            'fr' => 'Téléchargez votre achat ici :', 'pt' => 'Descarregue a sua compra aqui:',
+        ],
+        'mail.shop.downloads_expiry' => [
+            'es' => 'Los enlaces caducan en {days} días. Si necesitas uno nuevo, escríbenos indicando tu número de pedido.',
+            'en' => 'The links expire in {days} days. If you need a new one, write to us with your order number.',
+            'ca' => 'Els enllaços caduquen d’aquí a {days} dies. Si en necessites un de nou, escriu-nos amb el número de comanda.',
+            'gl' => 'As ligazóns caducan en {days} días. Se necesitas unha nova, escríbenos co teu número de pedido.',
+            'fr' => 'Les liens expirent dans {days} jours. S’il vous en faut un nouveau, écrivez-nous avec votre numéro de commande.',
+            'pt' => 'As ligações expiram em {days} dias. Se precisar de uma nova, escreva-nos com o número da encomenda.',
+        ],
+        'mail.shop.will_notify_digital' => [
+            'es' => 'En cuanto se confirme el pago te enviaremos el enlace de descarga.',
+            'en' => 'As soon as payment is confirmed we will send you the download link.',
+            'ca' => 'Tan bon punt es confirmi el pagament t’enviarem l’enllaç de descàrrega.',
+            'gl' => 'En canto se confirme o pagamento enviarémosche a ligazón de descarga.',
+            'fr' => 'Dès la confirmation du paiement, nous vous enverrons le lien de téléchargement.',
+            'pt' => 'Assim que o pagamento for confirmado, enviaremos a ligação de descarga.',
+        ],
+        'mail.shop.digital_consent_record' => [
+            'es' => 'Aceptaste recibir el contenido digital de inmediato y que, por ello, pierdes el derecho de desistimiento una vez empezada la descarga.',
+            'en' => 'You agreed to receive the digital content immediately and, as a result, to lose your right of withdrawal once the download starts.',
+            'ca' => 'Vas acceptar rebre el contingut digital immediatament i que, per això, perds el dret de desistiment un cop començada la descàrrega.',
+            'gl' => 'Aceptaches recibir o contido dixital de inmediato e que, por iso, perdes o dereito de desistencia unha vez comezada a descarga.',
+            'fr' => 'Vous avez accepté de recevoir le contenu numérique immédiatement et, de ce fait, de perdre votre droit de rétractation dès le début du téléchargement.',
+            'pt' => 'Aceitou receber o conteúdo digital de imediato e, por isso, perder o direito de livre resolução depois de iniciada a descarga.',
         ],
         'mail.shop.shipped_subject' => [
             'es' => 'Pedido enviado: {number}', 'en' => 'Order shipped: {number}',

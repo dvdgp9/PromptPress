@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Resources;
 
+use App\Modules\Commerce\ProductStore;
+use App\Modules\ModuleRegistry;
 use App\Services\FormStore;
 use App\Services\FormTemplates;
 use App\Services\LanguageService;
@@ -11,6 +13,7 @@ use App\Services\Microcopy;
 use App\Services\Permissions;
 use Core\Auth;
 use Core\CSRF;
+use Core\Database;
 use Core\Request;
 use Core\Response;
 use Core\Session;
@@ -124,6 +127,12 @@ final class ResourceAdminController
     {
         CSRF::check();
         $siteId = $this->requireSiteId();
+        // EBOOK-PAGO — borrar el archivo dejaría sin descarga a quien ya pagó.
+        // Pasarlo a borrador lo saca de la web sin quitarle nada a nadie.
+        if (self::hasPaidPurchases($siteId, (int) ($params['id'] ?? 0))) {
+            Session::flash('error', __('resource.admin.err.delete_sold'));
+            Response::redirect(base_url('admin/resources/' . (int) ($params['id'] ?? 0)));
+        }
         if (ResourceFileService::deleteFileAndResource($siteId, (int) ($params['id'] ?? 0))) {
             Session::flash('notice', __('resource.admin.ok.deleted'));
         } else {
@@ -205,11 +214,77 @@ final class ResourceAdminController
         ]);
     }
 
+    /**
+     * EBOOK-PAGO — Crear aquí mismo el producto de la Tienda que vende este
+     * recurso (mismo motivo que createForm: no sacar al gestor del editor).
+     *
+     * Nace en borrador y sin precio; el gestor lo abre en otra pestaña para
+     * ponérselo. Si ya existe uno, se devuelve ese: un recurso, un producto.
+     * La forma de entrega del recurso la cambia el guardado del editor, no esto.
+     */
+    public function createProduct(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+
+        // Recursos es `content`; la Tienda es `clients`. Mismo criterio que
+        // createForm con `forms`.
+        if (!Auth::can(Permissions::CAP_CLIENTS)) {
+            Response::json(['ok' => false, 'error' => __('common.access_denied')], 403);
+        }
+        if (!ModuleRegistry::isEnabled($siteId, 'commerce')) {
+            Response::json(['ok' => false, 'error' => __('resource.admin.access.sale_needs_commerce')], 409);
+        }
+        $resource = ResourceStore::find($siteId, (int) ($params['id'] ?? 0));
+        if ($resource === null) {
+            Response::json(['ok' => false, 'error' => __('resource.admin.err.not_found')], 404);
+        }
+        if (!ProductStore::isDeliverable($siteId, (int) $resource['id'])) {
+            Response::json(['ok' => false, 'error' => __('resource.admin.err.sale_needs_file')], 422);
+        }
+
+        $product = ProductStore::forResource($siteId, (int) $resource['id']);
+        if ($product === null) {
+            $id = ProductStore::create($siteId, [
+                'name'         => (string) $resource['title'],
+                'description'  => (string) ($resource['description'] ?? ''),
+                'media_id'     => $resource['cover_media_id'] ?? null,
+                'product_type' => 'digital',
+                'resource_id'  => (int) $resource['id'],
+                'active'       => '0',
+            ]);
+            $product = ProductStore::find($siteId, $id);
+        }
+
+        Response::json([
+            'ok'      => true,
+            'product' => [
+                'id'      => (int) $product['id'],
+                'name'    => (string) $product['name'],
+                'editUrl' => base_url('admin/commerce/products/' . (int) $product['id']),
+            ],
+        ]);
+    }
+
+    /** ¿Alguien ha pagado por descargar este recurso? (pedidos pagados o enviados) */
+    private static function hasPaidPurchases(int $siteId, int $resourceId): bool
+    {
+        return $resourceId > 0 && Database::selectOne(
+            "SELECT ci.id FROM commerce_order_items ci
+               JOIN commerce_orders o ON o.id = ci.order_id
+              WHERE o.site_id = ? AND ci.resource_id = ? AND o.status IN ('paid','shipped') LIMIT 1",
+            [$siteId, $resourceId]
+        ) !== null;
+    }
+
     /** @param string[] $errors */
     private function renderEditor(int $siteId, array $resource, array $errors): void
     {
+        $commerceEnabled = ModuleRegistry::isEnabled($siteId, 'commerce');
         View::send('admin/resources/edit', [
             'resource'          => $resource,
+            'commerceEnabled'   => $commerceEnabled,
+            'saleProduct'       => $commerceEnabled ? ProductStore::forResource($siteId, (int) $resource['id']) : null,
             'forms'             => FormStore::all($siteId),
             'languages'         => LanguageService::activeFor($siteId),
             'publicationIssues' => self::publicationIssues($resource),

@@ -15,30 +15,88 @@ use Core\Database;
  * del nombre y se desambigua con sufijo -2, -3… si choca.
  *
  * Importes SIEMPRE en céntimos enteros (ver cursor/commerce-design.md §2).
+ *
+ * EBOOK-PAGO: un producto `digital` entrega el archivo de un recurso
+ * (`resource_id`). No tiene stock ni envío; Recursos sigue siendo el dueño del
+ * binario (cursor/resources-api.md §7).
  */
 final class ProductStore
 {
+    public const TYPES = ['physical', 'digital'];
+
     private const DEFAULTS = [
-        'name'        => '',
-        'description' => '',
-        'price_cents' => 0,
-        'tax_rate'    => 21.0,
-        'stock'       => null,   // null = ilimitado
-        'media_id'    => null,
-        'active'      => 1,
+        'name'         => '',
+        'description'  => '',
+        'price_cents'  => 0,
+        'tax_rate'     => 21.0,
+        'stock'        => null,   // null = ilimitado
+        'media_id'     => null,
+        'active'       => 1,
+        'product_type' => 'physical',
+        'resource_id'  => null,
     ];
 
     /** @return array<int, array<string,mixed>> productos del sitio con la imagen resuelta */
     public static function all(int $siteId): array
     {
         return Database::select(
-            'SELECT p.*, m.path AS media_path
+            'SELECT p.*, m.path AS media_path, r.title AS resource_title
                FROM commerce_products p
                LEFT JOIN media m ON m.id = p.media_id
+               LEFT JOIN resources r ON r.id = p.resource_id
               WHERE p.site_id = ?
               ORDER BY p.active DESC, p.created_at DESC',
             [$siteId]
         );
+    }
+
+    /**
+     * Producto digital que vende un recurso (el activo primero), para la ficha
+     * pública del recurso y su editor.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function forResource(int $siteId, int $resourceId, bool $activeOnly = false): ?array
+    {
+        if ($resourceId <= 0) {
+            return null;
+        }
+        return Database::selectOne(
+            "SELECT * FROM commerce_products
+              WHERE site_id = ? AND resource_id = ? AND product_type = 'digital'"
+            . ($activeOnly ? ' AND active = 1' : '')
+            . ' ORDER BY active DESC, id ASC LIMIT 1',
+            [$siteId, $resourceId]
+        );
+    }
+
+    /**
+     * Recursos que un producto digital puede entregar: los del sitio que ya
+     * tienen archivo. Publicado o no da igual: se puede vender solo en la Tienda.
+     *
+     * @return array<int, array<string,mixed>>
+     */
+    public static function deliverableResources(int $siteId): array
+    {
+        return Database::select(
+            'SELECT id, title, original_filename, access_mode, status
+               FROM resources
+              WHERE site_id = ? AND file_path IS NOT NULL AND file_size > 0
+              ORDER BY title ASC, id ASC',
+            [$siteId]
+        );
+    }
+
+    /** ¿Puede este producto digital entregar ese recurso? */
+    public static function isDeliverable(int $siteId, ?int $resourceId): bool
+    {
+        if ($resourceId === null || $resourceId <= 0) {
+            return false;
+        }
+        return Database::selectOne(
+            'SELECT id FROM resources WHERE id = ? AND site_id = ? AND file_path IS NOT NULL AND file_size > 0 LIMIT 1',
+            [$resourceId, $siteId]
+        ) !== null;
     }
 
     /** @return array<string,mixed>|null */
@@ -76,11 +134,11 @@ final class ProductStore
         $slug = self::uniqueSlug($siteId, $f['name'], null);
         Database::execute(
             'INSERT INTO commerce_products
-                (site_id, name, slug, description, price_cents, tax_rate, stock, media_id, active, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+                (site_id, name, slug, product_type, resource_id, description, price_cents, tax_rate, stock, media_id, active, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
             [
-                $siteId, $f['name'], $slug, $f['description'], $f['price_cents'], $f['tax_rate'],
-                $f['stock'], $f['media_id'], $f['active'],
+                $siteId, $f['name'], $slug, $f['product_type'], $f['resource_id'], $f['description'],
+                $f['price_cents'], $f['tax_rate'], $f['stock'], $f['media_id'], $f['active'],
             ]
         );
         $id = (int) Database::lastInsertId();
@@ -106,12 +164,12 @@ final class ProductStore
 
         Database::execute(
             'UPDATE commerce_products
-                SET name = ?, slug = ?, description = ?, price_cents = ?, tax_rate = ?,
-                    stock = ?, media_id = ?, active = ?, updated_at = UTC_TIMESTAMP()
+                SET name = ?, slug = ?, product_type = ?, resource_id = ?, description = ?, price_cents = ?,
+                    tax_rate = ?, stock = ?, media_id = ?, active = ?, updated_at = UTC_TIMESTAMP()
               WHERE site_id = ? AND id = ?',
             [
-                $f['name'], $slug, $f['description'], $f['price_cents'], $f['tax_rate'],
-                $f['stock'], $f['media_id'], $f['active'], $siteId, $id,
+                $f['name'], $slug, $f['product_type'], $f['resource_id'], $f['description'], $f['price_cents'],
+                $f['tax_rate'], $f['stock'], $f['media_id'], $f['active'], $siteId, $id,
             ]
         );
         self::flushPageCache($siteId);
@@ -148,7 +206,8 @@ final class ProductStore
      * Normaliza y acota los campos.
      *
      * @param array<string,mixed> $fields
-     * @return array{name:string, description:string, price_cents:int, tax_rate:float, stock:?int, media_id:?int, active:int}
+     * @return array{name:string, description:string, price_cents:int, tax_rate:float, stock:?int, media_id:?int, active:int,
+     *               product_type:string, resource_id:?int}
      */
     public static function normalize(array $fields): array
     {
@@ -160,21 +219,28 @@ final class ProductStore
         $tax   = (float) $f['tax_rate'];
         $tax   = max(0.0, min(99.99, $tax));
 
-        // stock: '' o null → ilimitado; si no, entero >= 0.
+        $type = in_array((string) $f['product_type'], self::TYPES, true) ? (string) $f['product_type'] : 'physical';
+        $digital = $type === 'digital';
+
+        // stock: '' o null → ilimitado; si no, entero >= 0. Un archivo no se agota.
         $stock = $f['stock'];
-        $stockVal = ($stock === null || $stock === '') ? null : max(0, (int) $stock);
+        $stockVal = ($digital || $stock === null || $stock === '') ? null : max(0, (int) $stock);
 
         $media = ($f['media_id'] === null || $f['media_id'] === '' || (int) $f['media_id'] <= 0)
             ? null : (int) $f['media_id'];
+        $resource = (!$digital || $f['resource_id'] === null || $f['resource_id'] === '' || (int) $f['resource_id'] <= 0)
+            ? null : (int) $f['resource_id'];
 
         return [
-            'name'        => $name,
-            'description' => $desc,
-            'price_cents' => $price,
-            'tax_rate'    => round($tax, 2),
-            'stock'       => $stockVal,
-            'media_id'    => $media,
-            'active'      => (int) ((string) $f['active'] === '1'),
+            'name'         => $name,
+            'description'  => $desc,
+            'price_cents'  => $price,
+            'tax_rate'     => round($tax, 2),
+            'stock'        => $stockVal,
+            'media_id'     => $media,
+            'active'       => (int) ((string) $f['active'] === '1'),
+            'product_type' => $type,
+            'resource_id'  => $resource,
         ];
     }
 

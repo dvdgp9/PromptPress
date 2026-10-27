@@ -10871,3 +10871,152 @@ fake: no hay una RAK real a mano. Sitio de dev restaurado (sin claves). **Sin co
   en el sitio de dev, y la siguiente ejecución las toma como «previas». Limpiar a mano.
 - Las excepciones de `StripeApi::request()` llevan el HTTP status como `getCode()`.
 
+
+## Background and Motivation (GREV) — 27/10/2026
+
+El usuario quiere que las reseñas de una página (ahora inventadas) sean las
+reales de Google del negocio. Investigación en `cursor/google-reviews-api.md`.
+
+## Key Challenges and Analysis (GREV) — Planner
+
+- **Places API (New)**: datos crudos, diseño propio, pero **máximo 5 reseñas y
+  las elige Google** (por relevancia). **No se pueden cachear**: cada visita
+  es una llamada; 1.000 gratis/mes, luego 25 $/1.000. Atribución estricta
+  (logo/texto Google Maps, avatar+nombre+enlace del autor, enlace por reseña,
+  aviso de traducción, aviso «no verificadas por Google»).
+- **Places UI Kit** (`gmp-place-details` + `gmp-place-reviews`): Google pinta
+  y atribuye; 10.000 gratis/mes, luego 1 $/1.000. Aspecto de tarjeta Google
+  (250–400 px), estilo limitado; no está claro que funcione sin mapa. Carga JS
+  de Google en el visitante (consentimiento).
+- **Business Profile API**: todas las reseñas y gratis, pero exige aprobación
+  de Google (perfil verificado 60+ días, con web), OAuth del dueño y
+  verificación de la app. Semanas de trámites: descartado como primer paso.
+- Encaje en PromptPress: un embed canvas `{{reviews:google}}` (patrón de
+  `{{booking:auto}}`, tres listas blancas en `CanvasService`) + clave y
+  Place ID por sitio, cifrados (patrón `StripeConfig`).
+- Coste y bots (vía A): llamar a Google solo cuando la sección entra en
+  pantalla (JS → endpoint propio), no en cada render del servidor; ante error
+  o cuota agotada, mostrar nota media + «Ver reseñas en Google».
+- Pruebas reales: hace falta una clave de Google Cloud con facturación y el
+  Place ID del negocio (lo aporta el usuario; no se pueden crear cuentas).
+
+## High-level Task Breakdown (GREV) — vía A recomendada, PENDIENTE DE ELECCIÓN
+
+1. Ajustes del sitio: clave de Google (cifrada) + negocio (pegar enlace de
+   Maps o Place ID; botón «Probar» que trae nombre y nota). Éxito: guarda,
+   muestra nombre real del negocio, clave nunca re-mostrada.
+2. `GooglePlacesApi` (cURL, sin SDK, `$httpOverride` para tests). Éxito:
+   tests con transporte fake (OK, 403 clave, 429 cuota, sin red).
+3. Embed `{{reviews:google|limit=5}}` con el estilo de testimonios del sitio
+   y toda la atribución obligatoria. Éxito: render en canvas, sobrevive al
+   guardado del editor (tres listas blancas).
+4. Carga diferida por endpoint propio + fallback (nota media/enlace).
+   Éxito: sin JS o sin cuota la página no se rompe; probado en navegador.
+5. Asistente/IA: si hay reseñas de Google configuradas, usar el embed en vez
+   de inventar testimonios. Éxito: página generada con el embed.
+6. Prueba real con la clave del usuario y versión.
+
+
+# [EBOOK-PAGO] Vender ebooks: producto digital en la Tienda (27/10/2026, Planner)
+
+## Background and Motivation (EBOOK-PAGO)
+
+El usuario publicó un ebook en Recursos y se descarga gratis. Quiere cobrarlo.
+Recursos solo tenía `direct` y `form`; la Tienda cobra (Stripe/transferencia)
+pero no entregaba archivos. El contrato ya estaba escrito en
+`cursor/resources-api.md` §7: Recursos es dueño del archivo; Commerce, del
+precio, el pedido y el derecho de descarga del comprador. La web no está en uso
+pleno: puede seguir así mientras se desarrolla. «Procede».
+
+## Key Challenges and Analysis (EBOOK-PAGO)
+
+- **Decisiones que el usuario no contestó y tomo por defecto** (documentadas
+  para que las revise): enlace válido **7 días**; la página del pedido da uno
+  nuevo cada vez que se abre y el admin puede **reenviarlo** desde el pedido;
+  **casilla obligatoria** de entrega inmediata / pérdida del desistimiento si
+  el carrito lleva algo digital (fecha guardada en el pedido y mencionada en el
+  email de confirmación); **1 unidad** por producto digital; sin límite de
+  descargas; **cancelar el pedido revoca** el enlace.
+- El derecho de descarga va en la **línea del pedido** (`commerce_order_items.resource_id`,
+  snapshot): borrar o cambiar el producto no deja sin descarga a quien ya pagó.
+- El recurso a la venta tiene un tercer modo `sale`: su ficha muestra precio y
+  «Comprar»; `/descargar` sigue devolviendo 404 (nunca se pasa a `direct`).
+- La descarga comprada NO exige que el recurso esté publicado ni el módulo
+  Recursos activo: se puede vender solo desde la Tienda, y quien pagó no pierde
+  el acceso porque se apague un módulo.
+- Carrito solo digital → no se pide dirección ni se cobra envío.
+- Enlace firmado HMAC (mismo mecanismo que R5, propósito distinto) ligado a
+  pedido + línea + recurso; se valida contra el estado real del pedido
+  (`paid`/`shipped`) en cada descarga.
+- Borrar un recurso con compras pagadas se bloquea (pasarlo a borrador vale).
+- Microcopy pública en los 6 idiomas de módulo; panel en es/en/fr/pt.
+
+## High-level Task Breakdown (EBOOK-PAGO)
+
+1. Migración `2026_10_27_commerce_digital.php`: `commerce_products.product_type`
+   + `resource_id`, `commerce_order_items.resource_id`, `commerce_orders.digital_consent_at`,
+   `resources.access_mode` + `sale`. Éxito: migra en dev, idempotente.
+2. Modelo: ProductStore (tipo/recurso, stock NULL en digital), CartService
+   (cantidad 1, envío solo si hay físico), OrderStore (snapshot + consentimiento),
+   ResourceStore (`sale`). Éxito: tests CLI.
+3. Entrega: token de compra (ResourceAccessService), descarga
+   `GET /tienda/descargar?token=`, enlaces en gracias + email de pagado +
+   reenvío desde el pedido. Éxito: test HTTP pedido manual → pagado → descarga
+   PDF; cancelado/caducado → no.
+4. Checkout: casilla de entrega inmediata obligatoria con digitales. Éxito: sin
+   casilla no se crea pedido.
+5. Admin: tipo en el editor de producto, tercer modo en el editor de recurso
+   con «Crear producto en la tienda», etiqueta en listados, reenvío en el
+   pedido, bloqueo de borrado. Éxito: verificado en navegador.
+6. Ficha pública del recurso `sale` con precio y «Comprar». Éxito: HTTP.
+7. Hechos legales para «Condiciones de compra» (contenido digital).
+8. Traducciones + `admin_i18n`, `i18n_lint`, `php80_compat`, tests de commerce y
+   resources en verde.
+
+## Project Status Board (EBOOK-PAGO)
+
+- [x] 1. Migración
+- [x] 2. Modelo
+- [x] 3. Entrega y enlaces
+- [x] 4. Consentimiento en checkout
+- [x] 5. Admin
+- [x] 6. Ficha pública
+- [x] 7. Hechos legales
+- [x] 8. Traducciones y tests
+
+## Current Status / Progress Tracking (EBOOK-PAGO) — 27/10/2026, Executor
+
+Hecho y verificado en local. `tests/commerce_digital.php` (51 comprobaciones,
+CLI + HTTP real) ALL PASS; siguen en verde commerce_*, resources_*,
+admin_i18n, site_language, php80_compat; `i18n_lint` sin pendientes nuevos.
+Navegador (preview 8788): editor de recurso con tres formas de entrega y
+«Crear producto en la tienda», editor de producto digital, ficha pública con
+«Comprar · 14,90 €», checkout sin dirección con casilla. Datos de prueba
+borrados. **Sin commit ni versión.**
+
+Flujo para el gestor: Recursos → el ebook → «Vender en la tienda» → «Crear
+producto en la tienda» → (pestaña nueva) precio, IVA, «A la venta» → Guardar en
+ambos.
+
+## Executor's Feedback or Assistance Requests (EBOOK-PAGO)
+
+- Decisiones tomadas por defecto (pendientes de que el usuario las confirme):
+  enlace 7 días; reenvío manual desde el pedido; casilla obligatoria de entrega
+  inmediata; 1 unidad por producto digital; sin límite de descargas.
+- Texto legal de la casilla redactado por mí: conviene que lo revise alguien de
+  legal. El IVA del producto no se pone solo: el gestor elige (ebook en España
+  suele ser 4 %).
+- Un enlace caducado NO lleva a la página del pedido (si lo hiciera, la
+  caducidad no serviría con enlaces reenviados): el comprador pide otro y se le
+  reenvía desde el panel.
+
+## Lessons (EBOOK-PAGO)
+
+- `.pp-btn` trae `display` propio y pisa el atributo `hidden` (igual que
+  `.pp-link`): para quitar un botón tras una acción, `remove()` o CSS
+  `[hidden]{display:none}` explícito.
+- `scripts/i18n_lint.php` solo ve claves pasadas como literal a `__()`: un
+  `__($cond ? 'a' : 'b')` o `__(match …)` las da por «sin usar». Llamar a
+  `__()` en cada rama.
+- El puerto 8797 lo usan ya dos tests y una config de launch.json; los tests
+  HTTP nuevos van en 884x.

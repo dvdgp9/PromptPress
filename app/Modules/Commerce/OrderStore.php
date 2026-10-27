@@ -27,15 +27,22 @@ final class OrderStore
     /**
      * Crea un pedido desde el carrito actual.
      *
+     * EBOOK-PAGO: con líneas digitales, `$digitalConsent` debe ser true (casilla
+     * de entrega inmediata del checkout); se guarda cuándo se dio. Cada línea
+     * digital guarda el recurso que da derecho a descargar.
+     *
      * @param array{name:string, email:string, phone?:string, address?:string,
      *              city?:string, postcode?:string, province?:string, notes?:string} $customer
      * @return array{ok:bool, order?:array<string,mixed>, error?:string, detail?:string}
      */
-    public static function createFromCart(int $siteId, array $customer, string $paymentMethod, ?string $ipHash): array
+    public static function createFromCart(int $siteId, array $customer, string $paymentMethod, ?string $ipHash, bool $digitalConsent = false): array
     {
         $totals = CartService::totals($siteId);
         if ($totals['lines'] === []) {
             return ['ok' => false, 'error' => 'empty_cart'];
+        }
+        if ($totals['has_digital'] && !$digitalConsent) {
+            return ['ok' => false, 'error' => 'digital_consent'];
         }
         if ($ipHash !== null && self::isRateLimited($siteId, $ipHash)) {
             return ['ok' => false, 'error' => 'rate_limited'];
@@ -74,8 +81,10 @@ final class OrderStore
                      subtotal_cents, shipping_cents, tax_cents, total_cents,
                      customer_name, customer_email, customer_phone,
                      ship_address, ship_city, ship_postcode, ship_province,
-                     notes, ip_hash, created_at, updated_at)
-                 VALUES (?, ?, \'pending_payment\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                     notes, digital_consent_at, ip_hash, created_at, updated_at)
+                 VALUES (?, ?, \'pending_payment\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
+                 . ($totals['has_digital'] ? 'UTC_TIMESTAMP()' : 'NULL')
+                 . ', ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $ins->execute([
                 // El idioma con el que el cliente compró: es el que usarán sus
@@ -97,12 +106,12 @@ final class OrderStore
 
             $insItem = $pdo->prepare(
                 'INSERT INTO commerce_order_items
-                    (order_id, product_id, product_name, unit_price_cents, tax_rate, quantity, line_total_cents)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    (order_id, product_id, resource_id, product_name, unit_price_cents, tax_rate, quantity, line_total_cents)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
             );
             foreach ($totals['lines'] as $line) {
                 $insItem->execute([
-                    $orderId, $line['product_id'], $line['name'], $line['unit_price_cents'],
+                    $orderId, $line['product_id'], $line['resource_id'], $line['name'], $line['unit_price_cents'],
                     $line['tax_rate'], $line['quantity'], $line['line_total_cents'],
                 ]);
             }

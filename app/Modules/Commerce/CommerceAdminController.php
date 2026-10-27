@@ -80,6 +80,8 @@ final class CommerceAdminController
             'stock'       => Request::post('stock', ''),
             'media_id'    => Request::post('media_id', ''),
             'active'      => Request::post('active', '0'),
+            'product_type' => Request::post('product_type', 'physical'),
+            'resource_id'  => Request::post('resource_id', ''),
         ];
 
         $errors = [];
@@ -88,6 +90,17 @@ final class CommerceAdminController
         }
         if ((int) $fields['price_cents'] <= 0 && (string) $fields['active'] === '1') {
             $errors[] = __('prod.err.price');
+        }
+        // EBOOK-PAGO — un producto digital a la venta tiene que poder entregar algo.
+        $normalized = ProductStore::normalize($fields);
+        if ($normalized['product_type'] === 'digital') {
+            if ($normalized['resource_id'] === null) {
+                if ((string) $fields['active'] === '1') {
+                    $errors[] = __('prod.err.resource_required');
+                }
+            } elseif (!ProductStore::isDeliverable($siteId, $normalized['resource_id'])) {
+                $errors[] = __('prod.err.resource_invalid');
+            }
         }
 
         if ($errors !== []) {
@@ -253,6 +266,7 @@ final class CommerceAdminController
         }
         View::send('admin/commerce/order', [
             'order'  => $order,
+            'digitalItems' => DigitalDelivery::digitalItems($order),
             'nextStates' => OrderStore::ADMIN_TRANSITIONS[(string) $order['status']] ?? [],
             'notice' => Session::flash('notice'),
             'error'  => Session::flash('error'),
@@ -304,6 +318,36 @@ final class CommerceAdminController
         Response::redirect($detailUrl);
     }
 
+    /** POST /admin/commerce/pedidos/{id}/downloads — EBOOK-PAGO: reenvía los enlaces de descarga. */
+    public function orderDownloads(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        $id = (int) ($params['id'] ?? 0);
+        $detailUrl = base_url('admin/commerce/pedidos/' . $id);
+        $order = OrderStore::find($siteId, $id);
+        if ($order === null) {
+            Session::flash('error', __('order.err.not_found'));
+            Response::redirect(base_url('admin/commerce/pedidos'));
+        }
+        if (DigitalDelivery::links($siteId, $order) === []) {
+            Session::flash('error', __('order.err.downloads_none'));
+            Response::redirect($detailUrl);
+        }
+        $mail = 'failed';
+        try {
+            $mail = CommerceMailer::sendDownloads($siteId, $id);
+        } catch (\Throwable) {
+            // se informa abajo como fallo
+        }
+        if ($mail === 'sent') {
+            Session::flash('notice', __('order.ok.downloads_sent', ['email' => (string) $order['customer_email']]));
+        } else {
+            Session::flash('error', $mail === 'skipped' ? __('order.err.downloads_no_mail') : __('order.err.downloads_failed'));
+        }
+        Response::redirect($detailUrl);
+    }
+
     /** POST /admin/commerce/pedidos/{id}/notes — notas internas (no visibles para el cliente). */
     public function orderNotes(array $params = []): void
     {
@@ -327,8 +371,21 @@ final class CommerceAdminController
     /** @param array<string,mixed> $product @param string[] $errors */
     private function renderEditor(int $siteId, array $product, array $errors): void
     {
+        // EBOOK-PAGO — qué archivos puede entregar, y si el elegido se sigue
+        // regalando desde la web (el aviso que evita vender lo que es gratis).
+        $resourcesEnabled = \App\Modules\ModuleRegistry::isEnabled($siteId, 'resources');
+        $resources = ProductStore::deliverableResources($siteId);
+        $linked = null;
+        foreach ($resources as $r) {
+            if ((int) $r['id'] === (int) ($product['resource_id'] ?? 0)) {
+                $linked = $r;
+            }
+        }
         View::send('admin/commerce/edit', [
             'product'          => $product,
+            'resources'        => $resources,
+            'resourcesEnabled' => $resourcesEnabled,
+            'linkedResource'   => $linked,
             'pricesIncludeTax' => CommerceSettings::pricesIncludeTax($siteId),
             'errors'           => $errors,
             'notice'           => Session::flash('notice'),

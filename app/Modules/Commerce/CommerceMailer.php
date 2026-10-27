@@ -55,7 +55,13 @@ final class CommerceMailer
             $lines[] = $instructionsText;
             $lines[] = '';
         }
-        $lines[] = $t('mail.shop.will_notify');
+        // EBOOK-PAGO — la confirmación en soporte duradero debe recoger que el
+        // comprador aceptó la entrega inmediata y perder el desistimiento.
+        if (!empty($order['digital_consent_at'])) {
+            $lines[] = $t('mail.shop.digital_consent_record');
+            $lines[] = '';
+        }
+        $lines[] = $t(DigitalDelivery::digitalItems($order) !== [] ? 'mail.shop.will_notify_digital' : 'mail.shop.will_notify');
         $lines[] = '';
         $lines[] = $siteName;
 
@@ -106,8 +112,11 @@ final class CommerceMailer
         $number = (string) $order['order_number'];
 
         $subject = $t('mail.shop.' . $newStatus . '_subject', ['number' => $number]);
+        $paidKey = $newStatus === 'paid' && DigitalDelivery::isDigitalOnly($order) ? 'mail.shop.paid_body_digital' : null;
         $body = $t('mail.greeting', ['name' => $order['customer_name']]) . "\n\n"
-            . $t('mail.shop.' . $newStatus . '_body')
+            . $t($paidKey ?? 'mail.shop.' . $newStatus . '_body')
+            // EBOOK-PAGO: el email de «pagado» es el que entrega los archivos.
+            . ($newStatus === 'paid' ? self::downloadsBlock($siteId, $order, $lang) : '')
             . "\n\n" . $t('mail.shop.order_line', ['number' => $number])
             . "\n" . $t('mail.shop.total_simple', [
                 'total' => CommerceSettings::format((int) $order['total_cents']),
@@ -120,6 +129,60 @@ final class CommerceMailer
             '',
             (string) $order['customer_name']
         ));
+    }
+
+    /**
+     * EBOOK-PAGO — reenvío de los enlaces de descarga desde el pedido (panel).
+     * Devuelve 'sent' | 'skipped' (sin email configurado o nada que descargar)
+     * | 'failed', como sendStatusChange.
+     */
+    public static function sendDownloads(int $siteId, int $orderId): string
+    {
+        $ctx = self::context($siteId, $orderId);
+        if ($ctx === null) {
+            return 'skipped';
+        }
+        [$order, $siteName] = $ctx;
+        $lang = self::language($siteId, $order);
+        $block = self::downloadsBlock($siteId, $order, $lang);
+        if ($block === '') {
+            return 'skipped';
+        }
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
+        $number = (string) $order['order_number'];
+        $body = $t('mail.greeting', ['name' => $order['customer_name']])
+            . $block
+            . "\n\n" . $t('mail.shop.order_line', ['number' => $number])
+            . "\n\n" . $siteName;
+        return self::deliverToCustomer($siteId, $orderId, new MailMessage(
+            (string) $order['customer_email'],
+            $t('mail.shop.downloads_subject', ['number' => $number]),
+            $body,
+            '',
+            (string) $order['customer_name']
+        ));
+    }
+
+    /**
+     * Texto con los enlaces de descarga (empieza por salto de párrafo), o ''
+     * si el pedido no tiene nada que descargar o aún no da derecho.
+     *
+     * @param array<string,mixed> $order
+     */
+    public static function downloadsBlock(int $siteId, array $order, string $lang): string
+    {
+        $links = DigitalDelivery::links($siteId, $order);
+        if ($links === []) {
+            return '';
+        }
+        $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
+        $out = "\n\n" . $t('mail.shop.downloads_intro');
+        foreach ($links as $link) {
+            $out .= "\n• " . $link['title'] . "\n  " . $link['url'];
+        }
+        return $out . "\n\n" . $t('mail.shop.downloads_expiry', [
+            'days' => (int) round(DigitalDelivery::LINK_TTL / 86400),
+        ]);
     }
 
     // ======================================================================

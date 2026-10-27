@@ -63,7 +63,11 @@ $formatBytes = static function (int $bytes): string {
             <div class="pp-resource-row__meta">
                 <span><?= e($format) ?><?= $hasFile ? ' · ' . e($formatBytes((int) $resource['file_size'])) : '' ?></span>
                 <?php if (!empty($resource['category'])): ?><span><?= e((string) $resource['category']) ?></span><?php endif; ?>
-                <span><?= e((string) $resource['access_mode'] === 'form' ? __('resource.admin.access.form_short') : __('resource.admin.access.direct_short')) ?></span>
+                <span><?= e(match ((string) $resource['access_mode']) {
+                    'form'  => __('resource.admin.access.form_short'),
+                    'sale'  => __('resource.admin.access.sale_short'),
+                    default => __('resource.admin.access.direct_short'),
+                }) ?></span>
                 <span><?= e((string) ($resource['language_scope'] ?? 'selected') === 'all'
                     ? __('resource.admin.languages_all')
                     : implode(', ', array_map(static fn(string $code): string => LanguageService::label($code), (array) ($resource['languages'] ?? [])))) ?></span>

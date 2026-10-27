@@ -87,3 +87,31 @@
         if (ev.key === 'Escape' && !modal.hidden) closeModal();
     });
 })();
+
+/**
+ * EBOOK-PAGO — tipo de producto: «Digital» muestra el archivo que se entrega y
+ * esconde el stock (un archivo no se agota; el servidor lo ignora igualmente).
+ */
+(function () {
+    'use strict';
+
+    var box = document.querySelector('[data-product-type]');
+    if (!box) return;
+    var digital = box.querySelector('[data-digital-settings]');
+    var physicalOnly = document.querySelectorAll('[data-physical-only]');
+
+    function sync() {
+        var checked = box.querySelector('input[name="product_type"]:checked');
+        var isDigital = !!checked && checked.value === 'digital';
+        box.querySelectorAll('.pp-resource-choice').forEach(function (card) {
+            var radio = card.querySelector('input[name="product_type"]');
+            card.classList.toggle('is-selected', !!radio && radio.checked);
+        });
+        if (digital) digital.hidden = !isDigital;
+        physicalOnly.forEach(function (el) { el.hidden = isDigital; });
+    }
+
+    box.querySelectorAll('input[name="product_type"]').forEach(function (radio) {
+        radio.addEventListener('change', sync);
+    });
+})();

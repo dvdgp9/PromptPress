@@ -50,7 +50,8 @@ final class CartService
             self::persist($siteId, $cart);
             return Microcopy::site($siteId, 'shop.warn_unavailable');
         }
-        $qty = min($qty, 99);
+        // EBOOK-PAGO: un archivo se compra una vez; dos copias no dan nada más.
+        $qty = min($qty, self::maxQuantity($p));
         $warning = null;
         if ($p['stock'] !== null && $qty > (int) $p['stock']) {
             $qty = (int) $p['stock'];
@@ -65,6 +66,12 @@ final class CartService
         }
         self::persist($siteId, $cart);
         return $warning;
+    }
+
+    /** Tope de unidades por línea: 1 para lo digital, 99 para lo físico. @param array<string,mixed> $product */
+    public static function maxQuantity(array $product): int
+    {
+        return (string) ($product['product_type'] ?? 'physical') === 'digital' ? 1 : 99;
     }
 
     /** Suma cantidades (botón "añadir al carrito"). */
@@ -83,11 +90,16 @@ final class CartService
      * Totales calculados desde BD. Las líneas de productos desaparecidos o
      * desactivados se omiten (y deberían purgarse con put()).
      *
+     * `needs_shipping` es true si hay al menos una línea física: un carrito solo
+     * de ebooks no paga envío ni pide dirección. `has_digital` obliga a la
+     * casilla de entrega inmediata en el checkout.
+     *
      * @return array{lines: array<int, array{product_id:int, name:string, slug:string,
      *               unit_price_cents:int, tax_rate:float, quantity:int, available_stock:?int,
-     *               line_total_cents:int, line_tax_cents:int, media_path:?string}>,
+     *               line_total_cents:int, line_tax_cents:int, media_path:?string,
+     *               product_type:string, resource_id:?int, max_quantity:int}>,
      *               subtotal_cents:int, tax_cents:int, shipping_cents:int, total_cents:int,
-     *               prices_include_tax:bool, item_count:int}
+     *               prices_include_tax:bool, item_count:int, needs_shipping:bool, has_digital:bool}
      */
     public static function totals(int $siteId): array
     {
@@ -98,6 +110,8 @@ final class CartService
         $subtotal = 0;
         $tax = 0;
         $count = 0;
+        $hasPhysical = false;
+        $hasDigital = false;
         if ($cart !== []) {
             $ids = implode(',', array_map('intval', array_keys($cart)));
             $rows = Database::select(
@@ -109,9 +123,15 @@ final class CartService
             );
             foreach ($rows as $p) {
                 $pid = (int) $p['id'];
-                $qty = $cart[$pid] ?? 0;
+                $qty = min($cart[$pid] ?? 0, self::maxQuantity($p));
                 if ($qty <= 0) {
                     continue;
+                }
+                $digital = (string) ($p['product_type'] ?? 'physical') === 'digital';
+                if ($digital) {
+                    $hasDigital = true;
+                } else {
+                    $hasPhysical = true;
                 }
                 [$lineTotal, $lineTax] = self::lineAmounts((int) $p['price_cents'], (float) $p['tax_rate'], $qty, $includeTax);
                 $lines[] = [
@@ -125,6 +145,9 @@ final class CartService
                     'line_total_cents' => $lineTotal,
                     'line_tax_cents'   => $lineTax,
                     'media_path'       => $p['media_path'] !== null ? (string) $p['media_path'] : null,
+                    'product_type'     => $digital ? 'digital' : 'physical',
+                    'resource_id'      => $digital && $p['resource_id'] !== null ? (int) $p['resource_id'] : null,
+                    'max_quantity'     => self::maxQuantity($p),
                 ];
                 $subtotal += $lineTotal;
                 $tax += $lineTax;
@@ -133,7 +156,7 @@ final class CartService
         }
 
         $shipping = 0;
-        if ($lines !== []) {
+        if ($hasPhysical) {
             $shipping = CommerceSettings::shippingCents($siteId);
             $freeOver = CommerceSettings::freeShippingOverCents($siteId);
             if ($freeOver !== null && $subtotal >= $freeOver) {
@@ -149,6 +172,8 @@ final class CartService
             'total_cents'        => $subtotal + $shipping,
             'prices_include_tax' => $includeTax,
             'item_count'         => $count,
+            'needs_shipping'     => $hasPhysical,
+            'has_digital'        => $hasDigital,
         ];
     }
 

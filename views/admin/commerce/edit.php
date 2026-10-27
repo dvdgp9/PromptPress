@@ -3,6 +3,9 @@
  * Tienda — editor de producto (FEAT-3 C2).
  *
  * @var array    $product           commerce_products + media_path (o draft con errores)
+ * @var array    $resources         recursos con archivo que puede entregar (EBOOK-PAGO)
+ * @var bool     $resourcesEnabled
+ * @var ?array   $linkedResource    el recurso elegido, para avisar si sigue siendo gratis
  * @var bool     $pricesIncludeTax
  * @var string[] $errors
  * @var ?string  $notice
@@ -18,6 +21,10 @@ $mediaPath = (string) ($product['media_path'] ?? '');
 // Las claves son tipos impositivos guardados; solo la etiqueta se traduce.
 $taxRates = ['21.00' => __('shop.tax.general'), '10.00' => __('shop.tax.reduced'), '4.00' => __('shop.tax.super_reduced'), '0.00' => __('shop.tax.exempt')];
 $currentTax = number_format((float) ($product['tax_rate'] ?? 21), 2, '.', '');
+$productType = (string) ($product['product_type'] ?? 'physical') === 'digital' ? 'digital' : 'physical';
+$resourceId = (int) ($product['resource_id'] ?? 0);
+// Se puede elegir «Digital» si hay módulo Recursos, o si el producto ya lo era.
+$digitalAvailable = $resourcesEnabled || $productType === 'digital';
 ?>
 
 <?php \Core\View::start('title'); ?>Tienda · <?= e((string) $product['name']) ?><?php \Core\View::end(); ?>
@@ -31,6 +38,12 @@ $currentTax = number_format((float) ($product['tax_rate'] ?? 21), 2, '.', '');
 
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 <?php foreach ($errors as $err): ?><div class="pp-alert pp-alert--error"><?= e($err) ?></div><?php endforeach; ?>
+<?php if ($productType === 'digital' && $linkedResource !== null && (string) $linkedResource['access_mode'] !== 'sale' && (string) $linkedResource['status'] === 'published'): ?>
+    <div class="pp-alert pp-alert--warning">
+        <?= e(__('shop.digital_free_warning', ['recurso' => (string) $linkedResource['title']])) ?>
+        <a href="<?= e(base_url('admin/resources/' . (int) $linkedResource['id'])) ?>"><?= e(__('shop.digital_open_resource')) ?></a>
+    </div>
+<?php endif; ?>
 
 <form method="post" action="<?= e(base_url('admin/commerce/products/' . $pid)) ?>" class="pp-form" id="pp-commerce-editor" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
@@ -44,6 +57,33 @@ $currentTax = number_format((float) ($product['tax_rate'] ?? 21), 2, '.', '');
         <div class="pp-form-group">
             <label for="pp-cp-desc"><?= e(__('form_edit.description')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></label>
             <textarea id="pp-cp-desc" name="description" rows="4" maxlength="8000"><?= e((string) ($product['description'] ?? '')) ?></textarea>
+        </div>
+    </section>
+
+    <?php /* EBOOK-PAGO — físico (se envía) o digital (entrega un recurso). */ ?>
+    <section class="pp-ai-config-panel" data-product-type>
+        <div class="pp-ai-section-head"><div><h3><?= e(__('shop.type_title')) ?></h3><p><?= e(__('shop.type_help')) ?></p></div></div>
+        <div class="pp-resource-choice-grid">
+            <label class="pp-resource-choice<?= $productType === 'physical' ? ' is-selected' : '' ?>">
+                <input type="radio" name="product_type" value="physical" <?= $productType === 'physical' ? 'checked' : '' ?>>
+                <span><strong><?= e(__('shop.type.physical')) ?></strong><small><?= e(__('shop.type.physical_help')) ?></small></span>
+            </label>
+            <label class="pp-resource-choice<?= $productType === 'digital' ? ' is-selected' : '' ?><?= $digitalAvailable ? '' : ' is-disabled' ?>">
+                <input type="radio" name="product_type" value="digital" <?= $productType === 'digital' ? 'checked' : '' ?> <?= $digitalAvailable ? '' : 'disabled' ?>>
+                <span><strong><?= e(__('shop.type.digital')) ?></strong><small><?= e($digitalAvailable ? __('shop.type.digital_help') : __('shop.digital_needs_resources')) ?></small></span>
+            </label>
+        </div>
+        <div class="pp-form-group pp-commerce-digital" data-digital-settings <?= $productType === 'digital' ? '' : 'hidden' ?>>
+            <label for="pp-cp-resource"><?= e(__('shop.digital_resource')) ?></label>
+            <select id="pp-cp-resource" name="resource_id">
+                <option value=""><?= e(__('shop.digital_resource_placeholder')) ?></option>
+                <?php foreach ($resources as $r): ?>
+                    <option value="<?= (int) $r['id'] ?>" <?= $resourceId === (int) $r['id'] ? 'selected' : '' ?>>
+                        <?= e((string) $r['title']) ?> · <?= e(strtoupper(pathinfo((string) $r['original_filename'], PATHINFO_EXTENSION))) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <small><?= e($resources === [] ? __('shop.digital_no_resources') : __('shop.digital_resource_help')) ?></small>
         </div>
     </section>
 
@@ -78,7 +118,7 @@ $currentTax = number_format((float) ($product['tax_rate'] ?? 21), 2, '.', '');
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="pp-form-group">
+            <div class="pp-form-group" data-physical-only <?= $productType === 'digital' ? 'hidden' : '' ?>>
                 <label for="pp-cp-stock"><?= e(__('shop.stock')) ?> <span class="pp-ai-optional-tag"><?= e(__('shop.stock_hint')) ?></span></label>
                 <input type="number" id="pp-cp-stock" name="stock" min="0" max="1000000" value="<?= $product['stock'] === null ? '' : (int) $product['stock'] ?>" placeholder="Ilimitado">
             </div>

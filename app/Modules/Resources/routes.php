@@ -31,5 +31,7 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
         $r->post('/resources/{id}/delete',          [ResourceAdminController::class, 'destroy'], [$guard]);
         // RSRC-FORM — crear la puerta de descarga sin salir del editor
         $r->post('/resources/{id}/form',            [ResourceAdminController::class, 'createForm'], [$guard]);
+        // EBOOK-PAGO — crear el producto de la Tienda que lo vende
+        $r->post('/resources/{id}/product',         [ResourceAdminController::class, 'createProduct'], [$guard]);
     }, $adminMiddlewares);
 };

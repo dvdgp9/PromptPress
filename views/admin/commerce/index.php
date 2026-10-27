@@ -64,9 +64,13 @@ use App\Modules\Commerce\CommerceSettings;
                             <span class="pp-commerce-thumb pp-commerce-thumb--empty" aria-hidden="true"></span>
                         <?php endif; ?>
                     </td>
-                    <td><a href="<?= e(base_url('admin/commerce/products/' . (int) $p['id'])) ?>"><strong><?= e((string) $p['name']) ?></strong></a></td>
+                    <?php $isDigital = (string) ($p['product_type'] ?? 'physical') === 'digital'; ?>
+                    <td>
+                        <a href="<?= e(base_url('admin/commerce/products/' . (int) $p['id'])) ?>"><strong><?= e((string) $p['name']) ?></strong></a>
+                        <?php if ($isDigital): ?><span class="pp-order-digital-tag"><?= e(__('shop.digital_tag')) ?></span><?php endif; ?>
+                    </td>
                     <td><?= e(CommerceSettings::format((int) $p['price_cents'])) ?></td>
-                    <td><?= $p['stock'] === null ? '<span class="pp-booking-soft">' . e(__('shop.unlimited')) . '</span>' : (int) $p['stock'] ?></td>
+                    <td><?= $isDigital ? '<span class="pp-booking-soft">—</span>' : ($p['stock'] === null ? '<span class="pp-booking-soft">' . e(__('shop.unlimited')) . '</span>' : (int) $p['stock']) ?></td>
                     <td>
                         <?php if ((int) $p['active'] === 1): ?>
                             <span class="pp-status-pill pp-status-pill--green"><?= e(__('modules.active')) ?></span>

@@ -33,6 +33,8 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
     // webhook de confirmación (firmado por Stripe; sin sesión ni CSRF).
     $router->get('/tienda/pagar/{number}',    [ShopController::class, 'payRetry'],       [$guard]);
     $router->post('/tienda/stripe/webhook',   [StripeWebhookController::class, 'handle'], [$guard]);
+    // EBOOK-PAGO: archivo de una compra pagada (enlace firmado, 7 días).
+    $router->get('/tienda/descargar',         [ShopController::class, 'download'],       [$guard]);
 
     $router->group('/admin', function (Router $r) use ($guard): void {
         $r->get('/commerce',                       [CommerceAdminController::class, 'index'],   [$guard]);
@@ -42,6 +44,7 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
         $r->get('/commerce/pedidos/{id}',          [CommerceAdminController::class, 'order'],         [$guard]);
         $r->post('/commerce/pedidos/{id}/status',  [CommerceAdminController::class, 'orderStatus'],   [$guard]);
         $r->post('/commerce/pedidos/{id}/notes',   [CommerceAdminController::class, 'orderNotes'],    [$guard]);
+        $r->post('/commerce/pedidos/{id}/downloads', [CommerceAdminController::class, 'orderDownloads'], [$guard]);
         $r->post('/commerce/products',             [CommerceAdminController::class, 'create'],  [$guard]);
         $r->get('/commerce/products/{id}',         [CommerceAdminController::class, 'edit'],    [$guard]);
         $r->post('/commerce/products/{id}',        [CommerceAdminController::class, 'update'],  [$guard]);

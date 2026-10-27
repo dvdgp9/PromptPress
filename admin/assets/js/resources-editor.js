@@ -10,6 +10,7 @@
     var fileInput = editor.querySelector('[data-file-input]');
     var fileName = editor.querySelector('[data-file-name]');
     var formSettings = editor.querySelector('[data-form-settings]');
+    var saleSettings = editor.querySelector('[data-sale-settings]');
     var formSelect = editor.querySelector('[data-form-select]');
     var readiness = editor.querySelector('[data-readiness]');
     var save = editor.querySelector('[data-save]');
@@ -55,6 +56,7 @@
         radio.addEventListener('change', function () {
             updateSelectedCards('access_mode', '.pp-resource-choice');
             formSettings.hidden = selectedValue('access_mode') !== 'form';
+            if (saleSettings) saleSettings.hidden = selectedValue('access_mode') !== 'sale';
             updateReadiness();
         });
     });
@@ -123,6 +125,48 @@
             }).then(function () {
                 createFormBtn.disabled = false;
                 createFormBtn.textContent = original;
+            });
+        });
+    }
+    /* EBOOK-PAGO — «Crear producto en la tienda»: lo crea en borrador y deja
+       el enlace para ponerle precio en otra pestaña, sin perder lo que haya
+       sin guardar aquí (mismo motivo que crear el formulario). */
+    var createProductBtn = editor.querySelector('[data-create-product]');
+    if (createProductBtn) {
+        var productLink = editor.querySelector('[data-product-link]');
+        var saleStatus = editor.querySelector('[data-sale-status]');
+        createProductBtn.addEventListener('click', function () {
+            var original = createProductBtn.textContent;
+            var failed = createProductBtn.getAttribute('data-failed-text');
+            createProductBtn.disabled = true;
+            createProductBtn.textContent = createProductBtn.getAttribute('data-busy-label');
+
+            var body = new FormData();
+            var token = editor.querySelector('input[name="_csrf"]');
+            body.append('_csrf', token ? token.value : '');
+
+            fetch(createProductBtn.getAttribute('data-url'), {
+                method: 'POST',
+                body: body,
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function (response) {
+                return response.json().catch(function () { return {}; });
+            }).then(function (data) {
+                if (!data || !data.ok || !data.product) {
+                    throw new Error(data && data.error ? data.error : failed);
+                }
+                if (saleStatus) saleStatus.textContent = createProductBtn.getAttribute('data-done-text');
+                if (productLink) {
+                    productLink.href = data.product.editUrl;
+                    productLink.hidden = false;
+                }
+                // `.pp-btn` trae display propio que pisa `hidden`: fuera del todo.
+                createProductBtn.remove();
+            }).catch(function (error) {
+                window.alert(error && error.message ? error.message : failed);
+                createProductBtn.disabled = false;
+                createProductBtn.textContent = original;
             });
         });
     }
