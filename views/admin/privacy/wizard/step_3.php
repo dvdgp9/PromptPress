@@ -6,21 +6,49 @@ $services   = array_values(array_filter(
     fn ($s) => !empty($s['enabled'])
 ));
 $formsCount = count($formsList);
-$alreadyGenerated = array_filter($legalPagesState, fn ($p) => $p !== null);
 
 // Tipos aplicables al sitio (3, o 4 si hay tienda). El JS los usa para pintar
 // una fila de progreso por página.
 $genTypes = [];
+$missingTypes = [];
 foreach ($legalTypes as $typeKey => $typeInfo) {
-    $genTypes[] = ['key' => $typeKey, 'label' => $typeInfo['label']];
+    $row = ['key' => $typeKey, 'label' => $typeInfo['label']];
+    $genTypes[] = $row;
+    if (($legalPagesState[$typeKey] ?? null) === null) {
+        $missingTypes[] = $row;
+    }
 }
 $genCount = count($genTypes);
-$allGenerated = count($alreadyGenerated) >= $genCount;
+$missingCount = count($missingTypes);
+$allGenerated = $missingCount === 0;
+// LEGAL-TRUNC — Si alguna falló y el usuario recarga, el botón no puede volver
+// a ofrecer "las 3": reescribiría (y volvería a pagar) las que salieron bien.
+$partial = !$allGenerated && $missingCount < $genCount;
+$toGenerate = $partial ? $missingTypes : $genTypes;
+
+if ($partial) {
+    $buttonLabel = $missingCount === 1
+        ? __('privacy.wizard.generate_missing_one')
+        : __('privacy.wizard.generate_missing_other', ['n' => $missingCount]);
+} else {
+    $buttonLabel = $allGenerated
+        ? __('privacy.wizard.regenerate_n', ['n' => $genCount])
+        : __('privacy.wizard.generate_n', ['n' => $genCount]);
+}
 ?>
 
 <div class="pp-wizard__intro">
+    <?php if ($partial): ?>
+    <h3><?= e(__('privacy.wizard.partial', [
+        'hechas' => $genCount - $missingCount,
+        'n'      => $genCount,
+        'faltan' => implode(' · ', array_column($missingTypes, 'label')),
+    ])) ?></h3>
+    <p><?= e(__('privacy.wizard.partial_help')) ?></p>
+    <?php else: ?>
     <h3><?= e(__('privacy.wizard.ready', ['n' => $genCount])) ?></h3>
     <p><?= __('privacy.wizard.ready_help.html') ?></p>
+    <?php endif; ?>
 </div>
 
 <div class="pp-wizard__summary">
@@ -57,13 +85,16 @@ $allGenerated = count($alreadyGenerated) >= $genCount;
 </div>
 
 <form method="POST" action="<?= e(base_url('admin/privacy/wizard/finish')) ?>" class="pp-wizard__finish"
-      data-legal-generate="<?= e(json_encode($genTypes, JSON_UNESCAPED_UNICODE)) ?>"
+      data-legal-generate="<?= e(json_encode($toGenerate, JSON_UNESCAPED_UNICODE)) ?>"
       data-generate-url="<?= e(base_url('admin/privacy/pages/generate')) ?>"
       data-finish-url="<?= e(base_url('admin/privacy/wizard/finish')) ?>"
       data-done-url="<?= e(base_url('admin/privacy/wizard?step=3&done=1')) ?>">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+    <?php if ($partial): ?>
+    <input type="hidden" name="only_missing" value="1">
+    <?php endif; ?>
     <button type="submit" class="pp-btn pp-btn--primary pp-btn--lg">
-        <?= e($allGenerated ? __('privacy.wizard.regenerate_n', ['n' => $genCount]) : __('privacy.wizard.generate_n', ['n' => $genCount])) ?>
+        <?= e($buttonLabel) ?>
     </button>
     <p class="pp-wizard__finish-note"><?= e(__('privacy.wizard.finish_note')) ?></p>
 </form>

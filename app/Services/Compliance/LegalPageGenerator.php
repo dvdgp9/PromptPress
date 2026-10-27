@@ -274,6 +274,9 @@ final class LegalPageGenerator
      * (cada `generate()` es transaccional por sí solo). Los fallos quedan
      * reflejados en el array de resultados.
      *
+     * Con `$onlyMissing` se saltan las que ya existen: el asistente, tras un
+     * fallo parcial, no debe reescribir (ni volver a pagar) las que salieron bien.
+     *
      * @return array{
      *   ok: bool,
      *   error?: string,
@@ -282,7 +285,7 @@ final class LegalPageGenerator
      *   failed?: int
      * }
      */
-    public static function generateAllLegalPages(int $siteId): array
+    public static function generateAllLegalPages(int $siteId, bool $onlyMissing = false): array
     {
         $manifest = ComplianceService::manifest($siteId);
         $controller = (array) ($manifest['controller'] ?? []);
@@ -302,7 +305,11 @@ final class LegalPageGenerator
         $results = [];
         $generated = 0;
         $failed = 0;
+        $legalPages = (array) ($manifest['legal_pages'] ?? []);
         foreach (array_keys(self::typesFor($siteId)) as $type) {
+            if ($onlyMissing && self::findExistingPage($siteId, $type, $legalPages) !== null) {
+                continue;
+            }
             try {
                 $r = self::generate($siteId, $type);
                 $results[$type] = [

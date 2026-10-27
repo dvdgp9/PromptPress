@@ -158,6 +158,8 @@ class PrivacyController
     {
         CSRF::check();
         $siteId = self::requireSiteId();
+        // LEGAL-TRUNC — si la salida llega cortada la IA repite una vez.
+        @set_time_limit(180);
 
         // WZ-UX — el front genera página a página vía fetch para poder pintar
         // progreso real. Misma ruta: si el body es JSON respondemos JSON, si no

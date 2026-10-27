@@ -101,7 +101,10 @@ class PrivacyWizardController
             return;
         }
 
-        $result = LegalPageGenerator::generateAllLegalPages($siteId);
+        @set_time_limit(420);
+        // Tras un fallo parcial el paso 3 solo ofrece las que faltan.
+        $onlyMissing = Request::post('only_missing', '') === '1';
+        $result = LegalPageGenerator::generateAllLegalPages($siteId, $onlyMissing);
 
         // Precondición fallida: faltan datos del responsable → volver al paso 1.
         if (!$result['ok'] && !isset($result['results'])) {

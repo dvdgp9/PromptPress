@@ -137,7 +137,7 @@ final class AIActionRunner
         unset($built['options']['max_images']);
 
         try {
-            $responses = self::chatWithPlannerRetry(
+            $responses = self::chatWithTruncationRetry(
                 $provider,
                 $action,
                 $built['messages'],
@@ -227,15 +227,27 @@ final class AIActionRunner
     }
 
     /**
+     * Acciones con JSON largo que Gemini puede dejar a medias al agotar la
+     * completion. Son las únicas que repiten (ver `chatWithTruncationRetry()`).
+     */
+    private const TRUNCATION_RETRY_ACTIONS = [
+        Actions::PLAN_SITE_CHANGES,
+        // LEGAL-TRUNC — la política de privacidad fallaba siempre igual al
+        // reintentar a mano: mismo presupuesto, mismo corte.
+        Actions::GENERATE_LEGAL_PAGE,
+    ];
+
+    /**
      * BUG-ASST-PLAN — Gemini puede agotar la completion con JSON a medio
-     * escribir. Solo el planner repite, una vez y con presupuesto doblado.
-     * Devuelve todas las respuestas para contabilizar coste y latencia reales.
+     * escribir. Las acciones de `TRUNCATION_RETRY_ACTIONS` repiten, una vez y
+     * con presupuesto doblado. Devuelve todas las respuestas para contabilizar
+     * coste y latencia reales.
      *
      * @param array<int,array{role:string,content:mixed}> $messages
      * @param array<string,mixed> $options
      * @return array<int,AIResponse>
      */
-    private static function chatWithPlannerRetry(
+    private static function chatWithTruncationRetry(
         AIProviderInterface $provider,
         string $action,
         array $messages,
@@ -244,7 +256,7 @@ final class AIActionRunner
         $responses = [$provider->chat($messages, $options)];
         $first = $responses[0];
 
-        if ($action !== Actions::PLAN_SITE_CHANGES || !self::isTruncatedPlannerResponse($first)) {
+        if (!in_array($action, self::TRUNCATION_RETRY_ACTIONS, true) || !self::isTruncatedJsonResponse($first)) {
             return $responses;
         }
 
@@ -264,7 +276,7 @@ final class AIActionRunner
      * usa un fallback cerrado: JSON que empieza como objeto/lista, no parsea y
      * termina sin su delimitador raíz. Un `stop` explícito nunca se repite.
      */
-    private static function isTruncatedPlannerResponse(AIResponse $response): bool
+    private static function isTruncatedJsonResponse(AIResponse $response): bool
     {
         $finish = strtolower(trim((string) ($response->finishReason ?? '')));
         if (in_array($finish, ['length', 'max_tokens', 'max_output_tokens'], true)) {

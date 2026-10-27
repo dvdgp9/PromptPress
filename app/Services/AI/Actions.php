@@ -1268,7 +1268,13 @@ final class Actions
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.3,
-                    'max_tokens'      => 3500,
+                    // LEGAL-TRUNC — Con 3500 la política de privacidad (la más
+                    // larga: tienda, analítica, formularios…) llegaba cortada a
+                    // media frase porque Gemini 3 gasta parte de la salida en
+                    // thinking. Mismo margen que el planner y reasoning bajo.
+                    'max_tokens'      => 8000,
+                    'reasoning_effort'=> 'low',
+                    'timeout'         => 90,
                 ],
             ],
 

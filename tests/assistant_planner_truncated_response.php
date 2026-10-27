@@ -145,7 +145,7 @@ checkAssistantPlannerTruncation(
     json_encode($openAiPayload)
 );
 
-$retryMethodExists = method_exists(AIActionRunner::class, 'chatWithPlannerRetry');
+$retryMethodExists = method_exists(AIActionRunner::class, 'chatWithTruncationRetry');
 $retryResponses = [];
 $fake = new PlannerRetryFakeProvider([
     new AIResponse($trimmed, 'google/gemini-3.7-flash', 'openrouter', 900, 2500, 'length', 17013),
@@ -160,7 +160,7 @@ $fake = new PlannerRetryFakeProvider([
     ),
 ]);
 if ($retryMethodExists) {
-    $retryMethod = new ReflectionMethod(AIActionRunner::class, 'chatWithPlannerRetry');
+    $retryMethod = new ReflectionMethod(AIActionRunner::class, 'chatWithTruncationRetry');
     $retryResponses = (array) $retryMethod->invoke(
         null,
         $fake,

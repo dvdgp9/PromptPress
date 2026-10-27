@@ -54,6 +54,8 @@ Pendiente de verificación manual del usuario: flujo completo de generación 8 p
 
 # Lessons
 
+- (2026-10-27, LEGAL-TRUNC) «No se pudo parsear JSON» que se repite igual al reintentar = salida cortada por `max_tokens` (Gemini 3 gasta parte en thinking). Las acciones con JSON largo necesitan ≥8000 + `reasoning_effort: low` y estar en `AIActionRunner::TRUNCATION_RETRY_ACTIONS` (un reintento a 16000). La página legal tenía 3500 y la privacidad, la más larga, era la única que caía. En local no se reproducía: depende de lo que el sitio declare (tienda, formularios…).
+- (2026-10-27, LEGAL-TRUNC) Un botón «Generar las N» tras un fallo parcial reescribe y vuelve a pagar las que salieron bien. El paso 3 del asistente ofrece solo las que faltan (`only_missing`); el reintento en memoria del JS no sobrevive a una recarga.
 - (2026-10-05) Producción puede correr PHP 8.0 (yroa.es) y local es 8.4: `array_is_list()` tumbó el asistente con 502 en el hosting. Nada de `array_is_list`/`readonly`/`enum`/`f(...)`; `php tests/php80_compat.php` lo vigila.
 - (2026-10-05) El planificador del asistente solo sabe lo que dice `AssistantCapabilityRegistry::renderForPrompt`. Si el editor Canvas sabe hacer algo solo (p. ej. traer fotos de Unsplash) y el registro no lo dice, el plan lo marca «Necesito información». Las capacidades del editor van como `notes` de `pages.canvas.edit`.
 - `ai_logs` no tiene columna `action`: es `action_type`. Un `2>/dev/null` en mysql dentro de un until-loop puede convertir ese error en bucle infinito silencioso.
