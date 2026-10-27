@@ -55,6 +55,43 @@ final class StripeConfig
         );
     }
 
+    /**
+     * Prefijos aceptados para la clave de API de un modo. Primero la
+     * restringida (rk_): Stripe la recomienda y desaconseja la secreta
+     * estándar (sk_) para integraciones nuevas; las dos valen igual.
+     *
+     * @param 'test'|'live' $mode
+     * @return string[]
+     */
+    public static function apiKeyPrefixes(string $mode): array
+    {
+        return ['rk_' . $mode . '_', 'sk_' . $mode . '_'];
+    }
+
+    /**
+     * Qué le pasa a lo pegado en el recuadro de clave de API de un modo, solo
+     * por su forma (sin preguntar a Stripe).
+     *
+     * @param 'test'|'live' $mode
+     * @return null|'publishable'|'wrong_mode'|'bad_prefix' null = el formato vale
+     */
+    public static function apiKeyFormatProblem(string $mode, string $value): ?string
+    {
+        foreach (self::apiKeyPrefixes($mode) as $prefix) {
+            if (str_starts_with($value, $prefix)) {
+                return null;
+            }
+        }
+        if (str_starts_with($value, 'pk_')) {
+            return 'publishable';
+        }
+        $otherMode = $mode === 'live' ? 'test' : 'live';
+        if (preg_match('/^[rs]k_' . $otherMode . '_/', $value) === 1) {
+            return 'wrong_mode';
+        }
+        return 'bad_prefix';
+    }
+
     /** "sk_test_••••4242" para mostrar en el admin sin revelar el secreto. */
     public static function masked(?string $secret): ?string
     {

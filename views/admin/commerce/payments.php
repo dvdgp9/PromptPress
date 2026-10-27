@@ -4,7 +4,7 @@
  *
  * @var 'test'|'live' $mode
  * @var bool    $configured          hay clave secreta para el modo activo
- * @var ?string $maskedSkTest        "sk_test_••••1234" o null
+ * @var ?string $maskedSkTest        "rk_test_••••1234" (o sk_test_…) o null
  * @var ?string $maskedSkLive
  * @var ?string $maskedWhsecTest
  * @var ?string $maskedWhsecLive
@@ -74,9 +74,9 @@
             <fieldset class="pp-stripe-keyset<?= $mode === 'test' ? ' is-active' : '' ?>">
                 <legend><?= e(__('pay.test_keys')) ?> <?= $mode === 'test' ? '<span class="pp-status-pill pp-status-pill--green">' . e(__('pay.in_use')) . '</span>' : '' ?></legend>
                 <div class="pp-form-group">
-                    <label for="pp-sk-test"><?= e(__('pay.secret_key')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'sk_test_'])) ?></span></label>
+                    <label for="pp-sk-test"><?= e(__('pay.secret_key')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'rk_test_ / sk_test_'])) ?></span></label>
                     <input type="password" id="pp-sk-test" name="sk_test" autocomplete="off"
-                           placeholder="<?= $maskedSkTest !== null ? e(__('pay.saved_key', ['clave' => $maskedSkTest])) : 'sk_test_…' ?>">
+                           placeholder="<?= $maskedSkTest !== null ? e(__('pay.saved_key', ['clave' => $maskedSkTest])) : 'rk_test_… / sk_test_…' ?>">
                 </div>
                 <div class="pp-form-group">
                     <label for="pp-whsec-test"><?= e(__('pay.webhook_secret')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'whsec_'])) ?></span></label>
@@ -88,9 +88,9 @@
             <fieldset class="pp-stripe-keyset<?= $mode === 'live' ? ' is-active' : '' ?>">
                 <legend><?= e(__('pay.live_keys')) ?> <?= $mode === 'live' ? '<span class="pp-status-pill pp-status-pill--green">' . e(__('pay.in_use')) . '</span>' : '' ?></legend>
                 <div class="pp-form-group">
-                    <label for="pp-sk-live"><?= e(__('pay.secret_key')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'sk_live_'])) ?></span></label>
+                    <label for="pp-sk-live"><?= e(__('pay.secret_key')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'rk_live_ / sk_live_'])) ?></span></label>
                     <input type="password" id="pp-sk-live" name="sk_live" autocomplete="off"
-                           placeholder="<?= $maskedSkLive !== null ? e(__('pay.saved_key', ['clave' => $maskedSkLive])) : 'sk_live_…' ?>">
+                           placeholder="<?= $maskedSkLive !== null ? e(__('pay.saved_key', ['clave' => $maskedSkLive])) : 'rk_live_… / sk_live_…' ?>">
                 </div>
                 <div class="pp-form-group">
                     <label for="pp-whsec-live"><?= e(__('pay.webhook_secret')) ?> <span class="pp-ai-optional-tag"><?= e(__('pay.starts_with', ['prefijo' => 'whsec_'])) ?></span></label>

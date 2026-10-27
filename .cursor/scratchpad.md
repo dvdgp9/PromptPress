@@ -10837,3 +10837,37 @@ Los logos ya subidos NO se recortan solos: hay que volver a subirlos («Sustitui
 - zsh no parte en palabras una variable sin comillas: `M="mysql -u…"; $M -e …`
   da «command not found» (exit 127). Escribir el comando entero o usar un array.
 - La cabecera pública limita el logo a 42 px de alto (`DesignSystem.php`, `.pp-site-header__logo-img`) sin ajuste en el panel.
+
+## Background and Motivation (STRIPE-RK) — 27/10/2026
+
+Una compañera del usuario configuraba Stripe: PromptPress pedía una clave que
+empezara por `sk_` y Stripe le daba una `rk_` (clave restringida). Stripe ya
+recomienda las restringidas y desaconseja la secreta estándar. El servidor ya
+aceptaba `rk_` desde C5, pero toda la pantalla decía «empieza por sk_» y no
+explicaba qué permiso darle (las restringidas nacen sin ninguno).
+
+## Project Status Board (STRIPE-RK)
+
+- [x] Etiqueta, prefijos y placeholders: «Clave restringida o secreta · empieza por rk_test_ / sk_test_».
+- [x] Paso 2 reescrito: crear clave restringida con **Checkout Sessions → Escritura** (4 idiomas).
+- [x] Clave del otro modo (rk_live_ en el recuadro de pruebas) → aviso específico `pay.err.wrong_mode`.
+- [x] Al guardar, Stripe confirma la clave sin crear nada (`StripeApi::keyProblem`): 401 → `pay.err.key_rejected`, 403 → `pay.err.key_permission.html`; sin red no bloquea.
+- [x] Lógica de formato pura en `StripeConfig::apiKeyFormatProblem()`; tests en `commerce_stripe.php`.
+- [ ] Publicar versión (subir PP_VERSION) — pendiente de decisión del usuario.
+
+## Current Status / Progress Tracking (STRIPE-RK) — 27/10/2026, Executor
+
+`commerce_stripe.php`, `admin_i18n.php`, `php80_compat.php` ALL PASS. Probado en
+navegador (preview 8788): `rk_test_` falsa → «Stripe no reconoce…» (401 real de
+la API); `rk_test_` en el recuadro real → aviso de modo cambiado; textos nuevos
+visibles. El caso 403 (restringida sin permiso) solo está probado con transporte
+fake: no hay una RAK real a mano. Sitio de dev restaurado (sin claves). **Sin commit.**
+
+## Lessons (STRIPE-RK)
+
+- `tests/commerce_stripe.php` restaura los settings solo si llega al final: si
+  aborta a medias (p. ej. fatal por TDD con un método aún inexistente), deja las
+  claves falsas `sk_test_51FakeKeyForTests…abcd` / `whsec_test_secret_para_tests_0001`
+  en el sitio de dev, y la siguiente ejecución las toma como «previas». Limpiar a mano.
+- Las excepciones de `StripeApi::request()` llevan el HTTP status como `getCode()`.
+

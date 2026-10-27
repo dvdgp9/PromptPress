@@ -100,6 +100,38 @@ check_st('configurado en modo test', StripeConfig::isConfigured($siteId));
 check_st('modo live sin clave live → no configurado', StripeConfig::secretKey($siteId, 'live') === null);
 check_st('masked oculta el cuerpo', StripeConfig::masked($fakeSk) === 'sk_test_••••abcd', (string) StripeConfig::masked($fakeSk));
 check_st('con claves → stripe disponible y primero', array_key_first(PaymentMethods::availableFor($siteId)) === 'stripe');
+check_st('masked de una restringida', StripeConfig::masked('rk_test_51FakeRestricted00wxyz') === 'rk_test_••••wxyz');
+
+// ---------------------------------------------------------------------------
+// Formato de la clave de API: restringida (rk_, la que recomienda Stripe) o
+// secreta estándar (sk_), siempre del modo de su recuadro
+// ---------------------------------------------------------------------------
+check_st('rk_test_ vale en pruebas', StripeConfig::apiKeyFormatProblem('test', 'rk_test_51abc') === null);
+check_st('sk_test_ vale en pruebas', StripeConfig::apiKeyFormatProblem('test', 'sk_test_51abc') === null);
+check_st('rk_live_ vale en real', StripeConfig::apiKeyFormatProblem('live', 'rk_live_51abc') === null);
+check_st('sk_live_ vale en real', StripeConfig::apiKeyFormatProblem('live', 'sk_live_51abc') === null);
+check_st('rk_live_ en pruebas → wrong_mode', StripeConfig::apiKeyFormatProblem('test', 'rk_live_51abc') === 'wrong_mode');
+check_st('sk_test_ en real → wrong_mode', StripeConfig::apiKeyFormatProblem('live', 'sk_test_51abc') === 'wrong_mode');
+check_st('pk_ → publishable', StripeConfig::apiKeyFormatProblem('test', 'pk_test_51abc') === 'publishable');
+check_st('whsec_ en el recuadro de clave → bad_prefix', StripeConfig::apiKeyFormatProblem('test', 'whsec_abc') === 'bad_prefix');
+check_st('prefijos que se muestran', StripeConfig::apiKeyPrefixes('live') === ['rk_live_', 'sk_live_']);
+
+// keyProblem: pregunta a Stripe con un POST que nunca crea nada.
+$probe = null;
+StripeApi::$httpOverride = function (string $method, string $path, array $params) use (&$probe): array {
+    $probe = [$method, $path, $params];
+    throw new RuntimeException('Stripe: Invalid mode: must be one of payment, setup or subscription', 400);
+};
+check_st('keyProblem: 400 por parámetro → la clave vale', StripeApi::keyProblem('rk_test_x') === null);
+check_st('keyProblem: el sondeo lleva un mode inválido', $probe !== null && $probe[0] === 'POST'
+    && $probe[1] === '/checkout/sessions' && !in_array($probe[2]['mode'] ?? '', ['payment', 'setup', 'subscription'], true), json_encode($probe));
+StripeApi::$httpOverride = fn () => throw new RuntimeException('Stripe: Invalid API Key provided: rk_test_****', 401);
+check_st('keyProblem: 401 → invalid', (StripeApi::keyProblem('rk_test_x')['kind'] ?? '') === 'invalid');
+StripeApi::$httpOverride = fn () => throw new RuntimeException("Stripe: The provided key 'rk_test_****' does not have the required permissions for this endpoint", 403);
+check_st('keyProblem: 403 → permission', (StripeApi::keyProblem('rk_test_x')['kind'] ?? '') === 'permission');
+StripeApi::$httpOverride = fn () => throw new RuntimeException('Stripe: error de conexión (timeout)');
+check_st('keyProblem: sin red → no bloquea (null)', StripeApi::keyProblem('rk_test_x') === null);
+StripeApi::$httpOverride = null;
 
 // ---------------------------------------------------------------------------
 // Verificación de firma (pura)

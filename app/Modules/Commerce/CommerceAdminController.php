@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Commerce;
 
+use App\Modules\Commerce\Payments\StripeApi;
 use App\Modules\Commerce\Payments\StripeConfig;
 use Core\Auth;
 use Core\CSRF;
@@ -141,27 +142,44 @@ final class CommerceAdminController
         }
 
         $mode = (string) Request::post('stripe_mode', 'test') === 'live' ? 'live' : 'test';
+        // [modo de la clave de API | null = secreto del webhook, etiqueta, valor]
         $fields = [
-            'commerce_stripe_sk_test'             => ['sk_test_', __('pay.secret_key') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('sk_test', ''))],
-            'commerce_stripe_sk_live'             => ['sk_live_', __('pay.secret_key') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('sk_live', ''))],
-            'commerce_stripe_webhook_secret_test' => ['whsec_', __('pay.webhook_secret') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('whsec_test', ''))],
-            'commerce_stripe_webhook_secret_live' => ['whsec_', __('pay.webhook_secret') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('whsec_live', ''))],
+            'commerce_stripe_sk_test'             => ['test', __('pay.secret_key') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('sk_test', ''))],
+            'commerce_stripe_sk_live'             => ['live', __('pay.secret_key') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('sk_live', ''))],
+            'commerce_stripe_webhook_secret_test' => [null, __('pay.webhook_secret') . ' (' . __('pay.mode_test') . ')', trim((string) Request::post('whsec_test', ''))],
+            'commerce_stripe_webhook_secret_live' => [null, __('pay.webhook_secret') . ' (' . __('pay.mode_live') . ')', trim((string) Request::post('whsec_live', ''))],
         ];
 
         $errors = [];
-        foreach ($fields as $settingKey => [$prefix, $label, $value]) {
+        foreach ($fields as $settingKey => [$keyMode, $label, $value]) {
             if ($value === '') {
                 continue; // en blanco = conservar la guardada
             }
-            if (str_starts_with($value, 'pk_')) {
-                $errors[] = __('pay.err.publishable.html', ['campo' => $label, 'prefijo' => $prefix]);
-                continue;
-            }
-            // Las claves restringidas (rk_test_/rk_live_) también valen.
-            $rkPrefix = str_replace('sk_', 'rk_', $prefix);
-            if (!str_starts_with($value, $prefix) && !($prefix !== 'whsec_' && str_starts_with($value, $rkPrefix))) {
-                $errors[] = __('pay.err.bad_prefix', ['campo' => $label, 'prefijo' => $prefix]);
-                continue;
+            if ($keyMode === null) {
+                if (!str_starts_with($value, 'whsec_')) {
+                    $errors[] = __('pay.err.bad_prefix', ['campo' => $label, 'prefijo' => 'whsec_']);
+                    continue;
+                }
+            } else {
+                // Clave de API: restringida (rk_) o secreta (sk_) del modo de su
+                // recuadro; si la forma vale, Stripe confirma que puede cobrar
+                // (las restringidas nacen sin permisos).
+                $prefixes = implode(' / ', StripeConfig::apiKeyPrefixes($keyMode));
+                $problem = StripeConfig::apiKeyFormatProblem($keyMode, $value);
+                if ($problem === null && ($rejected = StripeApi::keyProblem($value)) !== null) {
+                    logger('Stripe rechaza la clave de ' . $settingKey . ' (' . $rejected['kind'] . '): ' . $rejected['message'], 'WARNING');
+                    $problem = $rejected['kind'];
+                }
+                if ($problem !== null) {
+                    $errors[] = match ($problem) {
+                        'publishable' => __('pay.err.publishable.html', ['campo' => $label, 'prefijo' => $prefixes]),
+                        'wrong_mode'  => __('pay.err.wrong_mode', ['campo' => $label, 'modo' => __($keyMode === 'live' ? 'pay.mode_test' : 'pay.mode_live')]),
+                        'invalid'     => __('pay.err.key_rejected', ['campo' => $label]),
+                        'permission'  => __('pay.err.key_permission.html', ['campo' => $label]),
+                        default       => __('pay.err.bad_prefix', ['campo' => $label, 'prefijo' => $prefixes]),
+                    };
+                    continue;
+                }
             }
             StripeConfig::saveSecret($siteId, $settingKey, $value);
         }

@@ -42,6 +42,33 @@ final class StripeApi
     }
 
     /**
+     * ¿Le pasa algo a esta clave? Se pregunta sin crear nada: POST
+     * /checkout/sessions con un `mode` inválido. Si la clave puede cobrar,
+     * Stripe responde 400 por el parámetro; si no existe o caducó, 401; si es
+     * restringida sin «Checkout Sessions: escritura», 403 (y su mensaje dice
+     * qué permiso falta).
+     *
+     * @return ?array{kind:'invalid'|'permission', message:string} null si vale
+     *         o no se pudo comprobar (sin red, Stripe caído…): eso no debe
+     *         impedir guardar
+     */
+    public static function keyProblem(string $secretKey): ?array
+    {
+        try {
+            self::request($secretKey, 'POST', '/checkout/sessions', ['mode' => 'pp_key_check']);
+        } catch (RuntimeException $e) {
+            $status = $e->getCode();
+            if ($status === 401) {
+                return ['kind' => 'invalid', 'message' => $e->getMessage()];
+            }
+            if ($status === 403 || ($status >= 400 && stripos($e->getMessage(), 'permission') !== false)) {
+                return ['kind' => 'permission', 'message' => $e->getMessage()];
+            }
+        }
+        return null;
+    }
+
+    /**
      * Verifica la firma Stripe-Signature de un webhook (HMAC-SHA256 sobre
      * "t.rawBody", comparación constant-time contra cada v1 del header).
      *
@@ -84,7 +111,8 @@ final class StripeApi
     /**
      * @param array<string,mixed> $params
      * @return array<string,mixed>
-     * @throws RuntimeException con el mensaje de error de Stripe
+     * @throws RuntimeException con el mensaje de error de Stripe y el código
+     *         HTTP como código de la excepción (0 = sin respuesta)
      */
     private static function request(string $secretKey, string $method, string $path, array $params): array
     {
@@ -120,7 +148,7 @@ final class StripeApi
         }
         if ($status < 200 || $status >= 300) {
             $msg = (string) ($data['error']['message'] ?? ('HTTP ' . $status));
-            throw new RuntimeException('Stripe: ' . $msg);
+            throw new RuntimeException('Stripe: ' . $msg, $status);
         }
         return $data;
     }
