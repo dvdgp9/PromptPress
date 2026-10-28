@@ -11075,3 +11075,87 @@ Verificación:
 - Los tests que usan `__()` necesitan `require vendor/autoload.php` + `\Core\App::boot()`.
 - Añadir columnas que se escriben en un INSERT exige correr la migración en local antes de los tests con BD (`assistant_jobs_source_context` falla si no).
 - `itemFingerprint`: añadir claves nuevas solo cuando tienen valor, para no invalidar las huellas de planes ya emitidos.
+
+---
+
+## Background and Motivation (ASST-V2) — 28/10/2026
+
+Usuario: «Si tuvieras que rediseñar el asistente, sabiendo lo que hace y las futuras funcionalidades (todo lo de la plataforma), ¿cómo lo harías? La idea es que se gestione todo desde ahí, aunque también se puedan hacer cambios a mano, y que sea lo más user friendly e intuitivo». Es una PROPUESTA (Planner): nada se implementa hasta que el usuario elija.
+
+## Key Challenges and Analysis (ASST-V2) — Planner
+
+Estado actual (verificado):
+- El asistente es UNA página más (/admin/assistant, grupo «Asistente» del menú). Para usarlo hay que salir de donde estás.
+- La conversación vive en la pestaña del navegador: recargar = perderla, incluido un plan pendiente.
+- Solo 2 ejecutores (pages.canvas.edit, forms.edit). Todo lo demás acaba en «Disponible en la plataforma → ve a /admin/x» sin enlace directo ni datos precargados.
+- Tres IAs distintas para el usuario: chat del Studio (CanvasChatService), composer de formularios (DESIGN_FORM) y el asistente central. Más los asistentes guiados (privacidad, onboarding).
+- Las tarjetas enseñan la instrucción técnica que leerá la otra IA, no «lo que verá tu visitante».
+- Cada tipo de cambio tiene su propio modelo de aprobación: páginas = borrador + Publicar; formularios = en vivo + Restaurar en otro sitio.
+- Ya existen piezas reutilizables: registro de capacidades, jobs, versiones (page_versions, versions), auditorías (LinkAudit, SeoTechnicalAudit, Compliance), Permissions, EditLock.
+- El skill design-taste-frontend declara fuera de alcance los paneles de administración; de él solo valen los principios generales (estados vacío/carga/error, un único acento, nada de relleno).
+
+Principios de la propuesta:
+1. **El asistente es una capa, no una página**: un panel lateral disponible en TODA pantalla del panel, que sabe dónde estás (página, formulario, producto…). La portada del panel (Inicio) es el asistente con lo pendiente.
+2. **Un solo contrato por acción**: cada funcionalidad registra qué puede LEER, qué puede HACER (handler), su NIVEL DE RIESGO y cómo se DESHACE. Una funcionalidad nueva de la plataforma = una entrada nueva en el registro, sin UI nueva.
+3. **Aprobación según riesgo, siempre igual**:
+   - Consultar (analítica, mensajes, pedidos): responde, no pide aprobación.
+   - Borrador (páginas, entradas): aplica como borrador → «Publicar».
+   - En vivo reversible (formularios, menú, SEO, textos globales): vista antes/después → «Aplicar» → «Deshacer» de un clic en la misma tarjeta.
+   - Sensible (legal, precios, pagos, destinatarios, borrar, usuarios): una a una, confirmación explícita, nunca en lote.
+4. **Previsualizar antes de aprobar**: la tarjeta muestra el antes/después (el formulario renderizado, la sección, el texto con cambios marcados), no la instrucción interna.
+5. **Un historial único con deshacer** («Actividad»): cada cambio, del asistente o a mano, con quién, cuándo y «Deshacer». Es lo que da confianza para dejar hacer.
+6. **Manual y asistente son lo mismo**: cada tarjeta tiene «Abrir en el editor» (deep link con el elemento abierto); cada editor tiene «Pídeselo al asistente» con el contexto ya puesto. Lo que el asistente aún no hace se convierte en botón al sitio exacto, no en texto con una ruta.
+7. **Conversaciones guardadas** en servidor, por tarea, que sobreviven a recargar y se retoman.
+8. **Proactivo con lo que ya se audita**: Inicio enseña 3-5 sugerencias de las auditorías existentes (enlaces rotos, SEO técnico, formularios sin traducir, cumplimiento legal) con «Arreglar».
+9. **Lenguaje de persona**: «Lo hago yo», «Te llevo», «Necesito un dato», «Hay que revisarlo», «Aún no sé hacerlo». Sin ids ni rutas.
+10. **Respeta roles**: solo propone lo que el rol del usuario puede hacer (Permissions).
+
+Riesgos: (a) más ejecutores = más superficie para errores en vivo → empezar por los reversibles y con versión previa; (b) unificar las tres IAs toca Studio, el flujo más usado → hacerlo al final; (c) conversaciones en servidor = tabla nueva y datos de clientes → retención limitada; (d) coste IA: las sugerencias proactivas salen de auditorías locales, sin llamadas al modelo hasta que el usuario pulsa.
+
+## High-level Task Breakdown (ASST-V2) — APROBADA por el usuario 28/10/2026 («Me parece genial, comienza»)
+
+Orden recomendado (cada fase se puede publicar sola):
+- [x] F1 Confianza (hecho en código, PENDIENTE de verificación visual del usuario): tabla `assistant_conversations` (retomar, plan pendiente sobrevive a recargar) + pantalla «Actividad» unificada con Deshacer (páginas, formularios). ✅ recargar no pierde el plan; deshacer un cambio de formulario y de página desde Actividad.
+- [ ] F2 Panel lateral global: assistant.js como cajón en layout.php con el contexto de la pantalla; botón «Pídeselo al asistente» en editores; tarjetas no automáticas con botón «Llévame» (deep link). ✅ desde /admin/formularios/{id} el asistente sabe qué formulario es sin decirlo.
+- [ ] F3 Tarjetas con vista previa antes/después (formularios primero, luego secciones de página) y modelo de riesgo en el registro (`risk: read|draft|live|sensitive`, `undo`). ✅ la tarjeta del caso «Pide información» enseña el formulario nuevo antes de aplicar.
+- [ ] F4 Ejecutores nuevos, de menos a más riesgo: SEO de página → menú/header/footer → entradas del blog (borrador) → crear página (borrador) → diseño global (colores/tipos, con vista previa) → servicios de reservas, productos y recursos (borrador/inactivos). Cada uno con test y versión previa.
+- [ ] F5 Inicio proactivo: sugerencias desde auditorías existentes, sin coste de IA hasta pulsar.
+- [ ] F6 Unificar el chat del Studio y el composer de formularios en el panel (mismo motor, mismo historial y coste).
+
+## Project Status Board (ASST-V2)
+- [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
+- [ ] F2 Panel lateral global y botones «Llévame»
+- [ ] F3 Vista previa antes/después + riesgo en el registro
+- [ ] F4 Ejecutores nuevos
+- [ ] F5 Inicio proactivo
+- [ ] F6 Unificar IA del Studio y composer de formularios
+
+## Current Status / Progress Tracking (ASST-V2) — 28/10/2026, Executor (F1)
+
+Conversaciones guardadas:
+- Tabla `assistant_conversations` (migración `2026_10_28_assistant_conversations.php` + schema.sql), por persona y sitio, retención 30 días (prune al crear).
+- `AssistantConversationStore` (save/find/latest/recent/delete + `sanitize` puro). El navegador manda una foto tras cada paso (plan recibido, aplicado, publicado) a `POST /admin/assistant/conversations/save`; guardados en serie para no duplicar.
+- Al entrar a /admin/assistant se reabre la última de los últimos 7 días; `?c=ID` retoma una; `?nueva=1` empieza de cero. Menú «Conversaciones» en la cabecera con borrar. El botón «Nueva conversación» pasa a la cabecera (fuera el duplicado del composer).
+- Al retomar se repinta el hilo; los planes ya aplicados quedan con «Aplicado»; el último pendiente se puede aplicar (si el material adjunto tenía más de 2 h, el token caduca y pide volver a proponer, como antes).
+- Arreglo de ASST-FORMS: `parseCurrentPlan` conservaba page_id pero perdía form_id en los mensajes siguientes.
+
+Actividad (`/admin/actividad`, menú Asistente → Actividad, capacidad assistant):
+- `ActivityService` lee lo que ya existe: `page_versions` (estado después; deshacer = versión anterior, queda en borrador, respeta EditLock) y `versions` de formularios (estado antes; deshacer = restaurar, en vivo).
+- Filtros Todo / Asistente / A mano; agrupado por día; «Abrir» y «Deshacer» con confirmación; las entradas deshechas se tachan.
+- Los guardados a mano del editor de formularios ahora guardan versión (`before_manual_update`); restaurar se movió a `FormStore::restoreVersion` (lo usan el editor y Actividad).
+- Redactor (sin `forms`) no ve ni deshace formularios.
+- El informe del asistente enlaza a «Ver en Actividad».
+
+Verificación:
+- `tests/assistant_v2_memory_activity.php` nuevo (24 PASS; los 2 casos «otro usuario» no corren con un solo usuario local). `admin_navigation` actualizado (+Actividad). Suites asistente/formularios/admin/permisos/canvas/php80 en verde. Lint completo OK.
+- Deshacer de página probado contra BD local (puntero 3969→3758 y vuelta). Vistas renderizadas por CLI sin avisos; `</script>` en una conversación sale escapado.
+- NO verificado en navegador (no hay credenciales de prueba). Publicado como v1.14.0 a petición del usuario.
+
+## Executor's Feedback or Assistance Requests (ASST-V2)
+- Necesito que el usuario inicie sesión en el navegador de la app (localhost:8765) para verificar visualmente retomar conversación, menú Conversaciones y Deshacer en Actividad.
+- Usuario (28/10): «Publícalo sin probar» → publicado como 1.14.0 sin verificación visual.
+
+## Lessons (ASST-V2)
+- `page_versions` guarda el estado DESPUÉS de cada cambio y `versions` (secciones/formularios) el de ANTES: deshacer se calcula distinto en cada uno.
+- `AdminNavigation::matchesPath` activa por prefijo: una pantalla bajo /admin/assistant/... encendería también «Asistente»; por eso Actividad vive en /admin/actividad.
+- tests/admin_navigation.php fija el número de destinos del menú: añadir un enlace exige actualizarlo.

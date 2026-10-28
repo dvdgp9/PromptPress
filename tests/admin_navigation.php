@@ -51,8 +51,8 @@ navCheck(
     navKeys($all) === ['home', 'assistant', 'content', 'clients', 'appearance', 'visibility', 'configuration'],
     json_encode(navKeys($all)) ?: ''
 );
-navCheck('base_destinations_count', count(AdminNavigation::flatten($none)) === 18);
-navCheck('all_modules_destinations_count', count(AdminNavigation::flatten($all)) === 22);
+navCheck('base_destinations_count', count(AdminNavigation::flatten($none)) === 19); // ASST-V2 F1: + Actividad
+navCheck('all_modules_destinations_count', count(AdminNavigation::flatten($all)) === 23);
 
 $allFlat = AdminNavigation::flatten($all);
 $allKeys = array_column($allFlat, 'key');
@@ -71,7 +71,7 @@ navCheck('all_items_have_route_icon_and_label', array_reduce(
 $groupsByKey = array_column($all, null, 'key');
 navCheck(
     'assistant_group_order',
-    navKeys($groupsByKey['assistant']['items']) === ['assistant_home', 'knowledge', 'documents', 'ai_usage']
+    navKeys($groupsByKey['assistant']['items']) === ['assistant_home', 'activity', 'knowledge', 'documents', 'ai_usage']
 );
 navCheck(
     'content_group_order',

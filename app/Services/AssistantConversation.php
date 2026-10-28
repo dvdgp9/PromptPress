@@ -73,7 +73,7 @@ final class AssistantConversation
                     $blockIds[] = (string) $id;
                 }
             }
-            $items[] = [
+            $entry = [
                 'page_id' => (int) ($item['page_id'] ?? 0),
                 'page_title' => mb_substr(trim((string) ($item['page_title'] ?? '')), 0, 120),
                 'section' => mb_substr(trim((string) ($item['section'] ?? '')), 0, 80),
@@ -83,6 +83,12 @@ final class AssistantConversation
                 'media_ids' => array_slice($mediaIds, 0, self::MAX_MEDIA),
                 'source_block_ids' => array_slice($blockIds, 0, 120),
             ];
+            // ASST-FORMS — sin form_id el plan vigente olvidaba a qué formulario
+            // iba un cambio en cuanto el usuario seguía hablando.
+            if ((int) ($item['form_id'] ?? 0) > 0) {
+                $entry['form_id'] = (int) $item['form_id'];
+            }
+            $items[] = $entry;
             if (count($items) >= self::MAX_PLAN_ITEMS) {
                 break;
             }

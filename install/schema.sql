@@ -697,6 +697,21 @@ CREATE TABLE IF NOT EXISTS assistant_job_items (
         FOREIGN KEY (job_id) REFERENCES assistant_jobs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ASST-V2 F1 — conversaciones del asistente (se borran a los 30 días)
+CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    site_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NULL,
+    title VARCHAR(160) NOT NULL DEFAULT '',
+    state_json MEDIUMTEXT NULL,
+    log_json MEDIUMTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_ac_owner (site_id, user_id, updated_at),
+    CONSTRAINT fk_ac_site FOREIGN KEY (site_id) REFERENCES sites (id) ON DELETE CASCADE,
+    CONSTRAINT fk_ac_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ------------------------------------------------------------

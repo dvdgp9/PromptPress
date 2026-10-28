@@ -15,7 +15,6 @@ use App\Services\FormTranslator;
 use App\Services\FormPlacementStore;
 use App\Services\LanguageService;
 use App\Services\VersionService;
-use App\Services\CacheService;
 use Core\Auth;
 use Core\CSRF;
 use Core\Database;
@@ -180,6 +179,8 @@ class FormsController
             return;
         }
 
+        // ASST-V2 F1 — también los cambios a mano quedan en Actividad y se pueden deshacer.
+        FormStore::snapshot($siteId, $id, Auth::id(), 'before_manual_update');
         FormStore::update($siteId, $id, $content);
         Session::flash('notice', __('forms.flash.saved'));
         Response::redirect(base_url('admin/formularios/' . $id));
@@ -425,18 +426,10 @@ class FormsController
             Session::flash('error', __('forms.error.not_found'));
             Response::redirect(base_url('admin/formularios'));
         }
-        $version = VersionService::loadSectionVersion($id, (int) Request::post('version_id', 0));
-        $content = $version !== null ? json_decode((string) ($version['data']['content'] ?? ''), true) : null;
-        if (!is_array($content) || ($version['data']['section_type'] ?? '') !== 'form') {
+        if (!FormStore::restoreVersion($siteId, $id, (int) Request::post('version_id', 0), Auth::id())) {
             Session::flash('error', __('form_edit.restore_failed'));
             Response::redirect($url);
         }
-        $section = Database::selectOne('SELECT * FROM page_sections WHERE id = ? LIMIT 1', [$id]);
-        if ($section !== null) {
-            VersionService::snapshotSection($section, Auth::id(), 'before_restore');
-        }
-        FormStore::update($siteId, $id, $content);
-        CacheService::flush($siteId);
         Session::flash('notice', __('form_edit.restored'));
         Response::redirect($url);
     }

@@ -375,7 +375,86 @@
     // aplicar y el token del material ya adjuntado.
     // ------------------------------------------------------------------
     const MAX_TURNS = 10;
-    const conversation = { turns: [], plan: null, sourceToken: '', thumbs: new Map() };
+    const conversation = { turns: [], plan: null, sourceToken: '', thumbs: new Map(), id: null, log: [] };
+
+    // ------------------------------------------------------------------
+    // ASST-V2 F1 — la conversación se guarda en el servidor tras cada paso
+    // para poder recargar o retomarla otro día.
+    // ------------------------------------------------------------------
+    function logEntry(entry) {
+        conversation.log.push(entry);
+        conversation.log = conversation.log.slice(-80);
+    }
+
+    let persistChain = Promise.resolve();
+    function persistConversation() {
+        if (conversation.log.length === 0) return;
+        const snapshot = JSON.stringify({
+            state: { turns: conversation.turns, plan: conversation.plan, source_token: conversation.sourceToken },
+            log: conversation.log
+        }, (key, value) => (key === '_thumbs' || key === '_button' ? undefined : value));
+        // En serie: dos guardados seguidos no pueden crear dos conversaciones.
+        persistChain = persistChain.then(async () => {
+            try {
+                const res = await fetch(cfg.baseUrl + '/conversations/save', {
+                    method: 'POST',
+                    body: new URLSearchParams({ _csrf: cfg.csrf, id: conversation.id || '', snapshot })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.ok && data.id) {
+                    conversation.id = data.id;
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', cfg.baseUrl + '?c=' + data.id);
+                    }
+                }
+            } catch (err) {
+                // Sin guardar se sigue pudiendo trabajar; solo se pierde al recargar.
+            }
+        });
+    }
+
+    function markPlanApplied(plan) {
+        plan._applied = true;
+        const msg = plan._button;
+        if (msg) {
+            msg.disabled = true;
+            msg.textContent = pp.t('js.as.plan_applied');
+        }
+    }
+
+    function restoreConversation(saved) {
+        if (!saved || !Array.isArray(saved.log) || saved.log.length === 0) return;
+        const state = saved.state || {};
+        conversation.id = saved.id;
+        conversation.turns = Array.isArray(state.turns) ? state.turns : [];
+        conversation.sourceToken = typeof state.source_token === 'string' ? state.source_token : '';
+        let pending = null;
+        saved.log.forEach((entry) => {
+            if (!entry || typeof entry !== 'object') return;
+            if (entry.type === 'plan' && entry.plan) {
+                const plan = entry.plan;
+                plan._thumbs = new Map();
+                renderPlan(plan);
+                conversation.log.push({ type: 'plan', plan });
+                if (plan._applied) {
+                    markPlanApplied(plan);
+                    if (lastPlanContext && lastPlanContext.plan === plan) lastPlanContext = null;
+                    pending = null;
+                } else {
+                    pending = (plan.items || []).length > 0 ? plan : null;
+                }
+                return;
+            }
+            const text = String(entry.text || '');
+            if (text === '') return;
+            if (entry.type === 'user') addMessage('user', text);
+            else addMessage('assistant', text, entry.type === 'error' ? 'ppa-msg--error' : '');
+            conversation.log.push({ type: entry.type, text });
+        });
+        conversation.plan = pending;
+        const note = addMessage('assistant', pp.t('js.as.conv_resumed'));
+        note.closest('.ppa-msg').classList.add('ppa-msg--resumed');
+    }
     const newChatBtn = document.getElementById('ppa-new-chat');
 
     function rememberTurn(role, text) {
@@ -416,6 +495,11 @@
         conversation.plan = null;
         conversation.sourceToken = '';
         conversation.thumbs = new Map();
+        conversation.id = null;
+        conversation.log = [];
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', cfg.baseUrl + '?nueva=1');
+        }
         lastPlanContext = null;
         Array.from(thread.children).slice(1).forEach((node) => node.remove());
         if (newChatBtn) newChatBtn.hidden = true;
@@ -602,6 +686,7 @@
             }
             bubble.appendChild(foot);
             refresh();
+            plan._button = btn;
             lastPlanContext = {
                 plan,
                 button: btn,
@@ -761,6 +846,15 @@
             bubble.appendChild(foot);
         }
 
+        // ASST-V2 F1 — todo lo aplicado se puede revisar y deshacer en Actividad.
+        if (doneItems.length > 0 && cfg.activityUrl) {
+            const activity = document.createElement('a');
+            activity.className = 'ppa-item__link';
+            activity.href = cfg.activityUrl + '?f=assistant';
+            activity.textContent = pp.t('js.as.view_activity');
+            bubble.appendChild(activity);
+        }
+
         thread.appendChild(msg);
         thread.scrollTop = thread.scrollHeight;
     }
@@ -791,9 +885,12 @@
                 list.appendChild(li);
             });
             container.after(list);
-            rememberTurn('assistant', live.length > 0
+            const publishedNote = live.length > 0
                 ? pp.t('js.as.turn_published', { paginas: live.map((page) => page.title).join(', ') })
-                : pp.t('js.as.turn_not_published'));
+                : pp.t('js.as.turn_not_published');
+            rememberTurn('assistant', publishedNote);
+            logEntry({ type: 'note', text: publishedNote });
+            persistConversation();
         } catch (error) {
             button.disabled = false;
             button.textContent = pp.t('js.as.publish_changes');
@@ -859,8 +956,12 @@
                 // La IA debe saber en el siguiente mensaje que esto ya está hecho.
                 const done = job.items.filter((it) => it.status === 'done').map(itemLabel);
                 const failed = job.items.filter((it) => it.status === 'failed').map(itemLabel);
-                rememberTurn('assistant', pp.t('js.as.turn_applied', { hechos: done.join(', ') || '-', fallidos: failed.join(', ') || '-' }));
+                const appliedNote = pp.t('js.as.turn_applied', { hechos: done.join(', ') || '-', fallidos: failed.join(', ') || '-' });
+                rememberTurn('assistant', appliedNote);
                 if (conversation.plan === plan) conversation.plan = null;
+                markPlanApplied(plan);
+                logEntry({ type: 'note', text: appliedNote });
+                persistConversation();
             }
         } catch (err) {
             addMessage('assistant', pp.t('js.as.exec_network'), 'ppa-msg--error');
@@ -897,6 +998,7 @@
         // aislada "sí, procede" (que lógicamente no contiene cambios).
         if (docs.length === 0 && (!richState || richState.images === 0) && lastPlanContext && isAffirmativeReply(text)) {
             addMessage('user', text);
+            logEntry({ type: 'user', text });
             if (richComposer) richComposer.reset();
             else input.value = '';
             const context = lastPlanContext;
@@ -951,6 +1053,9 @@
             rememberTurn('assistant', data.plan.reply || data.plan.summary || '');
             conversation.plan = (data.plan.items || []).length > 0 ? data.plan : null;
             if (data.plan.source_token) conversation.sourceToken = data.plan.source_token;
+            logEntry({ type: 'user', text: userLabel });
+            logEntry({ type: 'plan', plan: data.plan });
+            persistConversation();
         } catch (err) {
             thinking.closest('.ppa-msg').remove();
             addMessage('assistant', pp.t('js.as.plan_network'), 'ppa-msg--error');
@@ -1005,4 +1110,12 @@
         }
     });
     sendBtn.addEventListener('click', sendRequest);
+
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+        });
+    });
+    restoreConversation(cfg.conversation);
+    refreshSendState();
 })();

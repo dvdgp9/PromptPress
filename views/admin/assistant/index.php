@@ -10,6 +10,10 @@
 $maxMb = round($maxSize / 1024 / 1024);
 // ASST-CONV AC1 — el clip admite también imágenes (varias a la vez).
 $accept = '.' . implode(',.', $allowedExt) . ',.jpg,.jpeg,.png,.webp,.gif';
+// ASST-V2 F1 — conversación a retomar y las recientes de esta persona.
+$conversation = $conversation ?? null;
+$recentConversations = $recentConversations ?? [];
+$notice = \Core\Session::flash('notice');
 ?>
 
 <?php \Core\View::start('title'); ?>Asistente<?php \Core\View::end(); ?>
@@ -22,6 +26,8 @@ window.PPA = {
     baseUrl: <?= json_encode(base_url('admin/assistant')) ?>,
     studioUrl: <?= json_encode(base_url('admin/canvas/')) ?>,
     formsUrl: <?= json_encode(base_url('admin/formularios/')) ?>,
+    activityUrl: <?= json_encode(base_url('admin/actividad')) ?>,
+    conversation: <?= json_encode($conversation, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>,
     maxSize: <?= (int) $maxSize ?>,
     allowedExt: <?= json_encode($allowedExt) ?>,
     richMaxChars: <?= (int) \App\Services\AssistantContentNormalizer::DEFAULT_MAX_CHARS ?>,
@@ -44,7 +50,35 @@ window.PPA = {
 
 <div class="pp-page-header">
     <h2><?= e(__('assistant.title')) ?></h2>
+    <div class="ppa-conversations">
+        <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url('admin/assistant?nueva=1')) ?>"><?= e(__('assistant.new_conversation')) ?></a>
+        <?php if ($recentConversations !== []): ?>
+        <details class="ppa-conversations__menu">
+            <summary class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('asst.conv.recent')) ?></summary>
+            <ul class="ppa-conversations__list">
+                <?php foreach ($recentConversations as $c): ?>
+                <li class="<?= $conversation !== null && (int) $conversation['id'] === (int) $c['id'] ? 'is-current' : '' ?>">
+                    <a href="<?= e(base_url('admin/assistant?c=' . (int) $c['id'])) ?>">
+                        <span><?= e($c['title'] !== '' ? $c['title'] : __('asst.conv.untitled')) ?></span>
+                        <small><?= e(date('d/m H:i', strtotime((string) $c['updated_at']) ?: time())) ?></small>
+                    </a>
+                </li>
+                <?php endforeach; ?>
+                <?php if ($conversation !== null): ?>
+                <li class="ppa-conversations__delete">
+                    <form method="POST" action="<?= e(base_url('admin/assistant/conversations/' . (int) $conversation['id'] . '/delete')) ?>"
+                          data-confirm="<?= e(__('asst.conv.delete_confirm')) ?>">
+                        <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                        <button type="submit" class="pp-btn pp-btn--ghost pp-btn--sm"><?= e(__('asst.conv.delete')) ?></button>
+                    </form>
+                </li>
+                <?php endif; ?>
+            </ul>
+        </details>
+        <?php endif; ?>
+    </div>
 </div>
+<?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 
 <div class="ppa-media-picker" id="ppa-media-picker" role="presentation" hidden>
     <section class="ppa-media-picker__dialog" role="dialog" aria-modal="true"
@@ -86,9 +120,6 @@ window.PPA = {
             </button>
             <button type="button" class="ppa-composer__tool" id="ppa-paste-plain">
                 <?= e(__('assistant.paste_plain')) ?>
-            </button>
-            <button type="button" class="ppa-composer__tool ppa-composer__tool--end" id="ppa-new-chat" hidden>
-                <?= e(__('assistant.new_conversation')) ?>
             </button>
             <input type="file" id="ppa-file-input" accept="<?= e($accept) ?>" multiple hidden>
         </div>

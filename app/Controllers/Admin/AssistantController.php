@@ -5,6 +5,7 @@ namespace App\Controllers\Admin;
 use App\Services\AI\AIException;
 use App\Services\AssistantContentNormalizer;
 use App\Services\AssistantConversation;
+use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantSourceEnvelope;
 use App\Services\SiteAssistantJobs;
@@ -39,13 +40,71 @@ class AssistantController
     {
         $siteId = self::requireSiteId();
 
+        // ASST-V2 F1 — ?c=ID retoma una conversación; ?nueva=1 empieza de cero;
+        // sin nada se reabre la última de los últimos días.
+        $conversation = null;
+        $recent = [];
+        try {
+            $requested = (int) Request::get('c', 0);
+            if ($requested > 0) {
+                $conversation = AssistantConversationStore::find($siteId, Auth::id(), $requested);
+            } elseif ((string) Request::get('nueva', '') !== '1') {
+                $conversation = AssistantConversationStore::latest($siteId, Auth::id());
+            }
+            $recent = AssistantConversationStore::recent($siteId, Auth::id());
+        } catch (\Throwable $e) {
+            // Sin la tabla (migración pendiente) el asistente sigue funcionando sin memoria.
+            error_log('[assistant] conversations unavailable: ' . $e->getMessage());
+        }
+
         $data = DashboardController::getCommonData();
         $data = array_merge($data, [
             'csrf'       => CSRF::token(),
             'maxSize'    => DocumentController::MAX_SIZE,
             'allowedExt' => DocumentController::ALLOWED_EXT,
+            'conversation' => $conversation,
+            'recentConversations' => $recent,
         ]);
         View::send('admin/assistant/index', $data);
+    }
+
+    // ----------------------------------------------------------------------
+    // POST /admin/assistant/conversations/save — ASST-V2 F1: foto de la
+    // conversación tras cada paso (plan recibido, aplicado, publicado).
+    // ----------------------------------------------------------------------
+    public function saveConversation(): void
+    {
+        $siteId = self::requireSiteId();
+        CSRF::check();
+        $raw = (string) Request::post('snapshot', '');
+        if (strlen($raw) > 2000000) {
+            Response::json(['ok' => false, 'error' => __('asst.conv.too_big')], 413);
+        }
+        $snapshot = json_decode($raw, true);
+        if (!is_array($snapshot)) {
+            Response::json(['ok' => false, 'error' => __('asst.conv.save_failed')], 422);
+        }
+        $id = (int) Request::post('id', 0);
+        try {
+            $saved = AssistantConversationStore::save($siteId, Auth::id(), $id > 0 ? $id : null, $snapshot);
+        } catch (\Throwable $e) {
+            error_log('[assistant] save conversation site=' . $siteId . ': ' . $e->getMessage());
+            $saved = null;
+        }
+        if ($saved === null) {
+            Response::json(['ok' => false, 'error' => __('asst.conv.save_failed')], 422);
+        }
+        Response::json(['ok' => true, 'id' => $saved]);
+    }
+
+    // POST /admin/assistant/conversations/{id}/delete
+    public function deleteConversation(array $params = []): void
+    {
+        $siteId = self::requireSiteId();
+        CSRF::check();
+        AssistantConversationStore::delete($siteId, Auth::id(), (int) ($params['id'] ?? 0));
+        Session::flash('notice', __('asst.conv.deleted'));
+        Response::redirect(base_url('admin/assistant?nueva=1'));
     }
 
     // ----------------------------------------------------------------------

@@ -193,6 +193,41 @@ final class FormStore
     }
 
     /**
+     * ASST-V2 F1 — guarda una versión del formulario tal como está ahora
+     * (antes de cambiarlo). Sin versión no hay «Deshacer» en Actividad.
+     */
+    public static function snapshot(int $siteId, int $formId, ?int $userId, string $reason): void
+    {
+        $section = Database::selectOne(
+            "SELECT * FROM page_sections WHERE id = ? AND page_id = ? AND section_type = 'form' LIMIT 1",
+            [$formId, self::containerPageId($siteId)]
+        );
+        if ($section !== null) {
+            VersionService::snapshotSection($section, $userId, $reason);
+        }
+    }
+
+    /**
+     * Devuelve el formulario al contenido de una de sus versiones (guardando
+     * antes la actual, para poder deshacer el deshacer).
+     */
+    public static function restoreVersion(int $siteId, int $formId, int $versionId, ?int $userId): bool
+    {
+        if (self::find($siteId, $formId) === null) {
+            return false;
+        }
+        $version = VersionService::loadSectionVersion($formId, $versionId);
+        $content = $version !== null ? json_decode((string) ($version['data']['content'] ?? ''), true) : null;
+        if (!is_array($content) || ($version['data']['section_type'] ?? '') !== 'form') {
+            return false;
+        }
+        self::snapshot($siteId, $formId, $userId, 'before_restore');
+        self::update($siteId, $formId, $content);
+        CacheService::flush($siteId);
+        return true;
+    }
+
+    /**
      * Borrado SUAVE (FORMS-R T2): marca el formulario como `deleted` en vez de
      * eliminar la fila. Así sus respuestas (`form_submissions`, con FK
      * ON DELETE CASCADE a `page_sections`) se conservan. Desaparece del panel y

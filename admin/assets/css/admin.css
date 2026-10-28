@@ -12442,3 +12442,63 @@ a.pp-page-menu__item{text-decoration:none}
 .pp-form-ai-review__choices span{border:1px solid #cbd5e1;padding:7px 13px;border-radius:999px;font-size:.85rem;line-height:1.5}
 .pp-fb-row__actions{display:flex;gap:3px;align-items:center}
 @media(max-width:700px){.pp-form-ai-composer__body{padding:16px}.pp-form-ai-composer__reference{grid-template-columns:1fr}.pp-fb-row__head{grid-template-columns:auto minmax(0,1fr)}.pp-fb-row__actions{grid-column:1/-1;justify-content:flex-end}.pp-form-create{flex-wrap:wrap}.pp-fb-control--wide{min-width:0}}
+
+/* ======================================================================
+   ASST-V2 F1 — Conversaciones guardadas del asistente
+   ====================================================================== */
+.ppa-conversations { display: flex; align-items: center; gap: 8px; position: relative; }
+.ppa-conversations__menu { position: relative; }
+.ppa-conversations__menu > summary { list-style: none; cursor: pointer; }
+.ppa-conversations__menu > summary::-webkit-details-marker { display: none; }
+.ppa-conversations__menu[open] > summary { background: var(--pp-surface-alt); }
+.ppa-conversations__list {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+    width: min(340px, calc(100vw - 32px)); max-height: 360px; overflow-y: auto;
+    margin: 0; padding: 6px; list-style: none;
+    background: var(--pp-surface); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: var(--pp-shadow-sm);
+}
+.ppa-conversations__list a {
+    display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px;
+    border-radius: var(--pp-radius-sm); color: var(--pp-text); text-decoration: none; font-size: 0.88rem;
+}
+.ppa-conversations__list a:hover { background: var(--pp-surface-alt); }
+.ppa-conversations__list li.is-current a { background: var(--pp-primary-soft); }
+.ppa-conversations__list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppa-conversations__list small { flex-shrink: 0; color: var(--pp-text-muted); }
+.ppa-conversations__delete { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--pp-border); }
+.ppa-conversations__delete form { margin: 0; }
+.ppa-conversations__delete button { width: 100%; justify-content: flex-start; color: var(--pp-danger); }
+.ppa-msg--resumed .ppa-msg__bubble { background: transparent; color: var(--pp-text-muted); font-size: 0.8rem; padding: 0; }
+
+/* ======================================================================
+   ASST-V2 F1 — Actividad
+   ====================================================================== */
+.pp-icon--activity {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+}
+.pp-activity__filters { display: flex; gap: 4px; margin: 0 0 20px; padding: 4px; width: fit-content; background: var(--pp-surface-alt); border-radius: var(--pp-radius); }
+.pp-activity__filter { padding: 6px 14px; border-radius: var(--pp-radius-sm); color: var(--pp-text-muted); text-decoration: none; font-size: 0.88rem; }
+.pp-activity__filter:hover { color: var(--pp-text); }
+.pp-activity__filter.is-active { background: var(--pp-surface); color: var(--pp-text); box-shadow: var(--pp-shadow-sm); }
+.pp-activity__day { max-width: 860px; margin: 0 0 24px; }
+.pp-activity__day-title { margin: 0 0 8px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text-muted); }
+.pp-activity__list { margin: 0; padding: 0; list-style: none; background: var(--pp-surface); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); }
+.pp-activity__item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 16px; }
+.pp-activity__item + .pp-activity__item { border-top: 1px solid var(--pp-border); }
+.pp-activity__icon { width: 18px; height: 18px; background: currentColor; color: var(--pp-text-muted); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.pp-activity__item--assistant .pp-activity__icon { color: var(--pp-primary); }
+.pp-activity__line { margin: 0; font-size: 0.92rem; color: var(--pp-text); }
+.pp-activity__meta { margin: 2px 0 0; font-size: 0.8rem; color: var(--pp-text-muted); }
+.pp-activity__actions { display: flex; align-items: center; gap: 6px; }
+.pp-activity__actions form { margin: 0; }
+.pp-activity__undone { font-size: 0.8rem; color: var(--pp-text-muted); }
+.pp-activity__item.is-undone .pp-activity__line { color: var(--pp-text-muted); text-decoration: line-through; }
+.pp-activity__empty { max-width: 560px; padding: 28px; border: 1px dashed var(--pp-border-strong); border-radius: var(--pp-radius-lg); }
+.pp-activity__empty p { margin: 0 0 12px; color: var(--pp-text-muted); }
+.pp-activity__empty .pp-activity__empty-title { margin-bottom: 4px; font-weight: 600; color: var(--pp-text); }
+@media (max-width: 640px) {
+    .pp-activity__item { grid-template-columns: 20px minmax(0, 1fr); }
+    .pp-activity__actions { grid-column: 2; }
+}

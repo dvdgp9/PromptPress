@@ -6,7 +6,6 @@ namespace App\Services;
 
 use App\Services\AI\Actions;
 use App\Services\AI\AIActionRunner;
-use Core\Database;
 
 /**
  * ASST-FORMS — Ejecutor del asistente para `forms.edit`.
@@ -62,13 +61,7 @@ final class FormAssistantEditor
             return ['ok' => false, 'error' => implode(' ', $errors)];
         }
 
-        $section = Database::selectOne(
-            "SELECT * FROM page_sections WHERE id = ? AND section_type = 'form' LIMIT 1",
-            [$formId]
-        );
-        if ($section !== null) {
-            VersionService::snapshotSection($section, $userId, 'before_ai_edit');
-        }
+        FormStore::snapshot($siteId, $formId, $userId, 'before_ai_edit');
         FormStore::update($siteId, $formId, $merged);
         CacheService::flush($siteId);
 

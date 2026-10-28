@@ -103,6 +103,7 @@ final class Permissions
         'assistant'   => self::CAP_ASSISTANT,
         'memory'      => self::CAP_ASSISTANT,
         'documents'   => self::CAP_ASSISTANT,
+        'actividad'   => self::CAP_ASSISTANT,   // ASST-V2 — historial de cambios con deshacer
 
         // Apariencia
         'design'      => self::CAP_APPEARANCE,

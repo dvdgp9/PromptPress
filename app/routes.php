@@ -9,6 +9,7 @@
 
 use App\Controllers\Admin\AITestController;
 use App\Controllers\Admin\AssistantController;
+use App\Controllers\Admin\ActivityController;
 use App\Controllers\Admin\AIUsageController;
 use App\Controllers\Admin\AuthController;
 use App\Controllers\Admin\DashboardController;
@@ -170,6 +171,11 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/assistant/apply',    [AssistantController::class, 'apply']);
     $r->post('/assistant/jobs/{id}/step', [AssistantController::class, 'step']);
     $r->post('/assistant/jobs/{id}/publish', [AssistantController::class, 'publish']);
+    $r->post('/assistant/conversations/save', [AssistantController::class, 'saveConversation']);
+    $r->post('/assistant/conversations/{id}/delete', [AssistantController::class, 'deleteConversation']);
+    // ASST-V2 F1 — Actividad: historial único con deshacer
+    $r->get('/actividad',       [ActivityController::class, 'index']);
+    $r->post('/actividad/undo', [ActivityController::class, 'undo']);
 
     // Páginas (CRUD)
     $r->get('/pages',                [PageController::class, 'index']);

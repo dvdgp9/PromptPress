@@ -146,6 +146,7 @@ final class AdminNavigation
         return [
             'home' => self::link('home', 'admin/', 'dashboard', 'nav.dashboard', '/admin'),
             'assistant_home' => self::link('assistant_home', 'admin/assistant', 'ai', 'nav.assistant', '/admin/assistant'),
+            'activity' => self::link('activity', 'admin/actividad', 'activity', 'nav.activity', '/admin/actividad'),
             'knowledge' => self::link('knowledge', 'admin/memory', 'memory', 'nav.knowledge', '/admin/memory'),
             'documents' => self::link('documents', 'admin/documents', 'documents', 'nav.documents', '/admin/documents'),
             'ai_usage' => self::link('ai_usage', 'admin/ai/usage', 'ai', 'nav.ai', '/admin/ai'),
@@ -176,7 +177,7 @@ final class AdminNavigation
             'assistant' => [
                 'label_key' => 'nav.group.assistant',
                 'icon' => 'ai',
-                'items' => ['assistant_home', 'knowledge', 'documents', 'ai_usage'],
+                'items' => ['assistant_home', 'activity', 'knowledge', 'documents', 'ai_usage'],
             ],
             'content' => [
                 'label_key' => 'nav.group.content',
