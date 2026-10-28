@@ -12,7 +12,7 @@ use Core\Database;
  *
  * La existencia de una función en la plataforma no implica que el Assistant
  * pueda ejecutarla. Solo las entradas con mode=automatic y handler no nulo
- * pueden convertirse en items `aplicar`.
+ * pueden convertirse en items `aplicar` (hoy: pages.canvas.edit y forms.edit).
  */
 final class AssistantCapabilityRegistry
 {
@@ -111,9 +111,21 @@ final class AssistantCapabilityRegistry
                 null,
                 ['Decisión de marca o referencia visual']
             ),
+            // ASST-FORMS — editar preguntas y textos de un formulario que ya
+            // existe. Destinatario, base legal y autorrespuesta siguen en
+            // forms.manage / legal.content: el editor automático no los toca.
+            self::capability(
+                'forms.edit',
+                'Editar preguntas, opciones y textos de un formulario existente (se aplica en vivo)',
+                'automatic',
+                '/admin/formularios',
+                'form_edit',
+                (int) ($counts['forms'] ?? 0),
+                ['Formulario existente del MAPA DE FORMULARIOS', 'preguntas u opciones concretas']
+            ),
             self::capability(
                 'forms.manage',
-                'Crear o configurar formularios y sus destinatarios',
+                'Crear formularios nuevos o configurar destinatarios, consentimientos y autorrespuesta',
                 'manual',
                 '/admin/formularios',
                 null,

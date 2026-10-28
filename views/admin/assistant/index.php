@@ -21,6 +21,7 @@ window.PPA = {
     csrf: <?= json_encode($csrf) ?>,
     baseUrl: <?= json_encode(base_url('admin/assistant')) ?>,
     studioUrl: <?= json_encode(base_url('admin/canvas/')) ?>,
+    formsUrl: <?= json_encode(base_url('admin/formularios/')) ?>,
     maxSize: <?= (int) $maxSize ?>,
     allowedExt: <?= json_encode($allowedExt) ?>,
     richMaxChars: <?= (int) \App\Services\AssistantContentNormalizer::DEFAULT_MAX_CHARS ?>,

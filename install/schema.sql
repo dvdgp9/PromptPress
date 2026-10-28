@@ -680,6 +680,7 @@ CREATE TABLE IF NOT EXISTS assistant_job_items (
     id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     job_id       INT UNSIGNED NOT NULL,
     page_id      INT UNSIGNED NOT NULL,
+    form_id      INT UNSIGNED NULL,
     page_title   VARCHAR(255) NOT NULL DEFAULT '',
     section      VARCHAR(120) NOT NULL DEFAULT '',
     instruction  TEXT NOT NULL,

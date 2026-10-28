@@ -400,6 +400,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
 </div>
 
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
+<?php if (!empty($flashError)): ?><div class="pp-alert pp-alert--error"><?= e($flashError) ?></div><?php endif; ?>
 <?php if (!empty($errors)): ?>
     <div class="pp-alert pp-alert--error">
         <strong><?= e(__('settings_ai.check_errors')) ?></strong>
@@ -467,6 +468,31 @@ $baseIsWrong = $baseLang !== $primaryLang;
     </p>
     <?php endif; ?>
 </section>
+
+<?php $assistantVersions = $assistantVersions ?? []; ?>
+<?php if ($assistantVersions !== []): ?>
+<section class="pp-form-langs">
+    <div class="pp-form-langs__head">
+        <h3><?= e(__('form_edit.assistant_history')) ?></h3>
+        <p><?= e(__('form_edit.assistant_history_note')) ?></p>
+    </div>
+    <div class="pp-form-langs__list">
+        <?php foreach ($assistantVersions as $v): ?>
+            <div class="pp-form-lang pp-form-lang--done">
+                <div>
+                    <strong><?= e(__('form_edit.before_assistant')) ?></strong>
+                    <small><?= e(date('d/m/Y H:i', strtotime((string) $v['created_at']) ?: time())) ?></small>
+                </div>
+                <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id . '/restore')) ?>">
+                    <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="version_id" value="<?= (int) $v['id'] ?>">
+                    <button type="submit" class="pp-btn pp-btn--secondary pp-btn--sm"><?= e(__('form_edit.restore')) ?></button>
+                </form>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
 
 <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id)) ?>" class="pp-form" id="pp-form-editor" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">

@@ -14,6 +14,8 @@ use App\Services\FormTemplates;
 use App\Services\FormTranslator;
 use App\Services\FormPlacementStore;
 use App\Services\LanguageService;
+use App\Services\VersionService;
+use App\Services\CacheService;
 use Core\Auth;
 use Core\CSRF;
 use Core\Database;
@@ -309,47 +311,7 @@ class FormsController
     /** @param array<string,mixed> $c @return array<int,string> */
     private function validate(array $c): array
     {
-        $errors = [];
-        if ((string) $c['heading'] === '') {
-            $errors[] = __('forms.error.title_required');
-        }
-        if (!is_array($c['fields']) || count($c['fields']) === 0) {
-            $errors[] = __('forms.error.need_field');
-        }
-        $names = array_column((array) $c['fields'], 'name');
-        $labels = array_column((array) $c['fields'], 'label');
-        if (count($labels) !== count(array_unique($labels)) || count($names) !== count(array_unique($names)) || array_intersect($names, ['company_url', '_csrf', '_return', '_lang', '_pp_ts', '_pp_pow', '_marketing_consent']) !== []) {
-            $errors[] = __('forms.ai.duplicate_names');
-        }
-        if (count((array) $c['fields']) > FormDefinition::MAX_FIELDS) $errors[] = __('forms.ai.too_many_fields');
-        foreach ((array) $c['fields'] as $f) {
-            if (in_array($f['field_type'] ?? '', FormDefinition::CHOICE_TYPES, true) && empty($f['options'])) {
-                $errors[] = __('forms.ai.invalid_options');
-                break;
-            }
-        }
-        foreach ((array) $c['fields'] as $f) {
-            if (($f['field_type'] ?? '') === 'file'
-                && ($f['file_accept'] ?? '') === 'custom'
-                && trim((string) ($f['file_custom_ext'] ?? '')) === ''
-            ) {
-                $errors[] = 'Los campos de archivo personalizados necesitan extensiones permitidas.';
-                break;
-            }
-        }
-        if ((string) $c['notify_email'] !== '' && !filter_var($c['notify_email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = __('forms.error.bad_notice_email');
-        }
-        if ((string) $c['autoresponder_enabled'] === '1') {
-            $hasEmailField = false;
-            foreach ($c['fields'] as $f) {
-                if (($f['field_type'] ?? '') === 'email') { $hasEmailField = true; break; }
-            }
-            if (!$hasEmailField) {
-                $errors[] = __('forms.error.autoresponder_needs_email');
-            }
-        }
-        return $errors;
+        return FormDefinition::contentErrors($c);
     }
 
     /**
@@ -426,10 +388,57 @@ class FormsController
                 'siteLangs'    => LanguageService::activeFor($siteId),
                 'translated'   => FormI18n::translatedLanguages($form),
                 'langLabels'   => LanguageService::LANGUAGES,
+                // ASST-FORMS — versiones previas a cada cambio del asistente.
+                'assistantVersions' => $this->assistantVersions($id),
+                'flashError' => Session::flash('error'),
                 'notice'    => Session::flash('notice'),
                 'csrf'      => CSRF::token(),
             ]
         ));
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function assistantVersions(int $formId): array
+    {
+        try {
+            return array_slice(array_values(array_filter(
+                VersionService::sectionVersions($formId),
+                static fn (array $v): bool => ($v['reason'] ?? '') === 'before_ai_edit'
+            )), 0, 5);
+        } catch (\Throwable $e) {
+            error_log('[FormsController] versions: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * ASST-FORMS — POST /admin/formularios/{id}/restore: deshace un cambio del
+     * asistente devolviendo el formulario a la versión guardada justo antes.
+     */
+    public function restore(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        $id = (int) ($params['id'] ?? 0);
+        $url = base_url('admin/formularios/' . $id);
+        if (FormStore::find($siteId, $id) === null) {
+            Session::flash('error', __('forms.error.not_found'));
+            Response::redirect(base_url('admin/formularios'));
+        }
+        $version = VersionService::loadSectionVersion($id, (int) Request::post('version_id', 0));
+        $content = $version !== null ? json_decode((string) ($version['data']['content'] ?? ''), true) : null;
+        if (!is_array($content) || ($version['data']['section_type'] ?? '') !== 'form') {
+            Session::flash('error', __('form_edit.restore_failed'));
+            Response::redirect($url);
+        }
+        $section = Database::selectOne('SELECT * FROM page_sections WHERE id = ? LIMIT 1', [$id]);
+        if ($section !== null) {
+            VersionService::snapshotSection($section, Auth::id(), 'before_restore');
+        }
+        FormStore::update($siteId, $id, $content);
+        CacheService::flush($siteId);
+        Session::flash('notice', __('form_edit.restored'));
+        Response::redirect($url);
     }
 
     private function requireSiteId(): int

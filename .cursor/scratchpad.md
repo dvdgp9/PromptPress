@@ -11022,3 +11022,56 @@ ambos.
   `__()` en cada rama.
 - El puerto 8797 lo usan ya dos tests y una config de launch.json; los tests
   HTTP nuevos van en 884x.
+
+---
+
+## Background and Motivation (ASST-FORMS) — 28/10/2026
+
+Un cliente pidió al asistente: «En el formulario de pide información, solo una pregunta (Cirugía pecho, corporal, facial, Abdominoplastia, pérdida de peso, balón gástrico, reducción de estómago, microinjerto capilar, medicina facial) como desplegable». El asistente respondió «Disponible en la plataforma → ve a /admin/formularios». El usuario quiere que el asistente **pueda modificar formularios él mismo, siempre tras su aprobación** (igual que hoy hace con páginas Canvas).
+
+## Key Challenges and Analysis (ASST-FORMS) — Planner
+
+Por qué hoy no lo hace (verificado en código):
+- `AssistantCapabilityRegistry`: `forms.manage` tiene `mode=manual`, `handler=null` → el planner fuerza `manual_in_platform`.
+- `SiteAssistantJobs::isExecutablePlanItem()` solo acepta `capability_id = pages.canvas.edit`; los items y la tabla `assistant_job_items` están ligados a `page_id`.
+- El planner no ve los formularios: el prompt solo recibe el mapa de páginas, no la lista de formularios ni sus campos.
+
+Piezas que YA existen y se reutilizan (no reinventar):
+- `Actions::DESIGN_FORM` + `FormDefinition::fromAI()`: ya generan y validan un borrador de formulario a partir de «formulario actual + descripción del cambio» (lo usa el editor de formularios).
+- `FormStore::find/update`, y `VersionService::snapshotSection()` (los formularios son `page_sections` → podemos guardar versión antes de tocar y permitir deshacer).
+
+Riesgos / decisiones:
+1. **Los formularios no tienen borrador**: `FormStore::update` cambia la web pública al instante. Aprobar = publicar. Mitigación: snapshot previo + aviso claro en la tarjeta («se aplica en vivo»).
+2. **Qué puede tocar el asistente**: solo título, descripción, botón, mensaje de éxito y campos. NUNCA destinatario (`notify_email`), base legal/retención/consentimiento, autorrespuesta ni `form_type` → eso sigue `manual`/`sensitive_review`.
+3. **Respuestas antiguas**: conservar el `name` de los campos cuya etiqueta no cambie, para no romper el listado de mensajes recibidos.
+4. **Traducciones**: si el formulario tiene i18n, al cambiar campos quedan desfasadas. Propuesta simple: conservar i18n y avisar en el resultado «revisa traducciones» (no traducir automáticamente en esta fase). No 100% seguro de cómo resuelve `FormI18n::resolve` campos nuevos sin traducción — se comprueba en T4.
+5. Crear formularios nuevos queda fuera de esta fase (solo editar existentes).
+
+## High-level Task Breakdown (ASST-FORMS) — APROBADO por el usuario 28/10/2026 («procede con todo y lanza actualización»)
+
+- [x] T1 Registro: nueva capacidad `forms.edit` (mode=automatic, handler=`form_edit`, panel /admin/formularios). `forms.manage` sigue manual para crear/destinatarios/legal. ✅ test: `catalogForState()` incluye `forms.edit` automática y `renderForPrompt` la muestra.
+- [x] T2 Planner: añadir al prompt un «mapa de formularios» (id, título, campos y tipos); items aceptan `form_id`; `normalizeItems` valida que el formulario existe (si no → needs_input). Regla en el prompt de PLAN_SITE_CHANGES para usar `forms.edit`. ✅ test: item con `forms.edit` + form_id válido → `automatable_now`; form_id inexistente → `needs_input`.
+- [x] T3 Jobs: migración `assistant_job_items.form_id` (nullable) y `page_id` admite 0; `isExecutablePlanItem` acepta `forms.edit`; `createJob` revalida el formulario; `stepJob` despacha a `FormAssistantEditor`. Publicar no aplica a formularios. ✅ test: job con item de formulario se crea y ejecuta.
+- [x] T4 `FormAssistantEditor::apply()`: snapshot de versión → DESIGN_FORM con formulario actual + instrucción → `fromAI` → fusionar solo campos permitidos (preservando el resto y los `name` existentes) → validar con las mismas reglas que el editor (extraer `validate` a `FormDefinition`) → `FormStore::update`. ✅ test con fixture: el caso real (un `select` con las 9 opciones) deja intactos notify_email/lawful_basis/i18n.
+- [x] T5 UI asistente (`assistant.js` + `lang/admin/*.php`): tarjeta «Formulario «X»» con aviso «se aplica en vivo», enlace a /admin/formularios/{id} tras aplicar. ✅ verificación en navegador.
+- [x] T6 Prueba manual end-to-end con la petición real del cliente.
+
+## Current Status / Progress Tracking (ASST-FORMS) — 28/10/2026, Executor
+
+Hecho y publicado como **v1.13.0**:
+- `forms.edit` (automática, handler `form_edit`) en el registro; `forms.manage` queda para crear, destinatarios, consentimiento y autorrespuesta.
+- El planner recibe un MAPA DE FORMULARIOS (id, título, preguntas con tipo y opciones, páginas donde aparece) y devuelve `form_id`. Si un form_id no existe → needs_input.
+- `assistant_job_items.form_id` (migración `2026_10_28_assistant_form_items.php` + `install/schema.sql`). Los items de formulario guardan page_id 0; publicar los ignora.
+- `FormAssistantEditor`: DESIGN_FORM + `fromAI` → `merge` (solo heading/description/submit_text/success_message/fields; conserva los `name` cuando la etiqueta no cambia; quita traducciones desfasadas) → `FormDefinition::contentErrors` (validación movida del controlador) → snapshot `before_ai_edit` → `FormStore::update` + cache flush.
+- Editor de formularios: bloque «Cambios del asistente» con «Restaurar» (`POST /admin/formularios/{id}/restore`).
+- UI del asistente: tarjeta «Formulario «X»», aviso «se aplica en vivo», enlace «Ver formulario →», sin botón Publicar si solo hay formularios. Textos en es/en/fr/pt.
+
+Verificación:
+- `tests/assistant_form_edit.php` nuevo (19 PASS). Suites de asistente, formularios, admin_i18n, php80_compat y resources_form en verde.
+- E2E local con la IA real (openrouter/gemini-3.7-flash) y la petición literal del cliente sobre un formulario de prueba con 9 casillas: plan `forms.edit` automatable_now → queda Nombre, Teléfono, Email + «Tratamiento de interés» (select obligatorio con las 9 opciones); destinatario intacto; versión guardada. Restaurar desde el controlador devuelve los 12 campos. Formulario de prueba borrado.
+- NO verificado visualmente en el navegador el panel del asistente (no había credenciales de prueba para iniciar sesión); `node --check` OK.
+
+## Lessons (ASST-FORMS)
+- Los tests que usan `__()` necesitan `require vendor/autoload.php` + `\Core\App::boot()`.
+- Añadir columnas que se escriben en un INSERT exige correr la migración en local antes de los tests con BD (`assistant_jobs_source_context` falla si no).
+- `itemFingerprint`: añadir claves nuevas solo cuando tienen valor, para no invalidar las huellas de planes ya emitidos.

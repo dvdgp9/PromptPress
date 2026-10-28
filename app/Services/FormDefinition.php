@@ -79,6 +79,57 @@ final class FormDefinition
         return $out;
     }
 
+    /**
+     * Reglas de guardado que comparten el editor y el asistente (ASST-FORMS).
+     *
+     * @param array<string,mixed> $c @return array<int,string>
+     */
+    public static function contentErrors(array $c): array
+    {
+        $errors = [];
+        $c['fields'] = is_array($c['fields'] ?? null) ? $c['fields'] : [];
+        if ((string) ($c['heading'] ?? '') === '') {
+            $errors[] = __('forms.error.title_required');
+        }
+        if (count($c['fields']) === 0) {
+            $errors[] = __('forms.error.need_field');
+        }
+        $names = array_column((array) $c['fields'], 'name');
+        $labels = array_column((array) $c['fields'], 'label');
+        if (count($labels) !== count(array_unique($labels)) || count($names) !== count(array_unique($names)) || array_intersect($names, ['company_url', '_csrf', '_return', '_lang', '_pp_ts', '_pp_pow', '_marketing_consent']) !== []) {
+            $errors[] = __('forms.ai.duplicate_names');
+        }
+        if (count((array) $c['fields']) > self::MAX_FIELDS) $errors[] = __('forms.ai.too_many_fields');
+        foreach ((array) $c['fields'] as $f) {
+            if (in_array($f['field_type'] ?? '', self::CHOICE_TYPES, true) && empty($f['options'])) {
+                $errors[] = __('forms.ai.invalid_options');
+                break;
+            }
+        }
+        foreach ((array) $c['fields'] as $f) {
+            if (($f['field_type'] ?? '') === 'file'
+                && ($f['file_accept'] ?? '') === 'custom'
+                && trim((string) ($f['file_custom_ext'] ?? '')) === ''
+            ) {
+                $errors[] = 'Los campos de archivo personalizados necesitan extensiones permitidas.';
+                break;
+            }
+        }
+        if ((string) ($c['notify_email'] ?? '') !== '' && !filter_var($c['notify_email'], FILTER_VALIDATE_EMAIL)) {
+            $errors[] = __('forms.error.bad_notice_email');
+        }
+        if ((string) ($c['autoresponder_enabled'] ?? '0') === '1') {
+            $hasEmailField = false;
+            foreach ($c['fields'] as $f) {
+                if (($f['field_type'] ?? '') === 'email') { $hasEmailField = true; break; }
+            }
+            if (!$hasEmailField) {
+                $errors[] = __('forms.error.autoresponder_needs_email');
+            }
+        }
+        return $errors;
+    }
+
     /** @return array{0:string[],1:bool} Values in configured order; never accept forged options. */
     public static function multipleValues(mixed $raw, array $options, bool $required): array
     {

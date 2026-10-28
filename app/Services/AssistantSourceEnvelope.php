@@ -108,6 +108,11 @@ final class AssistantSourceEnvelope
             'source_block_ids' => $sourceIds,
             'media_ids' => $mediaIds,
         ];
+        // ASST-FORMS — solo cuando hay formulario, para no invalidar las
+        // huellas de los items de página ya emitidas.
+        if ((int) ($item['form_id'] ?? 0) > 0) {
+            $canonical['form_id'] = (int) $item['form_id'];
+        }
         return hash('sha256', json_encode($canonical, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 

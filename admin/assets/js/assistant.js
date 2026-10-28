@@ -391,6 +391,8 @@
         return plan.items.map((it) => ({
             page_id: it.page_id,
             page_title: it.page_title,
+            form_id: it.form_id || 0,
+            form_title: it.form_title || '',
             section: it.section,
             capability_id: it.capability_id,
             category: it.category,
@@ -516,9 +518,11 @@
                 head.appendChild(badge);
                 const title = document.createElement('span');
                 title.className = 'ppa-item__page';
-                title.textContent = it.page_title
-                    ? it.page_title + (it.section ? ' · ' + pp.t('js.as.section_x', { seccion: it.section }) : '')
-                    : pp.t('js.as.outside_pages');
+                title.textContent = it.form_id
+                    ? pp.t('js.as.form_x', { formulario: it.form_title })
+                    : it.page_title
+                        ? it.page_title + (it.section ? ' · ' + pp.t('js.as.section_x', { seccion: it.section }) : '')
+                        : pp.t('js.as.outside_pages');
                 head.appendChild(title);
                 card.appendChild(head);
 
@@ -589,6 +593,13 @@
             note.className = 'ppa-plan__note';
             note.textContent = pp.t('js.asst.draft_note');
             foot.appendChild(note);
+            // ASST-FORMS — los formularios no tienen borrador: avisar antes.
+            if (actionable.some((it) => it.form_id)) {
+                const live = document.createElement('span');
+                live.className = 'ppa-plan__note';
+                live.textContent = pp.t('js.as.form_live_note');
+                foot.appendChild(live);
+            }
             bubble.appendChild(foot);
             refresh();
             lastPlanContext = {
@@ -677,7 +688,14 @@
             t.className = 'ppa-item__page';
             t.textContent = itemLabel(it);
             head.appendChild(t);
-            if (!seenPages.has(it.page_id)) {
+            if (it.form_id) {
+                const link = document.createElement('a');
+                link.className = 'ppa-item__link';
+                link.href = cfg.formsUrl + it.form_id;
+                link.target = '_blank';
+                link.textContent = pp.t('js.as.view_form');
+                head.appendChild(link);
+            } else if (!seenPages.has(it.page_id)) {
                 seenPages.add(it.page_id);
                 const link = document.createElement('a');
                 link.className = 'ppa-item__link';
@@ -712,12 +730,20 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t('js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
 
-        if (doneItems.length > 0) {
+        if (doneItems.some((it) => it.form_id)) {
+            const formNote = document.createElement('p');
+            formNote.className = 'ppa-plan__note';
+            formNote.textContent = pp.t('js.as.form_live_done');
+            bubble.appendChild(formNote);
+        }
+
+        // Publicar solo tiene sentido para páginas: el formulario ya está en vivo.
+        if (doneItems.some((it) => !it.form_id)) {
             const note = document.createElement('p');
             note.className = 'ppa-plan__note';
             note.textContent = pp.t('js.as.saved_note');

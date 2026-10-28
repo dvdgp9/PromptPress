@@ -41,6 +41,7 @@ final class SiteAssistantPlanner
     public static function plan(int $siteId, string $requestText, string $docText = '', ?array $sourceBundle = null, string $conversationBlock = ''): array
     {
         $pages = self::sitePages($siteId);
+        $forms = self::siteForms($siteId);
 
         $docBlock = '';
         if (trim($docText) !== '') {
@@ -80,7 +81,7 @@ final class SiteAssistantPlanner
 
         $runnerInput = [
             'request_text'   => $requestText,
-            'site_map'       => self::renderSiteMap($pages),
+            'site_map'       => self::renderSiteMap($pages) . self::renderFormMap($forms),
             'capability_map' => AssistantCapabilityRegistry::renderForPrompt($capabilities),
             'vision_context' => $visionContext,
             'document_block' => $docBlock,
@@ -93,7 +94,7 @@ final class SiteAssistantPlanner
         $result = AIActionRunner::run(Actions::PLAN_SITE_CHANGES, $runnerInput, $siteId);
 
         $data = (array) $result['data'];
-        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle);
+        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle, $forms);
         $conversation = self::normalizeConversation($data, $sourceBundle ?? []);
         $runnerVision = (array) ($result['meta']['vision'] ?? []);
         if ($visionStatus === 'used' && (int) ($runnerVision['sent_images'] ?? 0) === 0) {
@@ -279,6 +280,71 @@ final class SiteAssistantPlanner
         return $map;
     }
 
+    /**
+     * ASST-FORMS — Formularios del sitio que el asistente puede editar, con sus
+     * preguntas y las páginas donde aparecen (para reconocer «el formulario de
+     * pide información» aunque nadie diga su título).
+     *
+     * @return array<int,array{id:int,heading:string,fields:array<int,array<string,mixed>>,pages:string[],translated:string[]}>
+     */
+    public static function siteForms(int $siteId): array
+    {
+        $placements = [];
+        try {
+            foreach (Database::select(
+                "SELECT fp.form_id, p.title FROM form_placements fp
+                 JOIN pages p ON p.id = fp.page_id
+                 WHERE p.site_id = ? ORDER BY p.sort_order ASC, p.id ASC",
+                [$siteId]
+            ) as $row) {
+                $placements[(int) $row['form_id']][] = (string) $row['title'];
+            }
+        } catch (\Throwable $e) {
+            error_log('[SiteAssistantPlanner] form placements: ' . $e->getMessage());
+        }
+
+        $out = [];
+        foreach (FormStore::all($siteId) as $summary) {
+            $form = FormStore::find($siteId, (int) $summary['id']);
+            if ($form === null) continue;
+            $id = (int) $form['id'];
+            $out[$id] = [
+                'id'         => $id,
+                'heading'    => trim((string) ($form['heading'] ?? '')),
+                'fields'     => array_values(array_filter((array) ($form['fields'] ?? []), 'is_array')),
+                'pages'      => array_values(array_unique($placements[$id] ?? [])),
+                'translated' => FormI18n::translatedLanguages($form),
+            ];
+        }
+        return $out;
+    }
+
+    /** @param array<int,array<string,mixed>> $forms */
+    private static function renderFormMap(array $forms): string
+    {
+        if ($forms === []) {
+            return '';
+        }
+        // i18n-ignore-start: mapa de formularios que viaja al prompt.
+        $lines = [];
+        foreach ($forms as $f) {
+            $questions = [];
+            foreach ($f['fields'] as $field) {
+                $q = '«' . (string) ($field['label'] ?? '') . '» ' . (string) ($field['field_type'] ?? 'text');
+                if (($field['required'] ?? '0') === '1') $q .= ' obligatorio';
+                $options = (array) ($field['options'] ?? []);
+                if ($options !== []) $q .= ' [' . implode(' | ', array_map('strval', $options)) . ']';
+                $questions[] = $q;
+            }
+            $line = '- form_id=' . $f['id'] . ' «' . ($f['heading'] !== '' ? $f['heading'] : 'Sin título') . '»';
+            if ($f['pages'] !== []) $line .= ' — aparece en: ' . implode(', ', $f['pages']);
+            $line .= "\n  preguntas: " . ($questions !== [] ? implode('; ', $questions) : '(ninguna)');
+            $lines[] = $line;
+        }
+        return "\n\nMAPA DE FORMULARIOS (editables con forms.edit; usa form_id y page_id 0):\n" . implode("\n", $lines);
+        // i18n-ignore-end
+    }
+
     // ======================================================================
     // Normalización del plan
     // ======================================================================
@@ -292,7 +358,7 @@ final class SiteAssistantPlanner
      * @param array<int,array<string,mixed>>|null $capabilities
      * @return array<int,array<string,mixed>>
      */
-    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null, ?array $sourceBundle = null): array
+    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null, ?array $sourceBundle = null, array $forms = []): array
     {
         $capabilities ??= AssistantCapabilityRegistry::catalogForState();
         $capabilityMap = AssistantCapabilityRegistry::byId($capabilities);
@@ -316,6 +382,7 @@ final class SiteAssistantPlanner
             $categoryGiven = trim((string) ($raw['category'] ?? '')) !== '';
             $capabilityId = trim((string) ($raw['capability_id'] ?? ''));
             $pageId      = (int) ($raw['page_id'] ?? 0);
+            $formId      = (int) ($raw['form_id'] ?? 0);
             $section     = trim((string) ($raw['section'] ?? ''));
             $instruction = trim((string) ($raw['instruction'] ?? ''));
             $status      = strtolower(trim((string) ($raw['status'] ?? '')));
@@ -374,6 +441,12 @@ final class SiteAssistantPlanner
                 $category = 'manual_in_platform';
             }
 
+            // ASST-FORMS — un item de formulario no pertenece a ninguna página.
+            $isForm = $capabilityId === 'forms.edit';
+            $form = $isForm ? ($forms[$formId] ?? null) : null;
+            if ($isForm) {
+                $pageId = 0;
+            }
             $page = $pages[$pageId] ?? null;
 
             // Si el modelo marca "ambiguo" pero aporta una instrucción concreta
@@ -391,7 +464,15 @@ final class SiteAssistantPlanner
                 $category = 'automatable_now';
             }
 
-            if ($category === 'automatable_now') {
+            if ($category === 'automatable_now' && $isForm) {
+                if ($form === null) {
+                    $category = 'needs_input';
+                    $reason = __('asst.plan.no_form');
+                } elseif ($instruction === '') {
+                    $category = 'needs_input';
+                    $reason = __('asst.plan.no_instruction');
+                }
+            } elseif ($category === 'automatable_now') {
                 if ($page === null) {
                     $category = 'needs_input';
                     $reason = __('asst.plan.no_page');
@@ -437,6 +518,8 @@ final class SiteAssistantPlanner
             $items[] = [
                 'page_id'     => $page !== null ? $pageId : 0,
                 'page_title'  => $page !== null ? (string) $page['title'] : '',
+                'form_id'     => $form !== null ? $formId : 0,
+                'form_title'  => $form !== null ? (string) ($form['heading'] ?: __('forms.untitled')) : '',
                 'page_slug'   => $page !== null ? (string) $page['slug'] : '',
                 'section'     => $section,
                 'instruction' => $instruction,

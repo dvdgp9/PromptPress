@@ -43,6 +43,7 @@ final class SiteAssistantJobs
     ): array
     {
         $pages = SiteAssistantPlanner::sitePages($siteId);
+        $forms = null; // ASST-FORMS — se cargan solo si llega un item de formulario
 
         $bundle = null;
         $authorizedHashes = [];
@@ -77,13 +78,31 @@ final class SiteAssistantJobs
                 continue;
             }
             // El cliente puede manipular el JSON confirmado. Repetimos aquí
-            // el gate del registro: hoy solo Canvas tiene handler automático.
+            // el gate del registro: Canvas y formularios tienen handler automático.
             if (!self::isExecutablePlanItem($item)) {
                 continue;
             }
             if ($source !== null
                 && !in_array(AssistantSourceEnvelope::itemFingerprint($item), $authorizedHashes, true)) {
                 return ['ok' => false, 'error' => 'El plan confirmado ha cambiado. Vuelve a proponerlo antes de aplicar.'];
+            }
+            if (($item['capability_id'] ?? '') === 'forms.edit') {
+                $forms ??= SiteAssistantPlanner::siteForms($siteId);
+                $formId = (int) ($item['form_id'] ?? 0);
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if (!isset($forms[$formId]) || $instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $clean[] = [
+                    'page_id'     => 0,
+                    'form_id'     => $formId,
+                    'page_title'  => __('asst.form.label', ['formulario' => (string) ($forms[$formId]['heading'] ?: __('forms.untitled'))]),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
             }
             $pageId      = (int) ($item['page_id'] ?? 0);
             $instruction = trim((string) ($item['instruction'] ?? ''));
@@ -119,6 +138,7 @@ final class SiteAssistantJobs
                 }
                 $clean[] = [
                     'page_id'     => $pageId,
+                    'form_id'     => null,
                     'page_title'  => (string) $page['title'],
                     'section'     => $section,
                     'instruction' => $chunkInstruction,
@@ -152,10 +172,10 @@ final class SiteAssistantJobs
             foreach ($clean as $i => $item) {
                 Database::execute(
                     'INSERT INTO assistant_job_items
-                     (job_id, page_id, page_title, section, instruction, source_block_ids_json, media_ids_json, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                     (job_id, page_id, form_id, page_title, section, instruction, source_block_ids_json, media_ids_json, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
-                        $jobId, $item['page_id'], $item['page_title'], $item['section'], $item['instruction'],
+                        $jobId, $item['page_id'], $item['form_id'], $item['page_title'], $item['section'], $item['instruction'],
                         json_encode($item['source_block_ids'], JSON_THROW_ON_ERROR),
                         json_encode($item['media_ids'], JSON_THROW_ON_ERROR),
                         $i,
@@ -177,7 +197,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && ($item['capability_id'] ?? '') === 'pages.canvas.edit';
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit'], true);
     }
 
     /**
@@ -212,6 +232,11 @@ final class SiteAssistantJobs
             Database::execute('UPDATE assistant_jobs SET status = "running" WHERE id = ?', [$jobId]);
         }
         Database::execute('UPDATE assistant_job_items SET status = "running" WHERE id = ?', [$item['id']]);
+
+        if ((int) ($item['form_id'] ?? 0) > 0) {
+            self::stepFormItem($siteId, $item, $job);
+            return self::finishStep($jobId, $siteId);
+        }
 
         $page = Database::selectOne(
             "SELECT * FROM pages WHERE id = ? AND site_id = ? AND render_mode = 'canvas' LIMIT 1",
@@ -249,7 +274,12 @@ final class SiteAssistantJobs
             );
         }
 
-        // ¿Quedan pendientes? Si no, cerrar el job.
+        return self::finishStep($jobId, $siteId);
+    }
+
+    /** ¿Quedan pendientes? Si no, cerrar el job. @return array{ok:bool, job?:array<string,mixed>} */
+    private static function finishStep(int $jobId, int $siteId): array
+    {
         $pending = Database::selectOne(
             'SELECT 1 FROM assistant_job_items WHERE job_id = ? AND status = "pending" LIMIT 1',
             [$jobId]
@@ -259,6 +289,44 @@ final class SiteAssistantJobs
         }
 
         return ['ok' => true, 'job' => self::jobState($jobId, $siteId)];
+    }
+
+    /**
+     * ASST-FORMS — ejecuta un item forms.edit. Se aplica en vivo (los
+     * formularios no tienen borrador); FormAssistantEditor guarda antes una
+     * versión restaurable.
+     *
+     * @param array<string,mixed> $item
+     * @param array<string,mixed> $job
+     */
+    private static function stepFormItem(int $siteId, array $item, array $job): void
+    {
+        try {
+            $outcome = FormAssistantEditor::apply(
+                $siteId,
+                (int) $item['form_id'],
+                (string) $item['instruction'],
+                isset($job['created_by']) ? (int) $job['created_by'] : null
+            );
+            if ($outcome['ok']) {
+                Database::execute(
+                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
+                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
+                );
+                return;
+            }
+            $error = (string) ($outcome['error'] ?? __('js.as.unknown_error'));
+        } catch (AIException $e) {
+            error_log('[assistant job] form item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            $error = __('asst.err.form_no_valid_change');
+        } catch (\Throwable $e) {
+            error_log('[assistant job] form item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
+            $error = __('asst.err.apply', ['detalle' => $e->getMessage()]);
+        }
+        Database::execute(
+            'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
+            [mb_substr($error, 0, 1000), $item['id']]
+        );
     }
 
     /**
@@ -547,7 +615,7 @@ final class SiteAssistantJobs
             return ['ok' => false, 'error' => __('asst.publish.not_done')];
         }
         $pageIds = array_map('intval', array_column(Database::select(
-            'SELECT DISTINCT page_id FROM assistant_job_items WHERE job_id = ? AND status = "done" ORDER BY page_id',
+            'SELECT DISTINCT page_id FROM assistant_job_items WHERE job_id = ? AND status = "done" AND page_id > 0 ORDER BY page_id',
             [$jobId]
         ), 'page_id'));
 
@@ -606,7 +674,7 @@ final class SiteAssistantJobs
             return null;
         }
         $items = Database::select(
-            'SELECT id, page_id, page_title, section, instruction, status, reply, error
+            'SELECT id, page_id, form_id, page_title, section, instruction, status, reply, error
              FROM assistant_job_items WHERE job_id = ? ORDER BY sort_order ASC',
             [$jobId]
         );
@@ -617,6 +685,7 @@ final class SiteAssistantJobs
                 $doneCount++;
             }
             $it['page_id'] = (int) $it['page_id'];
+            $it['form_id'] = (int) ($it['form_id'] ?? 0);
             $it['id'] = (int) $it['id'];
         }
         unset($it);
