@@ -11116,7 +11116,7 @@ Riesgos: (a) más ejecutores = más superficie para errores en vivo → empezar 
 
 Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Confianza (hecho en código, PENDIENTE de verificación visual del usuario): tabla `assistant_conversations` (retomar, plan pendiente sobrevive a recargar) + pantalla «Actividad» unificada con Deshacer (páginas, formularios). ✅ recargar no pierde el plan; deshacer un cambio de formulario y de página desde Actividad.
-- [ ] F2 Panel lateral global: assistant.js como cajón en layout.php con el contexto de la pantalla; botón «Pídeselo al asistente» en editores; tarjetas no automáticas con botón «Llévame» (deep link). ✅ desde /admin/formularios/{id} el asistente sabe qué formulario es sin decirlo.
+- [x] F2 Panel lateral global: assistant.js como cajón en layout.php con el contexto de la pantalla; botón «Pídeselo al asistente» en editores; tarjetas no automáticas con botón «Llévame» (deep link). ✅ desde /admin/formularios/{id} el asistente sabe qué formulario es sin decirlo.
 - [ ] F3 Tarjetas con vista previa antes/después (formularios primero, luego secciones de página) y modelo de riesgo en el registro (`risk: read|draft|live|sensitive`, `undo`). ✅ la tarjeta del caso «Pide información» enseña el formulario nuevo antes de aplicar.
 - [ ] F4 Ejecutores nuevos, de menos a más riesgo: SEO de página → menú/header/footer → entradas del blog (borrador) → crear página (borrador) → diseño global (colores/tipos, con vista previa) → servicios de reservas, productos y recursos (borrador/inactivos). Cada uno con test y versión previa.
 - [ ] F5 Inicio proactivo: sugerencias desde auditorías existentes, sin coste de IA hasta pulsar.
@@ -11124,7 +11124,7 @@ Orden recomendado (cada fase se puede publicar sola):
 
 ## Project Status Board (ASST-V2)
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
-- [ ] F2 Panel lateral global y botones «Llévame»
+- [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [ ] F3 Vista previa antes/después + riesgo en el registro
 - [ ] F4 Ejecutores nuevos
 - [ ] F5 Inicio proactivo
@@ -11159,3 +11159,35 @@ Verificación:
 - `page_versions` guarda el estado DESPUÉS de cada cambio y `versions` (secciones/formularios) el de ANTES: deshacer se calcula distinto en cada uno.
 - `AdminNavigation::matchesPath` activa por prefijo: una pantalla bajo /admin/assistant/... encendería también «Asistente»; por eso Actividad vive en /admin/actividad.
 - tests/admin_navigation.php fija el número de destinos del menú: añadir un enlace exige actualizarlo.
+
+## Current Status / Progress Tracking (ASST-V2 F2) — 28/10/2026, Executor
+
+Usuario: «Sigue con F2, cuida mucho la interfaz, que sea bien reactiva, dé feedback y cómoda de usar».
+
+Hecho:
+- Chat extraído a parciales: `views/admin/assistant/_chat.php` (hilo + composer + selector de medios) y `_config.php` (window.PPA para modo page/drawer + lista de scripts). La página /admin/assistant los usa igual que antes.
+- Panel lateral `_drawer.php`, incluido desde `admin/layout.php` en todas las pantallas salvo /admin/assistant, /admin/canvas (Studio, tiene su chat hasta F6) y /admin/onboarding, y solo con capacidad assistant.
+  - Botón flotante «Asistente Ctrl K / ⌘K»; atajo Ctrl/⌘ K abre/cierra; Esc cierra; el foco vuelve a donde estaba.
+  - Carga diferida: los 3 scripts del chat y la conversación (`GET /admin/assistant/conversations/current`) solo al abrirlo; esqueleto mientras tanto.
+  - En ≥1280px la pantalla se aparta (margin-right 440px) y sigue usable al lado; en móvil ocupa todo.
+  - Recuerda si estaba abierto al cambiar de pantalla (sessionStorage).
+  - Con el panel cerrado: spinner en el botón mientras trabaja y punto naranja cuando hay respuesta (también si fue un error); texto para lectores de pantalla.
+  - Cabecera: nueva conversación, abrir en grande, cerrar; chip «Viendo: …» con × para quitar el contexto.
+  - Saludo corto y contextual («Estás en Formulario «X». ¿Qué cambiamos aquí?»).
+  - El selector de medios se mueve a <body> (dentro del panel quedaba encerrado por el transform).
+- Contexto de pantalla: `AssistantScreenContext::forPath/resolve/promptBlock` (formulario por id, página clásica por id, o nombre de la sección del menú vía `AdminNavigation::labelKeyForPath`). El navegador manda solo tipo+id; el servidor revalida y lo añade al prompt.
+- «Llévame»: cada tarjeta no automática trae `link {url,label}` (`AssistantScreenContext::deepLink`): formulario concreto, página concreta o la pantalla de su capacidad. `forms.manage` conserva form_id para eso.
+- Feedback en el chat (página y panel): espera con puntos animados y 3 fases («Leyendo tu petición…», «Revisando tu web…», «Preparando la propuesta…»), segundos a partir de 10, botón Cancelar (AbortController) con mensaje discreto; spinner en «Proponer plan» y «Aplicar»; filas de progreso que laten; entrada suave de mensajes; aviso al salir de la página si está planificando/aplicando; tras aplicar algo de la pantalla actual, botón «Ver el cambio en esta pantalla».
+- Un solo acento: el chat usaba un índigo de reserva (--pp-admin-primary) → ahora el naranja del panel.
+- «Pídeselo al asistente» en la cabecera del editor de formularios (`[data-assistant-open]`, reutilizable en cualquier pantalla con `data-assistant-prompt`).
+- prefers-reduced-motion respetado en todo lo nuevo. Textos en es/en/fr/pt.
+
+Verificación:
+- `tests/assistant_v2_drawer.php` nuevo (17 PASS). Suites PHP del asistente, formularios, admin, permisos, canvas, php80 y tests JS en verde; lint completo OK.
+- Render por CLI: el panel aparece en el editor de formularios (contexto formulario) y en Actividad (contexto pantalla), no en /admin/assistant.
+- Revisión visual en el navegador con la página renderizada servida en estático y fetch simulado (no hay credenciales): apertura desde el botón y con Ctrl K, apartado de la pantalla a 1440px, móvil a pantalla completa, fases de espera, cancelar, spinner y punto en el botón con el panel cerrado, tarjetas con «Abrir el formulario →». No probado contra la IA real dentro del panel ni con sesión real.
+
+## Lessons (ASST-V2 F2)
+- Un `position: fixed` dentro de un elemento con `transform` se posiciona respecto a ese elemento: los modales del chat deben vivir en <body>.
+- La barra superior del panel es z-index 90 y el menú 100: capas nuevas por encima (lanzador 105, panel 110, selector 120).
+- `FormStore::find` con un sitio inexistente intenta crear su contenedor y revienta: no usar sitios ficticios en tests con BD.

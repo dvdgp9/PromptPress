@@ -171,6 +171,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/assistant/apply',    [AssistantController::class, 'apply']);
     $r->post('/assistant/jobs/{id}/step', [AssistantController::class, 'step']);
     $r->post('/assistant/jobs/{id}/publish', [AssistantController::class, 'publish']);
+    $r->get('/assistant/conversations/current', [AssistantController::class, 'currentConversation']);
     $r->post('/assistant/conversations/save', [AssistantController::class, 'saveConversation']);
     $r->post('/assistant/conversations/{id}/delete', [AssistantController::class, 'deleteConversation']);
     // ASST-V2 F1 — Actividad: historial único con deshacer

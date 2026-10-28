@@ -140,6 +140,26 @@ final class AdminNavigation
         return $ordered;
     }
 
+    /**
+     * ASST-V2 F2 — Etiqueta del menú (clave de traducción) de la pantalla a la
+     * que pertenece una ruta: la coincidencia más larga gana, así
+     * /admin/formularios/12 es «Formularios» y /admin no se come todo.
+     */
+    public static function labelKeyForPath(string $path): ?string
+    {
+        $path = self::normalizePath($path);
+        $best = null;
+        $bestLength = -1;
+        foreach (self::catalog() as $item) {
+            $match = (string) $item['match'];
+            if (self::matchesPath($path, $match) && strlen($match) > $bestLength) {
+                $best = (string) $item['label_key'];
+                $bestLength = strlen($match);
+            }
+        }
+        return $best;
+    }
+
     /** @return array<string, array<string, mixed>> */
     private static function catalog(): array
     {

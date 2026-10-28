@@ -443,7 +443,9 @@ final class SiteAssistantPlanner
 
             // ASST-FORMS — un item de formulario no pertenece a ninguna página.
             $isForm = $capabilityId === 'forms.edit';
-            $form = $isForm ? ($forms[$formId] ?? null) : null;
+            // ASST-V2 F2 — también forms.manage conserva su formulario: no se
+            // ejecuta, pero el botón «Llévame» abre ese formulario concreto.
+            $form = str_starts_with($capabilityId, 'forms.') ? ($forms[$formId] ?? null) : null;
             if ($isForm) {
                 $pageId = 0;
             }

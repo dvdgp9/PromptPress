@@ -188,5 +188,22 @@
     <script src="<?= e(base_url('admin/assets/js/pp-i18n.js')) ?>"></script>
     <script src="<?= e(base_url('admin/assets/js/admin.js')) ?>"></script>
     <?= \Core\View::section('scripts', '') ?>
+    <?php
+    // ASST-V2 F2 — el asistente, a mano en todas las pantallas. No en su
+    // propia página ni en el Studio (que tiene su chat hasta F6).
+    $assistantPath = \Core\Request::path();
+    $assistantSite = \Core\Auth::siteId();
+    if ($assistantSite !== null
+        && \App\Services\Permissions::allows(\Core\Auth::role(), '/admin/assistant')
+        && !preg_match('#^/admin/(assistant|canvas|onboarding)(/|$)#', $assistantPath)
+        && \Core\View::section('noAssistant', '') === '') {
+        try {
+            $assistantContext = \App\Services\AssistantScreenContext::forPath((int) $assistantSite, $assistantPath);
+        } catch (\Throwable $e) {
+            $assistantContext = null;
+        }
+        include PP_ROOT . '/views/admin/assistant/_drawer.php';
+    }
+    ?>
 </body>
 </html>

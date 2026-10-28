@@ -204,6 +204,8 @@
         extracting = attachedDocs.some((doc) => doc.status === 'working');
         attachBtn.classList.toggle('is-busy', extracting);
         sendBtn.disabled = (!hasContent && readyDocs().length === 0) || !valid || extracting || planning;
+        sendBtn.classList.toggle('is-loading', planning);
+        sendBtn.setAttribute('aria-busy', planning ? 'true' : 'false');
     }
 
     /** Extrae el texto en el servidor. Devuelve {ok, data} o {ok:false, error, empty}. */
@@ -403,7 +405,7 @@
                 const data = await res.json().catch(() => ({}));
                 if (res.ok && data.ok && data.id) {
                     conversation.id = data.id;
-                    if (window.history && window.history.replaceState) {
+                    if (cfg.mode !== 'drawer' && window.history && window.history.replaceState) {
                         window.history.replaceState(null, '', cfg.baseUrl + '?c=' + data.id);
                     }
                 }
@@ -497,7 +499,7 @@
         conversation.thumbs = new Map();
         conversation.id = null;
         conversation.log = [];
-        if (window.history && window.history.replaceState) {
+        if (cfg.mode !== 'drawer' && window.history && window.history.replaceState) {
             window.history.replaceState(null, '', cfg.baseUrl + '?nueva=1');
         }
         lastPlanContext = null;
@@ -627,6 +629,14 @@
                     next.className = 'ppa-plan__note';
                     next.textContent = pp.t('js.as.next_action', { accion: it.next_action });
                     card.appendChild(next);
+                }
+                // ASST-V2 F2 — lo que el asistente aún no hace, a un clic.
+                if (it.link && it.link.url && category !== 'automatable_now') {
+                    const go = document.createElement('a');
+                    go.className = 'pp-btn pp-btn--secondary pp-btn--sm ppa-item__go';
+                    go.href = it.link.url;
+                    go.textContent = it.link.label + ' →';
+                    card.appendChild(go);
                 }
                 const media = renderItemMedia(it, plan);
                 if (media) card.appendChild(media);
@@ -846,6 +856,18 @@
             bubble.appendChild(foot);
         }
 
+        // ASST-V2 F2 — si lo cambiado es lo que hay en pantalla, ofrecer verlo.
+        const ctx = cfg.mode === 'drawer' ? cfg.context : null;
+        if (ctx && doneItems.some((it) => (ctx.type === 'form' && Number(it.form_id) === Number(ctx.id))
+            || (ctx.type === 'page' && Number(it.page_id) === Number(ctx.id)))) {
+            const reload = document.createElement('button');
+            reload.type = 'button';
+            reload.className = 'pp-btn pp-btn--primary pp-btn--sm ppa-plan__reload';
+            reload.textContent = pp.t('js.as.reload_screen');
+            reload.addEventListener('click', () => window.location.reload());
+            bubble.appendChild(reload);
+        }
+
         // ASST-V2 F1 — todo lo aplicado se puede revisar y deshacer en Actividad.
         if (doneItems.length > 0 && cfg.activityUrl) {
             const activity = document.createElement('a');
@@ -903,7 +925,9 @@
     async function applyPlan(plan, applicable, btn) {
         if (applying) return;
         applying = true;
+        setBusy(true);
         btn.disabled = true;
+        btn.classList.add('is-loading');
         if (lastPlanContext && lastPlanContext.plan === plan) {
             lastPlanContext = null;
         }
@@ -967,6 +991,9 @@
             addMessage('assistant', pp.t('js.as.exec_network'), 'ppa-msg--error');
         } finally {
             applying = false;
+            btn.classList.remove('is-loading');
+            setBusy(false);
+            emit('ppa:news');
         }
     }
 
@@ -974,6 +1001,70 @@
     // Envío: POST /admin/assistant/plan
     // ------------------------------------------------------------------
     let planning = false;
+    let planAbort = null;
+
+    // ASST-V2 F2 — el panel lateral escucha esto para avisar con el botón.
+    function emit(name, detail) {
+        document.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+    }
+    function setBusy(busy) {
+        emit('ppa:busy', { busy });
+    }
+
+    /**
+     * Mensaje de espera que dice en qué está el asistente: tres fases que
+     * avanzan solas, segundos a partir de 10 y un botón para cancelar.
+     */
+    function showThinking(onCancel) {
+        const bubble = addMessage('assistant', '', 'ppa-msg--thinking');
+        bubble.textContent = '';
+        const row = document.createElement('div');
+        row.className = 'ppa-thinking';
+        const dots = document.createElement('span');
+        dots.className = 'ppa-thinking__dots';
+        dots.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < 3; i += 1) dots.appendChild(document.createElement('i'));
+        const label = document.createElement('span');
+        label.className = 'ppa-thinking__label';
+        label.setAttribute('role', 'status');
+        const time = document.createElement('span');
+        time.className = 'ppa-thinking__time';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'ppa-thinking__cancel';
+        cancel.textContent = pp.t('js.as.cancel');
+        cancel.addEventListener('click', onCancel);
+        row.append(dots, label, time, cancel);
+        bubble.appendChild(row);
+
+        const stages = ['js.as.stage_read', 'js.as.stage_check', 'js.as.stage_write'];
+        const started = Date.now();
+        let stage = 0;
+        label.textContent = pp.t(stages[0]);
+        const timer = window.setInterval(() => {
+            const seconds = Math.round((Date.now() - started) / 1000);
+            const next = Math.min(stages.length - 1, Math.floor(seconds / 4));
+            if (next !== stage) {
+                stage = next;
+                label.textContent = pp.t(stages[stage]);
+            }
+            time.textContent = seconds >= 10 ? pp.t('js.as.seconds', { n: seconds }) : '';
+        }, 500);
+        return {
+            remove() {
+                window.clearInterval(timer);
+                const msg = bubble.closest('.ppa-msg');
+                if (msg) msg.remove();
+            }
+        };
+    }
+
+    // Irse a mitad de un plan o, sobre todo, de una aplicación la corta.
+    window.addEventListener('beforeunload', (event) => {
+        if (!planning && !applying) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
 
     function isAffirmativeReply(text) {
         const normalized = text.toLocaleLowerCase('es-ES')
@@ -1027,7 +1118,10 @@
 
         planning = true;
         refreshSendState();
-        const thinking = addMessage('assistant', pp.t('js.as.analyzing'), 'ppa-msg--thinking');
+        setBusy(true);
+        planAbort = typeof AbortController === 'function' ? new AbortController() : null;
+        const thinking = showThinking(() => { if (planAbort) planAbort.abort(); });
+        let cancelled = false;
 
         const body = new URLSearchParams({
             _csrf: cfg.csrf,
@@ -1036,12 +1130,14 @@
             rich_html: richHtml,
             history: JSON.stringify(conversation.turns),
             current_plan: JSON.stringify(condensePlan(conversation.plan)),
-            source_token: conversation.sourceToken
+            source_token: conversation.sourceToken,
+            context_type: cfg.context ? cfg.context.type : '',
+            context_id: cfg.context ? String(cfg.context.id) : ''
         });
         try {
-            const res = await fetch(cfg.baseUrl + '/plan', { method: 'POST', body });
+            const res = await fetch(cfg.baseUrl + '/plan', { method: 'POST', body, signal: planAbort ? planAbort.signal : undefined });
             const data = await res.json().catch(() => ({}));
-            thinking.closest('.ppa-msg').remove();
+            thinking.remove();
             if (!res.ok || !data.ok) {
                 addMessage('assistant', data.error || pp.t('js.as.plan_failed'), 'ppa-msg--error');
                 return;
@@ -1057,11 +1153,20 @@
             logEntry({ type: 'plan', plan: data.plan });
             persistConversation();
         } catch (err) {
-            thinking.closest('.ppa-msg').remove();
-            addMessage('assistant', pp.t('js.as.plan_network'), 'ppa-msg--error');
+            thinking.remove();
+            if (err && err.name === 'AbortError') {
+                cancelled = true;
+                addMessage('assistant', pp.t('js.as.plan_cancelled'), 'ppa-msg--muted');
+            } else {
+                addMessage('assistant', pp.t('js.as.plan_network'), 'ppa-msg--error');
+            }
         } finally {
             planning = false;
+            planAbort = null;
+            setBusy(false);
             refreshSendState();
+            // Respuesta o error: con el panel cerrado, el botón avisa.
+            if (!cancelled) emit('ppa:news');
         }
     }
 
@@ -1116,6 +1221,53 @@
             if (!window.confirm(form.dataset.confirm)) event.preventDefault();
         });
     });
-    restoreConversation(cfg.conversation);
-    refreshSendState();
+    // ASST-V2 F2 — API mínima para el panel lateral.
+    window.PPAssistant = {
+        focus() {
+            const target = richComposer && richInput && !richInput.hidden ? richInput : input;
+            if (target) target.focus();
+        },
+        prefill(text) {
+            const value = String(text || '');
+            if (value === '') return;
+            if (richComposer && richInput && !richInput.hidden) {
+                richInput.textContent = value;
+                richInput.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+                input.value = value;
+            }
+            refreshSendState();
+        },
+        reset() {
+            if (planning || applying) return;
+            resetConversation();
+            thread.classList.remove('is-fresh');
+            void thread.offsetWidth; // reinicia la animación de «conversación nueva»
+            thread.classList.add('is-fresh');
+            window.PPAssistant.focus();
+        }
+    };
+
+    function boot(saved) {
+        // En el panel lateral el saludo es corto y, si sabe dónde estás, lo dice.
+        if (cfg.mode === 'drawer') {
+            const first = thread.querySelector('.ppa-msg__bubble');
+            if (first) {
+                first.textContent = cfg.context
+                    ? pp.t('js.as.drawer_greeting_ctx', { pantalla: cfg.context.label })
+                    : pp.t('js.as.drawer_greeting');
+            }
+        }
+        restoreConversation(saved);
+        refreshSendState();
+        emit('ppa:ready');
+    }
+    if (cfg.lazyConversation) {
+        fetch(cfg.baseUrl + '/conversations/current', { headers: { Accept: 'application/json' } })
+            .then((res) => res.json())
+            .then((data) => boot(data && data.ok ? data.conversation : null))
+            .catch(() => boot(null));
+    } else {
+        boot(cfg.conversation);
+    }
 })();

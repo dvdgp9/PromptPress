@@ -7,6 +7,7 @@ use App\Services\AssistantContentNormalizer;
 use App\Services\AssistantConversation;
 use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
+use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
@@ -95,6 +96,20 @@ class AssistantController
             Response::json(['ok' => false, 'error' => __('asst.conv.save_failed')], 422);
         }
         Response::json(['ok' => true, 'id' => $saved]);
+    }
+
+    // GET /admin/assistant/conversations/current — ASST-V2 F2: el panel
+    // lateral pide la conversación al abrirse (no viaja en cada página).
+    public function currentConversation(): void
+    {
+        $siteId = self::requireSiteId();
+        $conversation = null;
+        try {
+            $conversation = AssistantConversationStore::latest($siteId, Auth::id());
+        } catch (\Throwable $e) {
+            error_log('[assistant] current conversation: ' . $e->getMessage());
+        }
+        Response::json(['ok' => true, 'conversation' => $conversation]);
     }
 
     // POST /admin/assistant/conversations/{id}/delete
@@ -247,6 +262,14 @@ class AssistantController
             ? $instruction
             : 'Aplica los cambios descritos en el documento adjunto.'));
 
+        // ASST-V2 F2 — pantalla desde la que se escribe (panel lateral). El
+        // navegador solo dice tipo e id; aquí se comprueba que existe.
+        $screen = AssistantScreenContext::resolve(
+            $siteId,
+            (string) Request::post('context_type', ''),
+            (int) Request::post('context_id', 0)
+        );
+
         @set_time_limit(180);
         try {
             $plan = SiteAssistantPlanner::plan(
@@ -254,8 +277,15 @@ class AssistantController
                 $requestText,
                 $docText,
                 $normalized,
-                AssistantConversation::renderForPrompt($history, $currentPlan)
+                AssistantScreenContext::promptBlock($screen) . AssistantConversation::renderForPrompt($history, $currentPlan)
             );
+            // ASST-V2 F2 — lo que no se aplica solo lleva un botón al sitio exacto.
+            foreach ($plan['items'] as &$planItem) {
+                if (($planItem['category'] ?? '') !== 'automatable_now') {
+                    $planItem['link'] = AssistantScreenContext::deepLink($planItem, $siteId);
+                }
+            }
+            unset($planItem);
             $roles = (array) ($plan['media_roles'] ?? []);
             // Al navegador como lista: un mapa id => rol con ids sueltos sería un
             // objeto JSON con claves numéricas, incómodo de recorrer.

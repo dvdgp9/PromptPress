@@ -12502,3 +12502,153 @@ a.pp-page-menu__item{text-decoration:none}
     .pp-activity__item { grid-template-columns: 20px minmax(0, 1fr); }
     .pp-activity__actions { grid-column: 2; }
 }
+
+/* ======================================================================
+   ASST-V2 F2 — Panel lateral del asistente (en todo el panel)
+   Capas: barra superior 90 < menú 100 < lanzador 105 < panel 110 < selector de medios 120.
+   ====================================================================== */
+/* Un solo acento en todo el panel: el chat usaba un índigo de reserva. */
+.ppa-chat { --pp-admin-primary: var(--pp-primary); }
+.ppa-launcher__icon {
+    display: inline-block; width: 18px; height: 18px; flex-shrink: 0;
+    background-color: currentColor;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+}
+.ppa-launcher {
+    position: fixed; right: 20px; bottom: 20px; z-index: 105;
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 44px; padding: 0 14px 0 12px;
+    border: 1px solid var(--pp-border); border-radius: 999px;
+    background: var(--pp-surface); color: var(--pp-text);
+    font: inherit; font-size: 0.9rem; font-weight: 600;
+    box-shadow: var(--pp-shadow-lg); cursor: pointer;
+    transition: transform var(--pp-duration) var(--pp-ease), box-shadow var(--pp-duration) var(--pp-ease), opacity var(--pp-duration) var(--pp-ease);
+}
+.ppa-launcher:hover { transform: translateY(-1px); border-color: var(--pp-border-strong); }
+.ppa-launcher:active { transform: translateY(0) scale(0.98); }
+.ppa-launcher:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.ppa-launcher .ppa-launcher__icon { color: var(--pp-primary); }
+.ppa-launcher__kbd {
+    padding: 2px 6px; border: 1px solid var(--pp-border); border-radius: 6px;
+    background: var(--pp-surface-alt); color: var(--pp-text-muted);
+    font-family: var(--pp-font-mono); font-size: 0.72rem; font-weight: 500;
+}
+.ppa-launcher__badge {
+    position: absolute; top: -2px; right: -2px; width: 12px; height: 12px;
+    border: 2px solid var(--pp-surface); border-radius: 50%; background: var(--pp-primary);
+}
+.ppa-launcher.is-busy .ppa-launcher__icon {
+    -webkit-mask-image: none; mask-image: none; background: transparent;
+    border: 2px solid var(--pp-primary-soft); border-top-color: var(--pp-primary); border-radius: 50%;
+    animation: ppa-spin 0.8s linear infinite;
+}
+.has-ppa-drawer .ppa-launcher { opacity: 0; pointer-events: none; transform: translateY(8px); }
+
+.ppa-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 110;
+    width: min(440px, 100vw);
+    display: flex; flex-direction: column;
+    background: var(--pp-surface); border-left: 1px solid var(--pp-border);
+    box-shadow: -24px 0 48px -32px rgba(28, 25, 23, 0.35);
+    transform: translateX(104%);
+    transition: transform 260ms var(--pp-ease);
+}
+.ppa-drawer.is-open { transform: translateX(0); }
+.ppa-drawer[hidden] { display: none; }
+/* El panel se desplaza con transform: el selector de medios vive fuera, en <body>. */
+body > .ppa-media-picker { z-index: 120; }
+@media (min-width: 1280px) {
+    /* Con sitio de sobra, la pantalla se aparta y queda usable al lado. */
+    .pp-main { transition: margin-right 260ms var(--pp-ease); }
+    .has-ppa-drawer .pp-main { margin-right: 440px; }
+}
+.ppa-drawer__head { flex: 0 0 auto; padding: 12px 14px 10px 16px; border-bottom: 1px solid var(--pp-border); }
+.ppa-drawer__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ppa-drawer__title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1rem; font-weight: 650; }
+.ppa-drawer__title .ppa-launcher__icon { color: var(--pp-primary); }
+.ppa-drawer__tools { display: flex; gap: 2px; }
+.ppa-icon-btn {
+    display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0;
+    border: 0; border-radius: 9px; background: transparent; color: var(--pp-text-muted);
+    cursor: pointer; text-decoration: none;
+    transition: background var(--pp-duration-fast) var(--pp-ease), color var(--pp-duration-fast) var(--pp-ease), transform var(--pp-duration-fast) var(--pp-ease);
+}
+.ppa-icon-btn:hover { background: var(--pp-surface-alt); color: var(--pp-text); }
+.ppa-icon-btn:active { transform: scale(0.94); }
+.ppa-icon-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.ppa-icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+.ppa-context {
+    display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%;
+    margin-top: 10px; padding: 4px 4px 4px 10px; border-radius: 999px;
+    background: var(--pp-primary-soft); color: var(--pp-text); font-size: 0.8rem;
+}
+.ppa-context[hidden] { display: none; }
+.ppa-context__label { color: var(--pp-text-muted); }
+.ppa-context__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ppa-context__clear { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--pp-text-muted); cursor: pointer; }
+.ppa-context__clear:hover { background: var(--pp-surface); color: var(--pp-text); }
+.ppa-context__clear svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.ppa-drawer__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.ppa-drawer:not(.is-ready) .ppa-chat { display: none; }
+.ppa-drawer .ppa-chat { flex: 1 1 auto; min-height: 0; max-width: none; border: 0; border-radius: 0; }
+.ppa-drawer .ppa-thread { flex: 1 1 auto; max-height: none; min-height: 0; padding: 16px; }
+.ppa-drawer .ppa-msg__bubble { max-width: 88%; }
+.ppa-drawer .ppa-composer { padding: 10px 12px 12px; }
+.ppa-drawer .ppa-composer__hint { display: none; }
+.ppa-drawer .ppa-composer__editor { min-height: 64px; max-height: 200px; }
+
+.ppa-drawer__skeleton { display: grid; gap: 12px; padding: 20px 16px; }
+.ppa-drawer__skeleton span {
+    display: block; height: 44px; border-radius: 12px;
+    background: linear-gradient(90deg, var(--pp-surface-alt) 0%, var(--pp-surface) 50%, var(--pp-surface-alt) 100%);
+    background-size: 200% 100%; animation: ppa-shimmer 1.2s ease-in-out infinite;
+}
+.ppa-drawer__skeleton span.is-short { width: 60%; }
+.ppa-drawer__skeleton.is-error { color: var(--pp-danger); font-size: 0.9rem; }
+
+/* Mensajes: entrada suave y estado «pensando» con fases */
+.ppa-msg { animation: ppa-in 220ms var(--pp-ease) both; }
+.ppa-thread.is-fresh .ppa-msg { animation: ppa-in 320ms var(--pp-ease) both; }
+.ppa-msg--muted .ppa-msg__bubble { background: transparent; color: var(--pp-text-muted); font-size: 0.85rem; padding: 2px 0; }
+.ppa-msg--thinking .ppa-msg__bubble { opacity: 1; font-style: normal; }
+.ppa-thinking { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ppa-thinking__dots { display: inline-flex; gap: 3px; }
+.ppa-thinking__dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--pp-primary); animation: ppa-dot 1s ease-in-out infinite; }
+.ppa-thinking__dots i:nth-child(2) { animation-delay: 0.15s; }
+.ppa-thinking__dots i:nth-child(3) { animation-delay: 0.3s; }
+.ppa-thinking__label { color: var(--pp-text); }
+.ppa-thinking__time { color: var(--pp-text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.ppa-thinking__cancel { margin-left: auto; padding: 2px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--pp-text-muted); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.ppa-thinking__cancel:hover { background: var(--pp-surface); color: var(--pp-text); }
+
+/* Botones con trabajo en curso */
+.ppa-composer__send.is-loading, .ppa-plan__apply.is-loading { position: relative; color: transparent !important; }
+.ppa-composer__send.is-loading::after, .ppa-plan__apply.is-loading::after {
+    content: ""; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; border-radius: 50%;
+    animation: ppa-spin 0.7s linear infinite;
+}
+.ppa-progress__row--running .ppa-progress__icon { display: inline-block; animation: ppa-pulse 1s ease-in-out infinite; color: var(--pp-primary); }
+.ppa-item__go { margin-top: 10px; }
+.ppa-plan__reload { margin: 10px 8px 0 0; }
+
+@keyframes ppa-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ppa-dot { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes ppa-spin { to { transform: rotate(360deg); } }
+@keyframes ppa-pulse { 50% { opacity: 0.35; } }
+@keyframes ppa-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 640px) {
+    .ppa-launcher { right: 14px; bottom: 14px; }
+    .ppa-launcher__kbd { display: none; }
+    .ppa-drawer { width: 100vw; border-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ppa-launcher, .ppa-drawer, .pp-main, .ppa-msg, .ppa-thread.is-fresh .ppa-msg { transition: none; animation: none; }
+    .ppa-thinking__dots i, .ppa-launcher.is-busy .ppa-launcher__icon, .ppa-drawer__skeleton span,
+    .ppa-composer__send.is-loading::after, .ppa-plan__apply.is-loading::after, .ppa-progress__row--running .ppa-progress__icon { animation: none; }
+}

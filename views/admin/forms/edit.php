@@ -397,6 +397,10 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
         <a class="pp-back-link" href="<?= e(base_url('admin/formularios')) ?>">← <?= e(__('forms.title')) ?></a>
         <h2><?= e(__('form_edit.title')) ?></h2>
     </div>
+    <?php /* ASST-V2 F2 — abre el panel lateral ya situado en este formulario. */ ?>
+    <button type="button" class="pp-btn pp-btn--secondary pp-btn--sm" data-assistant-open>
+        <?= e(__('asst.ask_assistant')) ?>
+    </button>
 </div>
 
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
