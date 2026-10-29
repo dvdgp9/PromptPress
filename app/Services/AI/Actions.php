@@ -54,6 +54,7 @@ final class Actions
     public const DRAFT_FORM_AUTORESPONDER   = 'draft_form_autoresponder';    // FORMS F4
     public const PLAN_SITE_CHANGES          = 'plan_site_changes';           // FEAT-5 asistente central
     public const EDIT_CHROME                = 'edit_chrome';                 // ASST-V2 F4b menú, header y pie
+    public const EDIT_DESIGN                = 'edit_design';                 // ASST-V2 F4e colores, tipografías y radios
 
     /**
      * FH2 — Principios POSITIVOS de diseño (la otra cara del anti-slop):
@@ -276,6 +277,39 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.3,
                     'max_tokens'      => 6000,
+                ],
+            ],
+
+            // ASST-V2 F4e — Colores de la paleta, tipografías y radios del
+            // diseño global. Devuelve solo lo que cambia; el servidor valida.
+            self::EDIT_DESIGN => [
+                'label'        => 'Editar colores y tipografías',
+                'output'       => 'json',
+                'required'     => ['request', 'current_design', 'font_options'],
+                'instruction'  =>
+                    "Ajustas el diseño global de una web: colores, tipografías y radios.\n"
+                  . "Recibes el diseño actual en JSON y devuelves SOLO las claves que cambian, con su valor nuevo. Lo que no se pide, no se toca.\n"
+                  . "FORMA (todas las claves opcionales; no añadas otras):\n"
+                  . "{\"colors\":{\"primary\":\"#rrggbb\",\"primary_dark\":\"#rrggbb\",\"accent\":\"#rrggbb\",\"bg\":\"#rrggbb\",\"surface\":\"#rrggbb\",\"text\":\"#rrggbb\",\"text_muted\":\"#rrggbb\",\"border\":\"#rrggbb\"},"
+                  . "\"typography\":{\"font_heading\":\"<valor de FUENTES>\",\"font_body\":\"<valor de FUENTES>\",\"base_size\":16},\"buttons\":{\"radius\":8},\"spacing\":{\"radius_card\":12}}\n"
+                  . "SIGNIFICADO: primary = color de marca de botones y enlaces; primary_dark = su versión al pasar el ratón (algo más oscura); accent = segundo color de marca; bg = fondo de la página; surface = fondo de tarjetas y bandas suaves; text = texto principal; text_muted = texto secundario; border = líneas y bordes.\n"
+                  . "REGLAS:\n"
+                  . "- Colores siempre en hex de 6 dígitos. Si cambias primary, ajusta también primary_dark (mismo tono, unos 10-15 puntos de luminosidad menos).\n"
+                  . "- Peticiones relativas («más oscuro», «más cálido», «menos chillón»): parte del valor actual y muévelo con mesura; conserva el tono de marca salvo que pidan otro.\n"
+                  . "- Cuida el contraste: text sobre bg y sobre surface al menos 4.5:1; el texto blanco o el oscuro sobre primary, legible. Si un fondo oscuro lo pide, cambia también text, text_muted, surface y border para que todo siga leyéndose.\n"
+                  . "- Fuentes: usa EXACTAMENTE uno de los valores de FUENTES (la parte antes de « = »). Una fuente marcada como fijada por la marca no se cambia.\n"
+                  . "- base_size entre 14 y 20 (px). buttons.radius entre 0 y 40; spacing.radius_card entre 0 y 32. «Botones redondos» o «tipo píldora» = radius 40; «cuadrados» = 0.\n"
+                  . "- Si la petición no es de colores, fuentes, tamaño de letra o radios, devuelve {}.\n"
+                  . "- Responde SOLO con el JSON.",
+                'user_template' =>
+                    "Petición del operador:\n\"{request}\"\n\n"
+                  . "FUENTES (valor = nombre):\n{font_options}\n\n"
+                  . "COLORES DE MARCA DECLARADOS: {brand_colors}\n\n"
+                  . "DISEÑO ACTUAL:\n{current_design}\n{extra_context}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.3,
+                    'max_tokens'      => 1200,
                 ],
             ],
 
@@ -1330,6 +1364,7 @@ final class Actions
                   . "- PÁGINAS NUEVAS: crear una página que no existe (servicio, landing, contacto, producto) es automatable_now con capability_id pages.create (page_id 0, form_id 0, section vacía): un item por página, máximo 3; la instruction dice qué página es entre «», su objetivo, su público y su llamada a la acción si se dan. Un artículo es posts.create y una página legal es legal.content. Preguntar qué páginas faltan o pedir ideas de páginas es automatable_now con capability_id pages.ideas: un solo item, la instruction resume el enfoque (o «sin enfoque»). Cambiar una página que ya existe es pages.canvas.edit.\n"
                   . "- BLOG: escribir una o varias entradas nuevas es automatable_now con capability_id posts.create (page_id 0, form_id 0, section vacía): un item por entrada, máximo 5; la instruction dice el tema entre «», el enfoque, el público y la extensión (corta, media o larga) si se dan. Pedir ideas, temas o sugerencias para el blog es automatable_now con capability_id posts.ideas: un solo item, la instruction resume el enfoque pedido (o «sin enfoque»); el operador elegirá luego cuáles escribir. Editar, publicar o borrar entradas que ya existen es posts.manage.\n"
                   . "- MENÚ, HEADER Y PIE: añadir, quitar, renombrar u ordenar elementos del menú del header (también desplegables), cambiar el botón del header o los textos y enlaces del pie (lema, menú del pie, teléfono, dirección, email, horario, redes, copyright) es automatable_now con capability_id chrome.edit: page_id 0, form_id 0, section vacía. Un solo item para todo el header y el pie. La instruction dice el resultado: qué elementos quedan, en qué orden, con qué texto y a qué página o URL apuntan. Colores, fondo, logo, bordes, columnas o altura del header NO son chrome.edit: usa chrome.manage. No inventes datos de contacto ni redes.\n"
+                  . "- DISEÑO GLOBAL: cambiar los colores de la web (principal, acento, fondo, superficie, texto, bordes), las tipografías de titulares o de texto, el tamaño de letra o lo redondeados que son botones y tarjetas es automatable_now con capability_id design.edit: page_id 0, form_id 0, section vacía. Un solo item para todo el diseño; la instruction recoge literalmente lo pedido (hex, nombre de fuente, «más oscuro», «más elegante»). Subir un logo, favicon o fuentes propias, o regenerar el estilo visual entero, es design.manage. Los colores y el fondo del header y el pie son chrome.manage.\n"
                   . "- SEO DE PÁGINA: mejorar o cambiar el título SEO (meta title) o la meta descripción de una página del MAPA es automatable_now con capability_id seo.page.edit: pon su page_id y section vacía. Un item por página. La instruction resume el enfoque pedido (palabras clave, servicio, ciudad, tono) sin inventar datos. Cambiar la URL/slug, redirecciones, noindex o canonical NO es seo.page.edit: usa seo.manage. Si piden «mejorar el SEO» de toda la web, un item seo.page.edit por cada página importante (máximo 6) y dilo en reply.\n"
                   . "- FORMULARIOS: cambiar preguntas, opciones, tipos de campo (p. ej. convertir varias preguntas en un único desplegable), etiquetas, título, descripción, texto del botón o mensaje de éxito de un formulario del MAPA DE FORMULARIOS es automatable_now con capability_id forms.edit: pon su form_id, page_id 0 y section vacía. Un item por formulario. La instruction describe el formulario resultante completo: qué preguntas quedan, en qué orden, su tipo (select = desplegable, radio, checkbox_group…), si son obligatorias y las opciones literales. Conserva las preguntas de contacto (nombre, email, teléfono) salvo que se pida expresamente quitarlas. Si no queda claro qué formulario es, needs_input y pregunta cuál. Destinatario del aviso, consentimientos o textos legales y autorrespuesta NO son forms.edit: usa forms.manage o legal.content. Crear un formulario nuevo es forms.manage.\n"
                   . "- category manual_in_platform si la plataforma lo permite pero la capacidad no tiene handler automático. status no_viable; next_action indica el panel del registro. No significa que PromptPress no lo soporte.\n"

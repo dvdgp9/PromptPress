@@ -174,22 +174,23 @@ final class SiteAssistantJobs
                 ];
                 continue;
             }
-            if (($item['capability_id'] ?? '') === 'chrome.edit') {
+            if (in_array($item['capability_id'] ?? '', ['chrome.edit', 'design.edit'], true)) {
                 $instruction = trim((string) ($item['instruction'] ?? ''));
                 if ($instruction === '' || mb_strlen($instruction) > 4000) {
                     continue;
                 }
+                $siteKind = $item['capability_id'] === 'chrome.edit' ? 'chrome' : 'design';
                 $proposal = trim((string) ($item['preview_token'] ?? ''));
-                if ($proposal !== '' && AssistantProposal::open($proposal, 'chrome', $siteId, $siteId, $instruction) === null) {
-                    error_log('[assistant job create] site=' . $siteId . ' chrome preview token rejected');
+                if ($proposal !== '' && AssistantProposal::open($proposal, $siteKind, $siteId, $siteId, $instruction) === null) {
+                    error_log('[assistant job create] site=' . $siteId . ' ' . $siteKind . ' preview token rejected');
                     $proposal = '';
                 }
                 $clean[] = [
-                    'capability_id' => 'chrome.edit',
+                    'capability_id' => (string) $item['capability_id'],
                     'proposal_token' => $proposal !== '' ? $proposal : null,
                     'page_id'     => 0,
                     'form_id'     => null,
-                    'page_title'  => __('asst.chrome.label'),
+                    'page_title'  => __('asst.' . $siteKind . '.label'),
                     'section'     => '',
                     'instruction' => $instruction,
                     'source_block_ids' => [],
@@ -315,7 +316,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'posts.create', 'pages.create'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit', 'posts.create', 'pages.create'], true);
     }
 
     /**
@@ -452,6 +453,15 @@ final class SiteAssistantJobs
                 return $p !== null
                     ? ChromeAssistantEditor::commit($siteId, $p['content'], $p['base_hash'], $userId)
                     : ChromeAssistantEditor::apply($siteId, $instruction, $userId);
+            };
+        } elseif ($capability === 'design.edit') {
+            $kind = 'design';
+            $aiError = 'asst.err.design_no_valid_change';
+            $run = static function () use ($siteId, $instruction, $token, $userId): array {
+                $p = AssistantProposal::open($token, 'design', $siteId, $siteId, $instruction);
+                return $p !== null
+                    ? DesignAssistantEditor::commit($siteId, $p['content'], $p['base_hash'], $userId)
+                    : DesignAssistantEditor::apply($siteId, $instruction, $userId);
             };
         } elseif ($capability === 'posts.create') {
             $kind = 'post';

@@ -13,6 +13,7 @@ use App\Services\AssistantSourceEnvelope;
 use App\Services\BlogAssistant;
 use App\Services\AssistantProposal;
 use App\Services\ChromeAssistantEditor;
+use App\Services\DesignAssistantEditor;
 use App\Services\FormAssistantEditor;
 use App\Services\PageAssistant;
 use App\Services\PageSeoAssistantEditor;
@@ -355,6 +356,7 @@ class AssistantController
             'forms.edit'    => ['form', (int) ($item['form_id'] ?? 0)],
             'seo.page.edit' => ['seo', (int) ($item['page_id'] ?? 0)],
             'chrome.edit'   => ['chrome', $siteId],
+            'design.edit'   => ['design', $siteId],
             'posts.ideas'   => ['ideas', $siteId],
             'pages.ideas'   => ['page_ideas', $siteId],
             'pages.create'  => ['page', $siteId],
@@ -380,6 +382,7 @@ class AssistantController
                 'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction),
                 'seo'    => PageSeoAssistantEditor::propose($siteId, $targetId, $instruction),
                 'chrome' => ChromeAssistantEditor::propose($siteId, $instruction),
+                'design' => DesignAssistantEditor::propose($siteId, $instruction),
             };
         } catch (AIException $e) {
             error_log('[assistant preview] site=' . $siteId . ' ' . $capability . ' target=' . $targetId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
@@ -394,6 +397,7 @@ class AssistantController
             'form'   => FormAssistantEditor::preview($proposal['before'], $proposal['content']),
             'seo'    => PageSeoAssistantEditor::preview($siteId, $targetId, $proposal['before'], $proposal['content']),
             'chrome' => ChromeAssistantEditor::preview($siteId, $proposal['before'], $proposal['content']),
+            'design' => DesignAssistantEditor::preview($siteId, $proposal['before'], $proposal['content'], $proposal['notes'] ?? []),
         };
         error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
             $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));

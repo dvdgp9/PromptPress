@@ -587,6 +587,7 @@
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
             || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
             || it.capability_id === 'chrome.edit'
+            || it.capability_id === 'design.edit'
             || it.capability_id === 'posts.ideas'
             || it.capability_id === 'pages.ideas'
             || it.capability_id === 'pages.create';
@@ -936,6 +937,132 @@
         return mock;
     }
 
+    // ------------------------------------------------------------------
+    // ASST-V2 F4e — diseño global: una web en miniatura pintada con los
+    // colores, fuentes y radios de cada versión.
+    // ------------------------------------------------------------------
+    function loadDesignFonts(data) {
+        if (data.font_href && !document.querySelector('link[data-ppa-font="' + data.font_href + '"]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = data.font_href;
+            link.dataset.ppaFont = data.font_href;
+            document.head.appendChild(link);
+        }
+        // Fuentes propias del sitio: sus @font-face los genera el servidor.
+        if (data.font_css && !document.getElementById('ppa-site-fonts')) {
+            const holder = document.createElement('div');
+            holder.innerHTML = data.font_css;
+            const style = holder.querySelector('style');
+            if (style) {
+                style.id = 'ppa-site-fonts';
+                document.head.appendChild(style);
+            }
+        }
+    }
+
+    function labelOn(hex) {
+        const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+        if (!m) return '#ffffff';
+        const lin = (v) => { v = parseInt(v, 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        const l = 0.2126 * lin(m[1]) + 0.7152 * lin(m[2]) + 0.0722 * lin(m[3]);
+        return (1.05 / (l + 0.05)) >= ((l + 0.05) / 0.05) ? '#ffffff' : '#111111';
+    }
+
+    function swatch(hex) {
+        const s = document.createElement('span');
+        s.className = 'ppa-swatch';
+        s.style.setProperty('--sw', hex);
+        s.setAttribute('aria-hidden', 'true');
+        return s;
+    }
+
+    function renderDesignMock(tokens, data, changedKeys) {
+        const c = tokens.colors || {};
+        const t = tokens.typography || {};
+        const fonts = data.fonts || {};
+        const mock = document.createElement('div');
+        mock.className = 'ppa-dmock';
+        const vars = {
+            '--m-primary': c.primary, '--m-primary-dark': c.primary_dark, '--m-on-primary': labelOn(c.primary),
+            '--m-accent': c.accent, '--m-on-accent': labelOn(c.accent), '--m-bg': c.bg, '--m-surface': c.surface,
+            '--m-text': c.text, '--m-muted': c.text_muted, '--m-border': c.border,
+            '--m-heading': (fonts[t.font_heading] || {}).css || 'inherit', '--m-body': (fonts[t.font_body] || {}).css || 'inherit',
+            '--m-size': String(Number(t.base_size) || 16),
+            '--m-btn-radius': (Number((tokens.buttons || {}).radius) || 0) + 'px',
+            '--m-card-radius': (Number((tokens.spacing || {}).radius_card) || 0) + 'px'
+        };
+        Object.keys(vars).forEach((k) => { if (vars[k]) mock.style.setProperty(k, vars[k]); });
+
+        const bar = document.createElement('div');
+        bar.className = 'ppa-dmock__bar';
+        const brand = document.createElement('span');
+        brand.className = 'ppa-dmock__brand';
+        brand.textContent = pp.t('js.as.design_mock_brand');
+        bar.appendChild(brand);
+        const nav = document.createElement('span');
+        nav.className = 'ppa-dmock__nav';
+        nav.textContent = pp.t('js.as.design_mock_nav');
+        bar.appendChild(nav);
+        const cta = document.createElement('span');
+        cta.className = 'ppa-dmock__btn is-small';
+        cta.textContent = pp.t('js.as.design_mock_cta');
+        bar.appendChild(cta);
+        mock.appendChild(bar);
+
+        const hero = document.createElement('div');
+        hero.className = 'ppa-dmock__hero';
+        const h = document.createElement('p');
+        h.className = 'ppa-dmock__title';
+        h.textContent = pp.t('js.as.design_mock_title');
+        hero.appendChild(h);
+        const p = document.createElement('p');
+        p.className = 'ppa-dmock__text';
+        p.textContent = pp.t('js.as.design_mock_text');
+        hero.appendChild(p);
+        const actions = document.createElement('div');
+        actions.className = 'ppa-dmock__actions';
+        const primary = document.createElement('span');
+        primary.className = 'ppa-dmock__btn';
+        primary.textContent = pp.t('js.as.design_mock_cta');
+        const ghost = document.createElement('span');
+        ghost.className = 'ppa-dmock__btn is-ghost';
+        ghost.textContent = pp.t('js.as.design_mock_ghost');
+        actions.append(primary, ghost);
+        hero.appendChild(actions);
+        mock.appendChild(hero);
+
+        const card = document.createElement('div');
+        card.className = 'ppa-dmock__card';
+        const tag = document.createElement('span');
+        tag.className = 'ppa-dmock__tag';
+        tag.textContent = pp.t('js.as.design_mock_tag');
+        const ct = document.createElement('p');
+        ct.className = 'ppa-dmock__card-title';
+        ct.textContent = pp.t('js.as.design_mock_card_title');
+        const cx = document.createElement('p');
+        cx.className = 'ppa-dmock__text';
+        cx.textContent = pp.t('js.as.design_mock_card_text');
+        card.append(tag, ct, cx);
+        mock.appendChild(card);
+
+        const strip = document.createElement('ul');
+        strip.className = 'ppa-dmock__palette';
+        strip.setAttribute('aria-label', pp.t('js.as.design_palette'));
+        Object.keys(data.labels || {}).forEach((key) => {
+            const li = document.createElement('li');
+            if (changedKeys.has('colors.' + key)) li.className = 'is-changed';
+            li.title = data.labels[key] + ' ' + c[key];
+            li.appendChild(swatch(c[key]));
+            const name = document.createElement('span');
+            name.textContent = data.labels[key];
+            li.appendChild(name);
+            strip.appendChild(li);
+        });
+        mock.appendChild(strip);
+        return mock;
+    }
+
     /** ASST-V2 F4a — cómo saldría la página en Google. */
     function renderSnippet(snippet, limits) {
         const box = document.createElement('div');
@@ -1071,7 +1198,10 @@
             const what = document.createElement('strong');
             what.textContent = change.label;
             li.appendChild(what);
-            if (change.detail) li.appendChild(document.createTextNode(': ' + change.detail));
+            if (change.type === 'color') {
+                li.appendChild(document.createTextNode(': '));
+                li.append(swatch(change.from), document.createTextNode(change.from + ' → '), swatch(change.to), document.createTextNode(change.to));
+            } else if (change.detail) li.appendChild(document.createTextNode(': ' + change.detail));
             const sr = document.createElement('span');
             sr.className = 'pp-sr-only';
             sr.textContent = {
@@ -1084,16 +1214,28 @@
             list.appendChild(li);
         });
         box.appendChild(list);
+        (data.warnings || []).concat(data.notes || []).forEach((text, i) => {
+            const p = document.createElement('p');
+            p.className = i < (data.warnings || []).length ? 'ppa-preview__warn' : 'ppa-preview__note';
+            p.textContent = i < (data.warnings || []).length ? pp.t('js.as.design_contrast', { pares: text }) : text;
+            box.appendChild(p);
+        });
 
         const isSeo = data.kind === 'seo';
         const isChrome = data.kind === 'chrome';
-        const marks = isSeo ? { before: {}, after: {} } : isChrome ? chromeMarks(data.before, data.after) : fieldMarks(data.before, data.after);
+        const isDesign = data.kind === 'design';
+        if (isDesign) loadDesignFonts(data);
+        const changedKeys = new Set(changes.map((ch) => ch.key));
+        const marks = isSeo || isDesign ? { before: {}, after: {} } : isChrome ? chromeMarks(data.before, data.after) : fieldMarks(data.before, data.after);
         const tabs = document.createElement('div');
         tabs.className = 'ppa-seg';
         tabs.setAttribute('role', 'tablist');
         const stage = document.createElement('div');
         stage.className = 'ppa-preview__stage';
-        const views = isChrome ? {
+        const views = isDesign ? {
+            after: () => renderDesignMock(data.after, data, changedKeys),
+            before: () => renderDesignMock(data.before, data, changedKeys)
+        } : isChrome ? {
             after: () => renderChromeMock(data.after, marks.after),
             before: () => renderChromeMock(data.before, marks.before)
         } : isSeo ? {
@@ -1246,6 +1388,8 @@
                     ? pp.t('js.as.form_x', { formulario: it.form_title })
                     : it.capability_id === 'chrome.edit'
                         ? pp.t('js.as.chrome_title')
+                    : it.capability_id === 'design.edit'
+                        ? pp.t('js.as.design_title')
                     : it.capability_id === 'posts.ideas'
                         ? pp.t('js.as.ideas_title')
                     : it.capability_id === 'pages.ideas'
@@ -1618,7 +1762,7 @@
             t.className = 'ppa-item__page';
             t.textContent = itemLabel(it);
             head.appendChild(t);
-            if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit') {
+            if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit' || it.capability_id === 'design.edit') {
                 // En vivo ya: no hay nada que revisar ni publicar.
             } else if (it.capability_id === 'pages.create' && it.new_page) {
                 const link = document.createElement('a');
@@ -1668,7 +1812,7 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'design.edit' ? 'js.as.design_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
@@ -1690,6 +1834,12 @@
             chromeNote.className = 'ppa-plan__note';
             chromeNote.textContent = pp.t('js.as.chrome_live_done');
             bubble.appendChild(chromeNote);
+        }
+        if (doneItems.some((it) => it.capability_id === 'design.edit')) {
+            const designNote = document.createElement('p');
+            designNote.className = 'ppa-plan__note';
+            designNote.textContent = pp.t('js.as.design_live_done');
+            bubble.appendChild(designNote);
         }
         if (doneItems.some((it) => it.capability_id === 'seo.page.edit')) {
             const seoNote = document.createElement('p');

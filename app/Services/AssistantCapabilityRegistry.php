@@ -71,6 +71,7 @@ final class AssistantCapabilityRegistry
         'posts.manage'       => 'live',
         'chrome.edit'        => 'live',
         'chrome.manage'      => 'live',
+        'design.edit'        => 'live',
         'design.manage'      => 'live',
         'forms.edit'         => 'live',
         'forms.manage'       => 'live',
@@ -96,6 +97,7 @@ final class AssistantCapabilityRegistry
         // El editor del header y el pie es solo de administradores
         // (ChromeController::save), no de todo el que tiene Apariencia.
         'chrome.edit'       => self::ADMIN_ONLY,
+        'design.edit'       => Permissions::CAP_APPEARANCE,
         'posts.create'      => Permissions::CAP_CONTENT,
         'pages.create'      => Permissions::CAP_CONTENT,
         'pages.ideas'       => Permissions::CAP_CONTENT,
@@ -113,7 +115,7 @@ final class AssistantCapabilityRegistry
     }
 
     /** Capacidades cuyo cambio del asistente se deshace desde Actividad. */
-    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit'];
+    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit'];
 
     /**
      * Constructor puro del catálogo; permite probar el gate sin base de datos.
@@ -213,9 +215,22 @@ final class AssistantCapabilityRegistry
                 ['Decisión de diseño']
             ),
             // i18n-ignore-end
+            // ASST-V2 F4e — colores de la paleta, tipografías y radios. Logo,
+            // favicon, subir fuentes y regenerar el estilo siguen en design.manage.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+            self::capability(
+                'design.edit',
+                'Cambiar los colores de la web (principal, acento, fondo, superficie, texto, bordes), las tipografías de titulares y texto, el tamaño de letra y lo redondeados que son botones y tarjetas; se aplica en vivo en toda la web',
+                'automatic',
+                '/admin/design',
+                'design_edit',
+                null,
+                ['Qué color, fuente o radio y hacia dónde (un hex, «más oscuro», «más elegante»)']
+            ),
+            // i18n-ignore-end
             self::capability(
                 'design.manage',
-                'Editar colores, tipografías, logos y sistema visual global',
+                'Subir o cambiar logos, favicon y fuentes propias, o regenerar el estilo visual completo',
                 'manual',
                 '/admin/design',
                 null,

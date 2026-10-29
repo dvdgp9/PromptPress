@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e–F4f por hacer
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f por hacer
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11324,3 +11324,31 @@ Verificación:
 ## Lessons (ASST-V2 F4d)
 - La precomposición del creador de páginas es un único hueco por sitio (settings studio_compose_*): con varias páginas en un plan no se precompone (se pisarían).
 - En PHP, `($x ?? 'x') === null` nunca es cierto: `??` también salta con null.
+
+## Key Challenges and Analysis (ASST-V2 F4e) — 29/10/2026, Planner (usuario: «Sí, sigue con F4e»)
+- Cadena de precedencia de Diseño (DesignSystem::effective): defaults → `design_system` → skin → paleta a medida (`site_palette_custom`) → overrides manuales (`design_manual_tokens`) → fuentes de marca por rol. El asistente escribe por el MISMO camino que el formulario de Diseño: colores → BrandPaletteService::save (8 claves, se congela la paleta efectiva entera), resto → DesignSystem::saveManualTokens(diffManualTokens(...)). No toca `design_system`, skin ni logos.
+- Alcance `design.edit` (automático, live, deshacer): los 8 colores de la paleta (principal, principal oscuro, acento, fondo, superficie, texto, texto suave, borde), tipografía de titulares y de texto (FONT_OPTIONS + fuentes propias), tamaño base, radio de botones y de tarjetas. Logo, favicon, subir fuentes, regenerar estilo y diseño del header/pie siguen manuales (`design.manage`, `chrome.manage`).
+- Fuente de marca asignada a un rol: manda sobre todo; el asistente no la cambia (se avisa en la vista previa).
+- Contraste: no se corrige a escondidas (mismo criterio que Diseño, T5); la vista previa avisa con BrandPaletteService::contrastReport.
+- Deshacer: `versions` entity `design`, entity_id = site_id, con los dos ajustes en crudo (paleta y overrides; null = no existía).
+- Permiso: CAP_APPEARANCE (el mismo que /admin/design).
+- Vista previa visual: mini web (cabecera, titular, texto, botones, tarjeta) con antes/después y muestras de color.
+
+## High-level Task Breakdown (ASST-V2 F4e)
+1. Test primero (tests/assistant_v2_design.php): registro, prepare sin IA (colores, fuentes, rangos, valores malos), commit + hash, deshacer, permiso. Éxito: pasa.
+2. DesignAssistantEditor + acción EDIT_DESIGN + capacidad + jobs/controlador/Actividad. Éxito: test y suites anteriores en verde.
+3. Tarjeta con maqueta visual (antes/después) y textos en 4 idiomas. Éxito: verificada en navegador con fetch simulado, lint i18n sin nuevos pendientes.
+
+## Current Status / Progress Tracking (ASST-V2 F4e) — 29/10/2026, Executor
+- Hecho (sin publicar): capacidad `design.edit` (automática, live, deshacer, CAP_APPEARANCE). `design.manage` queda para logos, favicon, fuentes propias y regenerar el estilo.
+- `DesignAssistantEditor`: current/prepare (valida hex, fuentes de fontOptions, rangos del schema; descarta lo inválido y lo explica en notes; fuentes de marca por rol fijadas), commit (huella = hash de DesignSystem::effective; colores → BrandPaletteService::save con la paleta entera; resto → saveManualTokens(diffManualTokens)), restoreVersion (versions entity design con los dos ajustes en crudo), preview (antes/después, cambios, avisos de contraste NUEVOS, href de Google Fonts y @font-face propios), diff.
+- Acción IA `EDIT_DESIGN` (devuelve solo lo que cambia) y regla «DISEÑO GLOBAL» en PLAN_SITE_CHANGES.
+- Jobs (createJob con token 'design', stepLiveItem), planner (site-wide), /assistant/preview, Actividad (entradas y deshacer, icono design).
+- Tarjeta: lista de cambios con muestras de color, avisos, web en miniatura (cabecera, titular, texto, botones, tarjeta, paleta) con Antes/Después. Textos en es/en/fr/pt.
+- Tests: tests/assistant_v2_design.php 28/28; capacidades, preview, seo, chrome, posts, pages, design_precedence y admin_i18n en verde; lint i18n 46 pendientes (antes 47).
+- Navegador (página estática con fetch simulado y vista previa real generada por PHP): lista con muestras, Playfair cargada, Antes/Después, aplicar → informe «ya se ven así… deshacer en Actividad». En móvil la maqueta desbordaba (261 > 203 px): arreglado con grid-template-columns minmax(0,1fr).
+- Sin probar con la IA real ni con login real.
+
+## Lessons (ASST-V2 F4e)
+- Un grid de una sola columna toma el min-content de sus hijos: en tarjetas estrechas usar `grid-template-columns: minmax(0, 1fr)`.
+- Las etiquetas del schema de Diseño («Radio», «Tamaño base») no se entienden fuera de su pestaña: el asistente usa las suyas (asst.design.*).

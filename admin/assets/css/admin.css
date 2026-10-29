@@ -12834,3 +12834,28 @@ body > .ppa-media-picker { z-index: 120; }
 @media (prefers-reduced-motion: reduce) {
     .ppa-preview, .ppa-preview__skeleton span { animation: none; }
 }
+
+/* ASST-V2 F4e — diseño global: web en miniatura con los tokens de cada versión.
+   Los valores llegan como variables (--m-*) desde los datos de la vista previa. */
+.ppa-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--sw, #ccc); box-shadow: inset 0 0 0 1px rgba(28, 25, 23, 0.18); vertical-align: -2px; margin-right: 4px; }
+.ppa-preview__changes .ppa-swatch:not(:first-of-type) { margin-left: 2px; }
+.ppa-preview__warn { margin: -4px 0 8px; padding: 6px 8px; border-radius: 6px; background: #fffbeb; color: #92400e; font-size: 0.76rem; line-height: 1.4; }
+.ppa-preview__note { margin: -4px 0 8px; font-size: 0.76rem; color: var(--pp-text-muted); line-height: 1.4; }
+.ppa-preview__stage:has(.ppa-dmock) { padding: 0; background: transparent; border: 0; max-height: none; }
+.ppa-dmock { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0 0 10px; border-radius: 8px; border: 1px solid var(--pp-border); overflow: hidden; background: var(--m-bg); color: var(--m-text); font-family: var(--m-body); font-size: calc(var(--m-size, 16) * 0.05rem); line-height: 1.45; }
+.ppa-dmock__bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--m-border); }
+.ppa-dmock__brand { font-family: var(--m-heading); font-weight: 700; font-size: 0.95em; }
+.ppa-dmock__nav { flex: 1; min-width: 0; color: var(--m-muted); font-size: 0.85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ppa-dmock__hero { display: grid; gap: 6px; padding: 4px 12px; }
+.ppa-dmock__title { margin: 0; font-family: var(--m-heading); font-weight: 700; font-size: 1.55em; line-height: 1.12; letter-spacing: -0.01em; }
+.ppa-dmock__text { margin: 0; color: var(--m-muted); max-width: 46ch; }
+.ppa-dmock__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.ppa-dmock__btn { display: inline-block; padding: 0.45em 1em; border-radius: var(--m-btn-radius); background: var(--m-primary); color: var(--m-on-primary); font-weight: 600; font-size: 0.85em; white-space: nowrap; }
+.ppa-dmock__btn.is-small { padding: 0.35em 0.8em; font-size: 0.78em; }
+.ppa-dmock__btn.is-ghost { background: transparent; color: var(--m-primary); box-shadow: inset 0 0 0 1.5px var(--m-primary); }
+.ppa-dmock__card { display: grid; gap: 4px; justify-items: start; margin: 0 12px; padding: 10px 12px; border-radius: var(--m-card-radius); background: var(--m-surface); border: 1px solid var(--m-border); }
+.ppa-dmock__tag { padding: 0.1em 0.6em; border-radius: 999px; background: var(--m-accent); color: var(--m-on-accent); font-size: 0.72em; font-weight: 600; }
+.ppa-dmock__card-title { margin: 0; font-family: var(--m-heading); font-weight: 700; font-size: 1.05em; }
+.ppa-dmock__palette { list-style: none; margin: 0 12px; padding: 8px 0 0; border-top: 1px solid var(--m-border); display: flex; flex-wrap: wrap; gap: 4px 10px; font-family: var(--pp-font, inherit); font-size: 0.68rem; color: var(--m-muted); }
+.ppa-dmock__palette li { display: inline-flex; align-items: center; padding: 1px 4px 1px 2px; border-radius: 4px; }
+.ppa-dmock__palette li.is-changed { background: color-mix(in srgb, var(--m-surface) 70%, var(--m-primary)); color: var(--m-text); font-weight: 600; }
