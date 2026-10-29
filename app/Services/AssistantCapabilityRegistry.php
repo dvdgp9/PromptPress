@@ -70,6 +70,7 @@ final class AssistantCapabilityRegistry
         'forms.edit'         => 'live',
         'forms.manage'       => 'live',
         'media.manage'       => 'live',
+        'seo.page.edit'      => 'live',
         'seo.manage'         => 'live',
         'legal.content'      => 'sensitive',
         'analytics.review'   => 'read',
@@ -79,8 +80,24 @@ final class AssistantCapabilityRegistry
         'custom.development' => 'read',
     ];
 
+    /**
+     * Permiso de panel que hace falta para que el asistente ejecute cada
+     * capacidad automática: el asistente no da más acceso del que ya hay.
+     */
+    public const EXECUTOR_PERMISSION = [
+        'pages.canvas.edit' => Permissions::CAP_CONTENT,
+        'forms.edit'        => Permissions::CAP_FORMS,
+        'seo.page.edit'     => Permissions::CAP_VISIBILITY,
+    ];
+
+    public static function roleCanExecute(?string $role, string $capabilityId): bool
+    {
+        $cap = self::EXECUTOR_PERMISSION[$capabilityId] ?? null;
+        return $cap !== null && Permissions::roleHas($role, $cap);
+    }
+
     /** Capacidades cuyo cambio del asistente se deshace desde Actividad. */
-    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit'];
+    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit'];
 
     /**
      * Constructor puro del catálogo; permite probar el gate sin base de datos.
@@ -170,15 +187,28 @@ final class AssistantCapabilityRegistry
                 (int) ($counts['media'] ?? 0),
                 ['Archivo o fuente permitida y uso previsto']
             ),
+            // ASST-V2 F4a — título SEO y meta descripción de una página. La URL
+            // (slug), redirecciones, indexación y canonical siguen en seo.manage.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+            self::capability(
+                'seo.page.edit',
+                'Cambiar el título SEO y la meta descripción de una página existente (se aplica en vivo)',
+                'automatic',
+                '/admin/seo',
+                'seo_page_edit',
+                (int) ($counts['pages'] ?? 0),
+                ['Página existente', 'enfoque o palabras clave si el operador los da']
+            ),
             self::capability(
                 'seo.manage',
-                'Editar SEO, redirecciones o metadatos',
+                'Editar la URL (slug), redirecciones, indexación o canonical',
                 'manual',
                 '/admin/seo',
                 null,
                 null,
                 ['Página o URL y objetivo del cambio']
             ),
+            // i18n-ignore-end
             self::capability(
                 'legal.content',
                 'Añadir o modificar textos, consentimientos o condiciones legales',

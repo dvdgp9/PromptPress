@@ -681,6 +681,7 @@ CREATE TABLE IF NOT EXISTS assistant_job_items (
     job_id       INT UNSIGNED NOT NULL,
     page_id      INT UNSIGNED NOT NULL,
     form_id      INT UNSIGNED NULL,
+    capability_id VARCHAR(60) NULL,
     page_title   VARCHAR(255) NOT NULL DEFAULT '',
     section      VARCHAR(120) NOT NULL DEFAULT '',
     instruction  TEXT NOT NULL,

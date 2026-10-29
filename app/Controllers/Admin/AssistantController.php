@@ -3,13 +3,16 @@
 namespace App\Controllers\Admin;
 
 use App\Services\AI\AIException;
+use App\Services\AssistantCapabilityRegistry;
 use App\Services\AssistantContentNormalizer;
 use App\Services\AssistantConversation;
 use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
+use App\Services\AssistantProposal;
 use App\Services\FormAssistantEditor;
+use App\Services\PageSeoAssistantEditor;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
 use App\Services\TextExtractor;
@@ -342,29 +345,39 @@ class AssistantController
         CSRF::check();
 
         $item = json_decode((string) Request::post('item', ''), true);
-        $formId = is_array($item) ? (int) ($item['form_id'] ?? 0) : 0;
+        $capability = is_array($item) ? (string) ($item['capability_id'] ?? '') : '';
+        $targetId = !is_array($item) ? 0 : (int) ($capability === 'forms.edit' ? ($item['form_id'] ?? 0) : ($item['page_id'] ?? 0));
         $instruction = is_array($item) ? trim((string) ($item['instruction'] ?? '')) : '';
-        if (!is_array($item) || ($item['capability_id'] ?? '') !== 'forms.edit'
-            || $formId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
+        if (!in_array($capability, ['forms.edit', 'seo.page.edit'], true)
+            || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
             Response::json(['ok' => false, 'error' => __('asst.err.preview_unsupported')], 422);
+        }
+
+        if (!AssistantCapabilityRegistry::roleCanExecute(Auth::role(), $capability)) {
+            Response::json(['ok' => false, 'error' => __('asst.err.no_permission')], 403);
         }
 
         @set_time_limit(200);
         $started = microtime(true);
+        $isForm = $capability === 'forms.edit';
         try {
-            $proposal = FormAssistantEditor::propose($siteId, $formId, $instruction);
+            $proposal = $isForm
+                ? FormAssistantEditor::propose($siteId, $targetId, $instruction)
+                : PageSeoAssistantEditor::propose($siteId, $targetId, $instruction);
         } catch (AIException $e) {
-            error_log('[assistant preview] site=' . $siteId . ' form=' . $formId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => __('asst.err.form_no_valid_change')], 502);
+            error_log('[assistant preview] site=' . $siteId . ' ' . $capability . ' target=' . $targetId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            Response::json(['ok' => false, 'error' => __($isForm ? 'asst.err.form_no_valid_change' : 'asst.err.seo_no_valid_change')], 502);
         }
         if (!$proposal['ok']) {
             Response::json(['ok' => false, 'error' => (string) $proposal['error']], 422);
         }
 
-        $token = FormAssistantEditor::sealProposal($siteId, $formId, $instruction, $proposal['content'], $proposal['base_hash']);
-        $preview = FormAssistantEditor::preview($proposal['before'], $proposal['content']);
-        error_log(sprintf('[assistant preview] site=%d form=%d changes=%d ms=%d',
-            $siteId, $formId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
+        $token = AssistantProposal::seal($isForm ? 'form' : 'seo', $siteId, $targetId, $instruction, $proposal['content'], $proposal['base_hash']);
+        $preview = $isForm
+            ? FormAssistantEditor::preview($proposal['before'], $proposal['content'])
+            : PageSeoAssistantEditor::preview($siteId, $targetId, $proposal['before'], $proposal['content']);
+        error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
+            $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
         Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
     }
 
@@ -405,6 +418,12 @@ class AssistantController
             }
         }
 
+        // El asistente no ejecuta lo que esta persona no puede hacer a mano.
+        foreach ($items as $item) {
+            if (is_array($item) && !AssistantCapabilityRegistry::roleCanExecute(Auth::role(), (string) ($item['capability_id'] ?? ''))) {
+                Response::json(['ok' => false, 'error' => __('asst.err.no_permission')], 403);
+            }
+        }
         $result = SiteAssistantJobs::createJob($siteId, $requestText, $summary, $items, Auth::id(), $source);
         if (!$result['ok']) {
             Response::json(['ok' => false, 'error' => (string) $result['error']], 422);

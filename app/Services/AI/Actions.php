@@ -467,7 +467,8 @@ final class Actions
                   . "Slug actual: {current_slug}\n"
                   . "Meta título actual: {current_meta_title}\n"
                   . "Meta descripción actual: {current_meta_description}\n\n"
-                  . "Contenido de la página:\n---\n{page_content}\n---",
+                  . "Contenido de la página:\n---\n{page_content}\n---\n"
+                  . "{extra_context}",
                 'options'      => [
                     'response_format' => 'json',
                     'temperature'     => 0.4,
@@ -1292,6 +1293,7 @@ final class Actions
                   . "REGLAS:\n"
                   . "- CAPACIDADES VERIFICADAS es la única fuente sobre lo que PromptPress y este Assistant pueden hacer. Usa siempre un capability_id literal del registro. No inventes capacidades, handlers, pantallas ni estado configurado.\n"
                   . "- category automatable_now SOLO si la capacidad declara mode=automatic, handler distinto de ninguno, la página Canvas existe y están todos los datos. status debe ser aplicar.\n"
+                  . "- SEO DE PÁGINA: mejorar o cambiar el título SEO (meta title) o la meta descripción de una página del MAPA es automatable_now con capability_id seo.page.edit: pon su page_id y section vacía. Un item por página. La instruction resume el enfoque pedido (palabras clave, servicio, ciudad, tono) sin inventar datos. Cambiar la URL/slug, redirecciones, noindex o canonical NO es seo.page.edit: usa seo.manage. Si piden «mejorar el SEO» de toda la web, un item seo.page.edit por cada página importante (máximo 6) y dilo en reply.\n"
                   . "- FORMULARIOS: cambiar preguntas, opciones, tipos de campo (p. ej. convertir varias preguntas en un único desplegable), etiquetas, título, descripción, texto del botón o mensaje de éxito de un formulario del MAPA DE FORMULARIOS es automatable_now con capability_id forms.edit: pon su form_id, page_id 0 y section vacía. Un item por formulario. La instruction describe el formulario resultante completo: qué preguntas quedan, en qué orden, su tipo (select = desplegable, radio, checkbox_group…), si son obligatorias y las opciones literales. Conserva las preguntas de contacto (nombre, email, teléfono) salvo que se pida expresamente quitarlas. Si no queda claro qué formulario es, needs_input y pregunta cuál. Destinatario del aviso, consentimientos o textos legales y autorrespuesta NO son forms.edit: usa forms.manage o legal.content. Crear un formulario nuevo es forms.manage.\n"
                   . "- category manual_in_platform si la plataforma lo permite pero la capacidad no tiene handler automático. status no_viable; next_action indica el panel del registro. No significa que PromptPress no lo soporte.\n"
                   . "- category needs_input cuando una capacidad conocida necesita archivos, textos, precios, credenciales o una decisión ausente. status ambiguo y required_inputs enumera únicamente lo que falta.\n"

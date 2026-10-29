@@ -25,9 +25,7 @@ final class FormAssistantEditor
     public const EDITABLE_KEYS = ['heading', 'description', 'submit_text', 'success_message', 'fields'];
 
     /** ASST-V2 F3 — vigencia de una vista previa firmada. */
-    public const PROPOSAL_TTL = 7200;
-    private const PROPOSAL_VERSION = 'fp1';
-    private const MAX_PROPOSAL_BYTES = 150000;
+    public const PROPOSAL_TTL = AssistantProposal::TTL;
     /** A partir de cuántas preguntas quitadas se resumen en una línea. */
     private const GROUP_AFTER = 3;
 
@@ -121,7 +119,7 @@ final class FormAssistantEditor
     public static function contentHash(array $form): string
     {
         unset($form['id']);
-        return hash('sha256', json_encode($form, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+        return AssistantProposal::hash($form);
     }
 
     /**
@@ -132,23 +130,7 @@ final class FormAssistantEditor
      */
     public static function sealProposal(int $siteId, int $formId, string $instruction, array $content, string $baseHash, ?int $now = null): string
     {
-        $now ??= time();
-        $payload = [
-            'site_id'     => $siteId,
-            'form_id'     => $formId,
-            'instruction' => hash('sha256', trim($instruction)),
-            'base_hash'   => $baseHash,
-            'expires_at'  => $now + self::PROPOSAL_TTL,
-            'content'     => $content,
-        ];
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-        $body = self::b64(gzdeflate($json, 6) ?: '');
-        $token = self::PROPOSAL_VERSION . '.' . $body . '.'
-            . self::b64(hash_hmac('sha256', self::PROPOSAL_VERSION . '.' . $body, self::proposalKey(), true));
-        if (strlen($token) > self::MAX_PROPOSAL_BYTES) {
-            throw new \RuntimeException('El formulario propuesto es demasiado grande.');
-        }
-        return $token;
+        return AssistantProposal::seal('form', $siteId, $formId, $instruction, $content, $baseHash, $now);
     }
 
     /**
@@ -159,24 +141,7 @@ final class FormAssistantEditor
      */
     public static function openProposal(string $token, int $siteId, int $formId, string $instruction, ?int $now = null): ?array
     {
-        $now ??= time();
-        if ($token === '' || strlen($token) > self::MAX_PROPOSAL_BYTES) return null;
-        $parts = explode('.', $token);
-        if (count($parts) !== 3 || $parts[0] !== self::PROPOSAL_VERSION) return null;
-        $expected = self::b64(hash_hmac('sha256', self::PROPOSAL_VERSION . '.' . $parts[1], self::proposalKey(), true));
-        if (!hash_equals($expected, $parts[2])) return null;
-        $raw = base64_decode(strtr($parts[1], '-_', '+/'), true);
-        $json = $raw === false ? false : @gzinflate($raw, 400000);
-        $payload = is_string($json) ? json_decode($json, true) : null;
-        if (!is_array($payload)
-            || (int) ($payload['site_id'] ?? 0) !== $siteId
-            || (int) ($payload['form_id'] ?? 0) !== $formId
-            || !hash_equals((string) ($payload['instruction'] ?? ''), hash('sha256', trim($instruction)))
-            || (int) ($payload['expires_at'] ?? 0) < $now
-            || !is_array($payload['content'] ?? null)) {
-            return null;
-        }
-        return ['content' => $payload['content'], 'base_hash' => (string) ($payload['base_hash'] ?? '')];
+        return AssistantProposal::open($token, 'form', $siteId, $formId, $instruction, $now);
     }
 
     /**
@@ -302,18 +267,6 @@ final class FormAssistantEditor
         $key = 'asst.ftype.' . $type;
         $label = __($key);
         return $label !== $key ? $label : $type;
-    }
-
-    private static function proposalKey(): string
-    {
-        $appKey = (string) (\Core\App::config()['app_key'] ?? '');
-        if ($appKey === '') throw new \RuntimeException('Assistant requiere app_key en config.php.');
-        return hash_hmac('sha256', 'assistant-form-proposal-v1', $appKey, true);
-    }
-
-    private static function b64(string $raw): string
-    {
-        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
     }
 
     /**

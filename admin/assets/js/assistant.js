@@ -580,7 +580,40 @@
     }
 
     function wantsPreview(it) {
-        return it.capability_id === 'forms.edit' && Number(it.form_id) > 0 && it.status === 'aplicar';
+        if (it.status !== 'aplicar') return false;
+        return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
+            || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0);
+    }
+
+    /** ASST-V2 F4a — cómo saldría la página en Google. */
+    function renderSnippet(snippet, limits) {
+        const box = document.createElement('div');
+        box.className = 'ppa-snippet';
+        const url = document.createElement('span');
+        url.className = 'ppa-snippet__url';
+        url.textContent = String(snippet.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+        box.appendChild(url);
+        const title = document.createElement('span');
+        title.className = 'ppa-snippet__title';
+        title.textContent = snippet.title || '';
+        box.appendChild(title);
+        const desc = document.createElement('span');
+        desc.className = 'ppa-snippet__desc' + (snippet.description ? '' : ' is-empty');
+        desc.textContent = snippet.description || pp.t('js.as.seo_no_description');
+        box.appendChild(desc);
+        const meter = document.createElement('div');
+        meter.className = 'ppa-snippet__meter';
+        [['title', (snippet.fallback ? '' : snippet.title) || '', 'js.as.seo_title_chars'],
+            ['description', snippet.description || '', 'js.as.seo_desc_chars']].forEach(([key, text, label]) => {
+            const limit = Number((limits || {})[key] || 0);
+            const span = document.createElement('span');
+            const n = Array.from(text).length;
+            span.className = limit > 0 && n > limit ? 'is-over' : '';
+            span.textContent = pp.t(label, { n: n, max: limit });
+            meter.appendChild(span);
+        });
+        box.appendChild(meter);
+        return box;
     }
 
     /** Maqueta compacta del formulario. `marks` = name => 'added'|'changed'|'removed'. */
@@ -693,13 +726,17 @@
         });
         box.appendChild(list);
 
-        const marks = fieldMarks(data.before, data.after);
+        const isSeo = data.kind === 'seo';
+        const marks = isSeo ? { before: {}, after: {} } : fieldMarks(data.before, data.after);
         const tabs = document.createElement('div');
         tabs.className = 'ppa-seg';
         tabs.setAttribute('role', 'tablist');
         const stage = document.createElement('div');
         stage.className = 'ppa-preview__stage';
-        const views = {
+        const views = isSeo ? {
+            after: () => renderSnippet(data.after, data.limits),
+            before: () => renderSnippet(data.before, data.limits)
+        } : {
             after: () => renderFormMock(data.after, marks.after),
             before: () => renderFormMock(data.before, marks.before)
         };
@@ -754,7 +791,7 @@
                 method: 'POST',
                 body: new URLSearchParams({
                     _csrf: cfg.csrf,
-                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, instruction: it.instruction })
+                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, page_id: it.page_id, instruction: it.instruction })
                 })
             });
             const data = await res.json().catch(() => ({}));
@@ -839,7 +876,9 @@
                 title.className = 'ppa-item__page';
                 title.textContent = it.form_id
                     ? pp.t('js.as.form_x', { formulario: it.form_title })
-                    : it.page_title
+                    : it.capability_id === 'seo.page.edit' && it.page_title
+                        ? pp.t('js.as.seo_x', { pagina: it.page_title })
+                        : it.page_title
                         ? it.page_title + (it.section ? ' · ' + pp.t('js.as.section_x', { seccion: it.section }) : '')
                         : pp.t('js.as.outside_pages');
                 head.appendChild(title);
@@ -933,7 +972,7 @@
             });
             foot.appendChild(btn);
             // Lo que no se ve en las tarjetas: qué pasa con las páginas.
-            if (actionable.some((it) => !it.form_id)) {
+            if (actionable.some((it) => isCanvasItem(it))) {
                 const note = document.createElement('span');
                 note.className = 'ppa-plan__note';
                 note.textContent = pp.t('js.asst.draft_note');
@@ -967,6 +1006,10 @@
         done:    { icon: '✓', label: pp.t('js.as.done') },
         failed:  { icon: '✗', label: pp.t('js.as.failed') }
     };
+
+    function isCanvasItem(it) {
+        return !it.form_id && (!it.capability_id || it.capability_id === 'pages.canvas.edit');
+    }
 
     function itemLabel(it) {
         return it.page_title + (it.section ? ' · «' + it.section + '»' : '');
@@ -1031,7 +1074,9 @@
             t.className = 'ppa-item__page';
             t.textContent = itemLabel(it);
             head.appendChild(t);
-            if (it.form_id) {
+            if (it.capability_id === 'seo.page.edit') {
+                // En vivo ya: no hay nada que revisar ni publicar.
+            } else if (it.form_id) {
                 const link = document.createElement('a');
                 link.className = 'ppa-item__link';
                 link.href = cfg.formsUrl + it.form_id;
@@ -1073,11 +1118,17 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
 
+        if (doneItems.some((it) => it.capability_id === 'seo.page.edit')) {
+            const seoNote = document.createElement('p');
+            seoNote.className = 'ppa-plan__note';
+            seoNote.textContent = pp.t('js.as.seo_live_done');
+            bubble.appendChild(seoNote);
+        }
         if (doneItems.some((it) => it.form_id)) {
             const formNote = document.createElement('p');
             formNote.className = 'ppa-plan__note';
@@ -1085,8 +1136,8 @@
             bubble.appendChild(formNote);
         }
 
-        // Publicar solo tiene sentido para páginas: el formulario ya está en vivo.
-        if (doneItems.some((it) => !it.form_id)) {
+        // Publicar solo tiene sentido para páginas Canvas: formularios y SEO ya están en vivo.
+        if (doneItems.some((it) => isCanvasItem(it))) {
             const note = document.createElement('p');
             note.className = 'ppa-plan__note';
             note.textContent = pp.t('js.as.saved_note');

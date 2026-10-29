@@ -478,7 +478,8 @@ final class SiteAssistantPlanner
                 if ($page === null) {
                     $category = 'needs_input';
                     $reason = __('asst.plan.no_page');
-                } elseif (!$page['editable']) {
+                } elseif (!$page['editable'] && $capabilityId !== 'seo.page.edit') {
+                    // El SEO se cambia igual en páginas Canvas y clásicas.
                     $category = 'manual_in_platform';
                     $reason = __('asst.plan.not_canvas', ['pagina' => (string) $page['title']]);
                 } elseif ($instruction === '') {
@@ -513,7 +514,8 @@ final class SiteAssistantPlanner
             }
 
             // Sección: solo si existe en la página; si no, cae a página completa.
-            if ($page === null || !in_array($section, (array) $page['sections'], true)) {
+            // El SEO es de la página entera.
+            if ($page === null || $capabilityId === 'seo.page.edit' || !in_array($section, (array) $page['sections'], true)) {
                 $section = '';
             }
 

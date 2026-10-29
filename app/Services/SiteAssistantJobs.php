@@ -101,10 +101,35 @@ final class SiteAssistantJobs
                     $proposal = '';
                 }
                 $clean[] = [
+                    'capability_id' => 'forms.edit',
                     'proposal_token' => $proposal !== '' ? $proposal : null,
                     'page_id'     => 0,
                     'form_id'     => $formId,
                     'page_title'  => __('asst.form.label', ['formulario' => (string) ($forms[$formId]['heading'] ?: __('forms.untitled'))]),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
+            if (($item['capability_id'] ?? '') === 'seo.page.edit') {
+                $pageId = (int) ($item['page_id'] ?? 0);
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if (!isset($pages[$pageId]) || $instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                if ($proposal !== '' && AssistantProposal::open($proposal, 'seo', $siteId, $pageId, $instruction) === null) {
+                    error_log('[assistant job create] site=' . $siteId . ' page=' . $pageId . ' seo preview token rejected');
+                    $proposal = '';
+                }
+                $clean[] = [
+                    'capability_id' => 'seo.page.edit',
+                    'proposal_token' => $proposal !== '' ? $proposal : null,
+                    'page_id'     => $pageId,
+                    'form_id'     => null,
+                    'page_title'  => __('asst.seo.label', ['pagina' => (string) $pages[$pageId]['title']]),
                     'section'     => '',
                     'instruction' => $instruction,
                     'source_block_ids' => [],
@@ -180,10 +205,10 @@ final class SiteAssistantJobs
             foreach ($clean as $i => $item) {
                 Database::execute(
                     'INSERT INTO assistant_job_items
-                     (job_id, page_id, form_id, page_title, section, instruction, source_block_ids_json, media_ids_json, proposal_token, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (job_id, page_id, form_id, capability_id, page_title, section, instruction, source_block_ids_json, media_ids_json, proposal_token, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
-                        $jobId, $item['page_id'], $item['form_id'], $item['page_title'], $item['section'], $item['instruction'],
+                        $jobId, $item['page_id'], $item['form_id'], $item['capability_id'] ?? 'pages.canvas.edit', $item['page_title'], $item['section'], $item['instruction'],
                         json_encode($item['source_block_ids'], JSON_THROW_ON_ERROR),
                         json_encode($item['media_ids'], JSON_THROW_ON_ERROR),
                         $item['proposal_token'] ?? null,
@@ -206,7 +231,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit'], true);
     }
 
     /**
@@ -244,6 +269,10 @@ final class SiteAssistantJobs
 
         if ((int) ($item['form_id'] ?? 0) > 0) {
             self::stepFormItem($siteId, $item, $job);
+            return self::finishStep($jobId, $siteId);
+        }
+        if (($item['capability_id'] ?? '') === 'seo.page.edit') {
+            self::stepSeoItem($siteId, $item, $job);
             return self::finishStep($jobId, $siteId);
         }
 
@@ -335,6 +364,43 @@ final class SiteAssistantJobs
             $error = __('asst.err.form_no_valid_change');
         } catch (\Throwable $e) {
             error_log('[assistant job] form item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
+            $error = __('asst.err.apply', ['detalle' => $e->getMessage()]);
+        }
+        Database::execute(
+            'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
+            [mb_substr($error, 0, 1000), $item['id']]
+        );
+    }
+
+    /**
+     * ASST-V2 F4a — ejecuta un item seo.page.edit. En vivo; antes se guarda el
+     * SEO anterior para deshacerlo desde Actividad.
+     *
+     * @param array<string,mixed> $item
+     * @param array<string,mixed> $job
+     */
+    private static function stepSeoItem(int $siteId, array $item, array $job): void
+    {
+        $pageId = (int) $item['page_id'];
+        try {
+            $userId = isset($job['created_by']) ? (int) $job['created_by'] : null;
+            $proposal = AssistantProposal::open((string) ($item['proposal_token'] ?? ''), 'seo', $siteId, $pageId, (string) $item['instruction']);
+            $outcome = $proposal !== null
+                ? PageSeoAssistantEditor::commit($siteId, $pageId, $proposal['content'], $proposal['base_hash'], $userId)
+                : PageSeoAssistantEditor::apply($siteId, $pageId, (string) $item['instruction'], $userId);
+            if ($outcome['ok']) {
+                Database::execute(
+                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
+                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
+                );
+                return;
+            }
+            $error = (string) ($outcome['error'] ?? __('js.as.unknown_error'));
+        } catch (AIException $e) {
+            error_log('[assistant job] seo item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            $error = __('asst.err.seo_no_valid_change');
+        } catch (\Throwable $e) {
+            error_log('[assistant job] seo item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
             $error = __('asst.err.apply', ['detalle' => $e->getMessage()]);
         }
         Database::execute(
@@ -629,7 +695,8 @@ final class SiteAssistantJobs
             return ['ok' => false, 'error' => __('asst.publish.not_done')];
         }
         $pageIds = array_map('intval', array_column(Database::select(
-            'SELECT DISTINCT page_id FROM assistant_job_items WHERE job_id = ? AND status = "done" AND page_id > 0 ORDER BY page_id',
+            'SELECT DISTINCT page_id FROM assistant_job_items WHERE job_id = ? AND status = "done" AND page_id > 0
+               AND (capability_id IS NULL OR capability_id = "pages.canvas.edit") ORDER BY page_id',
             [$jobId]
         ), 'page_id'));
 
@@ -688,7 +755,7 @@ final class SiteAssistantJobs
             return null;
         }
         $items = Database::select(
-            'SELECT id, page_id, form_id, page_title, section, instruction, status, reply, error
+            'SELECT id, page_id, form_id, capability_id, page_title, section, instruction, status, reply, error
              FROM assistant_job_items WHERE job_id = ? ORDER BY sort_order ASC',
             [$jobId]
         );
@@ -700,6 +767,7 @@ final class SiteAssistantJobs
             }
             $it['page_id'] = (int) $it['page_id'];
             $it['form_id'] = (int) ($it['form_id'] ?? 0);
+            $it['capability_id'] = (string) ($it['capability_id'] ?? '') ?: ($it['form_id'] > 0 ? 'forms.edit' : 'pages.canvas.edit');
             $it['id'] = (int) $it['id'];
         }
         unset($it);

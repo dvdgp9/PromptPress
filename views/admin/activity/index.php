@@ -77,7 +77,7 @@ document.querySelectorAll('form[data-confirm]').forEach(function (form) {
             $line = __($lineKey, ['quien' => $who($e), 'titulo' => (string) $e['title']]);
             ?>
             <li class="pp-activity__item pp-activity__item--<?= e($e['actor']) ?><?= $e['undone'] ? ' is-undone' : '' ?>">
-                <span class="pp-activity__icon pp-icon--<?= $e['type'] === 'form' ? 'forms' : 'pages' ?>" aria-hidden="true"></span>
+                <span class="pp-activity__icon pp-icon--<?= ['form' => 'forms', 'seo' => 'seo'][$e['type']] ?? 'pages' ?>" aria-hidden="true"></span>
                 <div class="pp-activity__text">
                     <p class="pp-activity__line"><?= e($line) ?></p>
                     <p class="pp-activity__meta">

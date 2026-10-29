@@ -11125,8 +11125,8 @@ Orden recomendado (cada fase se puede publicar sola):
 ## Project Status Board (ASST-V2)
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
-- [x] F3 Vista previa antes/después + riesgo en el registro — código, tests y revisión en navegador con datos simulados; pendiente de «Publícalo»
-- [ ] F4 Ejecutores nuevos
+- [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
+- [ ] F4 Ejecutores nuevos — F4a (SEO de página) publicado como v1.17.0 (29/10, «Publícalo»); F4b–F4f por hacer
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11214,3 +11214,39 @@ Verificación:
 - El lint i18n no ve claves construidas (`'js.as.preview_' + x`): usar claves literales.
 - Los campos guardados usan `field_type` y `required` '1'/'0', no `type`/bool.
 - Los renders estáticos por CLI salen con `http://localhost/`: reescribir a `:8765` para cargar los assets.
+
+## High-level Task Breakdown (ASST-V2 F4) — Planner, 29/10/2026 (usuario: «Sí, sigue con F4»)
+Un ejecutor por paso, de menos a más riesgo. Cada uno: capacidad automática en el registro con `risk`/`undo`, vista previa antes de aplicar (propuesta firmada que «Aplicar» guarda tal cual), versión previa guardada y deshacer en Actividad.
+- [x] F4a SEO de página (`seo.page.edit`): título SEO y meta descripción de una página existente. En vivo, deshacible. Slug, redirecciones, indexación y canonical siguen en `seo.manage` (manual): tocar el slug rompe enlaces. ✅ «mejora el SEO de la portada» enseña el resultado de Google antes/después y se deshace desde Actividad.
+- [ ] F4b Menú, header y footer (`chrome.manage` → automático para textos y enlaces).
+- [ ] F4c Entradas del blog en borrador.
+- [ ] F4d Crear página en borrador.
+- [ ] F4e Diseño global (colores/tipografías), con vista previa visual.
+- [ ] F4f Reservas, productos, recursos (sensibles: precios/pagos).
+Executor para tras cada paso para verificación y «Publícalo».
+
+Notas técnicas F4a:
+- La firma de propuestas pasa a `AssistantProposal` (común a formularios y SEO); `FormAssistantEditor::sealProposal/openProposal` delegan. Tokens viejos (fp1) dejan de valer → se vuelve a pedir a la IA (2 h de vida, impacto nulo).
+- `assistant_job_items.capability_id` (migración) para que el paso distinga un item SEO de una edición Canvas de la misma página.
+- `versions` con entity_type `page_seo` (antes del cambio) → Actividad lo lista y deshace. El permiso es CAP_VISIBILITY.
+- `IMPROVE_SEO` recibe `{extra_context}` al final del user_template (vacío para los usos actuales) para llevar la petición.
+
+## Current Status / Progress Tracking (ASST-V2 F4a) — 29/10/2026, Executor
+Hecho (pendiente de verificación del usuario y «Publícalo»):
+- `seo.page.edit` automático (riesgo live, deshacible). `seo.manage` queda manual para URL/slug, redirecciones, indexación y canonical.
+- `PageSeoAssistantEditor`: propose (IMPROVE_SEO con la petición como contexto, sin tocar el slug), commit (comprueba que el SEO no cambió desde la vista previa, guarda versión `page_seo` antes), restoreVersion. Vale también en páginas clásicas.
+- Vista previa en la tarjeta: resultado de Google Después/Antes con contador de caracteres (60 / 155). Se publica solo; no entra en «Publicar cambios».
+- Actividad lista los cambios SEO del asistente («antes: «título»») y los deshace. Solo para roles con Visibilidad.
+- Nuevo: el asistente solo ejecuta lo que el usuario puede hacer a mano (`AssistantCapabilityRegistry::EXECUTOR_PERMISSION`, en preview y apply). Antes, alguien con permiso de asistente podía cambiar formularios sin permiso de formularios.
+- Firma común `AssistantProposal` (formularios y SEO).
+- Migración `2026_10_29_assistant_item_capability` (`assistant_job_items.capability_id`), también en schema.sql; aplicada en local tras dry-run.
+
+Verificación:
+- `tests/assistant_v2_seo.php` (24 PASS) con BD real: aplicar sin IA, publicar lo ignora, propuesta obsoleta rechazada, Actividad + deshacer, permisos de redactor. Resto de suites en verde; lint i18n 50 (antes 51).
+- Navegador (renders + fetch simulado): tarjeta con resultado de Google, pestaña Antes, «Aplicar» manda el token; Actividad muestra la línea SEO con Deshacer (cambio temporal en BD, revertido).
+- Sin probar con la IA real.
+
+## Lessons (ASST-V2 F4a)
+- Los ejecutores del asistente deben exigir el permiso del panel equivalente: el segmento /assistant solo pide CAP_ASSISTANT.
+- Un mismo page_id puede ser edición Canvas o SEO: el item del job guarda capability_id.
+- Los cambios SEO manuales (Studio/editor) no guardan versión: Actividad solo enseña los del asistente y las restauraciones.

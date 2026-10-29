@@ -41,6 +41,9 @@ final class ActivityService
         if (Permissions::roleHas($role, Permissions::CAP_FORMS)) {
             $entries = array_merge($entries, self::formEntries($siteId));
         }
+        if (Permissions::roleHas($role, Permissions::CAP_VISIBILITY)) {
+            $entries = array_merge($entries, self::seoEntries($siteId));
+        }
         return self::filterAndSort($entries, $filter);
     }
 
@@ -158,6 +161,48 @@ final class ActivityService
     }
 
     /**
+     * ASST-V2 F4a — SEO de página: cada fila es el estado ANTES del cambio
+     * (solo los cambios del asistente y las restauraciones lo guardan).
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function seoEntries(int $siteId): array
+    {
+        $rows = Database::select(
+            "SELECT vr.id, vr.entity_id, vr.reason, vr.created_at, vr.version_data, p.title, u.username
+             FROM versions vr
+             JOIN pages p ON p.id = vr.entity_id AND p.site_id = ?
+             LEFT JOIN users u ON u.id = vr.created_by
+             WHERE vr.entity_type = ? AND vr.reason IN ('before_ai_edit', 'before_restore')
+               AND vr.created_at >= NOW() - INTERVAL " . self::DAYS . " DAY
+             ORDER BY vr.id DESC LIMIT " . self::LIMIT,
+            [$siteId, PageSeoAssistantEditor::ENTITY]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $actor = self::formActor((string) $r['reason']);
+            if ($actor === null) continue;
+            $before = json_decode((string) $r['version_data'], true);
+            $oldTitle = is_array($before) ? trim((string) ($before['meta_title'] ?? '')) : '';
+            $link = AssistantScreenContext::deepLink(['page_id' => (int) $r['entity_id']], $siteId);
+            $out[] = [
+                'type' => 'seo',
+                'entity_id' => (int) $r['entity_id'],
+                'title' => (string) $r['title'],
+                'actor' => $actor,
+                'username' => (string) ($r['username'] ?? ''),
+                'detail' => __('activity.seo_before', ['titulo' => $oldTitle !== '' ? $oldTitle : __('asst.diff.empty')]),
+                'at' => (string) $r['created_at'],
+                'version_id' => (int) $r['id'],
+                'undone' => false,
+                'undoable' => true,
+                'edit_url' => $link['url'] ?? base_url('admin/seo'),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Deshace un cambio. Devuelve la clave de traducción del resultado.
      *
      * @return array{ok:bool,message:string,vars?:array<string,string>}
@@ -169,6 +214,12 @@ final class ActivityService
             if (!Permissions::roleHas($role, Permissions::CAP_FORMS)) return $fail;
             return FormStore::restoreVersion($siteId, $entityId, $versionId, $userId)
                 ? ['ok' => true, 'message' => 'activity.undo_form_done']
+                : $fail;
+        }
+        if ($type === 'seo') {
+            if (!Permissions::roleHas($role, Permissions::CAP_VISIBILITY)) return $fail;
+            return PageSeoAssistantEditor::restoreVersion($siteId, $entityId, $versionId, $userId)
+                ? ['ok' => true, 'message' => 'activity.undo_seo_done']
                 : $fail;
         }
         if ($type !== 'page' || !Permissions::roleHas($role, Permissions::CAP_CONTENT)) {
