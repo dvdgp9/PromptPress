@@ -533,6 +533,8 @@ final class SiteAssistantPlanner
                 'next_action'   => $nextAction,
                 'required_inputs' => $requiredInputs,
                 'admin_path'    => (string) ($capability['admin_path'] ?? ''),
+                'risk'          => (string) ($capability['risk'] ?? 'live'),
+                'undo'          => (bool) ($capability['undo'] ?? false),
                 'source_block_ids' => $sourceBlockIds,
                 'media_ids' => $mediaIds,
             ];

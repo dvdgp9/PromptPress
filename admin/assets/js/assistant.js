@@ -394,7 +394,7 @@
         const snapshot = JSON.stringify({
             state: { turns: conversation.turns, plan: conversation.plan, source_token: conversation.sourceToken },
             log: conversation.log
-        }, (key, value) => (key === '_thumbs' || key === '_button' ? undefined : value));
+        }, (key, value) => (key === '_thumbs' || key === '_button' || key === '_preview' ? undefined : value));
         // En serie: dos guardados seguidos no pueden crear dos conversaciones.
         persistChain = persistChain.then(async () => {
             try {
@@ -436,6 +436,7 @@
             if (entry.type === 'plan' && entry.plan) {
                 const plan = entry.plan;
                 plan._thumbs = new Map();
+                plan._restored = true;
                 renderPlan(plan);
                 conversation.log.push({ type: 'plan', plan });
                 if (plan._applied) {
@@ -487,6 +488,7 @@
     function supersedePreviousPlans() {
         thread.querySelectorAll('.ppa-plan__apply:not([disabled])').forEach((button) => {
             button.disabled = true;
+            button.dataset.superseded = '1';
             button.textContent = pp.t('js.as.plan_superseded');
         });
     }
@@ -553,6 +555,235 @@
         return wrap;
     }
 
+    // ------------------------------------------------------------------
+    // ASST-V2 F3 — riesgo de cada cambio y vista previa de formularios
+    // ------------------------------------------------------------------
+    const RISK_META = {
+        read:      { cls: 'is-read', label: pp.t('js.as.risk.read') },
+        draft:     { cls: 'is-draft', label: pp.t('js.as.risk.draft') },
+        live:      { cls: 'is-live', label: pp.t('js.as.risk.live') },
+        sensitive: { cls: 'is-sensitive', label: pp.t('js.as.risk.sensitive') }
+    };
+
+    function renderRisk(it) {
+        const meta = RISK_META[it.risk] || (it.form_id ? RISK_META.live : RISK_META.draft);
+        const line = document.createElement('div');
+        line.className = 'ppa-risk ' + meta.cls;
+        const dot = document.createElement('span');
+        dot.className = 'ppa-risk__dot';
+        dot.setAttribute('aria-hidden', 'true');
+        line.appendChild(dot);
+        const text = document.createElement('span');
+        text.textContent = meta.label + (it.undo ? ' · ' + pp.t('js.as.risk.undo') : '');
+        line.appendChild(text);
+        return line;
+    }
+
+    function wantsPreview(it) {
+        return it.capability_id === 'forms.edit' && Number(it.form_id) > 0 && it.status === 'aplicar';
+    }
+
+    /** Maqueta compacta del formulario. `marks` = name => 'added'|'changed'|'removed'. */
+    function renderFormMock(outline, marks) {
+        const mock = document.createElement('div');
+        mock.className = 'ppa-mock';
+        if (outline.heading) {
+            const h = document.createElement('p');
+            h.className = 'ppa-mock__heading';
+            h.textContent = outline.heading;
+            mock.appendChild(h);
+        }
+        (outline.fields || []).forEach((field) => {
+            const row = document.createElement('div');
+            row.className = 'ppa-mock__field' + (marks[field.name] ? ' is-' + marks[field.name] : '');
+            const label = document.createElement('span');
+            label.className = 'ppa-mock__label';
+            label.textContent = field.label + (field.required ? ' *' : '');
+            row.appendChild(label);
+            const options = field.options || [];
+            if ((field.type === 'radio' || field.type === 'checkbox_group') && options.length > 0) {
+                const list = document.createElement('div');
+                list.className = 'ppa-mock__choices';
+                options.slice(0, 12).forEach((option) => {
+                    const choice = document.createElement('span');
+                    choice.className = 'ppa-mock__choice ppa-mock__choice--' + (field.type === 'radio' ? 'radio' : 'check');
+                    choice.textContent = option;
+                    list.appendChild(choice);
+                });
+                if (options.length > 12) list.appendChild(document.createTextNode(pp.t('js.as.preview_more', { n: options.length - 12 })));
+                row.appendChild(list);
+            } else if (field.type === 'checkbox') {
+                row.classList.add('ppa-mock__field--check');
+            } else {
+                const control = document.createElement('span');
+                control.className = 'ppa-mock__control ppa-mock__control--' + (field.type === 'textarea' ? 'area' : field.type === 'select' ? 'select' : field.type === 'file' ? 'file' : 'line');
+                if (field.type === 'select' && options.length > 0) control.textContent = options[0];
+                row.appendChild(control);
+                if (field.type === 'select' && options.length > 1) {
+                    const all = document.createElement('div');
+                    all.className = 'ppa-mock__chips';
+                    options.slice(0, 12).forEach((option) => {
+                        const chip = document.createElement('span');
+                        chip.textContent = option;
+                        all.appendChild(chip);
+                    });
+                    if (options.length > 12) all.appendChild(document.createTextNode(pp.t('js.as.preview_more', { n: options.length - 12 })));
+                    row.appendChild(all);
+                }
+            }
+            mock.appendChild(row);
+        });
+        const submit = document.createElement('span');
+        submit.className = 'ppa-mock__submit';
+        submit.textContent = outline.submit_text || pp.t('js.as.preview_submit');
+        mock.appendChild(submit);
+        return mock;
+    }
+
+    function fieldMarks(before, after) {
+        const old = new Map((before.fields || []).map((f) => [f.name, JSON.stringify(f)]));
+        const now = new Set((after.fields || []).map((f) => f.name));
+        const afterMarks = {};
+        (after.fields || []).forEach((f) => {
+            if (!old.has(f.name)) afterMarks[f.name] = 'added';
+            else if (old.get(f.name) !== JSON.stringify(f)) afterMarks[f.name] = 'changed';
+        });
+        const beforeMarks = {};
+        (before.fields || []).forEach((f) => {
+            if (!now.has(f.name)) beforeMarks[f.name] = 'removed';
+            else if (afterMarks[f.name]) beforeMarks[f.name] = 'changed';
+        });
+        return { before: beforeMarks, after: afterMarks };
+    }
+
+    function renderPreviewResult(box, data) {
+        box.textContent = '';
+        box.className = 'ppa-preview is-ready';
+        const changes = data.changes || [];
+        const list = document.createElement('ul');
+        list.className = 'ppa-preview__changes';
+        if (changes.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'is-none';
+            li.textContent = pp.t('js.as.preview_no_changes');
+            list.appendChild(li);
+        }
+        changes.forEach((change) => {
+            const li = document.createElement('li');
+            li.className = 'is-' + change.kind;
+            const sign = document.createElement('span');
+            sign.className = 'ppa-preview__sign';
+            sign.setAttribute('aria-hidden', 'true');
+            sign.textContent = { added: '+', removed: '−', changed: '~', text: '~' }[change.kind] || '·';
+            li.appendChild(sign);
+            const what = document.createElement('strong');
+            what.textContent = change.label;
+            li.appendChild(what);
+            if (change.detail) li.appendChild(document.createTextNode(' — ' + change.detail));
+            const sr = document.createElement('span');
+            sr.className = 'pp-sr-only';
+            sr.textContent = {
+                added: pp.t('js.as.preview_kind_added'),
+                removed: pp.t('js.as.preview_kind_removed'),
+                changed: pp.t('js.as.preview_kind_changed'),
+                text: pp.t('js.as.preview_kind_text')
+            }[change.kind] || '';
+            li.prepend(sr);
+            list.appendChild(li);
+        });
+        box.appendChild(list);
+
+        const marks = fieldMarks(data.before, data.after);
+        const tabs = document.createElement('div');
+        tabs.className = 'ppa-seg';
+        tabs.setAttribute('role', 'tablist');
+        const stage = document.createElement('div');
+        stage.className = 'ppa-preview__stage';
+        const views = {
+            after: () => renderFormMock(data.after, marks.after),
+            before: () => renderFormMock(data.before, marks.before)
+        };
+        const buttons = {};
+        const show = (which) => {
+            Object.keys(buttons).forEach((key) => {
+                buttons[key].setAttribute('aria-selected', key === which ? 'true' : 'false');
+                buttons[key].tabIndex = key === which ? 0 : -1;
+            });
+            stage.textContent = '';
+            stage.dataset.view = which;
+            stage.appendChild(views[which]());
+        };
+        ['after', 'before'].forEach((which) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'ppa-seg__btn';
+            b.setAttribute('role', 'tab');
+            b.textContent = which === 'after' ? pp.t('js.as.preview_after') : pp.t('js.as.preview_before');
+            b.addEventListener('click', () => show(which));
+            b.addEventListener('keydown', (event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                const next = which === 'after' ? 'before' : 'after';
+                show(next);
+                buttons[next].focus();
+            });
+            buttons[which] = b;
+            tabs.appendChild(b);
+        });
+        box.appendChild(tabs);
+        box.appendChild(stage);
+        show('after');
+    }
+
+    async function loadPreview(it, box, onSettled) {
+        it._preview = { state: 'loading' };
+        box.textContent = '';
+        box.className = 'ppa-preview is-loading';
+        box.setAttribute('aria-busy', 'true');
+        const label = document.createElement('span');
+        label.className = 'ppa-preview__loading';
+        label.textContent = pp.t('js.as.preview_loading');
+        box.appendChild(label);
+        const skel = document.createElement('div');
+        skel.className = 'ppa-preview__skeleton';
+        skel.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < 3; i++) skel.appendChild(document.createElement('span'));
+        box.appendChild(skel);
+        onSettled();
+        try {
+            const res = await fetch(cfg.baseUrl + '/preview', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    _csrf: cfg.csrf,
+                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, instruction: it.instruction })
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) throw new Error(data.error || pp.t('js.as.preview_failed'));
+            it._preview = { state: 'ready', token: data.token };
+            renderPreviewResult(box, data.preview);
+        } catch (error) {
+            it._preview = { state: 'failed' };
+            box.textContent = '';
+            box.className = 'ppa-preview is-failed';
+            const msg = document.createElement('span');
+            msg.textContent = (error && error.message ? error.message : pp.t('js.as.preview_failed')) + ' ' + pp.t('js.as.preview_still_apply');
+            box.appendChild(msg);
+            box.appendChild(previewButton(it, box, onSettled, pp.t('js.as.preview_retry')));
+        } finally {
+            box.removeAttribute('aria-busy');
+            onSettled();
+        }
+    }
+
+    function previewButton(it, box, onSettled, text) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pp-btn pp-btn--secondary pp-btn--sm ppa-preview__retry';
+        b.textContent = text;
+        b.addEventListener('click', () => loadPreview(it, box, onSettled));
+        return b;
+    }
+
     function renderPlan(plan) {
         supersedePreviousPlans();
         const msg = document.createElement('div');
@@ -589,6 +820,8 @@
         }
 
         const items = plan.items || [];
+        const previewQueue = [];
+        let previewSettled = () => {};
         const order = ['automatable_now', 'manual_in_platform', 'needs_input', 'requires_development', 'sensitive_review'];
         order.forEach((category) => {
             items.filter((it) => itemCategory(it) === category).forEach((it) => {
@@ -641,6 +874,18 @@
                 const media = renderItemMedia(it, plan);
                 if (media) card.appendChild(media);
 
+                if (category === 'automatable_now') {
+                    if (wantsPreview(it) && !plan._applied) {
+                        const box = document.createElement('div');
+                        box.className = 'ppa-preview';
+                        card.appendChild(box);
+                        // Un plan recuperado no vuelve a gastar IA al abrirse: a petición.
+                        if (plan._restored) box.appendChild(previewButton(it, box, () => previewSettled(), pp.t('js.as.preview_show')));
+                        else previewQueue.push(() => loadPreview(it, box, () => previewSettled()));
+                    }
+                    card.appendChild(renderRisk(it));
+                }
+
                 bubble.appendChild(card);
             });
         });
@@ -673,8 +918,12 @@
             btn.className = 'pp-btn pp-btn--primary ppa-plan__apply';
             const refresh = () => {
                 const applicable = items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
-                btn.disabled = applicable.length === 0;
-                btn.textContent = applicable.length > 0
+                const preparing = applicable.some((it) => it._preview && it._preview.state === 'loading');
+                btn.disabled = applicable.length === 0 || preparing || !!plan._applied;
+                btn.classList.toggle('is-waiting', preparing);
+                if (plan._applied) btn.textContent = pp.t('js.as.plan_applied');
+                else if (preparing) btn.textContent = pp.t('js.as.preview_wait');
+                else btn.textContent = applicable.length > 0
                     ? pp.t(applicable.length === 1 ? 'js.as.apply_one' : 'js.as.apply_n', { n: applicable.length })
                     : pp.t('js.as.confirm_above');
             };
@@ -683,19 +932,18 @@
                 if (applicable.length > 0) applyPlan(plan, applicable, btn);
             });
             foot.appendChild(btn);
-            const note = document.createElement('span');
-            note.className = 'ppa-plan__note';
-            note.textContent = pp.t('js.asst.draft_note');
-            foot.appendChild(note);
-            // ASST-FORMS — los formularios no tienen borrador: avisar antes.
-            if (actionable.some((it) => it.form_id)) {
-                const live = document.createElement('span');
-                live.className = 'ppa-plan__note';
-                live.textContent = pp.t('js.as.form_live_note');
-                foot.appendChild(live);
+            // Lo que no se ve en las tarjetas: qué pasa con las páginas.
+            if (actionable.some((it) => !it.form_id)) {
+                const note = document.createElement('span');
+                note.className = 'ppa-plan__note';
+                note.textContent = pp.t('js.asst.draft_note');
+                foot.appendChild(note);
             }
             bubble.appendChild(foot);
             refresh();
+            // Una vista previa que llega tarde no reactiva un plan ya sustituido.
+            previewSettled = () => { if (!applying && !btn.dataset.superseded) refresh(); };
+            previewQueue.forEach((start) => start());
             plan._button = btn;
             lastPlanContext = {
                 plan,
@@ -943,7 +1191,12 @@
         try {
             const body = new URLSearchParams({
                 _csrf: cfg.csrf,
-                items: JSON.stringify(applicable),
+                items: JSON.stringify(applicable.map((it) => {
+                    const copy = Object.assign({}, it);
+                    delete copy._preview;
+                    if (it._preview && it._preview.state === 'ready') copy.preview_token = it._preview.token;
+                    return copy;
+                })),
                 request_text: plan._request || '',
                 summary: plan.summary || '',
                 source_token: plan.source_token || ''

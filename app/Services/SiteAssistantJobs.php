@@ -93,7 +93,15 @@ final class SiteAssistantJobs
                 if (!isset($forms[$formId]) || $instruction === '' || mb_strlen($instruction) > 4000) {
                     continue;
                 }
+                // ASST-V2 F3 — la propuesta de la vista previa, si sigue valiendo.
+                // Si caducó o no cuadra, el paso vuelve a pedírsela a la IA.
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                if ($proposal !== '' && FormAssistantEditor::openProposal($proposal, $siteId, $formId, $instruction) === null) {
+                    error_log('[assistant job create] site=' . $siteId . ' form=' . $formId . ' preview token rejected');
+                    $proposal = '';
+                }
                 $clean[] = [
+                    'proposal_token' => $proposal !== '' ? $proposal : null,
                     'page_id'     => 0,
                     'form_id'     => $formId,
                     'page_title'  => __('asst.form.label', ['formulario' => (string) ($forms[$formId]['heading'] ?: __('forms.untitled'))]),
@@ -172,12 +180,13 @@ final class SiteAssistantJobs
             foreach ($clean as $i => $item) {
                 Database::execute(
                     'INSERT INTO assistant_job_items
-                     (job_id, page_id, form_id, page_title, section, instruction, source_block_ids_json, media_ids_json, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (job_id, page_id, form_id, page_title, section, instruction, source_block_ids_json, media_ids_json, proposal_token, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         $jobId, $item['page_id'], $item['form_id'], $item['page_title'], $item['section'], $item['instruction'],
                         json_encode($item['source_block_ids'], JSON_THROW_ON_ERROR),
                         json_encode($item['media_ids'], JSON_THROW_ON_ERROR),
+                        $item['proposal_token'] ?? null,
                         $i,
                     ]
                 );
@@ -302,12 +311,17 @@ final class SiteAssistantJobs
     private static function stepFormItem(int $siteId, array $item, array $job): void
     {
         try {
-            $outcome = FormAssistantEditor::apply(
+            $userId = isset($job['created_by']) ? (int) $job['created_by'] : null;
+            $proposal = FormAssistantEditor::openProposal(
+                (string) ($item['proposal_token'] ?? ''),
                 $siteId,
                 (int) $item['form_id'],
-                (string) $item['instruction'],
-                isset($job['created_by']) ? (int) $job['created_by'] : null
+                (string) $item['instruction']
             );
+            // Con vista previa se guarda lo que se enseñó; sin ella, se pide ahora.
+            $outcome = $proposal !== null
+                ? FormAssistantEditor::commit($siteId, (int) $item['form_id'], $proposal['content'], $proposal['base_hash'], $userId)
+                : FormAssistantEditor::apply($siteId, (int) $item['form_id'], (string) $item['instruction'], $userId);
             if ($outcome['ok']) {
                 Database::execute(
                     'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',

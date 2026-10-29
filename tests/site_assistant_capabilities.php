@@ -53,10 +53,12 @@ checkAssistantCapability(
     json_encode(AssistantCapabilityRegistry::CATEGORIES)
 );
 checkAssistantCapability(
-    'canvas_edit_is_the_only_automatic_handler',
+    // ASST-FORMS añadió forms.edit: son los dos únicos con ejecutor.
+    'only_canvas_and_form_edit_are_automatic',
     ($byId['pages.canvas.edit']['mode'] ?? '') === 'automatic'
         && ($byId['pages.canvas.edit']['handler'] ?? '') === 'canvas_edit'
-        && count(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic')) === 1,
+        && ($byId['forms.edit']['handler'] ?? '') === 'form_edit'
+        && array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id') === ['pages.canvas.edit', 'forms.edit'],
     json_encode($catalog)
 );
 checkAssistantCapability(

@@ -686,6 +686,7 @@ CREATE TABLE IF NOT EXISTS assistant_job_items (
     instruction  TEXT NOT NULL,
     source_block_ids_json TEXT NULL,
     media_ids_json TEXT NULL,
+    proposal_token MEDIUMTEXT NULL,
     status       ENUM('pending','running','done','failed') NOT NULL DEFAULT 'pending',
     reply        TEXT NULL,
     error        TEXT NULL,

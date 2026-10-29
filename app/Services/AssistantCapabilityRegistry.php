@@ -54,6 +54,35 @@ final class AssistantCapabilityRegistry
     }
 
     /**
+     * ASST-V2 F3 — Qué pasa en la web cuando se aplica cada capacidad.
+     *   read      solo consulta, no cambia nada
+     *   draft     se guarda como borrador; se revisa antes de publicar
+     *   live      se ve en la web nada más aplicarse
+     *   sensitive textos legales, pagos o datos que piden revisión humana
+     * Lo que no aparece aquí se trata como «live».
+     */
+    public const RISK = [
+        'pages.canvas.edit'  => 'draft',
+        'pages.create'       => 'draft',
+        'posts.manage'       => 'draft',
+        'chrome.manage'      => 'live',
+        'design.manage'      => 'live',
+        'forms.edit'         => 'live',
+        'forms.manage'       => 'live',
+        'media.manage'       => 'live',
+        'seo.manage'         => 'live',
+        'legal.content'      => 'sensitive',
+        'analytics.review'   => 'read',
+        'booking.manage'     => 'live',
+        'resources.manage'   => 'live',
+        'commerce.manage'    => 'sensitive',
+        'custom.development' => 'read',
+    ];
+
+    /** Capacidades cuyo cambio del asistente se deshace desde Actividad. */
+    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit'];
+
+    /**
      * Constructor puro del catálogo; permite probar el gate sin base de datos.
      *
      * @param array<string,array{available?:bool,enabled?:bool}> $moduleStates
@@ -260,6 +289,7 @@ final class AssistantCapabilityRegistry
                 . ' | plataforma=' . ((bool) $capability['platform_available'] ? 'sí' : 'no')
                 . ' | estado=' . $capability['state']
                 . ' | mode=' . $capability['mode']
+                . ' | riesgo=' . $capability['risk']
                 . ' | handler=' . ($capability['handler'] ?? 'ninguno')
                 . ' | panel=' . ($capability['admin_path'] !== '' ? $capability['admin_path'] : 'ninguno');
             if ($capability['configured_items'] !== null) {
@@ -313,6 +343,8 @@ final class AssistantCapabilityRegistry
             'sensitive'          => $sensitive,
             'module'             => $module,
             'notes'              => '',
+            'risk'               => self::RISK[$id] ?? 'live',
+            'undo'               => in_array($id, self::UNDOABLE, true),
         ];
     }
 

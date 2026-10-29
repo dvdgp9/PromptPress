@@ -168,6 +168,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->get('/assistant',           [AssistantController::class, 'index']);
     $r->post('/assistant/extract',  [AssistantController::class, 'extract']);
     $r->post('/assistant/plan',     [AssistantController::class, 'plan']);
+    $r->post('/assistant/preview',  [AssistantController::class, 'preview']);
     $r->post('/assistant/apply',    [AssistantController::class, 'apply']);
     $r->post('/assistant/jobs/{id}/step', [AssistantController::class, 'step']);
     $r->post('/assistant/jobs/{id}/publish', [AssistantController::class, 'publish']);

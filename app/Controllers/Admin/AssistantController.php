@@ -9,6 +9,7 @@ use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
+use App\Services\FormAssistantEditor;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
 use App\Services\TextExtractor;
@@ -328,6 +329,43 @@ class AssistantController
                 'warnings' => $normalized['warnings'],
             ],
         ]);
+    }
+
+    // ----------------------------------------------------------------------
+    // POST /admin/assistant/preview — ASST-V2 F3: cómo quedaría un formulario
+    // antes de aplicar. No guarda nada; devuelve la propuesta firmada para que
+    // «Aplicar» guarde exactamente lo que se ha enseñado.
+    // ----------------------------------------------------------------------
+    public function preview(): void
+    {
+        $siteId = self::requireSiteId();
+        CSRF::check();
+
+        $item = json_decode((string) Request::post('item', ''), true);
+        $formId = is_array($item) ? (int) ($item['form_id'] ?? 0) : 0;
+        $instruction = is_array($item) ? trim((string) ($item['instruction'] ?? '')) : '';
+        if (!is_array($item) || ($item['capability_id'] ?? '') !== 'forms.edit'
+            || $formId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
+            Response::json(['ok' => false, 'error' => __('asst.err.preview_unsupported')], 422);
+        }
+
+        @set_time_limit(200);
+        $started = microtime(true);
+        try {
+            $proposal = FormAssistantEditor::propose($siteId, $formId, $instruction);
+        } catch (AIException $e) {
+            error_log('[assistant preview] site=' . $siteId . ' form=' . $formId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            Response::json(['ok' => false, 'error' => __('asst.err.form_no_valid_change')], 502);
+        }
+        if (!$proposal['ok']) {
+            Response::json(['ok' => false, 'error' => (string) $proposal['error']], 422);
+        }
+
+        $token = FormAssistantEditor::sealProposal($siteId, $formId, $instruction, $proposal['content'], $proposal['base_hash']);
+        $preview = FormAssistantEditor::preview($proposal['before'], $proposal['content']);
+        error_log(sprintf('[assistant preview] site=%d form=%d changes=%d ms=%d',
+            $siteId, $formId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
+        Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
     }
 
     // ----------------------------------------------------------------------

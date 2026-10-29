@@ -11125,7 +11125,7 @@ Orden recomendado (cada fase se puede publicar sola):
 ## Project Status Board (ASST-V2)
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
-- [ ] F3 Vista previa antes/después + riesgo en el registro
+- [x] F3 Vista previa antes/después + riesgo en el registro — código, tests y revisión en navegador con datos simulados; pendiente de «Publícalo»
 - [ ] F4 Ejecutores nuevos
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
@@ -11191,3 +11191,26 @@ Verificación:
 - Un `position: fixed` dentro de un elemento con `transform` se posiciona respecto a ese elemento: los modales del chat deben vivir en <body>.
 - La barra superior del panel es z-index 90 y el menú 100: capas nuevas por encima (lanzador 105, panel 110, selector 120).
 - `FormStore::find` con un sitio inexistente intenta crear su contenedor y revienta: no usar sitios ficticios en tests con BD.
+
+## Current Status / Progress Tracking (ASST-V2 F3) — 29/10/2026, Executor
+Hecho (pendiente de que el usuario confirme y diga si se publica):
+- Riesgo en el registro: `AssistantCapabilityRegistry::RISK` (read/draft/live/sensitive) y `UNDOABLE`. Cada capacidad lleva `risk` y `undo`; el prompt del planner ve `riesgo=` y cada item del plan los lleva a la tarjeta.
+- Tarjetas aplicables con línea de riesgo: «Se verá en la web al aplicarlo · se puede deshacer en Actividad», «Se guarda como borrador…», etc.
+- Vista previa de formularios: `POST /admin/assistant/preview` → `FormAssistantEditor::propose()` (IA, sin guardar) → lista de cambios + maqueta Después/Antes. La propuesta va firmada (`sealProposal`, HMAC con app_key, 2 h, ligada a sitio+formulario+instrucción) y «Aplicar» guarda exactamente eso, sin segunda llamada a la IA (`commit()`).
+- Si el formulario cambió entre la vista previa y aplicar, no se pisa: falla con «El formulario ha cambiado desde la vista previa…».
+- Token inválido o caducado → se descarta y el paso pide el cambio a la IA como antes (queda en el log).
+- La vista previa se pide sola al llegar el plan; el botón «Aplicar» espera («Preparando vista previa…»). Si falla: mensaje + «Reintentar», y se puede aplicar igual. En un plan recuperado no se gasta IA: botón «Ver cómo quedará».
+- Muchas preguntas quitadas (>3) se resumen en una línea.
+- Migración `2026_10_29_assistant_form_proposals` (columna opcional `assistant_job_items.proposal_token`), también en schema.sql. Aplicada en local tras dry-run.
+- Páginas: sin vista previa previa a aplicar (necesitaría una edición completa de Canvas con IA solo para enseñarla); ya quedan como borrador revisable antes de publicar. Decisión del Executor, a confirmar por el Planner.
+
+Verificación:
+- `tests/assistant_v2_preview.php` nuevo (29 PASS), incluido aplicar una propuesta firmada contra BD sin IA (<5 s) y rechazo de propuesta caducada/manipulada/obsoleta.
+- Suites del asistente y formularios en verde; i18n lint igual que antes (51).
+- Navegador con página renderizada y fetch simulado (sin credenciales): esqueleto + botón en espera, lista de cambios, pestañas Después/Antes (teclado con flechas), error + Reintentar, panel lateral a 440 px, «Aplicar» manda `preview_token` solo en el item de formulario. No probado con la IA real.
+
+## Lessons (ASST-V2 F3)
+- `tests/site_assistant_capabilities.php` seguía esperando un único ejecutor automático desde la 1.13 (forms.edit es el segundo): actualizado.
+- El lint i18n no ve claves construidas (`'js.as.preview_' + x`): usar claves literales.
+- Los campos guardados usan `field_type` y `required` '1'/'0', no `type`/bool.
+- Los renders estáticos por CLI salen con `http://localhost/`: reescribir a `:8765` para cargar los assets.

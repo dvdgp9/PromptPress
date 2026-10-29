@@ -12652,3 +12652,76 @@ body > .ppa-media-picker { z-index: 120; }
     .ppa-thinking__dots i, .ppa-launcher.is-busy .ppa-launcher__icon, .ppa-drawer__skeleton span,
     .ppa-composer__send.is-loading::after, .ppa-plan__apply.is-loading::after, .ppa-progress__row--running .ppa-progress__icon { animation: none; }
 }
+
+/* ==========================================================================
+   ASST-V2 F3 — Riesgo de cada cambio y vista previa antes/después
+   ========================================================================== */
+.ppa-risk { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.78rem; color: var(--pp-text-muted); }
+.ppa-risk__dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ppa-risk.is-draft .ppa-risk__dot { background: #a8a29e; }
+.ppa-risk.is-live { color: #9a3412; }
+.ppa-risk.is-live .ppa-risk__dot { background: var(--pp-primary); }
+.ppa-risk.is-sensitive { color: #991b1b; }
+.ppa-risk.is-sensitive .ppa-risk__dot { background: #dc2626; }
+.ppa-risk.is-read .ppa-risk__dot { background: #d6d3d1; }
+
+.ppa-preview { margin-top: 10px; border: 1px solid var(--pp-border); border-radius: 10px; background: var(--pp-surface-alt); padding: 10px; animation: ppa-in 0.2s var(--pp-ease, ease-out); }
+.ppa-preview:empty { display: none; }
+.ppa-preview.is-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--pp-text-muted); background: #fff; }
+.ppa-preview__loading { display: block; font-size: 0.8rem; color: var(--pp-text-muted); margin-bottom: 8px; }
+.ppa-preview__skeleton { display: grid; gap: 6px; }
+.ppa-preview__skeleton span {
+    display: block; height: 22px; border-radius: 6px;
+    background: linear-gradient(90deg, var(--pp-surface) 0%, #fff7ed 45%, var(--pp-surface) 90%);
+    background-size: 200% 100%; animation: ppa-shimmer 1.2s ease-in-out infinite;
+}
+.ppa-preview__skeleton span:nth-child(2) { width: 82%; }
+.ppa-preview__skeleton span:nth-child(3) { width: 58%; }
+.ppa-preview__retry { flex: none; }
+
+.ppa-preview__changes { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; font-size: 0.82rem; }
+.ppa-preview__changes li { display: flex; align-items: baseline; gap: 6px; line-height: 1.4; }
+.ppa-preview__changes li.is-none { color: var(--pp-text-muted); }
+.ppa-preview__changes strong { font-weight: 600; }
+.ppa-preview__sign { flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 0.75rem; font-weight: 700; line-height: 1; transform: translateY(2px); }
+.ppa-preview__changes .is-added .ppa-preview__sign { background: #dcfce7; color: #166534; }
+.ppa-preview__changes .is-removed .ppa-preview__sign { background: #fee2e2; color: #991b1b; }
+.ppa-preview__changes .is-changed .ppa-preview__sign,
+.ppa-preview__changes .is-text .ppa-preview__sign { background: #ffedd5; color: #9a3412; }
+.ppa-preview__changes .is-removed strong { text-decoration: line-through; color: var(--pp-text-muted); }
+
+.ppa-seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--pp-surface); border: 1px solid var(--pp-border); margin-bottom: 8px; }
+.ppa-seg__btn { border: 0; background: transparent; padding: 4px 12px; border-radius: 6px; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.ppa-seg__btn[aria-selected="true"] { background: #fff; color: var(--pp-text); box-shadow: 0 1px 2px rgba(28, 25, 23, 0.08); }
+.ppa-seg__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.ppa-seg__btn:active { transform: scale(0.98); }
+
+.ppa-preview__stage { border-radius: 8px; background: #fff; border: 1px solid var(--pp-border); padding: 12px; max-height: 340px; overflow: auto; }
+.ppa-preview__stage[data-view="before"] { background: var(--pp-surface); }
+.ppa-mock { display: grid; gap: 10px; }
+.ppa-mock__heading { margin: 0; font-weight: 700; font-size: 0.9rem; }
+.ppa-mock__field { display: grid; gap: 4px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; }
+.ppa-mock__field.is-added { background: #f0fdf4; box-shadow: inset 2px 0 0 #22c55e; }
+.ppa-mock__field.is-changed { background: #fff7ed; box-shadow: inset 2px 0 0 var(--pp-primary); }
+.ppa-mock__field.is-removed { background: #fef2f2; box-shadow: inset 2px 0 0 #ef4444; opacity: 0.75; }
+.ppa-mock__field.is-removed .ppa-mock__label { text-decoration: line-through; }
+.ppa-mock__label { font-size: 0.78rem; font-weight: 600; color: var(--pp-text); }
+.ppa-mock__field--check .ppa-mock__label::before { content: ""; display: inline-block; width: 11px; height: 11px; border: 1.5px solid #a8a29e; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.ppa-mock__control { display: block; height: 26px; border: 1px solid #d6d3d1; border-radius: 6px; background: #fff; font-size: 0.76rem; color: var(--pp-text-muted); padding: 4px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ppa-mock__control--area { height: 46px; }
+.ppa-mock__control--file { border-style: dashed; }
+.ppa-mock__control--select { padding-right: 24px; position: relative; }
+.ppa-mock__control--select::after { content: ""; position: absolute; right: 9px; top: 9px; width: 6px; height: 6px; border-right: 1.5px solid #78716c; border-bottom: 1.5px solid #78716c; transform: rotate(45deg); }
+.ppa-mock__chips, .ppa-mock__choices { display: flex; flex-wrap: wrap; gap: 4px; font-size: 0.72rem; color: var(--pp-text-muted); align-items: center; }
+.ppa-mock__chips span { padding: 1px 7px; border-radius: 999px; background: var(--pp-surface); border: 1px solid var(--pp-border); color: var(--pp-text); }
+.ppa-mock__choices { flex-direction: column; align-items: flex-start; gap: 3px; }
+.ppa-mock__choice { color: var(--pp-text); }
+.ppa-mock__choice::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 1.5px solid #a8a29e; margin-right: 6px; vertical-align: -1px; }
+.ppa-mock__choice--radio::before { border-radius: 50%; }
+.ppa-mock__choice--check::before { border-radius: 3px; }
+.ppa-mock__submit { justify-self: start; padding: 5px 14px; border-radius: 6px; background: var(--pp-primary); color: #fff; font-size: 0.78rem; font-weight: 600; }
+.ppa-plan__apply.is-waiting { opacity: 0.75; cursor: progress; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ppa-preview, .ppa-preview__skeleton span { animation: none; }
+}
