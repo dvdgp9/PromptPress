@@ -394,7 +394,7 @@
         const snapshot = JSON.stringify({
             state: { turns: conversation.turns, plan: conversation.plan, source_token: conversation.sourceToken },
             log: conversation.log
-        }, (key, value) => (key === '_thumbs' || key === '_button' || key === '_preview' ? undefined : value));
+        }, (key, value) => (['_thumbs', '_button', '_preview', '_ideas', '_length'].includes(key) ? undefined : value));
         // En serie: dos guardados seguidos no pueden crear dos conversaciones.
         persistChain = persistChain.then(async () => {
             try {
@@ -566,7 +566,10 @@
     };
 
     function renderRisk(it) {
-        const meta = RISK_META[it.risk] || (it.form_id ? RISK_META.live : RISK_META.draft);
+        // Las ideas solo se leen, pero lo que se elija se escribe en borrador.
+        const meta = it.capability_id === 'posts.ideas'
+            ? RISK_META.draft
+            : RISK_META[it.risk] || (it.form_id ? RISK_META.live : RISK_META.draft);
         const line = document.createElement('div');
         line.className = 'ppa-risk ' + meta.cls;
         const dot = document.createElement('span');
@@ -583,7 +586,141 @@
         if (it.status !== 'aplicar') return false;
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
             || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
-            || it.capability_id === 'chrome.edit';
+            || it.capability_id === 'chrome.edit'
+            || it.capability_id === 'posts.ideas';
+    }
+
+    // ------------------------------------------------------------------
+    // ASST-V2 F4c — ideas para el blog: se eligen tocándolas y «Aplicar»
+    // escribe las elegidas como borradores (como en /admin/posts/new).
+    // ------------------------------------------------------------------
+    const LENGTHS = ['corto', 'medio', 'largo'];
+
+    function renderIdeas(box, data, it, onSettled) {
+        box.textContent = '';
+        box.className = 'ppa-preview is-ready ppa-preview--ideas';
+        it._ideas = (data.ideas || []).map((idea) => Object.assign({ selected: false }, idea));
+        it._length = it._length || 'medio';
+
+        const hint = document.createElement('p');
+        hint.className = 'ppa-ideas__hint';
+        hint.textContent = pp.t('js.as.ideas_hint');
+        box.appendChild(hint);
+
+        const list = document.createElement('div');
+        list.className = 'ppa-ideas';
+        list.setAttribute('role', 'group');
+        list.setAttribute('aria-label', pp.t('js.as.ideas_title'));
+        it._ideas.forEach((idea) => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'ppa-idea';
+            tile.setAttribute('role', 'checkbox');
+            tile.setAttribute('aria-checked', 'false');
+            const check = document.createElement('span');
+            check.className = 'ppa-idea__check';
+            check.setAttribute('aria-hidden', 'true');
+            tile.appendChild(check);
+            const text = document.createElement('span');
+            text.className = 'ppa-idea__text';
+            const title = document.createElement('span');
+            title.className = 'ppa-idea__title';
+            title.textContent = idea.title;
+            text.appendChild(title);
+            if (idea.angle) {
+                const angle = document.createElement('span');
+                angle.className = 'ppa-idea__angle';
+                angle.textContent = idea.angle;
+                text.appendChild(angle);
+            }
+            if (idea.why_now) {
+                const why = document.createElement('span');
+                why.className = 'ppa-idea__why';
+                why.textContent = idea.why_now;
+                text.appendChild(why);
+            }
+            tile.appendChild(text);
+            tile.addEventListener('click', () => {
+                idea.selected = !idea.selected;
+                tile.classList.toggle('is-selected', idea.selected);
+                tile.setAttribute('aria-checked', idea.selected ? 'true' : 'false');
+                onSettled();
+            });
+            list.appendChild(tile);
+        });
+        box.appendChild(list);
+
+        const tools = document.createElement('div');
+        tools.className = 'ppa-ideas__tools';
+        const lengthLabel = document.createElement('span');
+        lengthLabel.className = 'ppa-ideas__label';
+        lengthLabel.textContent = pp.t('js.as.ideas_length');
+        tools.appendChild(lengthLabel);
+        const seg = document.createElement('div');
+        seg.className = 'ppa-seg ppa-seg--inline';
+        seg.setAttribute('role', 'radiogroup');
+        seg.setAttribute('aria-label', pp.t('js.as.ideas_length'));
+        const names = { corto: pp.t('js.as.length_short'), medio: pp.t('js.as.length_medium'), largo: pp.t('js.as.length_long') };
+        LENGTHS.forEach((value) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'ppa-seg__btn';
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', it._length === value ? 'true' : 'false');
+            b.setAttribute('aria-selected', it._length === value ? 'true' : 'false');
+            b.textContent = names[value];
+            b.addEventListener('click', () => {
+                it._length = value;
+                seg.querySelectorAll('.ppa-seg__btn').forEach((other) => {
+                    const on = other === b;
+                    other.setAttribute('aria-checked', on ? 'true' : 'false');
+                    other.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+            });
+            seg.appendChild(b);
+        });
+        tools.appendChild(seg);
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'ppa-ideas__more';
+        more.textContent = pp.t('js.as.ideas_more');
+        more.addEventListener('click', () => loadPreview(it, box, onSettled));
+        tools.appendChild(more);
+        box.appendChild(tools);
+    }
+
+    /** Entradas a escribir que salen de las ideas elegidas. */
+    function ideaItems(it) {
+        return (it._ideas || []).filter((idea) => idea.selected).map((idea) => ({
+            capability_id: 'posts.create',
+            category: 'automatable_now',
+            status: 'aplicar',
+            page_id: 0,
+            form_id: 0,
+            section: '',
+            page_title: idea.title,
+            instruction: idea.instruction,
+            preview_token: idea.token,
+            length: it._length || 'medio',
+            risk: 'draft',
+            undo: false
+        }));
+    }
+
+    /** Lo que mandaría «Aplicar»: los cambios directos y las ideas elegidas. */
+    function applicableItems(items) {
+        const out = [];
+        items.forEach((it) => {
+            if (it.status !== 'aplicar' || itemCategory(it) !== 'automatable_now') return;
+            if (it.capability_id === 'posts.ideas') out.push(...ideaItems(it));
+            else out.push(it);
+        });
+        return out;
+    }
+
+    function postTopic(it) {
+        const m = /«([^»]{3,200})»/.exec(it.instruction || '');
+        return m ? m[1] : (it.page_title || it.instruction || '');
     }
 
     /** ASST-V2 F4b — marcas por elemento del menú: key => added|changed|removed. */
@@ -777,7 +914,11 @@
         return { before: beforeMarks, after: afterMarks };
     }
 
-    function renderPreviewResult(box, data) {
+    function renderPreviewResult(box, data, it, onSettled) {
+        if (data.kind === 'ideas') {
+            renderIdeas(box, data, it, onSettled);
+            return;
+        }
         box.textContent = '';
         box.className = 'ppa-preview is-ready';
         const changes = data.changes || [];
@@ -800,7 +941,7 @@
             const what = document.createElement('strong');
             what.textContent = change.label;
             li.appendChild(what);
-            if (change.detail) li.appendChild(document.createTextNode(' — ' + change.detail));
+            if (change.detail) li.appendChild(document.createTextNode(': ' + change.detail));
             const sr = document.createElement('span');
             sr.className = 'pp-sr-only';
             sr.textContent = {
@@ -870,7 +1011,7 @@
         box.setAttribute('aria-busy', 'true');
         const label = document.createElement('span');
         label.className = 'ppa-preview__loading';
-        label.textContent = pp.t('js.as.preview_loading');
+        label.textContent = pp.t(it.capability_id === 'posts.ideas' ? 'js.as.ideas_loading' : 'js.as.preview_loading');
         box.appendChild(label);
         const skel = document.createElement('div');
         skel.className = 'ppa-preview__skeleton';
@@ -889,7 +1030,7 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.ok) throw new Error(data.error || pp.t('js.as.preview_failed'));
             it._preview = { state: 'ready', token: data.token };
-            renderPreviewResult(box, data.preview);
+            renderPreviewResult(box, data.preview, it, onSettled);
         } catch (error) {
             it._preview = { state: 'failed' };
             box.textContent = '';
@@ -970,6 +1111,10 @@
                     ? pp.t('js.as.form_x', { formulario: it.form_title })
                     : it.capability_id === 'chrome.edit'
                         ? pp.t('js.as.chrome_title')
+                    : it.capability_id === 'posts.ideas'
+                        ? pp.t('js.as.ideas_title')
+                    : it.capability_id === 'posts.create'
+                        ? pp.t('js.as.post_x', { titulo: postTopic(it) })
                     : it.capability_id === 'seo.page.edit' && it.page_title
                         ? pp.t('js.as.seo_x', { pagina: it.page_title })
                         : it.page_title
@@ -1013,7 +1158,7 @@
                         box.className = 'ppa-preview';
                         card.appendChild(box);
                         // Un plan recuperado no vuelve a gastar IA al abrirse: a petición.
-                        if (plan._restored) box.appendChild(previewButton(it, box, () => previewSettled(), pp.t('js.as.preview_show')));
+                        if (plan._restored) box.appendChild(previewButton(it, box, () => previewSettled(), pp.t(it.capability_id === 'posts.ideas' ? 'js.as.ideas_show' : 'js.as.preview_show')));
                         else previewQueue.push(() => loadPreview(it, box, () => previewSettled()));
                     }
                     card.appendChild(renderRisk(it));
@@ -1049,19 +1194,21 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'pp-btn pp-btn--primary ppa-plan__apply';
+            const hasIdeas = actionable.some((it) => it.capability_id === 'posts.ideas');
             const refresh = () => {
-                const applicable = items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
-                const preparing = applicable.some((it) => it._preview && it._preview.state === 'loading');
+                const applicable = applicableItems(items);
+                const preparing = actionable.some((it) => it._preview && it._preview.state === 'loading');
+                const onlyPosts = applicable.length > 0 && applicable.every((it) => it.capability_id === 'posts.create');
                 btn.disabled = applicable.length === 0 || preparing || !!plan._applied;
                 btn.classList.toggle('is-waiting', preparing);
                 if (plan._applied) btn.textContent = pp.t('js.as.plan_applied');
                 else if (preparing) btn.textContent = pp.t('js.as.preview_wait');
-                else btn.textContent = applicable.length > 0
-                    ? pp.t(applicable.length === 1 ? 'js.as.apply_one' : 'js.as.apply_n', { n: applicable.length })
-                    : pp.t('js.as.confirm_above');
+                else if (applicable.length === 0) btn.textContent = pp.t(hasIdeas ? 'js.as.ideas_pick' : 'js.as.confirm_above');
+                else if (onlyPosts) btn.textContent = pp.t(applicable.length === 1 ? 'js.as.write_one' : 'js.as.write_n', { n: applicable.length });
+                else btn.textContent = pp.t(applicable.length === 1 ? 'js.as.apply_one' : 'js.as.apply_n', { n: applicable.length });
             };
             btn.addEventListener('click', () => {
-                const applicable = items.filter((it) => it.status === 'aplicar' && itemCategory(it) === 'automatable_now');
+                const applicable = applicableItems(items);
                 if (applicable.length > 0) applyPlan(plan, applicable, btn);
             });
             foot.appendChild(btn);
@@ -1105,7 +1252,139 @@
         return !it.form_id && (!it.capability_id || it.capability_id === 'pages.canvas.edit');
     }
 
+    // ------------------------------------------------------------------
+    // ASST-V2 F4c — tarjeta de revisión de una entrada nueva, con las mismas
+    // acciones que /admin/posts/new: leer aquí, publicar, editar, descartar.
+    // ------------------------------------------------------------------
+    const adminUrl = String(cfg.baseUrl || '').replace(/\/assistant\/?$/, '');
+
+    function postAction(path, data) {
+        const body = new URLSearchParams(Object.assign({ _csrf: cfg.csrf }, data || {}));
+        return fetch(adminUrl + path, { method: 'POST', credentials: 'same-origin', body })
+            .then((res) => res.json().catch(() => ({})).then((d) => (res.ok && d.ok ? d : Promise.reject(new Error(d.error || pp.t('js.as.unknown_error'))))));
+    }
+
+    function renderPostReview(post) {
+        const card = document.createElement('article');
+        card.className = 'ppa-post';
+        let published = post.status === 'published';
+        if (post.featured_image_path) {
+            const img = document.createElement('img');
+            img.className = 'ppa-post__cover';
+            img.src = post.featured_image_path;
+            img.alt = '';
+            img.loading = 'lazy';
+            card.appendChild(img);
+        }
+        const body = document.createElement('div');
+        body.className = 'ppa-post__body';
+        const head = document.createElement('div');
+        head.className = 'ppa-post__head';
+        const title = document.createElement('h4');
+        title.className = 'ppa-post__title';
+        title.textContent = post.title;
+        head.appendChild(title);
+        const badge = document.createElement('span');
+        badge.className = 'ppa-post__badge';
+        head.appendChild(badge);
+        body.appendChild(head);
+        if (post.excerpt) {
+            const ex = document.createElement('p');
+            ex.className = 'ppa-post__excerpt';
+            ex.textContent = post.excerpt;
+            body.appendChild(ex);
+        }
+        if (post.reading_minutes) {
+            const meta = document.createElement('p');
+            meta.className = 'ppa-post__meta';
+            meta.textContent = pp.t('js.as.post_minutes', { n: post.reading_minutes });
+            body.appendChild(meta);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'ppa-post__actions';
+        const button = (label, cls) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'pp-btn pp-btn--sm ' + cls;
+            b.textContent = label;
+            actions.appendChild(b);
+            return b;
+        };
+        const read = button(pp.t('js.as.post_read'), 'pp-btn--secondary');
+        const publish = button('', 'pp-btn--primary');
+        const edit = document.createElement('a');
+        edit.className = 'pp-btn pp-btn--secondary pp-btn--sm';
+        edit.href = post.edit_url;
+        edit.textContent = pp.t('js.as.post_edit');
+        actions.appendChild(edit);
+        const discard = button(pp.t('js.as.post_discard'), 'pp-btn--ghost ppa-post__discard');
+        body.appendChild(actions);
+        const status = document.createElement('p');
+        status.className = 'ppa-post__status';
+        status.setAttribute('role', 'status');
+        body.appendChild(status);
+        const reader = document.createElement('div');
+        reader.className = 'ppa-post__reader';
+        reader.hidden = true;
+        body.appendChild(reader);
+        card.appendChild(body);
+
+        const paint = () => {
+            badge.textContent = published ? pp.t('js.as.post_live') : pp.t('js.as.post_draft');
+            badge.classList.toggle('is-live', published);
+            publish.textContent = published ? pp.t('js.as.post_unpublish') : pp.t('js.as.post_publish');
+        };
+        paint();
+
+        read.addEventListener('click', () => {
+            if (reader.hidden) {
+                if (!reader.firstChild) {
+                    const frame = document.createElement('iframe');
+                    frame.src = post.preview_url;
+                    frame.title = pp.t('js.as.post_read');
+                    frame.loading = 'lazy';
+                    reader.appendChild(frame);
+                }
+                reader.hidden = false;
+                read.textContent = pp.t('js.as.post_hide');
+            } else {
+                reader.hidden = true;
+                read.textContent = pp.t('js.as.post_read');
+            }
+        });
+        publish.addEventListener('click', () => {
+            const next = published ? 'draft' : 'published';
+            publish.disabled = true;
+            publish.classList.add('is-loading');
+            status.textContent = '';
+            postAction('/posts/' + post.page_id + '/status', { status: next })
+                .then(() => {
+                    published = next === 'published';
+                    paint();
+                    status.textContent = published ? pp.t('js.as.post_published_note') : pp.t('js.as.post_unpublished_note');
+                })
+                .catch((error) => { status.textContent = error.message; })
+                .finally(() => { publish.disabled = false; publish.classList.remove('is-loading'); });
+        });
+        discard.addEventListener('click', () => {
+            if (!window.confirm(pp.t('js.as.post_discard_confirm'))) return;
+            discard.disabled = true;
+            postAction('/posts/' + post.page_id + '/delete', { ajax: '1' })
+                .then(() => {
+                    card.classList.add('is-discarded');
+                    card.textContent = '';
+                    const gone = document.createElement('p');
+                    gone.className = 'ppa-post__gone';
+                    gone.textContent = pp.t('js.as.post_discarded', { titulo: post.title });
+                    card.appendChild(gone);
+                })
+                .catch((error) => { discard.disabled = false; status.textContent = error.message; });
+        });
+        return card;
+    }
+
     function itemLabel(it) {
+        if (it.capability_id === 'posts.create') return pp.t('js.as.post_x', { titulo: it.page_title });
         return it.page_title + (it.section ? ' · «' + it.section + '»' : '');
     }
 
@@ -1113,9 +1392,12 @@
         container.textContent = '';
         const title = document.createElement('div');
         title.className = 'ppa-progress__title';
-        title.textContent = job.status === 'done'
-            ? 'Cambios aplicados (' + job.completed + '/' + job.total + ')'
-            : 'Aplicando cambios… (' + job.completed + '/' + job.total + ')';
+        const onlyPosts = job.items.length > 0 && job.items.every((it) => it.capability_id === 'posts.create');
+        title.textContent = onlyPosts
+            ? pp.t(job.status === 'done' ? 'js.as.posts_written_progress' : 'js.as.posts_writing_progress', { n: job.completed, total: job.total })
+            : job.status === 'done'
+                ? 'Cambios aplicados (' + job.completed + '/' + job.total + ')'
+                : 'Aplicando cambios… (' + job.completed + '/' + job.total + ')';
         container.appendChild(title);
 
         job.items.forEach((it) => {
@@ -1149,13 +1431,21 @@
 
         const p = document.createElement('p');
         p.className = 'ppa-plan__summary';
-        p.textContent = failedItems.length === 0
+        const onlyPosts = job.items.length > 0 && job.items.every((it) => it.capability_id === 'posts.create');
+        p.textContent = onlyPosts
+            ? (failedItems.length === 0
+                ? pp.t(doneItems.length === 1 ? 'js.as.posts_written_one' : 'js.as.posts_written_n', { n: doneItems.length })
+                : pp.t('js.as.posts_written_partial', { n: doneItems.length, total: job.items.length }))
+            : failedItems.length === 0
             ? 'Listo: he aplicado ' + doneItems.length + (doneItems.length === 1 ? ' cambio.' : ' cambios.')
             : 'He aplicado ' + doneItems.length + ' de ' + job.items.length + ' cambios; ' + failedItems.length + ' no se ' + (failedItems.length === 1 ? 'pudo aplicar.' : 'pudieron aplicar.');
         bubble.appendChild(p);
 
         const seenPages = new Set();
-        doneItems.forEach((it) => {
+        doneItems.filter((it) => it.capability_id === 'posts.create' && it.post).forEach((it) => {
+            bubble.appendChild(renderPostReview(it.post));
+        });
+        doneItems.filter((it) => !(it.capability_id === 'posts.create' && it.post)).forEach((it) => {
             const card = document.createElement('div');
             card.className = 'ppa-item ppa-item--ok';
             const head = document.createElement('div');
@@ -1212,11 +1502,17 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
 
+        if (doneItems.some((it) => it.capability_id === 'posts.create')) {
+            const postNote = document.createElement('p');
+            postNote.className = 'ppa-plan__note';
+            postNote.textContent = pp.t('js.as.posts_done_note');
+            bubble.appendChild(postNote);
+        }
         if (doneItems.some((it) => it.capability_id === 'chrome.edit')) {
             const chromeNote = document.createElement('p');
             chromeNote.className = 'ppa-plan__note';
@@ -1268,7 +1564,7 @@
         }
 
         // ASST-V2 F1 — todo lo aplicado se puede revisar y deshacer en Actividad.
-        if (doneItems.length > 0 && cfg.activityUrl) {
+        if (doneItems.some((it) => it.capability_id !== 'posts.create') && cfg.activityUrl) {
             const activity = document.createElement('a');
             activity.className = 'ppa-item__link';
             activity.href = cfg.activityUrl + '?f=assistant';

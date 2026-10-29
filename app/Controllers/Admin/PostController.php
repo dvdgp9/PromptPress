@@ -408,82 +408,21 @@ class PostController
         CSRF::check();
         $siteId = self::requireSiteId();
 
-        $count = max(3, min(8, (int) Request::post('count', 5)));
-
-        // Snapshot de entradas existentes (todas, no solo published, para coherencia)
-        $posts = Database::select(
-            "SELECT p.title, pm.excerpt
-             FROM pages p LEFT JOIN post_meta pm ON pm.page_id = p.id
-             WHERE p.site_id = ? AND p.page_type = 'article'
-             ORDER BY COALESCE(p.published_at, p.updated_at) DESC
-             LIMIT 50",
-            [$siteId]
-        );
-
-        $existingCount = count($posts);
-        if ($existingCount === 0) {
-            // i18n-ignore: contexto que viaja a la IA.
-            $existingList = '(El blog está vacío. Propón entradas pilares fundamentales del tema del negocio.)';
-        } else {
-            $lines = [];
-            foreach ($posts as $i => $p) {
-                $title = trim((string) $p['title']);
-                $excerpt = trim((string) ($p['excerpt'] ?? ''));
-                $lines[] = ($i + 1) . '. ' . $title . ($excerpt !== '' ? ' — ' . $excerpt : '');
-            }
-            $existingList = implode("\n", $lines);
+        // ASST-V2 F4c — la misma lógica la usa el asistente (BlogAssistant).
+        try {
+            $ideas = \App\Services\BlogAssistant::ideas(
+                $siteId,
+                (string) Request::post('focus', ''),
+                (int) Request::post('count', 5)
+            );
+        } catch (\Throwable $e) {
+            Response::json(['ok' => false, 'error' => 'Error pidiendo sugerencias: ' . $e->getMessage()], 500);
         }
-
-        // FH11 — enfoque/tema opcional para acotar las ideas.
-        $focus = trim((string) Request::post('focus', ''));
-        $focusLine = $focus !== ''
-            // i18n-ignore: instrucción para el modelo.
-            ? "Enfócate especialmente en este tema o ángulo: \"" . mb_substr($focus, 0, 240) . "\".\n\n"
-            : '';
-
-        // FH11 — el modelo devuelve ocasionalmente un JSON sin propuestas
-        // parseables (→ 422 transitorio). Reintentamos una vez antes de fallar.
-        $suggestions = [];
-        $result = null;
-        $lastError = __('post_ctrl.no_proposals');
-        $lastStatus = 422;
-        for ($attempt = 1; $attempt <= 2 && empty($suggestions); $attempt++) {
-            try {
-                $result = AIActionRunner::run(Actions::SUGGEST_RELATED_ARTICLES, [
-                    'existing_count' => (string) $existingCount,
-                    'existing_posts' => $existingList,
-                    'count'          => (string) $count,
-                    'focus_line'     => $focusLine,
-                ], $siteId);
-            } catch (AIException $e) {
-                $lastError = $e->getMessage();
-                $st = $e->getHttpStatus();
-                $lastStatus = ($st >= 400 && $st < 600) ? $st : 422;
-                // 4xx propio del proveedor (auth, límite): no insistir.
-                if ($st >= 400 && $st < 500 && $st !== 422 && $st !== 429) break;
-                continue;
-            } catch (\Throwable $e) {
-                Response::json(['ok' => false, 'error' => 'Error pidiendo sugerencias: ' . $e->getMessage()], 500);
-            }
-
-            $data = (array) ($result['data'] ?? []);
-            $raw = is_array($data['suggestions'] ?? null) ? $data['suggestions'] : [];
-            foreach ($raw as $s) {
-                if (!is_array($s)) continue;
-                $title = trim((string) ($s['title'] ?? ''));
-                if ($title === '') continue;
-                $suggestions[] = [
-                    'title'    => mb_substr($title, 0, 200),
-                    'angle'    => mb_substr(trim((string) ($s['angle'] ?? '')), 0, 400),
-                    'audience' => mb_substr(trim((string) ($s['audience'] ?? '')), 0, 200),
-                    'why_now'  => mb_substr(trim((string) ($s['why_now'] ?? '')), 0, 400),
-                ];
-            }
+        if (!$ideas['ok']) {
+            Response::json(['ok' => false, 'error' => (string) $ideas['error']], (int) $ideas['status']);
         }
-
-        if (empty($suggestions)) {
-            Response::json(['ok' => false, 'error' => $lastError], $lastStatus);
-        }
+        $suggestions = $ideas['suggestions'];
+        $result = $ideas['result'];
 
         Response::json([
             'ok' => true,

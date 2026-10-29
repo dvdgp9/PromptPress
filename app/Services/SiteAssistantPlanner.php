@@ -447,8 +447,9 @@ final class SiteAssistantPlanner
             // ejecuta, pero el botón «Llévame» abre ese formulario concreto.
             $form = str_starts_with($capabilityId, 'forms.') ? ($forms[$formId] ?? null) : null;
             // ASST-V2 F4b — el header y el pie son de todo el sitio.
-            $isChrome = $capabilityId === 'chrome.edit';
-            if ($isForm || $isChrome) {
+            // ASST-V2 F4c — las entradas nuevas y las ideas tampoco son de una página.
+            $isSiteWide = in_array($capabilityId, ['chrome.edit', 'posts.create', 'posts.ideas'], true);
+            if ($isForm || $isSiteWide) {
                 $pageId = 0;
             }
             $page = $pages[$pageId] ?? null;
@@ -468,7 +469,7 @@ final class SiteAssistantPlanner
                 $category = 'automatable_now';
             }
 
-            if ($category === 'automatable_now' && $isChrome) {
+            if ($category === 'automatable_now' && $isSiteWide) {
                 if ($instruction === '') {
                     $category = 'needs_input';
                     $reason = __('asst.plan.no_instruction');

@@ -50,6 +50,7 @@ final class AssistantCapabilityRegistry
             'resources'        => self::count('SELECT COUNT(*) AS n FROM resources WHERE site_id = ?', $siteId),
             'commerce_products'=> self::count('SELECT COUNT(*) AS n FROM commerce_products WHERE site_id = ?', $siteId),
             'image_bank'       => ImageBankService::isAvailable() ? 1 : 0,
+            'posts'            => self::count("SELECT COUNT(*) AS n FROM pages WHERE site_id = ? AND page_type = 'article'", $siteId),
         ]);
     }
 
@@ -64,7 +65,9 @@ final class AssistantCapabilityRegistry
     public const RISK = [
         'pages.canvas.edit'  => 'draft',
         'pages.create'       => 'draft',
-        'posts.manage'       => 'draft',
+        'posts.create'       => 'draft',
+        'posts.ideas'        => 'read',
+        'posts.manage'       => 'live',
         'chrome.edit'        => 'live',
         'chrome.manage'      => 'live',
         'design.manage'      => 'live',
@@ -92,6 +95,8 @@ final class AssistantCapabilityRegistry
         // El editor del header y el pie es solo de administradores
         // (ChromeController::save), no de todo el que tiene Apariencia.
         'chrome.edit'       => self::ADMIN_ONLY,
+        'posts.create'      => Permissions::CAP_CONTENT,
+        'posts.ideas'       => Permissions::CAP_CONTENT,
     ];
     private const ADMIN_ONLY = 'role:admin';
 
@@ -138,15 +143,38 @@ final class AssistantCapabilityRegistry
                 (int) ($counts['pages'] ?? 0),
                 ['Título', 'objetivo y contenido mínimo']
             ),
+            // ASST-V2 F4c — el blog: escribir entradas en borrador y proponer ideas
+            // con lo mismo que usa /admin/posts/new. Editar, publicar o borrar
+            // entradas existentes sigue en posts.manage.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+            self::capability(
+                'posts.create',
+                'Escribir entradas nuevas del blog (se guardan en borrador, con imagen destacada si hay banco de imágenes)',
+                'automatic',
+                '/admin/posts',
+                'post_create',
+                (int) ($counts['posts'] ?? 0),
+                ['Tema de cada entrada; enfoque, público o extensión si los da']
+            ),
+            self::capability(
+                'posts.ideas',
+                'Proponer ideas de entradas para el blog a partir de las que ya hay (el operador elige cuáles escribir)',
+                'automatic',
+                '/admin/posts',
+                'post_ideas',
+                (int) ($counts['posts'] ?? 0),
+                ['Enfoque o tema si lo da']
+            ),
             self::capability(
                 'posts.manage',
-                'Crear o gestionar entradas del blog',
+                'Editar, publicar, despublicar o borrar entradas del blog que ya existen',
                 'manual',
                 '/admin/posts',
                 null,
-                null,
-                ['Título y contenido']
+                (int) ($counts['posts'] ?? 0),
+                ['Entrada y cambio concreto']
             ),
+            // i18n-ignore-end
             // ASST-V2 F4b — textos y enlaces del header y el pie. El diseño
             // (colores, fondo, logo, columnas, densidad) sigue en chrome.manage.
             // i18n-ignore-start: etiquetas que lee el planner en el prompt.

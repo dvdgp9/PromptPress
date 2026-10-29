@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b (menú, header y pie) publicado como v1.18.0 (29/10, «Publícalo»); F4c–F4f por hacer
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c (blog) publicado como v1.19.0 (29/10, «Publícalo»); F4d–F4f por hacer
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11219,7 +11219,7 @@ Verificación:
 Un ejecutor por paso, de menos a más riesgo. Cada uno: capacidad automática en el registro con `risk`/`undo`, vista previa antes de aplicar (propuesta firmada que «Aplicar» guarda tal cual), versión previa guardada y deshacer en Actividad.
 - [x] F4a SEO de página (`seo.page.edit`): título SEO y meta descripción de una página existente. En vivo, deshacible. Slug, redirecciones, indexación y canonical siguen en `seo.manage` (manual): tocar el slug rompe enlaces. ✅ «mejora el SEO de la portada» enseña el resultado de Google antes/después y se deshace desde Actividad.
 - [x] F4b Menú, header y footer (`chrome.edit` automático para textos y enlaces).
-- [ ] F4c Entradas del blog en borrador.
+- [x] F4c Entradas del blog en borrador (+ ideas).
 - [ ] F4d Crear página en borrador.
 - [ ] F4e Diseño global (colores/tipografías), con vista previa visual.
 - [ ] F4f Reservas, productos, recursos (sensibles: precios/pagos).
@@ -11277,3 +11277,33 @@ Verificación:
 ## Lessons (ASST-V2 F4b)
 - Header y pie: el permiso real es `role === admin` (ChromeController), no CAP_APPEARANCE.
 - Menú vacío = automático. Guardar el menú efectivo tal cual lo congelaría y las páginas nuevas dejarían de entrar solas.
+
+## Key Challenges and Analysis (ASST-V2 F4c) — 29/10/2026
+Lo que ya existe en el blog y se reutiliza tal cual (usuario: «ten en cuenta la funcionalidad que hay montada… puede ser interesante mantener cosas»):
+- `GENERATE_ARTICLE` + `PostController::createPostFromAiPayload`: entrada en BORRADOR con imagen destacada automática (si hay banco de imágenes).
+- `SUGGEST_RELATED_ARTICLES` (mira las entradas existentes, enfoque opcional, 1 reintento) → ideas {title, angle, audience, why_now}.
+- Flujo de /admin/posts/new: elegir ideas (tarjetas seleccionables) → tono/extensión → generación en cola → tarjeta de revisión (Leer en línea, Publicar/Despublicar, Editar, Descartar).
+Diseño F4c:
+- `posts.create` automático (riesgo borrador, sin deshacer: no se publica nada). Máx. 5 por plan.
+- `posts.ideas` automático (solo consulta): la tarjeta carga sola las ideas (mismo servicio), se eligen tocándolas, se elige extensión, y «Aplicar» escribe las elegidas como borradores. Cada idea va firmada para que no haga falta re-proponer el plan.
+- Tras aplicar: tarjeta de revisión por entrada con las mismas acciones que /admin/posts/new (mismos endpoints).
+- Editar/publicar/borrar entradas existentes sigue en `posts.manage` (manual) por ahora.
+- La lógica de ideas pasa a `BlogAssistant::ideas()` y el controlador la usa (mismo comportamiento).
+Design read (design-taste-frontend): tarjeta de producto en el chat del panel, para dueño de web no técnico; calma y funcional; tokens del panel + CSS nativo, movimiento contenido (4/4/5). Sin rayas largas (—) en textos visibles nuevos; se quitan también de la lista de cambios.
+
+## Current Status / Progress Tracking (ASST-V2 F4c) — 29/10/2026, Executor
+Hecho (pendiente de verificación del usuario y «Publícalo»):
+- `posts.create` (borrador) y `posts.ideas` (consulta) automáticos; `posts.manage` queda para editar/publicar/borrar existentes.
+- `BlogAssistant`: ideas() (lógica movida desde PostController::aiSuggestRelated, que ahora la usa), create() con GENERATE_ARTICLE + createPostFromAiPayload (imagen destacada incluida), card() para la revisión.
+- Tarjeta de ideas: se cargan solas («Buscando ideas…»), se eligen tocándolas (role=checkbox), extensión Corta/Media/Larga, «Otras ideas»; el botón dice «Elige qué ideas escribir» → «Escribir N entradas». Cada idea va firmada (`post_idea`), así que se acepta aunque el plan tenga material adjunto.
+- Informe: progreso «Escribiendo entradas… (1/2)» y tarjeta de revisión por entrada con Leer (iframe en línea), Publicar/Despublicar, Editar y Descartar (con confirmación), con los mismos endpoints que /admin/posts/new. Máximo 5 entradas por plan. No entra en «Publicar cambios» ni en Actividad (son borradores).
+- UX (design-taste-frontend): sin «—» en textos nuevos y quitada de la lista de cambios; botón deshabilitado ahora se ve deshabilitado (0.55, not-allowed); foco visible; pulsación con scale; reduced-motion.
+
+Verificación:
+- `tests/assistant_v2_posts.php` (20 PASS): firma de ideas con material adjunto, sin firma o manipulada rechazada, tope de 5, tema y extensión guardados, tarjeta desde una entrada real en borrador, no se publica sola. Resto de suites en verde; lint i18n 48.
+- Navegador (render + fetch simulado, panel 440px): ideas → elegir 2 → Larga → escribir → progreso → tarjetas; Leer, Publicar y Descartar funcionando.
+- Sin probar con la IA real.
+
+## Lessons (ASST-V2 F4c)
+- Un item que no estaba en el plan (elegido en la tarjeta) choca con la huella del material adjunto: se autoriza con su propia firma.
+- Los `pp-btn--primary` deshabilitados no tenían estilo propio en el chat: parecían activos.

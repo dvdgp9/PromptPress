@@ -82,7 +82,17 @@ final class SiteAssistantJobs
             if (!self::isExecutablePlanItem($item)) {
                 continue;
             }
-            if ($source !== null
+            // ASST-V2 F4c — una entrada elegida entre las ideas no estaba en el
+            // plan original: la autoriza la firma de esa idea.
+            $fromIdea = ($item['capability_id'] ?? '') === 'posts.create'
+                && AssistantProposal::open(
+                    (string) ($item['preview_token'] ?? ''),
+                    'post_idea',
+                    $siteId,
+                    $siteId,
+                    trim((string) ($item['instruction'] ?? ''))
+                ) !== null;
+            if ($source !== null && !$fromIdea
                 && !in_array(AssistantSourceEnvelope::itemFingerprint($item), $authorizedHashes, true)) {
                 return ['ok' => false, 'error' => 'El plan confirmado ha cambiado. Vuelve a proponerlo antes de aplicar.'];
             }
@@ -107,6 +117,31 @@ final class SiteAssistantJobs
                     'form_id'     => $formId,
                     'page_title'  => __('asst.form.label', ['formulario' => (string) ($forms[$formId]['heading'] ?: __('forms.untitled'))]),
                     'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
+            if (($item['capability_id'] ?? '') === 'posts.create') {
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if ($instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $posts = count(array_filter($clean, static fn (array $c): bool => ($c['capability_id'] ?? '') === 'posts.create'));
+                if ($posts >= BlogAssistant::MAX_POSTS_PER_PLAN) {
+                    continue;
+                }
+                $topic = BlogAssistant::topicFrom($instruction);
+                $clean[] = [
+                    'capability_id' => 'posts.create',
+                    'proposal_token' => null,
+                    'page_id'     => 0,
+                    'form_id'     => null,
+                    'page_title'  => mb_substr($topic, 0, 255),
+                    // La extensión elegida viaja en `section` (los items de
+                    // entrada no tienen sección).
+                    'section'     => BlogAssistant::lengthFrom($instruction, (string) ($item['length'] ?? 'medio')),
                     'instruction' => $instruction,
                     'source_block_ids' => [],
                     'media_ids' => [],
@@ -254,7 +289,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'posts.create'], true);
     }
 
     /**
@@ -392,6 +427,12 @@ final class SiteAssistantJobs
                     ? ChromeAssistantEditor::commit($siteId, $p['content'], $p['base_hash'], $userId)
                     : ChromeAssistantEditor::apply($siteId, $instruction, $userId);
             };
+        } elseif ($capability === 'posts.create') {
+            $kind = 'post';
+            $aiError = 'asst.err.post_no_valid_change';
+            $topic = (string) ($item['page_title'] ?? '');
+            $length = (string) ($item['section'] ?? 'medio');
+            $run = static fn (): array => BlogAssistant::create($siteId, $userId, $topic, $instruction, $length);
         } else {
             return false;
         }
@@ -399,9 +440,10 @@ final class SiteAssistantJobs
         try {
             $outcome = $run();
             if ($outcome['ok']) {
+                // Una entrada nueva: el item apunta a ella desde ahora.
                 Database::execute(
-                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
-                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
+                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL, page_id = ? WHERE id = ?',
+                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), (int) ($outcome['page_id'] ?? $item['page_id']), $item['id']]
                 );
                 return true;
             }
@@ -780,6 +822,10 @@ final class SiteAssistantJobs
             $it['form_id'] = (int) ($it['form_id'] ?? 0);
             $it['capability_id'] = (string) ($it['capability_id'] ?? '') ?: ($it['form_id'] > 0 ? 'forms.edit' : 'pages.canvas.edit');
             $it['id'] = (int) $it['id'];
+            // ASST-V2 F4c — lo que necesita la tarjeta de revisión de la entrada.
+            if ($it['capability_id'] === 'posts.create' && $it['status'] === 'done' && $it['page_id'] > 0) {
+                $it['post'] = BlogAssistant::card($siteId, $it['page_id']);
+            }
         }
         unset($it);
 

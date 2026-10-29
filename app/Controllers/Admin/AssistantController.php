@@ -10,6 +10,7 @@ use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
+use App\Services\BlogAssistant;
 use App\Services\AssistantProposal;
 use App\Services\ChromeAssistantEditor;
 use App\Services\FormAssistantEditor;
@@ -353,6 +354,7 @@ class AssistantController
             'forms.edit'    => ['form', (int) ($item['form_id'] ?? 0)],
             'seo.page.edit' => ['seo', (int) ($item['page_id'] ?? 0)],
             'chrome.edit'   => ['chrome', $siteId],
+            'posts.ideas'   => ['ideas', $siteId],
             default         => ['', 0],
         };
         if ($kind === '' || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
@@ -364,6 +366,9 @@ class AssistantController
 
         @set_time_limit(200);
         $started = microtime(true);
+        if ($kind === 'ideas') {
+            $this->previewIdeas($siteId, $instruction, $started);
+        }
         try {
             $proposal = match ($kind) {
                 'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction),
@@ -387,6 +392,37 @@ class AssistantController
         error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
             $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
         Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
+    }
+
+    /**
+     * ASST-V2 F4c — ideas para el blog. Cada idea vuelve firmada junto con la
+     * instrucción de su entrada: al elegirla, «Aplicar» la escribe sin volver
+     * a proponer el plan.
+     */
+    private function previewIdeas(int $siteId, string $focus, float $started): void
+    {
+        // «sin enfoque» y similares no acotan nada.
+        $focus = preg_match('/^(sin enfoque|ninguno|general|-)\.?$/iu', trim($focus)) === 1 ? '' : $focus;
+        try {
+            $ideas = BlogAssistant::ideas($siteId, $focus, 6);
+        } catch (\Throwable $e) {
+            error_log('[assistant preview] site=' . $siteId . ' ideas ' . get_class($e) . ': ' . $e->getMessage());
+            Response::json(['ok' => false, 'error' => __('asst.err.ideas_failed')], 502);
+        }
+        if (!$ideas['ok']) {
+            Response::json(['ok' => false, 'error' => __('asst.err.ideas_failed')], 502);
+        }
+        $out = [];
+        foreach ($ideas['suggestions'] as $idea) {
+            $instruction = BlogAssistant::ideaInstruction($idea);
+            $out[] = $idea + [
+                'instruction' => $instruction,
+                'token'       => AssistantProposal::seal('post_idea', $siteId, $siteId, $instruction, $idea, ''),
+            ];
+        }
+        error_log(sprintf('[assistant preview] site=%d posts.ideas ideas=%d ms=%d',
+            $siteId, count($out), (int) ((microtime(true) - $started) * 1000)));
+        Response::json(['ok' => true, 'preview' => ['kind' => 'ideas', 'ideas' => $out, 'changes' => []], 'token' => '']);
     }
 
     // ----------------------------------------------------------------------

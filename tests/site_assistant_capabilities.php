@@ -53,12 +53,12 @@ checkAssistantCapability(
     json_encode(AssistantCapabilityRegistry::CATEGORIES)
 );
 checkAssistantCapability(
-    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a) y chrome.edit (F4b).
+    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a), chrome.edit (F4b) y el blog (F4c).
     'only_registered_executors_are_automatic',
     ($byId['pages.canvas.edit']['mode'] ?? '') === 'automatic'
         && ($byId['pages.canvas.edit']['handler'] ?? '') === 'canvas_edit'
         && ($byId['forms.edit']['handler'] ?? '') === 'form_edit'
-        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'forms.edit', 'pages.canvas.edit', 'seo.page.edit']; })(
+        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'forms.edit', 'pages.canvas.edit', 'posts.create', 'posts.ideas', 'seo.page.edit']; })(
             array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id')
         ),
     json_encode($catalog)
