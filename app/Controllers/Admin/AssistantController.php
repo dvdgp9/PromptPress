@@ -11,6 +11,7 @@ use App\Services\AssistantMediaReferences;
 use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
 use App\Services\AssistantProposal;
+use App\Services\ChromeAssistantEditor;
 use App\Services\FormAssistantEditor;
 use App\Services\PageSeoAssistantEditor;
 use App\Services\SiteAssistantJobs;
@@ -346,36 +347,43 @@ class AssistantController
 
         $item = json_decode((string) Request::post('item', ''), true);
         $capability = is_array($item) ? (string) ($item['capability_id'] ?? '') : '';
-        $targetId = !is_array($item) ? 0 : (int) ($capability === 'forms.edit' ? ($item['form_id'] ?? 0) : ($item['page_id'] ?? 0));
         $instruction = is_array($item) ? trim((string) ($item['instruction'] ?? '')) : '';
-        if (!in_array($capability, ['forms.edit', 'seo.page.edit'], true)
-            || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
+        // tipo de propuesta + elemento al que se ata la firma
+        [$kind, $targetId] = match ($capability) {
+            'forms.edit'    => ['form', (int) ($item['form_id'] ?? 0)],
+            'seo.page.edit' => ['seo', (int) ($item['page_id'] ?? 0)],
+            'chrome.edit'   => ['chrome', $siteId],
+            default         => ['', 0],
+        };
+        if ($kind === '' || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
             Response::json(['ok' => false, 'error' => __('asst.err.preview_unsupported')], 422);
         }
-
         if (!AssistantCapabilityRegistry::roleCanExecute(Auth::role(), $capability)) {
             Response::json(['ok' => false, 'error' => __('asst.err.no_permission')], 403);
         }
 
         @set_time_limit(200);
         $started = microtime(true);
-        $isForm = $capability === 'forms.edit';
         try {
-            $proposal = $isForm
-                ? FormAssistantEditor::propose($siteId, $targetId, $instruction)
-                : PageSeoAssistantEditor::propose($siteId, $targetId, $instruction);
+            $proposal = match ($kind) {
+                'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction),
+                'seo'    => PageSeoAssistantEditor::propose($siteId, $targetId, $instruction),
+                'chrome' => ChromeAssistantEditor::propose($siteId, $instruction),
+            };
         } catch (AIException $e) {
             error_log('[assistant preview] site=' . $siteId . ' ' . $capability . ' target=' . $targetId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => __($isForm ? 'asst.err.form_no_valid_change' : 'asst.err.seo_no_valid_change')], 502);
+            Response::json(['ok' => false, 'error' => __('asst.err.' . $kind . '_no_valid_change')], 502);
         }
         if (!$proposal['ok']) {
             Response::json(['ok' => false, 'error' => (string) $proposal['error']], 422);
         }
 
-        $token = AssistantProposal::seal($isForm ? 'form' : 'seo', $siteId, $targetId, $instruction, $proposal['content'], $proposal['base_hash']);
-        $preview = $isForm
-            ? FormAssistantEditor::preview($proposal['before'], $proposal['content'])
-            : PageSeoAssistantEditor::preview($siteId, $targetId, $proposal['before'], $proposal['content']);
+        $token = AssistantProposal::seal($kind, $siteId, $targetId, $instruction, $proposal['content'], $proposal['base_hash']);
+        $preview = match ($kind) {
+            'form'   => FormAssistantEditor::preview($proposal['before'], $proposal['content']),
+            'seo'    => PageSeoAssistantEditor::preview($siteId, $targetId, $proposal['before'], $proposal['content']),
+            'chrome' => ChromeAssistantEditor::preview($siteId, $proposal['before'], $proposal['content']),
+        };
         error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
             $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
         Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);

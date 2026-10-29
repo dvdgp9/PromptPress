@@ -12680,10 +12680,10 @@ body > .ppa-media-picker { z-index: 120; }
 .ppa-preview__retry { flex: none; }
 
 .ppa-preview__changes { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; font-size: 0.82rem; }
-.ppa-preview__changes li { display: flex; align-items: baseline; gap: 6px; line-height: 1.4; }
+.ppa-preview__changes li { position: relative; padding-left: 22px; line-height: 1.45; }
 .ppa-preview__changes li.is-none { color: var(--pp-text-muted); }
 .ppa-preview__changes strong { font-weight: 600; }
-.ppa-preview__sign { flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 0.75rem; font-weight: 700; line-height: 1; transform: translateY(2px); }
+.ppa-preview__sign { position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; line-height: 1; }
 .ppa-preview__changes .is-added .ppa-preview__sign { background: #dcfce7; color: #166534; }
 .ppa-preview__changes .is-removed .ppa-preview__sign { background: #fee2e2; color: #991b1b; }
 .ppa-preview__changes .is-changed .ppa-preview__sign,
@@ -12731,6 +12731,28 @@ body > .ppa-media-picker { z-index: 120; }
 .ppa-snippet__meter { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--pp-border); font-family: inherit; font-size: 0.72rem; color: var(--pp-text-muted); font-variant-numeric: tabular-nums; }
 .ppa-snippet__meter .is-over { color: #9a3412; font-weight: 600; }
 .ppa-preview__stage[data-view="before"] .ppa-snippet__title { color: #52525b; }
+
+/* ASST-V2 F4b — maqueta del menú y el pie */
+.ppa-chrome { display: grid; gap: 10px; }
+.ppa-chrome__tag { display: block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-muted); margin-bottom: 6px; }
+.ppa-chrome__header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; padding-bottom: 10px; border-bottom: 1px solid var(--pp-border); }
+.ppa-chrome__header .ppa-chrome__tag { flex-basis: 100%; margin-bottom: 0; }
+.ppa-chrome__menu { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto; }
+.ppa-chrome__item { font-size: 0.8rem; font-weight: 600; color: var(--pp-text); padding: 3px 8px; border-radius: 6px; border: 1px solid transparent; }
+.ppa-chrome__item.has-children > .ppa-chrome__label::after { content: " ▾"; color: var(--pp-text-muted); font-weight: 400; }
+.ppa-chrome__item.is-added { background: #f0fdf4; border-color: #86efac; }
+.ppa-chrome__item.is-changed { background: #fff7ed; border-color: #fdba74; }
+.ppa-chrome__item.is-removed { background: #fef2f2; border-color: #fca5a5; text-decoration: line-through; color: var(--pp-text-muted); }
+.ppa-chrome__item.is-hidden { opacity: 0.5; font-style: italic; }
+.ppa-chrome__sub { list-style: none; margin: 4px 0 0; padding: 4px 0 0 10px; border-left: 2px solid var(--pp-border); display: grid; gap: 2px; }
+.ppa-chrome__sub .ppa-chrome__item { font-weight: 500; font-size: 0.76rem; }
+.ppa-chrome__cta { flex: none; padding: 4px 12px; border-radius: 6px; background: var(--pp-primary); color: #fff; font-size: 0.76rem; font-weight: 600; }
+.ppa-chrome__cta.is-auto { opacity: 0.85; }
+.ppa-chrome__footer { padding: 10px; border-radius: 8px; background: #1c1917; color: #e7e5e4; }
+.ppa-chrome__footer .ppa-chrome__tag { color: #a8a29e; }
+.ppa-chrome__line { margin: 0 0 4px; font-size: 0.78rem; line-height: 1.4; }
+.ppa-chrome__line.is-auto { color: #a8a29e; font-style: italic; }
+.ppa-chrome__line.is-small { font-size: 0.7rem; margin: 6px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
     .ppa-preview, .ppa-preview__skeleton span { animation: none; }

@@ -44,6 +44,10 @@ final class ActivityService
         if (Permissions::roleHas($role, Permissions::CAP_VISIBILITY)) {
             $entries = array_merge($entries, self::seoEntries($siteId));
         }
+        // El header y el pie solo los edita un administrador.
+        if ($role === Permissions::ROLE_ADMIN) {
+            $entries = array_merge($entries, self::chromeEntries($siteId));
+        }
         return self::filterAndSort($entries, $filter);
     }
 
@@ -203,6 +207,43 @@ final class ActivityService
     }
 
     /**
+     * ASST-V2 F4b — header y pie: cada fila es la config ANTES del cambio.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function chromeEntries(int $siteId): array
+    {
+        $rows = Database::select(
+            "SELECT vr.id, vr.reason, vr.created_at, u.username
+             FROM versions vr
+             LEFT JOIN users u ON u.id = vr.created_by
+             WHERE vr.entity_type = ? AND vr.entity_id = ? AND vr.reason IN ('before_ai_edit', 'before_restore')
+               AND vr.created_at >= NOW() - INTERVAL " . self::DAYS . " DAY
+             ORDER BY vr.id DESC LIMIT " . self::LIMIT,
+            [ChromeAssistantEditor::ENTITY, $siteId]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $actor = self::formActor((string) $r['reason']);
+            if ($actor === null) continue;
+            $out[] = [
+                'type' => 'chrome',
+                'entity_id' => $siteId,
+                'title' => __('asst.chrome.label'),
+                'actor' => $actor,
+                'username' => (string) ($r['username'] ?? ''),
+                'detail' => '',
+                'at' => (string) $r['created_at'],
+                'version_id' => (int) $r['id'],
+                'undone' => false,
+                'undoable' => true,
+                'edit_url' => base_url('admin/chrome'),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Deshace un cambio. Devuelve la clave de traducción del resultado.
      *
      * @return array{ok:bool,message:string,vars?:array<string,string>}
@@ -214,6 +255,12 @@ final class ActivityService
             if (!Permissions::roleHas($role, Permissions::CAP_FORMS)) return $fail;
             return FormStore::restoreVersion($siteId, $entityId, $versionId, $userId)
                 ? ['ok' => true, 'message' => 'activity.undo_form_done']
+                : $fail;
+        }
+        if ($type === 'chrome') {
+            if ($role !== Permissions::ROLE_ADMIN || $entityId !== $siteId) return $fail;
+            return ChromeAssistantEditor::restoreVersion($siteId, $versionId, $userId)
+                ? ['ok' => true, 'message' => 'activity.undo_chrome_done']
                 : $fail;
         }
         if ($type === 'seo') {

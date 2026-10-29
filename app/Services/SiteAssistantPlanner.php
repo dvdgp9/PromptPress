@@ -446,7 +446,9 @@ final class SiteAssistantPlanner
             // ASST-V2 F2 — también forms.manage conserva su formulario: no se
             // ejecuta, pero el botón «Llévame» abre ese formulario concreto.
             $form = str_starts_with($capabilityId, 'forms.') ? ($forms[$formId] ?? null) : null;
-            if ($isForm) {
+            // ASST-V2 F4b — el header y el pie son de todo el sitio.
+            $isChrome = $capabilityId === 'chrome.edit';
+            if ($isForm || $isChrome) {
                 $pageId = 0;
             }
             $page = $pages[$pageId] ?? null;
@@ -466,7 +468,12 @@ final class SiteAssistantPlanner
                 $category = 'automatable_now';
             }
 
-            if ($category === 'automatable_now' && $isForm) {
+            if ($category === 'automatable_now' && $isChrome) {
+                if ($instruction === '') {
+                    $category = 'needs_input';
+                    $reason = __('asst.plan.no_instruction');
+                }
+            } elseif ($category === 'automatable_now' && $isForm) {
                 if ($form === null) {
                     $category = 'needs_input';
                     $reason = __('asst.plan.no_form');

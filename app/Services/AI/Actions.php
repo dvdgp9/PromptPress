@@ -53,6 +53,7 @@ final class Actions
     public const DESIGN_FORM                = 'design_form';                 // FORMS F4
     public const DRAFT_FORM_AUTORESPONDER   = 'draft_form_autoresponder';    // FORMS F4
     public const PLAN_SITE_CHANGES          = 'plan_site_changes';           // FEAT-5 asistente central
+    public const EDIT_CHROME                = 'edit_chrome';                 // ASST-V2 F4b menú, header y pie
 
     /**
      * FH2 — Principios POSITIVOS de diseño (la otra cara del anti-slop):
@@ -242,6 +243,39 @@ final class Actions
                     'response_format' => 'json',
                     'temperature'     => 0.5,
                     'max_tokens'      => 12000,
+                ],
+            ],
+
+            // ASST-V2 F4b — Textos y enlaces del header y el pie. Recibe y
+            // devuelve el mismo subconjunto de chrome_config; el diseño no viaja.
+            self::EDIT_CHROME => [
+                'label'        => 'Editar menú, header y pie',
+                'output'       => 'json',
+                'required'     => ['request', 'current_chrome', 'site_pages'],
+                'instruction'  =>
+                    "Editas el menú del header, el botón del header y los textos y enlaces del pie de una web.\n"
+                  . "Recibes el estado actual en JSON y devuelves EL MISMO JSON completo con solo el cambio pedido aplicado; todo lo demás, idéntico (mismo orden, mismas etiquetas, mismos enlaces).\n"
+                  . "FORMA (no añadas claves):\n"
+                  . "{\"header\":{\"menu\":[ITEM],\"cta\":{\"mode\":\"auto|custom|off\",\"label\":\"\",\"url\":\"\",\"style\":\"primary|ghost\"}},"
+                  . "\"footer\":{\"tagline\":\"\",\"nav\":[ITEM_SIMPLE],\"contact\":{\"address\":\"\",\"phone\":\"\",\"email\":\"\",\"hours\":\"\"},\"social\":[{\"network\":\"instagram\",\"url\":\"https://...\"}],\"copyright\":\"\",\"labels\":{\"nav\":\"\",\"legal\":\"\",\"contact\":\"\",\"social\":\"\",\"newsletter\":\"\"},\"brand\":{\"name\":\"\"}}}\n"
+                  . "ITEM: {\"type\":\"page\",\"page_id\":12,\"label\":\"\",\"visible\":true} | {\"type\":\"link\",\"label\":\"Blog\",\"url\":\"/blog\",\"target\":\"_self|_blank\",\"visible\":true} | {\"type\":\"dropdown\",\"label\":\"Servicios\",\"visible\":true,\"children\":[ITEM_SIMPLE]}\n"
+                  . "ITEM_SIMPLE: como ITEM pero solo page o link (sin dropdown).\n"
+                  . "REGLAS:\n"
+                  . "- Para enlazar una página de la web usa type page con su page_id de PÁGINAS DEL SITIO. Nunca inventes page_id. Una URL externa o un ancla es type link.\n"
+                  . "- label vacío en una página = se muestra su título. Déjalo vacío salvo que pidan otro nombre.\n"
+                  . "- Máximo 14 elementos por menú y 8 hijos por desplegable. Un desplegable necesita etiqueta y al menos un hijo.\n"
+                  . "- footer.nav vacío significa automático (páginas publicadas): déjalo vacío salvo que pidan cambiar el menú del pie.\n"
+                  . "- cta mode auto = botón automático de contacto; custom = usa label y url; off = sin botón.\n"
+                  . "- Textos vacíos en el pie = automáticos (tagline de la marca, © año). No inventes teléfonos, direcciones, emails, horarios ni redes: usa solo los que da el operador o ya están.\n"
+                  . "- Texto plano, sin HTML. Responde SOLO con el JSON.",
+                'user_template' =>
+                    "Petición del operador:\n\"{request}\"\n\n"
+                  . "PÁGINAS DEL SITIO (id | título | ruta | estado):\n{site_pages}\n\n"
+                  . "ESTADO ACTUAL:\n{current_chrome}\n{extra_context}",
+                'options'      => [
+                    'response_format' => 'json',
+                    'temperature'     => 0.3,
+                    'max_tokens'      => 6000,
                 ],
             ],
 
@@ -1293,6 +1327,7 @@ final class Actions
                   . "REGLAS:\n"
                   . "- CAPACIDADES VERIFICADAS es la única fuente sobre lo que PromptPress y este Assistant pueden hacer. Usa siempre un capability_id literal del registro. No inventes capacidades, handlers, pantallas ni estado configurado.\n"
                   . "- category automatable_now SOLO si la capacidad declara mode=automatic, handler distinto de ninguno, la página Canvas existe y están todos los datos. status debe ser aplicar.\n"
+                  . "- MENÚ, HEADER Y PIE: añadir, quitar, renombrar u ordenar elementos del menú del header (también desplegables), cambiar el botón del header o los textos y enlaces del pie (lema, menú del pie, teléfono, dirección, email, horario, redes, copyright) es automatable_now con capability_id chrome.edit: page_id 0, form_id 0, section vacía. Un solo item para todo el header y el pie. La instruction dice el resultado: qué elementos quedan, en qué orden, con qué texto y a qué página o URL apuntan. Colores, fondo, logo, bordes, columnas o altura del header NO son chrome.edit: usa chrome.manage. No inventes datos de contacto ni redes.\n"
                   . "- SEO DE PÁGINA: mejorar o cambiar el título SEO (meta title) o la meta descripción de una página del MAPA es automatable_now con capability_id seo.page.edit: pon su page_id y section vacía. Un item por página. La instruction resume el enfoque pedido (palabras clave, servicio, ciudad, tono) sin inventar datos. Cambiar la URL/slug, redirecciones, noindex o canonical NO es seo.page.edit: usa seo.manage. Si piden «mejorar el SEO» de toda la web, un item seo.page.edit por cada página importante (máximo 6) y dilo en reply.\n"
                   . "- FORMULARIOS: cambiar preguntas, opciones, tipos de campo (p. ej. convertir varias preguntas en un único desplegable), etiquetas, título, descripción, texto del botón o mensaje de éxito de un formulario del MAPA DE FORMULARIOS es automatable_now con capability_id forms.edit: pon su form_id, page_id 0 y section vacía. Un item por formulario. La instruction describe el formulario resultante completo: qué preguntas quedan, en qué orden, su tipo (select = desplegable, radio, checkbox_group…), si son obligatorias y las opciones literales. Conserva las preguntas de contacto (nombre, email, teléfono) salvo que se pida expresamente quitarlas. Si no queda claro qué formulario es, needs_input y pregunta cuál. Destinatario del aviso, consentimientos o textos legales y autorrespuesta NO son forms.edit: usa forms.manage o legal.content. Crear un formulario nuevo es forms.manage.\n"
                   . "- category manual_in_platform si la plataforma lo permite pero la capacidad no tiene handler automático. status no_viable; next_action indica el panel del registro. No significa que PromptPress no lo soporte.\n"

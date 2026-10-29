@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a (SEO de página) publicado como v1.17.0 (29/10, «Publícalo»); F4b–F4f por hacer
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b (menú, header y pie) publicado como v1.18.0 (29/10, «Publícalo»); F4c–F4f por hacer
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11218,7 +11218,7 @@ Verificación:
 ## High-level Task Breakdown (ASST-V2 F4) — Planner, 29/10/2026 (usuario: «Sí, sigue con F4»)
 Un ejecutor por paso, de menos a más riesgo. Cada uno: capacidad automática en el registro con `risk`/`undo`, vista previa antes de aplicar (propuesta firmada que «Aplicar» guarda tal cual), versión previa guardada y deshacer en Actividad.
 - [x] F4a SEO de página (`seo.page.edit`): título SEO y meta descripción de una página existente. En vivo, deshacible. Slug, redirecciones, indexación y canonical siguen en `seo.manage` (manual): tocar el slug rompe enlaces. ✅ «mejora el SEO de la portada» enseña el resultado de Google antes/después y se deshace desde Actividad.
-- [ ] F4b Menú, header y footer (`chrome.manage` → automático para textos y enlaces).
+- [x] F4b Menú, header y footer (`chrome.edit` automático para textos y enlaces).
 - [ ] F4c Entradas del blog en borrador.
 - [ ] F4d Crear página en borrador.
 - [ ] F4e Diseño global (colores/tipografías), con vista previa visual.
@@ -11250,3 +11250,30 @@ Verificación:
 - Los ejecutores del asistente deben exigir el permiso del panel equivalente: el segmento /assistant solo pide CAP_ASSISTANT.
 - Un mismo page_id puede ser edición Canvas o SEO: el item del job guarda capability_id.
 - Los cambios SEO manuales (Studio/editor) no guardan versión: Actividad solo enseña los del asistente y las restauraciones.
+
+## Key Challenges and Analysis (ASST-V2 F4b) — 29/10/2026
+- El header y el pie viven en `settings.chrome_config` (JSON) y solo los edita un administrador (ChromeController::save comprueba `role === admin`, no CAP_APPEARANCE). El ejecutor exige lo mismo.
+- Alcance F4b: solo TEXTOS Y ENLACES → nueva capacidad `chrome.edit` (menú del header con desplegables, botón del header, pie: tagline, menú del pie, contacto, redes, copyright, rótulos de columnas, nombre). Diseño (colores, fondo, bordes, densidad, logo, columnas) queda en `chrome.manage` manual hasta F4e.
+- Menú vacío = automático (páginas publicadas). A la IA se le da el menú efectivo (HeaderMenuService::editableMenu); si devuelve justo ese, se guarda vacío para seguir en automático. Si pasa a personalizado, editableMenu congela los idiomas secundarios en su lista (como «Añadir al menú»).
+- Solo idioma principal. Si hay capas de traducción del menú/pie, el informe avisa de revisarlas.
+- Las páginas que cite la IA deben existir en el sitio; si no, se rechaza la propuesta.
+- Vista previa: maqueta legible del menú y del pie (un header real a 440px no se lee) + lista de cambios. Deshacer: `versions` entity `chrome`, entity_id = site_id.
+
+## Current Status / Progress Tracking (ASST-V2 F4b) — 29/10/2026, Executor
+Hecho (pendiente de verificación del usuario y «Publícalo»):
+- `chrome.edit` automático (live, deshacible, SOLO administradores como el editor manual). `chrome.manage` pasa a ser solo diseño (manual).
+- Acción IA `EDIT_CHROME`: recibe y devuelve el subconjunto de textos y enlaces; páginas por page_id de la lista del sitio.
+- `ChromeAssistantEditor`: prepare (materializa el menú automático, vuelve a automático si queda igual, rechaza page_id inexistentes y dejar el menú vacío), commit (huella de la config guardada; versión `chrome` antes), restoreVersion (una versión vacía vuelve a «nunca configurado»).
+- Tarjeta: maqueta del header (menú con desplegables y botón) y del pie con marcas añadido/cambiado/quitado + lista de cambios. Aviso de traducciones si hay idiomas con capa propia.
+- Actividad: «X cambió el menú, el header o el pie» con Deshacer (solo admin).
+- Los tres ejecutores en vivo (formulario, SEO, header/pie) comparten `SiteAssistantJobs::stepLiveItem`.
+- `HeaderMenuService::editableMenu` pasa a público.
+
+Verificación:
+- `tests/assistant_v2_chrome.php` (27 PASS) con BD real: copia la config del sitio 1, aplica, deshace a automático y la deja byte a byte como estaba. Resto de suites en verde (site_assistant_capabilities ahora no depende del orden). Lint i18n 49.
+- Navegador (render + fetch simulado) en el panel a 440px: maqueta y lista de cambios; corregido el salto de línea de la lista y la flecha del desplegable.
+- Sin probar con la IA real.
+
+## Lessons (ASST-V2 F4b)
+- Header y pie: el permiso real es `role === admin` (ChromeController), no CAP_APPEARANCE.
+- Menú vacío = automático. Guardar el menú efectivo tal cual lo congelaría y las páginas nuevas dejarían de entrar solas.

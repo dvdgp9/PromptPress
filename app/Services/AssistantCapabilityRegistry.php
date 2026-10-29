@@ -65,6 +65,7 @@ final class AssistantCapabilityRegistry
         'pages.canvas.edit'  => 'draft',
         'pages.create'       => 'draft',
         'posts.manage'       => 'draft',
+        'chrome.edit'        => 'live',
         'chrome.manage'      => 'live',
         'design.manage'      => 'live',
         'forms.edit'         => 'live',
@@ -88,16 +89,23 @@ final class AssistantCapabilityRegistry
         'pages.canvas.edit' => Permissions::CAP_CONTENT,
         'forms.edit'        => Permissions::CAP_FORMS,
         'seo.page.edit'     => Permissions::CAP_VISIBILITY,
+        // El editor del header y el pie es solo de administradores
+        // (ChromeController::save), no de todo el que tiene Apariencia.
+        'chrome.edit'       => self::ADMIN_ONLY,
     ];
+    private const ADMIN_ONLY = 'role:admin';
 
     public static function roleCanExecute(?string $role, string $capabilityId): bool
     {
         $cap = self::EXECUTOR_PERMISSION[$capabilityId] ?? null;
+        if ($cap === self::ADMIN_ONLY) {
+            return $role === Permissions::ROLE_ADMIN;
+        }
         return $cap !== null && Permissions::roleHas($role, $cap);
     }
 
     /** Capacidades cuyo cambio del asistente se deshace desde Actividad. */
-    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit'];
+    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit'];
 
     /**
      * Constructor puro del catálogo; permite probar el gate sin base de datos.
@@ -139,15 +147,28 @@ final class AssistantCapabilityRegistry
                 null,
                 ['Título y contenido']
             ),
+            // ASST-V2 F4b — textos y enlaces del header y el pie. El diseño
+            // (colores, fondo, logo, columnas, densidad) sigue en chrome.manage.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+            self::capability(
+                'chrome.edit',
+                'Cambiar el menú del header (añadir, quitar, renombrar, ordenar, desplegables), su botón y los textos y enlaces del pie (lema, menú del pie, contacto, redes, copyright); se aplica en vivo en toda la web',
+                'automatic',
+                '/admin/chrome',
+                'chrome_edit',
+                null,
+                ['Qué elementos, en qué orden y con qué texto o enlace']
+            ),
             self::capability(
                 'chrome.manage',
-                'Editar header, footer, menú y navegación global',
+                'Cambiar el diseño del header y el pie (colores, fondo, bordes, logo, columnas, densidad)',
                 'manual',
                 '/admin/chrome',
                 null,
                 null,
-                ['Textos, enlaces y orden deseado']
+                ['Decisión de diseño']
             ),
+            // i18n-ignore-end
             self::capability(
                 'design.manage',
                 'Editar colores, tipografías, logos y sistema visual global',

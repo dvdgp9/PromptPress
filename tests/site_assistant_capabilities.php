@@ -53,12 +53,14 @@ checkAssistantCapability(
     json_encode(AssistantCapabilityRegistry::CATEGORIES)
 );
 checkAssistantCapability(
-    // ASST-FORMS añadió forms.edit y ASST-V2 F4a seo.page.edit: los únicos con ejecutor.
+    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a) y chrome.edit (F4b).
     'only_registered_executors_are_automatic',
     ($byId['pages.canvas.edit']['mode'] ?? '') === 'automatic'
         && ($byId['pages.canvas.edit']['handler'] ?? '') === 'canvas_edit'
         && ($byId['forms.edit']['handler'] ?? '') === 'form_edit'
-        && array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id') === ['pages.canvas.edit', 'forms.edit', 'seo.page.edit'],
+        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'forms.edit', 'pages.canvas.edit', 'seo.page.edit']; })(
+            array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id')
+        ),
     json_encode($catalog)
 );
 checkAssistantCapability(

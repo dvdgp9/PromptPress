@@ -259,7 +259,7 @@ final class HeaderMenuService
      * @param array<string,int[]> $autoByLang
      * @return array<int,array<string,mixed>>
      */
-    private static function editableMenu(array &$config, string $lang, string $primaryLang, array $autoByLang): array
+    public static function editableMenu(array &$config, string $lang, string $primaryLang, array $autoByLang): array
     {
         if ($lang !== $primaryLang) {
             $layer = (array) ($config['i18n'][$lang]['header']['menu'] ?? []);

@@ -113,6 +113,29 @@ final class SiteAssistantJobs
                 ];
                 continue;
             }
+            if (($item['capability_id'] ?? '') === 'chrome.edit') {
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if ($instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                if ($proposal !== '' && AssistantProposal::open($proposal, 'chrome', $siteId, $siteId, $instruction) === null) {
+                    error_log('[assistant job create] site=' . $siteId . ' chrome preview token rejected');
+                    $proposal = '';
+                }
+                $clean[] = [
+                    'capability_id' => 'chrome.edit',
+                    'proposal_token' => $proposal !== '' ? $proposal : null,
+                    'page_id'     => 0,
+                    'form_id'     => null,
+                    'page_title'  => __('asst.chrome.label'),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
             if (($item['capability_id'] ?? '') === 'seo.page.edit') {
                 $pageId = (int) ($item['page_id'] ?? 0);
                 $instruction = trim((string) ($item['instruction'] ?? ''));
@@ -231,7 +254,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit'], true);
     }
 
     /**
@@ -267,12 +290,7 @@ final class SiteAssistantJobs
         }
         Database::execute('UPDATE assistant_job_items SET status = "running" WHERE id = ?', [$item['id']]);
 
-        if ((int) ($item['form_id'] ?? 0) > 0) {
-            self::stepFormItem($siteId, $item, $job);
-            return self::finishStep($jobId, $siteId);
-        }
-        if (($item['capability_id'] ?? '') === 'seo.page.edit') {
-            self::stepSeoItem($siteId, $item, $job);
+        if (self::stepLiveItem($siteId, $item, $job)) {
             return self::finishStep($jobId, $siteId);
         }
 
@@ -330,83 +348,76 @@ final class SiteAssistantJobs
     }
 
     /**
-     * ASST-FORMS — ejecuta un item forms.edit. Se aplica en vivo (los
-     * formularios no tienen borrador); FormAssistantEditor guarda antes una
-     * versión restaurable.
+     * Ejecuta los items que se aplican en vivo (formulario, SEO, header y pie).
+     * Con vista previa se guarda la propuesta firmada que se enseñó; sin ella,
+     * se pide ahora a la IA. Cada ejecutor guarda antes una versión deshacible.
+     * Devuelve false si el item no es de este tipo (edición Canvas).
      *
      * @param array<string,mixed> $item
      * @param array<string,mixed> $job
      */
-    private static function stepFormItem(int $siteId, array $item, array $job): void
+    private static function stepLiveItem(int $siteId, array $item, array $job): bool
     {
-        try {
-            $userId = isset($job['created_by']) ? (int) $job['created_by'] : null;
-            $proposal = FormAssistantEditor::openProposal(
-                (string) ($item['proposal_token'] ?? ''),
-                $siteId,
-                (int) $item['form_id'],
-                (string) $item['instruction']
-            );
-            // Con vista previa se guarda lo que se enseñó; sin ella, se pide ahora.
-            $outcome = $proposal !== null
-                ? FormAssistantEditor::commit($siteId, (int) $item['form_id'], $proposal['content'], $proposal['base_hash'], $userId)
-                : FormAssistantEditor::apply($siteId, (int) $item['form_id'], (string) $item['instruction'], $userId);
-            if ($outcome['ok']) {
-                Database::execute(
-                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
-                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
-                );
-                return;
-            }
-            $error = (string) ($outcome['error'] ?? __('js.as.unknown_error'));
-        } catch (AIException $e) {
-            error_log('[assistant job] form item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            $error = __('asst.err.form_no_valid_change');
-        } catch (\Throwable $e) {
-            error_log('[assistant job] form item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
-            $error = __('asst.err.apply', ['detalle' => $e->getMessage()]);
-        }
-        Database::execute(
-            'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
-            [mb_substr($error, 0, 1000), $item['id']]
-        );
-    }
+        $userId = isset($job['created_by']) ? (int) $job['created_by'] : null;
+        $instruction = (string) $item['instruction'];
+        $token = (string) ($item['proposal_token'] ?? '');
+        $formId = (int) ($item['form_id'] ?? 0);
+        $pageId = (int) ($item['page_id'] ?? 0);
+        $capability = (string) ($item['capability_id'] ?? '');
 
-    /**
-     * ASST-V2 F4a — ejecuta un item seo.page.edit. En vivo; antes se guarda el
-     * SEO anterior para deshacerlo desde Actividad.
-     *
-     * @param array<string,mixed> $item
-     * @param array<string,mixed> $job
-     */
-    private static function stepSeoItem(int $siteId, array $item, array $job): void
-    {
-        $pageId = (int) $item['page_id'];
+        if ($formId > 0) {
+            $kind = 'form';
+            $aiError = 'asst.err.form_no_valid_change';
+            $run = static function () use ($siteId, $formId, $instruction, $token, $userId): array {
+                $p = FormAssistantEditor::openProposal($token, $siteId, $formId, $instruction);
+                return $p !== null
+                    ? FormAssistantEditor::commit($siteId, $formId, $p['content'], $p['base_hash'], $userId)
+                    : FormAssistantEditor::apply($siteId, $formId, $instruction, $userId);
+            };
+        } elseif ($capability === 'seo.page.edit') {
+            $kind = 'seo';
+            $aiError = 'asst.err.seo_no_valid_change';
+            $run = static function () use ($siteId, $pageId, $instruction, $token, $userId): array {
+                $p = AssistantProposal::open($token, 'seo', $siteId, $pageId, $instruction);
+                return $p !== null
+                    ? PageSeoAssistantEditor::commit($siteId, $pageId, $p['content'], $p['base_hash'], $userId)
+                    : PageSeoAssistantEditor::apply($siteId, $pageId, $instruction, $userId);
+            };
+        } elseif ($capability === 'chrome.edit') {
+            $kind = 'chrome';
+            $aiError = 'asst.err.chrome_no_valid_change';
+            $run = static function () use ($siteId, $instruction, $token, $userId): array {
+                $p = AssistantProposal::open($token, 'chrome', $siteId, $siteId, $instruction);
+                return $p !== null
+                    ? ChromeAssistantEditor::commit($siteId, $p['content'], $p['base_hash'], $userId)
+                    : ChromeAssistantEditor::apply($siteId, $instruction, $userId);
+            };
+        } else {
+            return false;
+        }
+
         try {
-            $userId = isset($job['created_by']) ? (int) $job['created_by'] : null;
-            $proposal = AssistantProposal::open((string) ($item['proposal_token'] ?? ''), 'seo', $siteId, $pageId, (string) $item['instruction']);
-            $outcome = $proposal !== null
-                ? PageSeoAssistantEditor::commit($siteId, $pageId, $proposal['content'], $proposal['base_hash'], $userId)
-                : PageSeoAssistantEditor::apply($siteId, $pageId, (string) $item['instruction'], $userId);
+            $outcome = $run();
             if ($outcome['ok']) {
                 Database::execute(
                     'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL WHERE id = ?',
                     [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), $item['id']]
                 );
-                return;
+                return true;
             }
             $error = (string) ($outcome['error'] ?? __('js.as.unknown_error'));
         } catch (AIException $e) {
-            error_log('[assistant job] seo item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            $error = __('asst.err.seo_no_valid_change');
+            error_log('[assistant job] ' . $kind . ' item=' . $item['id'] . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            $error = __($aiError);
         } catch (\Throwable $e) {
-            error_log('[assistant job] seo item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
+            error_log('[assistant job] ' . $kind . ' item=' . $item['id'] . ' ' . get_class($e) . ': ' . $e->getMessage());
             $error = __('asst.err.apply', ['detalle' => $e->getMessage()]);
         }
         Database::execute(
             'UPDATE assistant_job_items SET status = "failed", error = ? WHERE id = ?',
             [mb_substr($error, 0, 1000), $item['id']]
         );
+        return true;
     }
 
     /**

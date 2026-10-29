@@ -582,7 +582,95 @@
     function wantsPreview(it) {
         if (it.status !== 'aplicar') return false;
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
-            || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0);
+            || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
+            || it.capability_id === 'chrome.edit';
+    }
+
+    /** ASST-V2 F4b — marcas por elemento del menú: key => added|changed|removed. */
+    function chromeMarks(before, after) {
+        const flat = (menu) => {
+            const map = new Map();
+            (menu || []).forEach((it) => {
+                map.set(it.key, { label: it.label, visible: it.visible, parent: '' });
+                (it.children || []).forEach((c) => map.set(c.key, { label: c.label, visible: c.visible, parent: it.label }));
+            });
+            return map;
+        };
+        const a = flat(before.menu);
+        const b = flat(after.menu);
+        const afterMarks = {};
+        const beforeMarks = {};
+        b.forEach((v, key) => {
+            if (!a.has(key)) afterMarks[key] = 'added';
+            else if (JSON.stringify(a.get(key)) !== JSON.stringify(v)) { afterMarks[key] = 'changed'; beforeMarks[key] = 'changed'; }
+        });
+        a.forEach((v, key) => { if (!b.has(key)) beforeMarks[key] = 'removed'; });
+        return { before: beforeMarks, after: afterMarks };
+    }
+
+    function renderChromeMock(outline, marks) {
+        const mock = document.createElement('div');
+        mock.className = 'ppa-chrome';
+        const head = document.createElement('div');
+        head.className = 'ppa-chrome__header';
+        const tag = document.createElement('span');
+        tag.className = 'ppa-chrome__tag';
+        tag.textContent = pp.t('js.as.chrome_header');
+        head.appendChild(tag);
+        const nav = document.createElement('ul');
+        nav.className = 'ppa-chrome__menu';
+        (outline.menu || []).forEach((it) => {
+            const li = document.createElement('li');
+            li.className = 'ppa-chrome__item' + (marks[it.key] ? ' is-' + marks[it.key] : '') + (it.visible ? '' : ' is-hidden');
+            const label = document.createElement('span');
+            label.className = 'ppa-chrome__label';
+            label.textContent = it.label;
+            li.appendChild(label);
+            if ((it.children || []).length > 0) {
+                li.classList.add('has-children');
+                const sub = document.createElement('ul');
+                sub.className = 'ppa-chrome__sub';
+                it.children.forEach((c) => {
+                    const cli = document.createElement('li');
+                    cli.className = 'ppa-chrome__item' + (marks[c.key] ? ' is-' + marks[c.key] : '') + (c.visible ? '' : ' is-hidden');
+                    cli.textContent = c.label;
+                    sub.appendChild(cli);
+                });
+                li.appendChild(sub);
+            }
+            nav.appendChild(li);
+        });
+        head.appendChild(nav);
+        const cta = outline.cta || {};
+        if (cta.mode !== 'off') {
+            const btn = document.createElement('span');
+            btn.className = 'ppa-chrome__cta' + (cta.mode === 'auto' ? ' is-auto' : '');
+            btn.textContent = cta.mode === 'custom' && cta.label ? cta.label : pp.t('js.as.chrome_cta_auto');
+            head.appendChild(btn);
+        }
+        mock.appendChild(head);
+
+        const f = outline.footer || {};
+        const foot = document.createElement('div');
+        foot.className = 'ppa-chrome__footer';
+        const ftag = document.createElement('span');
+        ftag.className = 'ppa-chrome__tag';
+        ftag.textContent = pp.t('js.as.chrome_footer');
+        foot.appendChild(ftag);
+        const line = (text, cls) => {
+            const p = document.createElement('p');
+            p.className = 'ppa-chrome__line' + (cls ? ' ' + cls : '');
+            p.textContent = text;
+            foot.appendChild(p);
+        };
+        line(f.tagline || pp.t('js.as.chrome_auto_tagline'), f.tagline ? '' : 'is-auto');
+        line((f.nav || []).length > 0 ? f.nav.map((n) => n.label).join(' · ') : pp.t('js.as.chrome_auto_nav'), (f.nav || []).length > 0 ? '' : 'is-auto');
+        const contact = Object.values(f.contact || {}).filter(Boolean);
+        if (contact.length > 0) line(contact.join(' · '));
+        if ((f.social || []).length > 0) line(f.social.join(' · '));
+        line(f.copyright || pp.t('js.as.chrome_auto_copyright'), f.copyright ? 'is-small' : 'is-small is-auto');
+        mock.appendChild(foot);
+        return mock;
     }
 
     /** ASST-V2 F4a — cómo saldría la página en Google. */
@@ -727,13 +815,17 @@
         box.appendChild(list);
 
         const isSeo = data.kind === 'seo';
-        const marks = isSeo ? { before: {}, after: {} } : fieldMarks(data.before, data.after);
+        const isChrome = data.kind === 'chrome';
+        const marks = isSeo ? { before: {}, after: {} } : isChrome ? chromeMarks(data.before, data.after) : fieldMarks(data.before, data.after);
         const tabs = document.createElement('div');
         tabs.className = 'ppa-seg';
         tabs.setAttribute('role', 'tablist');
         const stage = document.createElement('div');
         stage.className = 'ppa-preview__stage';
-        const views = isSeo ? {
+        const views = isChrome ? {
+            after: () => renderChromeMock(data.after, marks.after),
+            before: () => renderChromeMock(data.before, marks.before)
+        } : isSeo ? {
             after: () => renderSnippet(data.after, data.limits),
             before: () => renderSnippet(data.before, data.limits)
         } : {
@@ -876,6 +968,8 @@
                 title.className = 'ppa-item__page';
                 title.textContent = it.form_id
                     ? pp.t('js.as.form_x', { formulario: it.form_title })
+                    : it.capability_id === 'chrome.edit'
+                        ? pp.t('js.as.chrome_title')
                     : it.capability_id === 'seo.page.edit' && it.page_title
                         ? pp.t('js.as.seo_x', { pagina: it.page_title })
                         : it.page_title
@@ -1074,7 +1168,7 @@
             t.className = 'ppa-item__page';
             t.textContent = itemLabel(it);
             head.appendChild(t);
-            if (it.capability_id === 'seo.page.edit') {
+            if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit') {
                 // En vivo ya: no hay nada que revisar ni publicar.
             } else if (it.form_id) {
                 const link = document.createElement('a');
@@ -1118,11 +1212,17 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
 
+        if (doneItems.some((it) => it.capability_id === 'chrome.edit')) {
+            const chromeNote = document.createElement('p');
+            chromeNote.className = 'ppa-plan__note';
+            chromeNote.textContent = pp.t('js.as.chrome_live_done');
+            bubble.appendChild(chromeNote);
+        }
         if (doneItems.some((it) => it.capability_id === 'seo.page.edit')) {
             const seoNote = document.createElement('p');
             seoNote.className = 'ppa-plan__note';
