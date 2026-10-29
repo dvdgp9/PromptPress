@@ -448,7 +448,7 @@ final class SiteAssistantPlanner
             $form = str_starts_with($capabilityId, 'forms.') ? ($forms[$formId] ?? null) : null;
             // ASST-V2 F4b — el header y el pie son de todo el sitio.
             // ASST-V2 F4c — las entradas nuevas y las ideas tampoco son de una página.
-            $isSiteWide = in_array($capabilityId, ['chrome.edit', 'posts.create', 'posts.ideas'], true);
+            $isSiteWide = in_array($capabilityId, ['chrome.edit', 'posts.create', 'posts.ideas', 'pages.create', 'pages.ideas'], true);
             if ($isForm || $isSiteWide) {
                 $pageId = 0;
             }

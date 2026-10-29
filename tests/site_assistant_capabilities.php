@@ -53,21 +53,23 @@ checkAssistantCapability(
     json_encode(AssistantCapabilityRegistry::CATEGORIES)
 );
 checkAssistantCapability(
-    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a), chrome.edit (F4b) y el blog (F4c).
+    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a), chrome.edit (F4b), el blog (F4c) y las páginas nuevas (F4d).
     'only_registered_executors_are_automatic',
     ($byId['pages.canvas.edit']['mode'] ?? '') === 'automatic'
         && ($byId['pages.canvas.edit']['handler'] ?? '') === 'canvas_edit'
         && ($byId['forms.edit']['handler'] ?? '') === 'form_edit'
-        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'forms.edit', 'pages.canvas.edit', 'posts.create', 'posts.ideas', 'seo.page.edit']; })(
+        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'forms.edit', 'pages.canvas.edit', 'pages.create', 'pages.ideas', 'posts.create', 'posts.ideas', 'seo.page.edit']; })(
             array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id')
         ),
     json_encode($catalog)
 );
 checkAssistantCapability(
-    'page_creation_exists_but_is_manual_for_assistant',
+    // ASST-V2 F4d — el asistente ya crea páginas, siempre en borrador.
+    'page_creation_is_automatic_and_draft',
     ($byId['pages.create']['platform_available'] ?? false) === true
-        && ($byId['pages.create']['mode'] ?? '') === 'manual'
-        && ($byId['pages.create']['handler'] ?? null) === null
+        && ($byId['pages.create']['mode'] ?? '') === 'automatic'
+        && ($byId['pages.create']['handler'] ?? null) === 'page_create'
+        && ($byId['pages.create']['risk'] ?? '') === 'draft'
         && ($byId['pages.create']['admin_path'] ?? '') === '/admin/pages',
     json_encode($byId['pages.create'] ?? null)
 );

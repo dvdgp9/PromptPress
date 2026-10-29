@@ -65,6 +65,7 @@ final class AssistantCapabilityRegistry
     public const RISK = [
         'pages.canvas.edit'  => 'draft',
         'pages.create'       => 'draft',
+        'pages.ideas'        => 'read',
         'posts.create'       => 'draft',
         'posts.ideas'        => 'read',
         'posts.manage'       => 'live',
@@ -96,6 +97,8 @@ final class AssistantCapabilityRegistry
         // (ChromeController::save), no de todo el que tiene Apariencia.
         'chrome.edit'       => self::ADMIN_ONLY,
         'posts.create'      => Permissions::CAP_CONTENT,
+        'pages.create'      => Permissions::CAP_CONTENT,
+        'pages.ideas'       => Permissions::CAP_CONTENT,
         'posts.ideas'       => Permissions::CAP_CONTENT,
     ];
     private const ADMIN_ONLY = 'role:admin';
@@ -134,15 +137,28 @@ final class AssistantCapabilityRegistry
 
         $capabilities = [
             $canvasEdit,
+            // ASST-V2 F4d — páginas nuevas con el creador del panel (plan +
+            // Canvas). Siempre en borrador; artículos y legales no entran aquí.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
             self::capability(
                 'pages.create',
-                'Crear una página nueva',
-                'manual',
+                'Crear una página nueva (servicio, landing, contacto, producto o inicio) en borrador, con su plan y diseño Canvas',
+                'automatic',
                 '/admin/pages',
-                null,
+                'page_create',
                 (int) ($counts['pages'] ?? 0),
-                ['Título', 'objetivo y contenido mínimo']
+                ['Qué página es y para qué sirve; público o llamada a la acción si los da']
             ),
+            self::capability(
+                'pages.ideas',
+                'Proponer qué páginas le faltan a la web (el operador elige cuáles crear)',
+                'automatic',
+                '/admin/pages',
+                'page_ideas',
+                (int) ($counts['pages'] ?? 0),
+                ['Enfoque si lo da']
+            ),
+            // i18n-ignore-end
             // ASST-V2 F4c — el blog: escribir entradas en borrador y proponer ideas
             // con lo mismo que usa /admin/posts/new. Editar, publicar o borrar
             // entradas existentes sigue en posts.manage.

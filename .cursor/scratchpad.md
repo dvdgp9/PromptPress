@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c (blog) publicado como v1.19.0 (29/10, «Publícalo»); F4d–F4f por hacer
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e–F4f por hacer
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11220,7 +11220,7 @@ Un ejecutor por paso, de menos a más riesgo. Cada uno: capacidad automática en
 - [x] F4a SEO de página (`seo.page.edit`): título SEO y meta descripción de una página existente. En vivo, deshacible. Slug, redirecciones, indexación y canonical siguen en `seo.manage` (manual): tocar el slug rompe enlaces. ✅ «mejora el SEO de la portada» enseña el resultado de Google antes/después y se deshace desde Actividad.
 - [x] F4b Menú, header y footer (`chrome.edit` automático para textos y enlaces).
 - [x] F4c Entradas del blog en borrador (+ ideas).
-- [ ] F4d Crear página en borrador.
+- [x] F4d Crear página en borrador (+ páginas que faltan).
 - [ ] F4e Diseño global (colores/tipografías), con vista previa visual.
 - [ ] F4f Reservas, productos, recursos (sensibles: precios/pagos).
 Executor para tras cada paso para verificación y «Publícalo».
@@ -11307,3 +11307,20 @@ Verificación:
 ## Lessons (ASST-V2 F4c)
 - Un item que no estaba en el plan (elegido en la tarjeta) choca con la huella del material adjunto: se autoriza con su propia firma.
 - Los `pp-btn--primary` deshabilitados no tenían estilo propio en el chat: parecían activos.
+
+## Current Status / Progress Tracking (ASST-V2 F4d) — 29/10/2026, Executor
+Reutiliza el creador de páginas del panel (usuario: mantener lo que ya hay):
+- `PageController::briefFor()` y `opportunitiesFor()` salen de aiBrief/aiOpportunities (mismas respuestas, con su reintento, plan base y caché); `isCanvasMarketingType`, `briefToContext` y `decodePostedBrief` pasan a públicos.
+- `PageAssistant`: brief (solo tipos Canvas; artículo → posts.create, legal → legal.content), ideas (oportunidades), create (usa la precomposición si coincide la firma del plan; si no, generateCanvasPageForPanel), card.
+- `pages.create` automático (borrador, máx. 3 por plan) y `pages.ideas` (consulta). Tarjeta: plan de la página (título, tipo, objetivo, secciones numeradas, CTA, público, formulario) firmado, «Otra propuesta», y precomposición en segundo plano con el mismo /admin/pages/ai-prepare («Diseñando la página mientras lo revisas…» → «Lista: se creará al momento»). Solo si hay una página en el plan (hay un único hueco de precomposición).
+- Ideas de páginas: mismo selector que el blog, sin extensión; «Crear N páginas».
+- Informe: «Creando páginas…», aviso de que tarda ~1 min, «Abrir en el Studio →» y nota de que quedan en borrador y fuera del menú. No entran en «Publicar cambios».
+
+Verificación:
+- `tests/assistant_v2_pages.php` (16 PASS): plan firmado guardado, token malo descartado, idea firmada con material adjunto, firma de otro tipo rechazada, tope de 3, creación desde precomposición sin IA (<5 s, Canvas, borrador, un solo uso). Actualizados 2 tests de capacidades (pages.create ya es automático). Suites de páginas, Canvas, onboarding y asistente en verde; lint i18n 47.
+- Navegador (render + fetch simulado, panel 440px): plan → precomposición lista → crear → Studio; ideas de páginas → 2 → crear.
+- Sin probar con la IA real.
+
+## Lessons (ASST-V2 F4d)
+- La precomposición del creador de páginas es un único hueco por sitio (settings studio_compose_*): con varias páginas en un plan no se precompone (se pisarían).
+- En PHP, `($x ?? 'x') === null` nunca es cierto: `??` también salta con null.

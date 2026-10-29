@@ -567,7 +567,7 @@
 
     function renderRisk(it) {
         // Las ideas solo se leen, pero lo que se elija se escribe en borrador.
-        const meta = it.capability_id === 'posts.ideas'
+        const meta = it.capability_id === 'posts.ideas' || it.capability_id === 'pages.ideas'
             ? RISK_META.draft
             : RISK_META[it.risk] || (it.form_id ? RISK_META.live : RISK_META.draft);
         const line = document.createElement('div');
@@ -587,7 +587,121 @@
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
             || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
             || it.capability_id === 'chrome.edit'
-            || it.capability_id === 'posts.ideas';
+            || it.capability_id === 'posts.ideas'
+            || it.capability_id === 'pages.ideas'
+            || it.capability_id === 'pages.create';
+    }
+
+    // ------------------------------------------------------------------
+    // ASST-V2 F4d — plan de una página nueva (el mismo que /admin/pages/create).
+    // Mientras se lee, la página se compone en segundo plano con el mismo
+    // endpoint del creador de páginas: al aplicar, sale al instante.
+    // ------------------------------------------------------------------
+    function renderPageBrief(box, data, it, onSettled, plan) {
+        const brief = data.brief || {};
+        box.textContent = '';
+        box.className = 'ppa-preview is-ready ppa-preview--page';
+
+        const head = document.createElement('div');
+        head.className = 'ppa-brief__head';
+        const title = document.createElement('strong');
+        title.className = 'ppa-brief__title';
+        title.textContent = brief.title || '';
+        head.appendChild(title);
+        if (data.type) {
+            const type = document.createElement('span');
+            type.className = 'ppa-brief__type';
+            type.textContent = data.type;
+            head.appendChild(type);
+        }
+        box.appendChild(head);
+        if (brief.goal) {
+            const goal = document.createElement('p');
+            goal.className = 'ppa-brief__goal';
+            goal.textContent = brief.goal;
+            box.appendChild(goal);
+        }
+
+        const sections = data.sections || [];
+        if (sections.length > 0) {
+            const label = document.createElement('p');
+            label.className = 'ppa-brief__label';
+            label.textContent = pp.t('js.as.page_sections', { n: sections.length });
+            box.appendChild(label);
+            const list = document.createElement('ol');
+            list.className = 'ppa-brief__sections';
+            sections.forEach((section) => {
+                const li = document.createElement('li');
+                const h = document.createElement('span');
+                h.className = 'ppa-brief__section';
+                h.textContent = section.heading || section.purpose;
+                li.appendChild(h);
+                if (section.heading && section.purpose) {
+                    const purpose = document.createElement('span');
+                    purpose.className = 'ppa-brief__purpose';
+                    purpose.textContent = section.purpose;
+                    li.appendChild(purpose);
+                }
+                list.appendChild(li);
+            });
+            box.appendChild(list);
+        }
+
+        const facts = document.createElement('div');
+        facts.className = 'ppa-brief__facts';
+        const fact = (labelKey, value) => {
+            if (!value) return;
+            const row = document.createElement('p');
+            const k = document.createElement('span');
+            k.textContent = pp.t(labelKey);
+            row.appendChild(k);
+            row.appendChild(document.createTextNode(value));
+            facts.appendChild(row);
+        };
+        fact('js.as.page_cta', brief.primary_cta);
+        fact('js.as.page_audience', brief.audience);
+        if ((data.form || []).length > 0) fact('js.as.page_form', data.form.join(', '));
+        if (facts.childNodes.length > 0) box.appendChild(facts);
+
+        if (data.fallback) {
+            const warn = document.createElement('p');
+            warn.className = 'ppa-brief__warn';
+            warn.textContent = pp.t('js.as.page_fallback');
+            box.appendChild(warn);
+        }
+
+        const tools = document.createElement('div');
+        tools.className = 'ppa-ideas__tools';
+        const status = document.createElement('span');
+        status.className = 'ppa-brief__status';
+        status.setAttribute('role', 'status');
+        tools.appendChild(status);
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'ppa-ideas__more';
+        again.textContent = pp.t('js.as.page_again');
+        again.addEventListener('click', () => loadPreview(it, box, onSettled));
+        tools.appendChild(again);
+        box.appendChild(tools);
+
+        // Una sola página en el plan: hay un único hueco de precomposición.
+        const pagesInPlan = (plan && plan.items ? plan.items : []).filter((x) => x.capability_id === 'pages.create').length;
+        if (pagesInPlan === 1) {
+            status.classList.add('is-working');
+            status.textContent = pp.t('js.as.page_preparing');
+            const body = new URLSearchParams({ _csrf: cfg.csrf, ai_brief_json: JSON.stringify(brief), ai_model: '' });
+            fetch(adminUrl + '/pages/ai-prepare', { method: 'POST', credentials: 'same-origin', body })
+                .then((res) => res.json().catch(() => ({})))
+                .then((d) => {
+                    status.classList.remove('is-working');
+                    status.textContent = d && d.ready ? pp.t('js.as.page_ready') : pp.t('js.as.page_compose_on_apply');
+                    status.classList.toggle('is-ready', !!(d && d.ready));
+                })
+                .catch(() => {
+                    status.classList.remove('is-working');
+                    status.textContent = pp.t('js.as.page_compose_on_apply');
+                });
+        }
     }
 
     // ------------------------------------------------------------------
@@ -604,13 +718,14 @@
 
         const hint = document.createElement('p');
         hint.className = 'ppa-ideas__hint';
-        hint.textContent = pp.t('js.as.ideas_hint');
+        const forPages = it.capability_id === 'pages.ideas';
+        hint.textContent = pp.t(forPages ? 'js.as.page_ideas_hint' : 'js.as.ideas_hint');
         box.appendChild(hint);
 
         const list = document.createElement('div');
         list.className = 'ppa-ideas';
         list.setAttribute('role', 'group');
-        list.setAttribute('aria-label', pp.t('js.as.ideas_title'));
+        list.setAttribute('aria-label', pp.t(forPages ? 'js.as.page_ideas_title' : 'js.as.ideas_title'));
         it._ideas.forEach((idea) => {
             const tile = document.createElement('button');
             tile.type = 'button';
@@ -652,6 +767,16 @@
 
         const tools = document.createElement('div');
         tools.className = 'ppa-ideas__tools';
+        if (forPages) {
+            const more = document.createElement('button');
+            more.type = 'button';
+            more.className = 'ppa-ideas__more';
+            more.textContent = pp.t('js.as.ideas_more');
+            more.addEventListener('click', () => loadPreview(it, box, onSettled));
+            tools.appendChild(more);
+            box.appendChild(tools);
+            return;
+        }
         const lengthLabel = document.createElement('span');
         lengthLabel.className = 'ppa-ideas__label';
         lengthLabel.textContent = pp.t('js.as.ideas_length');
@@ -691,8 +816,9 @@
 
     /** Entradas a escribir que salen de las ideas elegidas. */
     function ideaItems(it) {
+        const capability = it.capability_id === 'pages.ideas' ? 'pages.create' : 'posts.create';
         return (it._ideas || []).filter((idea) => idea.selected).map((idea) => ({
-            capability_id: 'posts.create',
+            capability_id: capability,
             category: 'automatable_now',
             status: 'aplicar',
             page_id: 0,
@@ -712,7 +838,7 @@
         const out = [];
         items.forEach((it) => {
             if (it.status !== 'aplicar' || itemCategory(it) !== 'automatable_now') return;
-            if (it.capability_id === 'posts.ideas') out.push(...ideaItems(it));
+            if (it.capability_id === 'posts.ideas' || it.capability_id === 'pages.ideas') out.push(...ideaItems(it));
             else out.push(it);
         });
         return out;
@@ -919,6 +1045,10 @@
             renderIdeas(box, data, it, onSettled);
             return;
         }
+        if (data.kind === 'page') {
+            renderPageBrief(box, data, it, onSettled, it._plan);
+            return;
+        }
         box.textContent = '';
         box.className = 'ppa-preview is-ready';
         const changes = data.changes || [];
@@ -1011,7 +1141,12 @@
         box.setAttribute('aria-busy', 'true');
         const label = document.createElement('span');
         label.className = 'ppa-preview__loading';
-        label.textContent = pp.t(it.capability_id === 'posts.ideas' ? 'js.as.ideas_loading' : 'js.as.preview_loading');
+        label.textContent = pp.t(
+            it.capability_id === 'posts.ideas' ? 'js.as.ideas_loading'
+                : it.capability_id === 'pages.ideas' ? 'js.as.page_ideas_loading'
+                    : it.capability_id === 'pages.create' ? 'js.as.page_brief_loading'
+                        : 'js.as.preview_loading'
+        );
         box.appendChild(label);
         const skel = document.createElement('div');
         skel.className = 'ppa-preview__skeleton';
@@ -1113,6 +1248,10 @@
                         ? pp.t('js.as.chrome_title')
                     : it.capability_id === 'posts.ideas'
                         ? pp.t('js.as.ideas_title')
+                    : it.capability_id === 'pages.ideas'
+                        ? pp.t('js.as.page_ideas_title')
+                    : it.capability_id === 'pages.create'
+                        ? pp.t('js.as.page_new_x', { pagina: postTopic(it) })
                     : it.capability_id === 'posts.create'
                         ? pp.t('js.as.post_x', { titulo: postTopic(it) })
                     : it.capability_id === 'seo.page.edit' && it.page_title
@@ -1154,11 +1293,12 @@
 
                 if (category === 'automatable_now') {
                     if (wantsPreview(it) && !plan._applied) {
+                        Object.defineProperty(it, '_plan', { value: plan, enumerable: false, configurable: true });
                         const box = document.createElement('div');
                         box.className = 'ppa-preview';
                         card.appendChild(box);
                         // Un plan recuperado no vuelve a gastar IA al abrirse: a petición.
-                        if (plan._restored) box.appendChild(previewButton(it, box, () => previewSettled(), pp.t(it.capability_id === 'posts.ideas' ? 'js.as.ideas_show' : 'js.as.preview_show')));
+                        if (plan._restored) box.appendChild(previewButton(it, box, () => previewSettled(), pp.t(it.capability_id === 'posts.ideas' || it.capability_id === 'pages.ideas' ? 'js.as.ideas_show' : 'js.as.preview_show')));
                         else previewQueue.push(() => loadPreview(it, box, () => previewSettled()));
                     }
                     card.appendChild(renderRisk(it));
@@ -1194,16 +1334,21 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'pp-btn pp-btn--primary ppa-plan__apply';
-            const hasIdeas = actionable.some((it) => it.capability_id === 'posts.ideas');
+            const hasIdeas = actionable.some((it) => it.capability_id === 'posts.ideas' || it.capability_id === 'pages.ideas');
             const refresh = () => {
                 const applicable = applicableItems(items);
                 const preparing = actionable.some((it) => it._preview && it._preview.state === 'loading');
                 const onlyPosts = applicable.length > 0 && applicable.every((it) => it.capability_id === 'posts.create');
+                const onlyPages = applicable.length > 0 && applicable.every((it) => it.capability_id === 'pages.create');
                 btn.disabled = applicable.length === 0 || preparing || !!plan._applied;
                 btn.classList.toggle('is-waiting', preparing);
                 if (plan._applied) btn.textContent = pp.t('js.as.plan_applied');
                 else if (preparing) btn.textContent = pp.t('js.as.preview_wait');
-                else if (applicable.length === 0) btn.textContent = pp.t(hasIdeas ? 'js.as.ideas_pick' : 'js.as.confirm_above');
+                else if (applicable.length === 0) btn.textContent = pp.t(
+                    actionable.some((it) => it.capability_id === 'pages.ideas') ? 'js.as.page_ideas_pick'
+                        : hasIdeas ? 'js.as.ideas_pick' : 'js.as.confirm_above'
+                );
+                else if (onlyPages) btn.textContent = pp.t(applicable.length === 1 ? 'js.as.create_page_one' : 'js.as.create_page_n', { n: applicable.length });
                 else if (onlyPosts) btn.textContent = pp.t(applicable.length === 1 ? 'js.as.write_one' : 'js.as.write_n', { n: applicable.length });
                 else btn.textContent = pp.t(applicable.length === 1 ? 'js.as.apply_one' : 'js.as.apply_n', { n: applicable.length });
             };
@@ -1385,6 +1530,7 @@
 
     function itemLabel(it) {
         if (it.capability_id === 'posts.create') return pp.t('js.as.post_x', { titulo: it.page_title });
+        if (it.capability_id === 'pages.create') return pp.t('js.as.page_new_x', { pagina: it.page_title });
         return it.page_title + (it.section ? ' · «' + it.section + '»' : '');
     }
 
@@ -1393,13 +1539,22 @@
         const title = document.createElement('div');
         title.className = 'ppa-progress__title';
         const onlyPosts = job.items.length > 0 && job.items.every((it) => it.capability_id === 'posts.create');
-        title.textContent = onlyPosts
+        const onlyPages = job.items.length > 0 && job.items.every((it) => it.capability_id === 'pages.create');
+        title.textContent = onlyPages
+            ? pp.t(job.status === 'done' ? 'js.as.pages_created_progress' : 'js.as.pages_creating_progress', { n: job.completed, total: job.total })
+            : onlyPosts
             ? pp.t(job.status === 'done' ? 'js.as.posts_written_progress' : 'js.as.posts_writing_progress', { n: job.completed, total: job.total })
             : job.status === 'done'
                 ? 'Cambios aplicados (' + job.completed + '/' + job.total + ')'
                 : 'Aplicando cambios… (' + job.completed + '/' + job.total + ')';
         container.appendChild(title);
 
+        if (job.status !== 'done' && job.items.some((it) => it.capability_id === 'pages.create' && it.status !== 'done' && it.status !== 'failed')) {
+            const wait = document.createElement('p');
+            wait.className = 'ppa-progress__hint';
+            wait.textContent = pp.t('js.as.page_takes_time');
+            container.appendChild(wait);
+        }
         job.items.forEach((it) => {
             const row = document.createElement('div');
             row.className = 'ppa-progress__row ppa-progress__row--' + it.status;
@@ -1432,7 +1587,12 @@
         const p = document.createElement('p');
         p.className = 'ppa-plan__summary';
         const onlyPosts = job.items.length > 0 && job.items.every((it) => it.capability_id === 'posts.create');
-        p.textContent = onlyPosts
+        const onlyPages = job.items.length > 0 && job.items.every((it) => it.capability_id === 'pages.create');
+        p.textContent = onlyPages
+            ? (failedItems.length === 0
+                ? pp.t(doneItems.length === 1 ? 'js.as.pages_created_one' : 'js.as.pages_created_n', { n: doneItems.length })
+                : pp.t('js.as.pages_created_partial', { n: doneItems.length, total: job.items.length }))
+            : onlyPosts
             ? (failedItems.length === 0
                 ? pp.t(doneItems.length === 1 ? 'js.as.posts_written_one' : 'js.as.posts_written_n', { n: doneItems.length })
                 : pp.t('js.as.posts_written_partial', { n: doneItems.length, total: job.items.length }))
@@ -1460,6 +1620,12 @@
             head.appendChild(t);
             if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit') {
                 // En vivo ya: no hay nada que revisar ni publicar.
+            } else if (it.capability_id === 'pages.create' && it.new_page) {
+                const link = document.createElement('a');
+                link.className = 'ppa-item__link';
+                link.href = it.new_page.edit_url;
+                link.textContent = pp.t('js.as.page_open_studio');
+                head.appendChild(link);
             } else if (it.form_id) {
                 const link = document.createElement('a');
                 link.className = 'ppa-item__link';
@@ -1502,11 +1668,17 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
 
+        if (doneItems.some((it) => it.capability_id === 'pages.create')) {
+            const pageNote = document.createElement('p');
+            pageNote.className = 'ppa-plan__note';
+            pageNote.textContent = pp.t('js.as.pages_done_note');
+            bubble.appendChild(pageNote);
+        }
         if (doneItems.some((it) => it.capability_id === 'posts.create')) {
             const postNote = document.createElement('p');
             postNote.className = 'ppa-plan__note';

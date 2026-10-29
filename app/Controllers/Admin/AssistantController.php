@@ -14,6 +14,7 @@ use App\Services\BlogAssistant;
 use App\Services\AssistantProposal;
 use App\Services\ChromeAssistantEditor;
 use App\Services\FormAssistantEditor;
+use App\Services\PageAssistant;
 use App\Services\PageSeoAssistantEditor;
 use App\Services\SiteAssistantJobs;
 use App\Services\SiteAssistantPlanner;
@@ -355,6 +356,8 @@ class AssistantController
             'seo.page.edit' => ['seo', (int) ($item['page_id'] ?? 0)],
             'chrome.edit'   => ['chrome', $siteId],
             'posts.ideas'   => ['ideas', $siteId],
+            'pages.ideas'   => ['page_ideas', $siteId],
+            'pages.create'  => ['page', $siteId],
             default         => ['', 0],
         };
         if ($kind === '' || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
@@ -366,8 +369,11 @@ class AssistantController
 
         @set_time_limit(200);
         $started = microtime(true);
-        if ($kind === 'ideas') {
-            $this->previewIdeas($siteId, $instruction, $started);
+        if ($kind === 'ideas' || $kind === 'page_ideas') {
+            $this->previewIdeas($siteId, $instruction, $started, $kind === 'page_ideas');
+        }
+        if ($kind === 'page') {
+            $this->previewPage($siteId, $instruction, $started);
         }
         try {
             $proposal = match ($kind) {
@@ -399,30 +405,54 @@ class AssistantController
      * instrucción de su entrada: al elegirla, «Aplicar» la escribe sin volver
      * a proponer el plan.
      */
-    private function previewIdeas(int $siteId, string $focus, float $started): void
+    private function previewIdeas(int $siteId, string $focus, float $started, bool $pages = false): void
     {
         // «sin enfoque» y similares no acotan nada.
         $focus = preg_match('/^(sin enfoque|ninguno|general|-)\.?$/iu', trim($focus)) === 1 ? '' : $focus;
         try {
-            $ideas = BlogAssistant::ideas($siteId, $focus, 6);
+            if ($pages) {
+                // ASST-V2 F4d — páginas que faltan (con la caché del creador de páginas).
+                $suggestions = PageAssistant::ideas($siteId, $focus)['ideas'];
+            } else {
+                $ideas = BlogAssistant::ideas($siteId, $focus, 6);
+                $suggestions = $ideas['ok'] ? $ideas['suggestions'] : [];
+            }
         } catch (\Throwable $e) {
             error_log('[assistant preview] site=' . $siteId . ' ideas ' . get_class($e) . ': ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => __('asst.err.ideas_failed')], 502);
+            $suggestions = [];
         }
-        if (!$ideas['ok']) {
+        if ($suggestions === []) {
             Response::json(['ok' => false, 'error' => __('asst.err.ideas_failed')], 502);
         }
         $out = [];
-        foreach ($ideas['suggestions'] as $idea) {
-            $instruction = BlogAssistant::ideaInstruction($idea);
+        foreach ($suggestions as $idea) {
+            $instruction = $pages ? PageAssistant::ideaInstruction($idea) : BlogAssistant::ideaInstruction($idea);
             $out[] = $idea + [
                 'instruction' => $instruction,
-                'token'       => AssistantProposal::seal('post_idea', $siteId, $siteId, $instruction, $idea, ''),
+                'token'       => AssistantProposal::seal($pages ? 'page_idea' : 'post_idea', $siteId, $siteId, $instruction, $idea, ''),
             ];
         }
-        error_log(sprintf('[assistant preview] site=%d posts.ideas ideas=%d ms=%d',
-            $siteId, count($out), (int) ((microtime(true) - $started) * 1000)));
-        Response::json(['ok' => true, 'preview' => ['kind' => 'ideas', 'ideas' => $out, 'changes' => []], 'token' => '']);
+        error_log(sprintf('[assistant preview] site=%d %s ideas=%d ms=%d',
+            $siteId, $pages ? 'pages.ideas' : 'posts.ideas', count($out), (int) ((microtime(true) - $started) * 1000)));
+        Response::json(['ok' => true, 'preview' => [
+            'kind' => 'ideas', 'target' => $pages ? 'pages' : 'posts', 'ideas' => $out, 'changes' => [],
+        ], 'token' => '']);
+    }
+
+    /**
+     * ASST-V2 F4d — el plan de la página nueva (el mismo que enseña
+     * /admin/pages/create). Va firmado: «Aplicar» crea la página con este plan.
+     */
+    private function previewPage(int $siteId, string $instruction, float $started): void
+    {
+        $brief = PageAssistant::brief($siteId, $instruction);
+        if (!$brief['ok']) {
+            Response::json(['ok' => false, 'error' => (string) $brief['error']], 502);
+        }
+        $token = AssistantProposal::seal('page', $siteId, $siteId, $instruction, $brief['brief'], '');
+        error_log(sprintf('[assistant preview] site=%d pages.create sections=%d fallback=%d ms=%d',
+            $siteId, count((array) ($brief['brief']['sections'] ?? [])), $brief['fallback'] ? 1 : 0, (int) ((microtime(true) - $started) * 1000)));
+        Response::json(['ok' => true, 'preview' => PageAssistant::preview($brief['brief'], $brief['fallback']), 'token' => $token]);
     }
 
     // ----------------------------------------------------------------------

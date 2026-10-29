@@ -84,10 +84,11 @@ final class SiteAssistantJobs
             }
             // ASST-V2 F4c — una entrada elegida entre las ideas no estaba en el
             // plan original: la autoriza la firma de esa idea.
-            $fromIdea = ($item['capability_id'] ?? '') === 'posts.create'
+            $ideaKind = ['posts.create' => 'post_idea', 'pages.create' => 'page_idea'][$item['capability_id'] ?? ''] ?? null;
+            $fromIdea = $ideaKind !== null
                 && AssistantProposal::open(
                     (string) ($item['preview_token'] ?? ''),
-                    'post_idea',
+                    $ideaKind,
                     $siteId,
                     $siteId,
                     trim((string) ($item['instruction'] ?? ''))
@@ -116,6 +117,31 @@ final class SiteAssistantJobs
                     'page_id'     => 0,
                     'form_id'     => $formId,
                     'page_title'  => __('asst.form.label', ['formulario' => (string) ($forms[$formId]['heading'] ?: __('forms.untitled'))]),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
+            if (($item['capability_id'] ?? '') === 'pages.create') {
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if ($instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $pagesSoFar = count(array_filter($clean, static fn (array $c): bool => ($c['capability_id'] ?? '') === 'pages.create'));
+                if ($pagesSoFar >= PageAssistant::MAX_PAGES_PER_PLAN) {
+                    continue;
+                }
+                // El plan que se enseñó en la tarjeta, si sigue valiendo.
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                $brief = $proposal !== '' ? AssistantProposal::open($proposal, 'page', $siteId, $siteId, $instruction) : null;
+                $clean[] = [
+                    'capability_id' => 'pages.create',
+                    'proposal_token' => $brief !== null ? $proposal : null,
+                    'page_id'     => 0,
+                    'form_id'     => null,
+                    'page_title'  => mb_substr((string) ($brief['content']['title'] ?? BlogAssistant::topicFrom($instruction)), 0, 255),
                     'section'     => '',
                     'instruction' => $instruction,
                     'source_block_ids' => [],
@@ -289,7 +315,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'posts.create'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'posts.create', 'pages.create'], true);
     }
 
     /**
@@ -433,6 +459,13 @@ final class SiteAssistantJobs
             $topic = (string) ($item['page_title'] ?? '');
             $length = (string) ($item['section'] ?? 'medio');
             $run = static fn (): array => BlogAssistant::create($siteId, $userId, $topic, $instruction, $length);
+        } elseif ($capability === 'pages.create') {
+            $kind = 'page';
+            $aiError = 'asst.err.page_create_failed';
+            $run = static function () use ($siteId, $instruction, $token): array {
+                $p = AssistantProposal::open($token, 'page', $siteId, $siteId, $instruction);
+                return $p !== null ? PageAssistant::create($siteId, $p['content']) : PageAssistant::apply($siteId, $instruction);
+            };
         } else {
             return false;
         }
@@ -825,6 +858,9 @@ final class SiteAssistantJobs
             // ASST-V2 F4c — lo que necesita la tarjeta de revisión de la entrada.
             if ($it['capability_id'] === 'posts.create' && $it['status'] === 'done' && $it['page_id'] > 0) {
                 $it['post'] = BlogAssistant::card($siteId, $it['page_id']);
+            }
+            if ($it['capability_id'] === 'pages.create' && $it['status'] === 'done' && $it['page_id'] > 0) {
+                $it['new_page'] = PageAssistant::card($siteId, $it['page_id']);
             }
         }
         unset($it);

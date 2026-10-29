@@ -264,21 +264,54 @@ class PageController
         $notes = trim((string) Request::post('notes', ''));
         $force = (string) Request::post('force', '') === '1';
 
+        $found = self::opportunitiesFor($siteId, $notes, $force);
+        if ($found['fallback']) {
+            Response::json([
+                'ok' => true,
+                'fallback' => true,
+                'cached' => false,
+                'data' => $found['data'],
+                'error_note' => $found['error'],
+            ]);
+        }
+        $meta = $found['meta'];
+        Response::json(array_merge([
+            'ok' => true,
+            'cached' => $found['cached'],
+            'cached_at' => $found['cached_at'],
+            'data' => $found['data'],
+            'model' => $meta['model'] ?? '',
+            'tokens_in' => $meta['tokens_in'] ?? 0,
+            'tokens_out' => $meta['tokens_out'] ?? 0,
+            'estimated_cost' => $meta['estimated_cost'] ?? 0,
+        ], $found['cached'] ? [] : [
+            'provider' => $meta['provider'] ?? '',
+            'latency_ms' => $meta['latency_ms'] ?? 0,
+            'warnings' => $meta['warnings'] ?? [],
+        ]));
+    }
+
+    /**
+     * Páginas que le faltan al sitio (DISCOVER_PAGE_OPPORTUNITIES), con caché
+     * por huella del sitio y un cálculo local si la IA falla. Lo usan el
+     * creador de páginas y el asistente (ASST-V2 F4d).
+     *
+     * @return array{data:array<string,mixed>, cached:bool, cached_at:?string, meta:array<string,mixed>, fallback:bool, error:string}
+     */
+    public static function opportunitiesFor(int $siteId, string $notes = '', bool $force = false): array
+    {
         $fingerprint = self::opportunityFingerprint($siteId, $notes);
         if (!$force) {
             $cached = self::cachedOpportunities($siteId, $fingerprint);
             if ($cached !== null) {
-                $meta = is_array($cached['meta'] ?? null) ? $cached['meta'] : [];
-                Response::json([
-                    'ok' => true,
+                return [
+                    'data' => $cached['data'] ?? self::fallbackOpportunities($siteId),
                     'cached' => true,
                     'cached_at' => $cached['cached_at'] ?? null,
-                    'data' => $cached['data'] ?? self::fallbackOpportunities($siteId),
-                    'model' => $meta['model'] ?? '',
-                    'tokens_in' => $meta['tokens_in'] ?? 0,
-                    'tokens_out' => $meta['tokens_out'] ?? 0,
-                    'estimated_cost' => $meta['estimated_cost'] ?? 0,
-                ]);
+                    'meta' => is_array($cached['meta'] ?? null) ? $cached['meta'] : [],
+                    'fallback' => false,
+                    'error' => '',
+                ];
             }
         }
 
@@ -287,30 +320,11 @@ class PageController
                 'existing_pages' => self::existingPagesPrompt($siteId),
                 'extra_context' => $notes,
             ], $siteId);
-
             $data = self::normalizeOpportunities((array) ($result['data'] ?? []), $siteId);
             self::storeCachedOpportunities($siteId, $fingerprint, $data, $result);
-            Response::json([
-                'ok' => true,
-                'cached' => false,
-                'cached_at' => date('c'),
-                'data' => $data,
-                'provider' => $result['provider'] ?? '',
-                'model' => $result['model'] ?? '',
-                'tokens_in' => $result['tokens_in'] ?? 0,
-                'tokens_out' => $result['tokens_out'] ?? 0,
-                'estimated_cost' => $result['estimated_cost'] ?? 0,
-                'latency_ms' => $result['latency_ms'] ?? 0,
-                'warnings' => $result['warnings'] ?? [],
-            ]);
+            return ['data' => $data, 'cached' => false, 'cached_at' => date('c'), 'meta' => $result, 'fallback' => false, 'error' => ''];
         } catch (AIException $e) {
-            Response::json([
-                'ok' => true,
-                'fallback' => true,
-                'cached' => false,
-                'data' => self::fallbackOpportunities($siteId),
-                'error_note' => $e->getMessage(),
-            ]);
+            return ['data' => self::fallbackOpportunities($siteId), 'cached' => false, 'cached_at' => null, 'meta' => [], 'fallback' => true, 'error' => $e->getMessage()];
         }
     }
 
@@ -328,6 +342,34 @@ class PageController
             Response::json(['ok' => false, 'error' => __('page_ctrl.describe_or_pick')], 422);
         }
 
+        $brief = self::briefFor($siteId, $idea, $notes);
+        if (!$brief['ok']) {
+            Response::json(['ok' => false, 'error' => $brief['error'], 'http_status' => $brief['status']],
+                $brief['status'] >= 400 && $brief['status'] < 600 ? $brief['status'] : 422);
+        }
+        $result = $brief['result'];
+        Response::json(array_merge([
+            'ok' => true,
+            'data' => $brief['data'],
+            'provider' => $result['provider'] ?? '',
+            'model' => $result['model'] ?? '',
+            'tokens_in' => $result['tokens_in'] ?? 0,
+            'tokens_out' => $result['tokens_out'] ?? 0,
+            'estimated_cost' => $result['estimated_cost'] ?? 0,
+            'latency_ms' => $result['latency_ms'] ?? 0,
+            'warnings' => $brief['warnings'],
+        ], $brief['fallback'] ? ['fallback' => true, 'error_note' => __('page_ctrl.plan_incomplete')] : []));
+    }
+
+    /**
+     * Plan de una página nueva (GENERATE_PAGE_BRIEF), con un reintento si el
+     * JSON llega roto y un plan base local si vuelve a fallar. Lo usan el
+     * creador de páginas y el asistente (ASST-V2 F4d).
+     *
+     * @return array{ok:bool, data?:array<string,mixed>, result?:array<string,mixed>, warnings?:array<int,string>, fallback?:bool, error?:string, status?:int}
+     */
+    public static function briefFor(int $siteId, string $idea, string $notes = ''): array
+    {
         $input = [
             'page_idea' => $idea,
             'existing_pages' => self::existingPagesPrompt($siteId),
@@ -336,24 +378,11 @@ class PageController
 
         try {
             $result = AIActionRunner::run(Actions::GENERATE_PAGE_BRIEF, $input, $siteId);
-            Response::json([
-                'ok' => true,
-                'data' => self::normalizeBrief((array) ($result['data'] ?? [])),
-                'provider' => $result['provider'] ?? '',
-                'model' => $result['model'] ?? '',
-                'tokens_in' => $result['tokens_in'] ?? 0,
-                'tokens_out' => $result['tokens_out'] ?? 0,
-                'estimated_cost' => $result['estimated_cost'] ?? 0,
-                'latency_ms' => $result['latency_ms'] ?? 0,
-                'warnings' => $result['warnings'] ?? [],
-            ]);
+            return ['ok' => true, 'data' => self::normalizeBrief((array) ($result['data'] ?? [])), 'result' => $result,
+                'warnings' => (array) ($result['warnings'] ?? []), 'fallback' => false];
         } catch (AIException $first) {
             if (!self::isJsonParseAiError($first)) {
-                Response::json([
-                    'ok' => false,
-                    'error' => self::publicAiBriefError($first),
-                    'http_status' => $first->getHttpStatus(),
-                ], $first->getHttpStatus() >= 400 && $first->getHttpStatus() < 600 ? $first->getHttpStatus() : 422);
+                return ['ok' => false, 'error' => self::publicAiBriefError($first), 'status' => $first->getHttpStatus()];
             }
 
             error_log('[aiBrief] JSON no parseable, reintentando: ' . $first->getMessage());
@@ -364,32 +393,13 @@ class PageController
                     . 'IMPORTANTE: devuelve SOLO JSON válido y compacto. Máximo 5 secciones y máximo 4 campos de formulario.'
                 );
                 $result = AIActionRunner::run(Actions::GENERATE_PAGE_BRIEF, $retryInput, $siteId);
-                Response::json([
-                    'ok' => true,
-                    'data' => self::normalizeBrief((array) ($result['data'] ?? [])),
-                    'provider' => $result['provider'] ?? '',
-                    'model' => $result['model'] ?? '',
-                    'tokens_in' => $result['tokens_in'] ?? 0,
-                    'tokens_out' => $result['tokens_out'] ?? 0,
-                    'estimated_cost' => $result['estimated_cost'] ?? 0,
-                    'latency_ms' => $result['latency_ms'] ?? 0,
+                return ['ok' => true, 'data' => self::normalizeBrief((array) ($result['data'] ?? [])), 'result' => $result,
                     'warnings' => array_merge((array) ($result['warnings'] ?? []), ['Se reintentó porque la primera respuesta del modelo no era JSON válido.']),
-                ]);
+                    'fallback' => false];
             } catch (AIException $second) {
                 error_log('[aiBrief] fallback local tras JSON no parseable: ' . $second->getMessage());
-                Response::json([
-                    'ok' => true,
-                    'fallback' => true,
-                    'data' => self::fallbackBrief($idea, $notes),
-                    'error_note' => __('page_ctrl.plan_incomplete'),
-                    'provider' => '',
-                    'model' => '',
-                    'tokens_in' => 0,
-                    'tokens_out' => 0,
-                    'estimated_cost' => 0,
-                    'latency_ms' => 0,
-                    'warnings' => ['Plan base generado localmente por formato incompleto de la IA.'],
-                ]);
+                return ['ok' => true, 'data' => self::fallbackBrief($idea, $notes), 'result' => [],
+                    'warnings' => ['Plan base generado localmente por formato incompleto de la IA.'], 'fallback' => true];
             }
         }
     }
@@ -520,7 +530,7 @@ class PageController
      * (HTML libre + Studio). Artículos y legales quedan fuera: usan el editor
      * estructurado clásico.
      */
-    private static function isCanvasMarketingType(string $type): bool
+    public static function isCanvasMarketingType(string $type): bool
     {
         return in_array($type, ['home', 'service', 'product', 'landing', 'contact'], true);
     }
@@ -3410,7 +3420,7 @@ class PageController
 
     /** @return array<string,mixed> */
     // i18n-ignore-end
-    private static function decodePostedBrief(string $raw): array
+    public static function decodePostedBrief(string $raw): array
     {
         $raw = trim($raw);
         if ($raw === '') return [];
@@ -3421,7 +3431,7 @@ class PageController
     // i18n-ignore-start: CARGA DE PROMPT y valores por defecto del brief
     // (objetivo, rol, CTA…). No es interfaz: traducirlo cambia lo que genera la IA.
     /** @param array<string,mixed> $brief */
-    private static function briefToContext(array $brief): string
+    public static function briefToContext(array $brief): string
     {
         if ($brief === []) return '';
         $lines = [
