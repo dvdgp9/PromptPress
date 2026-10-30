@@ -81,6 +81,11 @@ final class AssistantCapabilityRegistry
         'legal.content'      => 'sensitive',
         'analytics.review'   => 'read',
         'booking.manage'     => 'live',
+        'booking.service.edit'   => 'live',
+        'booking.service.create' => 'draft',
+        'commerce.product.edit'  => 'live',
+        'commerce.product.create'=> 'draft',
+        'resources.edit'     => 'live',
         'resources.manage'   => 'live',
         'commerce.manage'    => 'sensitive',
         'custom.development' => 'read',
@@ -98,6 +103,12 @@ final class AssistantCapabilityRegistry
         // (ChromeController::save), no de todo el que tiene Apariencia.
         'chrome.edit'       => self::ADMIN_ONLY,
         'design.edit'       => Permissions::CAP_APPEARANCE,
+        // ASST-V2 F4f — mismos permisos que /admin/booking, /admin/commerce y /admin/resources.
+        'booking.service.edit'    => Permissions::CAP_CLIENTS,
+        'booking.service.create'  => Permissions::CAP_CLIENTS,
+        'commerce.product.edit'   => Permissions::CAP_CLIENTS,
+        'commerce.product.create' => Permissions::CAP_CLIENTS,
+        'resources.edit'          => Permissions::CAP_CONTENT,
         'posts.create'      => Permissions::CAP_CONTENT,
         'pages.create'      => Permissions::CAP_CONTENT,
         'pages.ideas'       => Permissions::CAP_CONTENT,
@@ -115,7 +126,7 @@ final class AssistantCapabilityRegistry
     }
 
     /** Capacidades cuyo cambio del asistente se deshace desde Actividad. */
-    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit'];
+    public const UNDOABLE = ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit', 'booking.service.edit', 'commerce.product.edit', 'resources.edit'];
 
     /**
      * Constructor puro del catálogo; permite probar el gate sin base de datos.
@@ -301,6 +312,7 @@ final class AssistantCapabilityRegistry
             ),
         ];
 
+        // i18n-ignore-start: etiquetas que lee el planner en el prompt.
         $moduleDefinitions = [
             'analytics' => [
                 'id' => 'analytics.review',
@@ -311,27 +323,43 @@ final class AssistantCapabilityRegistry
             ],
             'booking' => [
                 'id' => 'booking.manage',
-                'label' => 'Crear o configurar servicios, horarios y reservas',
+                'label' => 'Configurar reservas: campos que se piden, emails, días sueltos cerrados, confirmación automática, integración externa, activar, desactivar o borrar servicios',
                 'path' => '/admin/booking',
                 'count' => (int) ($counts['booking_services'] ?? 0),
                 'required' => ['Duración, precio, disponibilidad y modalidad'],
             ],
             'resources' => [
                 'id' => 'resources.manage',
-                'label' => 'Crear o configurar ebooks y recursos descargables',
+                'label' => 'Crear recursos descargables, subir su archivo o portada, cambiar el acceso, publicarlos o borrarlos',
                 'path' => '/admin/resources',
                 'count' => (int) ($counts['resources'] ?? 0),
                 'required' => ['Archivo, portada, precio/acceso y textos'],
             ],
             'commerce' => [
                 'id' => 'commerce.manage',
-                'label' => 'Crear o configurar productos, precios y pagos',
+                'label' => 'Configurar pagos, Stripe, impuestos, envíos, imágenes de producto, productos digitales, activar, desactivar o borrar productos',
                 'path' => '/admin/commerce',
                 'count' => (int) ($counts['commerce_products'] ?? 0),
                 'required' => ['Producto, precio definitivo, impuestos y método de pago'],
             ],
         ];
+        // i18n-ignore-end
 
+        // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+        $catalogExecutors = [
+            'booking' => [
+                ['booking.service.edit', 'Cambiar un servicio de reserva del CATÁLOGO: nombre, descripción, precio visible, duración, margen entre citas, plazas, antelación mínima y máxima y horario semanal (se aplica en vivo; precio, tiempos y horario piden revisión)', 'catalog_edit', ['Servicio del CATÁLOGO (target_id) y cambio concreto']],
+                ['booking.service.create', 'Crear un servicio de reserva nuevo (nace desactivado: se revisa y se activa en Reservas)', 'catalog_create', ['Nombre; duración, precio y horario si se dan']],
+            ],
+            'commerce' => [
+                ['commerce.product.edit', 'Cambiar un producto del CATÁLOGO: nombre, descripción, precio o stock (se aplica en vivo; precio y stock piden revisión)', 'catalog_edit', ['Producto del CATÁLOGO (target_id) y cambio concreto']],
+                ['commerce.product.create', 'Crear un producto físico nuevo (nace desactivado, sin imagen: se completa y se activa en Tienda)', 'catalog_create', ['Nombre y precio']],
+            ],
+            'resources' => [
+                ['resources.edit', 'Cambiar el título, la descripción o la categoría de un recurso descargable del CATÁLOGO (se aplica en vivo)', 'catalog_edit', ['Recurso del CATÁLOGO (target_id) y textos nuevos']],
+            ],
+        ];
+        // i18n-ignore-end
         foreach ($moduleDefinitions as $key => $definition) {
             $state = $moduleStates[$key] ?? [];
             $available = (bool) ($state['available'] ?? false);
@@ -349,6 +377,12 @@ final class AssistantCapabilityRegistry
                 $available ? ($enabled ? 'enabled' : 'disabled') : 'unavailable',
                 $key
             );
+            // ASST-V2 F4f — con el módulo activo, el asistente edita lo que ya hay
+            // y crea servicios y productos desactivados.
+            foreach ($enabled ? ($catalogExecutors[$key] ?? []) : [] as [$id, $label, $handler, $required]) {
+                $capabilities[] = self::capability($id, $label, 'automatic', $definition['path'], $handler, $definition['count'], $required,
+                    false, true, 'enabled', $key);
+            }
         }
 
         $capabilities[] = self::capability(

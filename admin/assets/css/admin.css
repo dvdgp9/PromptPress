@@ -12859,3 +12859,26 @@ body > .ppa-media-picker { z-index: 120; }
 .ppa-dmock__palette { list-style: none; margin: 0 12px; padding: 8px 0 0; border-top: 1px solid var(--m-border); display: flex; flex-wrap: wrap; gap: 4px 10px; font-family: var(--pp-font, inherit); font-size: 0.68rem; color: var(--m-muted); }
 .ppa-dmock__palette li { display: inline-flex; align-items: center; padding: 1px 4px 1px 2px; border-radius: 4px; }
 .ppa-dmock__palette li.is-changed { background: color-mix(in srgb, var(--m-surface) 70%, var(--m-primary)); color: var(--m-text); font-weight: 600; }
+
+/* ASST-V2 F4f — ficha de servicio, producto o recurso, antes y después */
+.ppa-preview__flag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 0.68rem; font-weight: 600; line-height: 1.5; vertical-align: 1px; }
+.ppa-cat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0 4px; font-size: 0.82rem; color: var(--pp-text); }
+.ppa-cat p { margin: 0; }
+.ppa-cat .is-changed { background: #fff7ed; box-shadow: inset 2px 0 0 var(--pp-primary); border-radius: 4px; }
+.ppa-cat__title { font-weight: 700; font-size: 0.95rem; line-height: 1.3; padding: 1px 4px; margin: 0 -4px; }
+.ppa-cat__tag { justify-self: start; padding: 1px 8px; border-radius: 999px; background: var(--pp-surface); border: 1px solid var(--pp-border); font-size: 0.72rem; color: var(--pp-text-muted); }
+.ppa-cat__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+.ppa-cat__meta span { padding: 1px 8px; border-radius: 6px; background: var(--pp-surface); border: 1px solid var(--pp-border); font-size: 0.76rem; font-weight: 600; }
+.ppa-cat__meta span.is-changed { border-color: #fdba74; }
+.ppa-cat__price { font-size: 1.05rem; font-weight: 700; padding: 1px 4px; margin: 0 -4px; }
+.ppa-cat__desc { color: var(--pp-text-muted); line-height: 1.45; padding: 1px 4px; margin: 0 -4px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.ppa-cat__small { font-size: 0.74rem; color: var(--pp-text-muted); padding: 1px 4px; margin: 0 -4px; }
+.ppa-cat__hours { margin: 2px 0 0; display: grid; gap: 1px; border-top: 1px solid var(--pp-border); padding-top: 6px; }
+.ppa-cat__day { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 8px; padding: 2px 4px; margin: 0 -4px; font-size: 0.78rem; }
+.ppa-cat__day dt { color: var(--pp-text-muted); }
+.ppa-cat__day dd { margin: 0; font-variant-numeric: tabular-nums; }
+.ppa-cat__day dd.is-closed { color: var(--pp-text-muted); font-style: italic; }
+.ppa-review { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #fffbeb; border: 1px solid #fde68a; font-size: 0.8rem; font-weight: 600; color: #78350f; cursor: pointer; }
+.ppa-review input { margin: 2px 0 0; width: 16px; height: 16px; accent-color: var(--pp-primary); flex: none; cursor: pointer; }
+.ppa-review input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.ppa-review:has(input:checked) { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }

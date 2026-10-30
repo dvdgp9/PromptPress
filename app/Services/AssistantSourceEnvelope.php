@@ -113,6 +113,10 @@ final class AssistantSourceEnvelope
         if ((int) ($item['form_id'] ?? 0) > 0) {
             $canonical['form_id'] = (int) $item['form_id'];
         }
+        // ASST-V2 F4f — igual con el servicio, producto o recurso.
+        if ((int) ($item['target_id'] ?? 0) > 0) {
+            $canonical['target_id'] = (int) $item['target_id'];
+        }
         return hash('sha256', json_encode($canonical, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 

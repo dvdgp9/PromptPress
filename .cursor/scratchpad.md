@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f por hacer
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f (reservas, productos y recursos) publicado como v1.22.0 (30/10, «Publícalo»)
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11352,3 +11352,32 @@ Verificación:
 ## Lessons (ASST-V2 F4e)
 - Un grid de una sola columna toma el min-content de sus hijos: en tarjetas estrechas usar `grid-template-columns: minmax(0, 1fr)`.
 - Las etiquetas del schema de Diseño («Radio», «Tamaño base») no se entienden fuera de su pestaña: el asistente usa las suyas (asst.design.*).
+
+## Key Challenges and Analysis (ASST-V2 F4f) — 30/10/2026, Planner (usuario: «Sí, sigue con F4f»; alcance elegido: «Textos, precios y horarios»)
+- Alcance: servicios de reserva (nombre, descripción, precio visible, duración, margen, plazas, antelación mínima/máxima y HORARIO SEMANAL), productos (nombre, descripción, precio, stock) y recursos (título, descripción, categoría). Crear servicios y productos nuevos SIEMPRE desactivados. A mano siguen: pagos, impuestos, Stripe, archivos, excepciones de fecha, campos y emails de reserva, confirmación automática, activar/desactivar, borrar.
+- Capacidades automáticas (solo con el módulo activo): booking.service.edit (live, deshacer), booking.service.create (draft), commerce.product.edit (live, deshacer), commerce.product.create (draft), resources.edit (live, deshacer). Permisos: reservas y tienda CAP_CLIENTS (mismo que /admin/booking y /admin/commerce), recursos CAP_CONTENT.
+- Sensible: si cambia precio, duración, plazas, stock u horario, la vista previa lo marca y «Aplicar» exige marcar «Lo he revisado». Defensa en servidor: las ediciones de catálogo SOLO se aplican con propuesta firmada (nada de aplicar a ciegas) y, si es sensible, con `reviewed`.
+- Objetivo de cada item: `target_id` en el plan (mapa CATÁLOGO en el prompt); en el trabajo se guarda en page_id (capability_id lo distingue, como pages.create). Sin migración.
+- Guardado por los stores del módulo pasando la fila completa (ProductStore/ServiceStore normalizan con defaults: sin la fila entera se perderían imagen, impuestos, campos y emails). Excepciones de fecha intactas.
+- Deshacer: versions entity booking_service / commerce_product / resource con la fila (y horario+excepciones). Crear no se deshace (nace desactivado).
+
+## High-level Task Breakdown (ASST-V2 F4f)
+1. Test primero (tests/assistant_v2_catalog.php): registro y permisos por módulo, prepare (precio, horario válido/solapado, campos fuera de alcance), sensible, job exige token y reviewed, commit conserva lo no tocado (imagen, impuestos, excepciones, campos), deshacer, crear desactivado.
+2. CatalogAssistantEditor + acción IA + capacidades + mapa en el planner + jobs/controlador/Actividad.
+3. Tarjeta (ficha antes/después con horario semanal, casilla «Lo he revisado») y textos en 4 idiomas; navegador con fetch simulado.
+
+## Current Status / Progress Tracking (ASST-V2 F4f) — 30/10/2026, Executor
+- Hecho (sin publicar). Capacidades automáticas solo con su módulo activo: booking.service.edit, booking.service.create, commerce.product.edit, commerce.product.create, resources.edit. booking/commerce/resources.manage quedan para lo demás (etiquetas actualizadas).
+- `CatalogAssistantEditor`: siteCatalog (mapa CATÁLOGO para el planner), state, prepare (precio en euros → céntimos, horario por días con validación y solapes, campos fuera de alcance ignorados con aviso), isSensitive, commit (huella del estado; fila completa al store), create (desactivado), restoreVersion, preview, diff, card.
+- Acción IA `EDIT_CATALOG_ITEM`; regla «CATÁLOGO» y `target_id` en PLAN_SITE_CHANGES; normalizeItems valida target_id contra el catálogo; target_id entra en la huella del plan (AssistantSourceEnvelope).
+- Trabajo: las ediciones exigen propuesta firmada (`catalog_<tipo>`, atada al id) y `reviewed` si es sensible (error explícito, no se salta en silencio); crear usa `catalog_<tipo>_new`. El id va en page_id del item.
+- Actividad: entradas y deshacer por tipo (Clientes para reservas y tienda, Contenido para recursos), iconos booking/commerce/resources.
+- Tarjeta: ficha antes/después (chips de duración, precio y plazas; horario semanal con días cambiados marcados), etiqueta «Revisar» en filas sensibles, casilla «He revisado…» que bloquea «Aplicar» («Revisa los cambios marcados»); lo nuevo se enseña como ficha con «Se crea desactivado». Informe con «Abrir →».
+- Tests: tests/assistant_v2_catalog.php 38/38; capacidades (lista esperada actualizada), design, preview, seo, chrome, posts, pages, source_envelope, canvas_edit_envelope, booking_services, commerce_products, resources_store, resources_admin, admin_i18n en verde. Lint i18n 42 pendientes (antes 46).
+- Navegador (fetch simulado con vista previa real generada por PHP): ficha y horario, bloqueo hasta marcar la casilla, envío con preview_token/target_id/reviewed, informe. En móvil la ficha desbordaba 4 px (márgenes negativos de filas marcadas): arreglado con padding.
+- Sin probar con la IA real ni con login real.
+
+## Lessons (ASST-V2 F4f)
+- ProductStore::update y ServiceStore::update normalizan contra defaults: pasar siempre la fila completa o se pierden imagen, impuestos, campos y emails.
+- El lint i18n no sigue claves dinámicas (`'x.' . $k`, `'x_' + k`): usar match/mapas con claves literales.
+- Filas con margen negativo dentro de un contenedor estrecho: dar al contenedor el mismo padding.

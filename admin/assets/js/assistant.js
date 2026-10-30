@@ -394,7 +394,7 @@
         const snapshot = JSON.stringify({
             state: { turns: conversation.turns, plan: conversation.plan, source_token: conversation.sourceToken },
             log: conversation.log
-        }, (key, value) => (['_thumbs', '_button', '_preview', '_ideas', '_length'].includes(key) ? undefined : value));
+        }, (key, value) => (['_thumbs', '_button', '_preview', '_ideas', '_length', '_reviewed'].includes(key) ? undefined : value));
         // En serie: dos guardados seguidos no pueden crear dos conversaciones.
         persistChain = persistChain.then(async () => {
             try {
@@ -582,12 +582,28 @@
         return line;
     }
 
+    // ASST-V2 F4f — servicios de reserva, productos y recursos.
+    const CATALOG_EDIT = ['booking.service.edit', 'commerce.product.edit', 'resources.edit'];
+    const CATALOG_CREATE = ['booking.service.create', 'commerce.product.create'];
+    const CATALOG_KIND = {
+        'booking.service.edit': 'service', 'booking.service.create': 'service',
+        'commerce.product.edit': 'product', 'commerce.product.create': 'product', 'resources.edit': 'resource'
+    };
+    const isCatalogItem = (it) => Object.prototype.hasOwnProperty.call(CATALOG_KIND, it.capability_id);
+    const CATALOG_TITLE = {
+        'booking.service.edit': 'js.as.catalog_kind_service', 'commerce.product.edit': 'js.as.catalog_kind_product',
+        'resources.edit': 'js.as.catalog_kind_resource', 'booking.service.create': 'js.as.catalog_new_service',
+        'commerce.product.create': 'js.as.catalog_new_product'
+    };
+
     function wantsPreview(it) {
         if (it.status !== 'aplicar') return false;
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
             || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
             || it.capability_id === 'chrome.edit'
             || it.capability_id === 'design.edit'
+            || (CATALOG_EDIT.includes(it.capability_id) && Number(it.target_id) > 0)
+            || CATALOG_CREATE.includes(it.capability_id)
             || it.capability_id === 'posts.ideas'
             || it.capability_id === 'pages.ideas'
             || it.capability_id === 'pages.create';
@@ -840,6 +856,8 @@
         items.forEach((it) => {
             if (it.status !== 'aplicar' || itemCategory(it) !== 'automatable_now') return;
             if (it.capability_id === 'posts.ideas' || it.capability_id === 'pages.ideas') out.push(...ideaItems(it));
+            // Una edición del catálogo solo se aplica tal como se vio.
+            else if (CATALOG_EDIT.includes(it.capability_id) && !(it._preview && it._preview.state === 'ready')) return;
             else out.push(it);
         });
         return out;
@@ -1063,6 +1081,82 @@
         return mock;
     }
 
+    function catalogDayChanged(data, d) {
+        if (!data.before || !data.before.hours) return false;
+        return JSON.stringify(data.before.hours[d] || []) !== JSON.stringify(data.after.hours[d] || []);
+    }
+
+    function renderCatalogCard(state, data, changedKeys, which) {
+        const kind = data.item_kind;
+        const card = document.createElement('div');
+        card.className = 'ppa-cat ppa-cat--' + kind;
+        const mark = (el, key) => {
+            if (which === 'after' && changedKeys.has(key)) el.classList.add('is-changed');
+            return el;
+        };
+        const line = (cls, text, key) => {
+            const p = document.createElement('p');
+            p.className = 'ppa-cat__' + cls;
+            p.textContent = text;
+            card.appendChild(key ? mark(p, key) : p);
+            return p;
+        };
+        if (kind === 'resource' && state.category) line('tag', state.category, 'category');
+        line('title', state.name || state.title || '', kind === 'resource' ? 'title' : 'name');
+        if (kind === 'service') {
+            const meta = document.createElement('div');
+            meta.className = 'ppa-cat__meta';
+            [['duration_min', state.duration_min + ' min'], ['price_label', state.price_label || pp.t('js.as.catalog_no_price')],
+                ['capacity', pp.t(Number(state.capacity) === 1 ? 'js.as.catalog_places_one' : 'js.as.catalog_places', { n: state.capacity })]]
+                .forEach(([key, text]) => {
+                    const chip = document.createElement('span');
+                    chip.textContent = text;
+                    meta.appendChild(mark(chip, key));
+                });
+            card.appendChild(meta);
+        }
+        if (kind === 'product') {
+            line('price', state.price || '', 'price_cents');
+            line('small', state.stock === null || state.stock === undefined ? pp.t('js.as.catalog_stock_unlimited') : pp.t('js.as.catalog_stock', { n: state.stock }), 'stock');
+        }
+        if (state.description) line('desc', state.description, 'description');
+        if (kind === 'service') {
+            const grid = document.createElement('dl');
+            grid.className = 'ppa-cat__hours';
+            grid.setAttribute('aria-label', pp.t('js.as.catalog_hours'));
+            (data.weekdays || []).forEach((day, d) => {
+                const row = document.createElement('div');
+                row.className = 'ppa-cat__day' + (which === 'after' && catalogDayChanged(data, d) ? ' is-changed' : '');
+                const dt = document.createElement('dt');
+                dt.textContent = day;
+                const dd = document.createElement('dd');
+                const ranges = (state.hours || [])[d] || [];
+                dd.textContent = ranges.length ? ranges.map((r) => r.start + '-' + r.end).join(', ') : pp.t('js.as.catalog_closed');
+                if (!ranges.length) dd.className = 'is-closed';
+                row.append(dt, dd);
+                grid.appendChild(row);
+            });
+            card.appendChild(grid);
+            line('small', pp.t('js.as.catalog_rules', { margen: state.buffer_min, antelacion: state.min_notice_hours, dias: state.max_advance_days }),
+                ['buffer_min', 'min_notice_hours', 'max_advance_days'].find((k) => changedKeys.has(k)));
+        }
+        return card;
+    }
+
+    /** «Lo he revisado»: sin marcarlo, «Aplicar» no manda un cambio sensible. */
+    function renderCatalogReview(box, it, onSettled) {
+        const label = document.createElement('label');
+        label.className = 'ppa-review';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = it._reviewed === true;
+        check.addEventListener('change', () => { it._reviewed = check.checked; onSettled(); });
+        const text = document.createElement('span');
+        text.textContent = pp.t(it.capability_id === 'commerce.product.edit' ? 'js.as.catalog_review_product' : 'js.as.catalog_review_service');
+        label.append(check, text);
+        box.appendChild(label);
+    }
+
     /** ASST-V2 F4a — cómo saldría la página en Google. */
     function renderSnippet(snippet, limits) {
         const box = document.createElement('div');
@@ -1202,6 +1296,12 @@
                 li.appendChild(document.createTextNode(': '));
                 li.append(swatch(change.from), document.createTextNode(change.from + ' → '), swatch(change.to), document.createTextNode(change.to));
             } else if (change.detail) li.appendChild(document.createTextNode(': ' + change.detail));
+            if (change.sensitive) {
+                const tag = document.createElement('span');
+                tag.className = 'ppa-preview__flag';
+                tag.textContent = pp.t('js.as.catalog_check');
+                li.appendChild(tag);
+            }
             const sr = document.createElement('span');
             sr.className = 'pp-sr-only';
             sr.textContent = {
@@ -1224,15 +1324,34 @@
         const isSeo = data.kind === 'seo';
         const isChrome = data.kind === 'chrome';
         const isDesign = data.kind === 'design';
+        const isCatalog = data.kind === 'catalog';
         if (isDesign) loadDesignFonts(data);
         const changedKeys = new Set(changes.map((ch) => ch.key));
-        const marks = isSeo || isDesign ? { before: {}, after: {} } : isChrome ? chromeMarks(data.before, data.after) : fieldMarks(data.before, data.after);
+        if (isCatalog) {
+            it._preview.sensitive = data.sensitive === true;
+            if (data.is_new) {
+                list.remove();
+                const note = document.createElement('p');
+                note.className = 'ppa-preview__note';
+                note.textContent = pp.t('js.as.catalog_new_inactive');
+                box.prepend(note);
+                const stage = document.createElement('div');
+                stage.className = 'ppa-preview__stage';
+                stage.appendChild(renderCatalogCard(data.after, data, changedKeys, 'new'));
+                box.appendChild(stage);
+                return;
+            }
+        }
+        const marks = isSeo || isDesign || isCatalog ? { before: {}, after: {} } : isChrome ? chromeMarks(data.before, data.after) : fieldMarks(data.before, data.after);
         const tabs = document.createElement('div');
         tabs.className = 'ppa-seg';
         tabs.setAttribute('role', 'tablist');
         const stage = document.createElement('div');
         stage.className = 'ppa-preview__stage';
-        const views = isDesign ? {
+        const views = isCatalog ? {
+            after: () => renderCatalogCard(data.after, data, changedKeys, 'after'),
+            before: () => renderCatalogCard(data.before, data, changedKeys, 'before')
+        } : isDesign ? {
             after: () => renderDesignMock(data.after, data, changedKeys),
             before: () => renderDesignMock(data.before, data, changedKeys)
         } : isChrome ? {
@@ -1274,6 +1393,7 @@
         box.appendChild(tabs);
         box.appendChild(stage);
         show('after');
+        if (isCatalog && data.sensitive) renderCatalogReview(box, it, onSettled);
     }
 
     async function loadPreview(it, box, onSettled) {
@@ -1301,7 +1421,7 @@
                 method: 'POST',
                 body: new URLSearchParams({
                     _csrf: cfg.csrf,
-                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, page_id: it.page_id, instruction: it.instruction })
+                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, page_id: it.page_id, target_id: it.target_id, instruction: it.instruction })
                 })
             });
             const data = await res.json().catch(() => ({}));
@@ -1390,6 +1510,8 @@
                         ? pp.t('js.as.chrome_title')
                     : it.capability_id === 'design.edit'
                         ? pp.t('js.as.design_title')
+                    : CATALOG_CREATE.includes(it.capability_id) || (CATALOG_EDIT.includes(it.capability_id) && it.target_title)
+                        ? pp.t(CATALOG_TITLE[it.capability_id], { nombre: it.target_title })
                     : it.capability_id === 'posts.ideas'
                         ? pp.t('js.as.ideas_title')
                     : it.capability_id === 'pages.ideas'
@@ -1482,12 +1604,14 @@
             const refresh = () => {
                 const applicable = applicableItems(items);
                 const preparing = actionable.some((it) => it._preview && it._preview.state === 'loading');
+                const needsReview = applicable.some((it) => it._preview && it._preview.sensitive && it._reviewed !== true);
                 const onlyPosts = applicable.length > 0 && applicable.every((it) => it.capability_id === 'posts.create');
                 const onlyPages = applicable.length > 0 && applicable.every((it) => it.capability_id === 'pages.create');
-                btn.disabled = applicable.length === 0 || preparing || !!plan._applied;
+                btn.disabled = applicable.length === 0 || preparing || needsReview || !!plan._applied;
                 btn.classList.toggle('is-waiting', preparing);
                 if (plan._applied) btn.textContent = pp.t('js.as.plan_applied');
                 else if (preparing) btn.textContent = pp.t('js.as.preview_wait');
+                else if (needsReview) btn.textContent = pp.t('js.as.catalog_review_first');
                 else if (applicable.length === 0) btn.textContent = pp.t(
                     actionable.some((it) => it.capability_id === 'pages.ideas') ? 'js.as.page_ideas_pick'
                         : hasIdeas ? 'js.as.ideas_pick' : 'js.as.confirm_above'
@@ -1762,7 +1886,13 @@
             t.className = 'ppa-item__page';
             t.textContent = itemLabel(it);
             head.appendChild(t);
-            if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit' || it.capability_id === 'design.edit') {
+            if (isCatalogItem(it) && it.catalog) {
+                const link = document.createElement('a');
+                link.className = 'ppa-item__link';
+                link.href = it.catalog.edit_url;
+                link.textContent = pp.t('js.as.catalog_open');
+                head.appendChild(link);
+            } else if (it.capability_id === 'seo.page.edit' || it.capability_id === 'chrome.edit' || it.capability_id === 'design.edit') {
                 // En vivo ya: no hay nada que revisar ni publicar.
             } else if (it.capability_id === 'pages.create' && it.new_page) {
                 const link = document.createElement('a');
@@ -1812,7 +1942,7 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'design.edit' ? 'js.as.design_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'design.edit' ? 'js.as.design_unchanged' : isCatalogItem(it) ? 'js.as.catalog_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
@@ -1834,6 +1964,18 @@
             chromeNote.className = 'ppa-plan__note';
             chromeNote.textContent = pp.t('js.as.chrome_live_done');
             bubble.appendChild(chromeNote);
+        }
+        if (doneItems.some((it) => CATALOG_EDIT.includes(it.capability_id))) {
+            const catNote = document.createElement('p');
+            catNote.className = 'ppa-plan__note';
+            catNote.textContent = pp.t('js.as.catalog_live_done');
+            bubble.appendChild(catNote);
+        }
+        if (doneItems.some((it) => CATALOG_CREATE.includes(it.capability_id))) {
+            const newNote = document.createElement('p');
+            newNote.className = 'ppa-plan__note';
+            newNote.textContent = pp.t('js.as.catalog_created_done');
+            bubble.appendChild(newNote);
         }
         if (doneItems.some((it) => it.capability_id === 'design.edit')) {
             const designNote = document.createElement('p');
@@ -1963,7 +2105,9 @@
                 items: JSON.stringify(applicable.map((it) => {
                     const copy = Object.assign({}, it);
                     delete copy._preview;
+                    delete copy._reviewed;
                     if (it._preview && it._preview.state === 'ready') copy.preview_token = it._preview.token;
+                    if (isCatalogItem(it)) copy.reviewed = it._reviewed === true;
                     return copy;
                 })),
                 request_text: plan._request || '',

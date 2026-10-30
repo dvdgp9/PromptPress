@@ -51,6 +51,12 @@ final class ActivityService
         if (Permissions::roleHas($role, Permissions::CAP_APPEARANCE)) {
             $entries = array_merge($entries, self::designEntries($siteId));
         }
+        // ASST-V2 F4f — servicios y productos con Clientes; recursos con Contenido.
+        foreach (['service' => Permissions::CAP_CLIENTS, 'product' => Permissions::CAP_CLIENTS, 'resource' => Permissions::CAP_CONTENT] as $kind => $cap) {
+            if (Permissions::roleHas($role, $cap)) {
+                $entries = array_merge($entries, self::catalogEntries($siteId, $kind));
+            }
+        }
         return self::filterAndSort($entries, $filter);
     }
 
@@ -285,6 +291,50 @@ final class ActivityService
     }
 
     /**
+     * ASST-V2 F4f — servicio, producto o recurso: cada fila es el elemento
+     * ANTES del cambio. Solo los que siguen existiendo.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private static function catalogEntries(int $siteId, string $kind): array
+    {
+        $entity = CatalogAssistantEditor::KINDS[$kind]['entity'];
+        $rows = Database::select(
+            "SELECT vr.id, vr.entity_id, vr.reason, vr.created_at, u.username
+             FROM versions vr
+             LEFT JOIN users u ON u.id = vr.created_by
+             WHERE vr.entity_type = ? AND vr.reason IN ('before_ai_edit', 'before_restore')
+               AND vr.created_at >= NOW() - INTERVAL " . self::DAYS . " DAY
+             ORDER BY vr.id DESC LIMIT " . self::LIMIT,
+            [$entity]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $actor = self::formActor((string) $r['reason']);
+            $card = $actor !== null ? CatalogAssistantEditor::card($siteId, $kind, (int) $r['entity_id']) : null;
+            if ($card === null) continue;
+            $out[] = [
+                'type' => $entity,
+                'entity_id' => (int) $r['entity_id'],
+                'title' => $card['title'],
+                'actor' => $actor,
+                'username' => (string) ($r['username'] ?? ''),
+                'detail' => match ($kind) {
+                    'service' => __('asst.catalog.kind_service'),
+                    'product' => __('asst.catalog.kind_product'),
+                    default   => __('asst.catalog.kind_resource'),
+                },
+                'at' => (string) $r['created_at'],
+                'version_id' => (int) $r['id'],
+                'undone' => false,
+                'undoable' => true,
+                'edit_url' => $card['edit_url'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Deshace un cambio. Devuelve la clave de traducción del resultado.
      *
      * @return array{ok:bool,message:string,vars?:array<string,string>}
@@ -302,6 +352,14 @@ final class ActivityService
             if ($role !== Permissions::ROLE_ADMIN || $entityId !== $siteId) return $fail;
             return ChromeAssistantEditor::restoreVersion($siteId, $versionId, $userId)
                 ? ['ok' => true, 'message' => 'activity.undo_chrome_done']
+                : $fail;
+        }
+        foreach (CatalogAssistantEditor::KINDS as $kind => $def) {
+            if ($type !== $def['entity']) continue;
+            $cap = $kind === 'resource' ? Permissions::CAP_CONTENT : Permissions::CAP_CLIENTS;
+            if (!Permissions::roleHas($role, $cap)) return $fail;
+            return CatalogAssistantEditor::restoreVersion($siteId, $kind, $entityId, $versionId, $userId)
+                ? ['ok' => true, 'message' => 'activity.undo_catalog_done']
                 : $fail;
         }
         if ($type === 'design') {

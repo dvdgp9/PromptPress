@@ -12,6 +12,7 @@ use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
 use App\Services\BlogAssistant;
 use App\Services\AssistantProposal;
+use App\Services\CatalogAssistantEditor;
 use App\Services\ChromeAssistantEditor;
 use App\Services\DesignAssistantEditor;
 use App\Services\FormAssistantEditor;
@@ -360,6 +361,8 @@ class AssistantController
             'posts.ideas'   => ['ideas', $siteId],
             'pages.ideas'   => ['page_ideas', $siteId],
             'pages.create'  => ['page', $siteId],
+            'booking.service.edit', 'commerce.product.edit', 'resources.edit' => ['catalog', (int) ($item['target_id'] ?? 0)],
+            'booking.service.create', 'commerce.product.create' => ['catalog', $siteId],
             default         => ['', 0],
         };
         if ($kind === '' || $targetId <= 0 || $instruction === '' || mb_strlen($instruction) > 4000) {
@@ -371,6 +374,9 @@ class AssistantController
 
         @set_time_limit(200);
         $started = microtime(true);
+        if ($kind === 'catalog') {
+            $this->previewCatalog($siteId, $capability, (int) ($item['target_id'] ?? 0), $instruction, $started);
+        }
         if ($kind === 'ideas' || $kind === 'page_ideas') {
             $this->previewIdeas($siteId, $instruction, $started, $kind === 'page_ideas');
         }
@@ -401,6 +407,32 @@ class AssistantController
         };
         error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
             $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
+        Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
+    }
+
+    /**
+     * ASST-V2 F4f — servicio, producto o recurso: ficha antes y después,
+     * firmada y atada a ese elemento (o a «nuevo»).
+     */
+    private function previewCatalog(int $siteId, string $capability, int $targetId, string $instruction, float $started): void
+    {
+        $kind = (string) CatalogAssistantEditor::kindFor($capability);
+        $isCreate = CatalogAssistantEditor::isCreate($capability);
+        $id = $isCreate ? 0 : $targetId;
+        try {
+            $proposal = CatalogAssistantEditor::propose($siteId, $kind, $id, $instruction);
+        } catch (AIException $e) {
+            error_log('[assistant preview] site=' . $siteId . ' ' . $capability . ' target=' . $id . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
+            Response::json(['ok' => false, 'error' => __('asst.err.catalog_no_valid_change')], 502);
+        }
+        if (!$proposal['ok']) {
+            Response::json(['ok' => false, 'error' => (string) $proposal['error']], 422);
+        }
+        $token = AssistantProposal::seal('catalog_' . $kind . ($isCreate ? '_new' : ''), $siteId, $isCreate ? $siteId : $id, $instruction,
+            $proposal['content'], $proposal['base_hash']);
+        $preview = CatalogAssistantEditor::preview($siteId, $kind, $proposal['before'], $proposal['content'], $proposal['notes'], $proposal['sensitive']);
+        error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d sensitive=%d ms=%d',
+            $siteId, $capability, $id, count($preview['changes']), $proposal['sensitive'] ? 1 : 0, (int) ((microtime(true) - $started) * 1000)));
         Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
     }
 

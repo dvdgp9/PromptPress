@@ -42,6 +42,7 @@ final class SiteAssistantPlanner
     {
         $pages = self::sitePages($siteId);
         $forms = self::siteForms($siteId);
+        $catalog = CatalogAssistantEditor::siteCatalog($siteId);
 
         $docBlock = '';
         if (trim($docText) !== '') {
@@ -81,7 +82,7 @@ final class SiteAssistantPlanner
 
         $runnerInput = [
             'request_text'   => $requestText,
-            'site_map'       => self::renderSiteMap($pages) . self::renderFormMap($forms),
+            'site_map'       => self::renderSiteMap($pages) . self::renderFormMap($forms) . self::renderCatalogMap($catalog),
             'capability_map' => AssistantCapabilityRegistry::renderForPrompt($capabilities),
             'vision_context' => $visionContext,
             'document_block' => $docBlock,
@@ -94,7 +95,7 @@ final class SiteAssistantPlanner
         $result = AIActionRunner::run(Actions::PLAN_SITE_CHANGES, $runnerInput, $siteId);
 
         $data = (array) $result['data'];
-        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle, $forms);
+        $items = self::normalizeItems((array) ($data['items'] ?? []), $pages, $capabilities, $sourceBundle, $forms, $catalog);
         $conversation = self::normalizeConversation($data, $sourceBundle ?? []);
         $runnerVision = (array) ($result['meta']['vision'] ?? []);
         if ($visionStatus === 'used' && (int) ($runnerVision['sent_images'] ?? 0) === 0) {
@@ -345,6 +346,26 @@ final class SiteAssistantPlanner
         // i18n-ignore-end
     }
 
+    /**
+     * ASST-V2 F4f — servicios, productos y recursos de los módulos activos.
+     *
+     * @param array<string,array{kind:string,id:int,title:string,line:string}> $catalog
+     */
+    private static function renderCatalogMap(array $catalog): string
+    {
+        if ($catalog === []) {
+            return '';
+        }
+        // i18n-ignore-start: mapa del catálogo que viaja al prompt.
+        $names = ['service' => 'servicio de reserva', 'product' => 'producto', 'resource' => 'recurso'];
+        $lines = [];
+        foreach ($catalog as $c) {
+            $lines[] = '- ' . $names[$c['kind']] . ' target_id=' . $c['id'] . ' «' . $c['title'] . '» · ' . $c['line'];
+        }
+        return "\n\nCATÁLOGO (editable con booking.service.edit, commerce.product.edit o resources.edit; usa target_id y page_id 0):\n" . implode("\n", $lines);
+        // i18n-ignore-end
+    }
+
     // ======================================================================
     // Normalización del plan
     // ======================================================================
@@ -358,7 +379,7 @@ final class SiteAssistantPlanner
      * @param array<int,array<string,mixed>>|null $capabilities
      * @return array<int,array<string,mixed>>
      */
-    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null, ?array $sourceBundle = null, array $forms = []): array
+    private static function normalizeItems(array $rawItems, array $pages, ?array $capabilities = null, ?array $sourceBundle = null, array $forms = [], array $catalog = []): array
     {
         $capabilities ??= AssistantCapabilityRegistry::catalogForState();
         $capabilityMap = AssistantCapabilityRegistry::byId($capabilities);
@@ -383,6 +404,7 @@ final class SiteAssistantPlanner
             $capabilityId = trim((string) ($raw['capability_id'] ?? ''));
             $pageId      = (int) ($raw['page_id'] ?? 0);
             $formId      = (int) ($raw['form_id'] ?? 0);
+            $targetId    = (int) ($raw['target_id'] ?? 0);
             $section     = trim((string) ($raw['section'] ?? ''));
             $instruction = trim((string) ($raw['instruction'] ?? ''));
             $status      = strtolower(trim((string) ($raw['status'] ?? '')));
@@ -449,7 +471,11 @@ final class SiteAssistantPlanner
             // ASST-V2 F4b — el header y el pie son de todo el sitio.
             // ASST-V2 F4c — las entradas nuevas y las ideas tampoco son de una página.
             $isSiteWide = in_array($capabilityId, ['chrome.edit', 'design.edit', 'posts.create', 'posts.ideas', 'pages.create', 'pages.ideas'], true);
-            if ($isForm || $isSiteWide) {
+            // ASST-V2 F4f — servicio, producto o recurso: su id va en target_id.
+            $catalogKind = CatalogAssistantEditor::kindFor($capabilityId);
+            $catalogCreate = $catalogKind !== null && CatalogAssistantEditor::isCreate($capabilityId);
+            $target = $catalogKind !== null && !$catalogCreate ? ($catalog[$catalogKind . ':' . $targetId] ?? null) : null;
+            if ($isForm || $isSiteWide || $catalogKind !== null) {
                 $pageId = 0;
             }
             $page = $pages[$pageId] ?? null;
@@ -469,7 +495,10 @@ final class SiteAssistantPlanner
                 $category = 'automatable_now';
             }
 
-            if ($category === 'automatable_now' && $isSiteWide) {
+            if ($category === 'automatable_now' && $catalogKind !== null && !$catalogCreate && $target === null) {
+                $category = 'needs_input';
+                $reason = __('asst.plan.no_catalog_item');
+            } elseif ($category === 'automatable_now' && ($isSiteWide || $catalogKind !== null)) {
                 if ($instruction === '') {
                     $category = 'needs_input';
                     $reason = __('asst.plan.no_instruction');
@@ -532,6 +561,8 @@ final class SiteAssistantPlanner
                 'page_title'  => $page !== null ? (string) $page['title'] : '',
                 'form_id'     => $form !== null ? $formId : 0,
                 'form_title'  => $form !== null ? (string) ($form['heading'] ?: __('forms.untitled')) : '',
+                'target_id'   => $target !== null ? $targetId : 0,
+                'target_title' => $target !== null ? $target['title'] : '',
                 'page_slug'   => $page !== null ? (string) $page['slug'] : '',
                 'section'     => $section,
                 'instruction' => $instruction,

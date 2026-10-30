@@ -124,6 +124,48 @@ final class SiteAssistantJobs
                 ];
                 continue;
             }
+            // ASST-V2 F4f — servicio, producto o recurso. Una edición SOLO se
+            // aplica con la propuesta firmada de su vista previa (lo que se vio es
+            // lo que se guarda) y, si toca precio, tiempos, stock u horario, con
+            // «Lo he revisado» marcado. Crear (nace desactivado) puede ir sin ella.
+            $catalogKind = CatalogAssistantEditor::kindFor((string) ($item['capability_id'] ?? ''));
+            if ($catalogKind !== null) {
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if ($instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $isCreate = CatalogAssistantEditor::isCreate((string) $item['capability_id']);
+                $targetId = $isCreate ? 0 : (int) ($item['target_id'] ?? 0);
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                $opened = $proposal !== ''
+                    ? AssistantProposal::open($proposal, 'catalog_' . $catalogKind . ($isCreate ? '_new' : ''), $siteId, $isCreate ? $siteId : $targetId, $instruction)
+                    : null;
+                if (!$isCreate) {
+                    if ($opened === null || CatalogAssistantEditor::state($siteId, $catalogKind, $targetId) === null) {
+                        error_log('[assistant job create] site=' . $siteId . ' ' . $item['capability_id'] . ' target=' . $targetId . ' without valid preview');
+                        return ['ok' => false, 'error' => __('asst.err.catalog_needs_preview')];
+                    }
+                    if (($item['reviewed'] ?? false) !== true
+                        && CatalogAssistantEditor::isSensitive($siteId, $catalogKind, $targetId, $opened['content'])) {
+                        return ['ok' => false, 'error' => __('asst.err.catalog_needs_review')];
+                    }
+                }
+                $title = $isCreate
+                    ? (string) ($opened['content']['name'] ?? BlogAssistant::topicFrom($instruction))
+                    : (string) (CatalogAssistantEditor::card($siteId, $catalogKind, $targetId)['title'] ?? '');
+                $clean[] = [
+                    'capability_id' => (string) $item['capability_id'],
+                    'proposal_token' => $opened !== null ? $proposal : null,
+                    'page_id'     => $targetId,
+                    'form_id'     => null,
+                    'page_title'  => mb_substr($title, 0, 255),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
             if (($item['capability_id'] ?? '') === 'pages.create') {
                 $instruction = trim((string) ($item['instruction'] ?? ''));
                 if ($instruction === '' || mb_strlen($instruction) > 4000) {
@@ -316,7 +358,8 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit', 'posts.create', 'pages.create'], true);
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit', 'posts.create', 'pages.create',
+                'booking.service.edit', 'booking.service.create', 'commerce.product.edit', 'commerce.product.create', 'resources.edit'], true);
     }
 
     /**
@@ -476,6 +519,23 @@ final class SiteAssistantJobs
                 $p = AssistantProposal::open($token, 'page', $siteId, $siteId, $instruction);
                 return $p !== null ? PageAssistant::create($siteId, $p['content']) : PageAssistant::apply($siteId, $instruction);
             };
+        } elseif (($catalogKind = CatalogAssistantEditor::kindFor($capability)) !== null) {
+            $kind = 'catalog';
+            $aiError = 'asst.err.catalog_no_valid_change';
+            $isCreate = CatalogAssistantEditor::isCreate($capability);
+            $run = static function () use ($siteId, $catalogKind, $isCreate, $pageId, $instruction, $token, $userId): array {
+                if ($isCreate) {
+                    $p = AssistantProposal::open($token, 'catalog_' . $catalogKind . '_new', $siteId, $siteId, $instruction);
+                    $p ??= CatalogAssistantEditor::propose($siteId, $catalogKind, 0, $instruction);
+                    if (($p['ok'] ?? true) === false) return $p;
+                    return CatalogAssistantEditor::create($siteId, $catalogKind, $p['content']);
+                }
+                // Sin propuesta firmada no se toca nada (createJob ya lo exige).
+                $p = AssistantProposal::open($token, 'catalog_' . $catalogKind, $siteId, $pageId, $instruction);
+                return $p !== null
+                    ? CatalogAssistantEditor::commit($siteId, $catalogKind, $pageId, $p['content'], $p['base_hash'], $userId)
+                    : ['ok' => false, 'error' => __('asst.err.catalog_needs_preview')];
+            };
         } else {
             return false;
         }
@@ -486,7 +546,7 @@ final class SiteAssistantJobs
                 // Una entrada nueva: el item apunta a ella desde ahora.
                 Database::execute(
                     'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL, page_id = ? WHERE id = ?',
-                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), (int) ($outcome['page_id'] ?? $item['page_id']), $item['id']]
+                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), (int) ($outcome['page_id'] ?? $outcome['entity_id'] ?? $item['page_id']), $item['id']]
                 );
                 return true;
             }
@@ -871,6 +931,11 @@ final class SiteAssistantJobs
             }
             if ($it['capability_id'] === 'pages.create' && $it['status'] === 'done' && $it['page_id'] > 0) {
                 $it['new_page'] = PageAssistant::card($siteId, $it['page_id']);
+            }
+            // ASST-V2 F4f — enlace al servicio, producto o recurso.
+            $catalogKind = CatalogAssistantEditor::kindFor($it['capability_id']);
+            if ($catalogKind !== null && $it['status'] === 'done' && $it['page_id'] > 0) {
+                $it['catalog'] = CatalogAssistantEditor::card($siteId, $catalogKind, $it['page_id']);
             }
         }
         unset($it);

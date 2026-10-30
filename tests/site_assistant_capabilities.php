@@ -53,12 +53,12 @@ checkAssistantCapability(
     json_encode(AssistantCapabilityRegistry::CATEGORIES)
 );
 checkAssistantCapability(
-    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a), chrome.edit (F4b), el blog (F4c) y las páginas nuevas (F4d).
+    // Los únicos con ejecutor: Canvas, forms.edit (ASST-FORMS), seo.page.edit (F4a), chrome.edit (F4b), el blog (F4c) y las páginas nuevas (F4d), el diseño (F4e) y, con su módulo activo, reservas y recursos (F4f; aquí la tienda está apagada).
     'only_registered_executors_are_automatic',
     ($byId['pages.canvas.edit']['mode'] ?? '') === 'automatic'
         && ($byId['pages.canvas.edit']['handler'] ?? '') === 'canvas_edit'
         && ($byId['forms.edit']['handler'] ?? '') === 'form_edit'
-        && (static function (array $ids): bool { sort($ids); return $ids === ['chrome.edit', 'design.edit', 'forms.edit', 'pages.canvas.edit', 'pages.create', 'pages.ideas', 'posts.create', 'posts.ideas', 'seo.page.edit']; })(
+        && (static function (array $ids): bool { sort($ids); return $ids === ['booking.service.create', 'booking.service.edit', 'chrome.edit', 'design.edit', 'forms.edit', 'pages.canvas.edit', 'pages.create', 'pages.ideas', 'posts.create', 'posts.ideas', 'resources.edit', 'seo.page.edit']; })(
             array_column(array_filter($catalog, static fn (array $c): bool => ($c['mode'] ?? '') === 'automatic'), 'id')
         ),
     json_encode($catalog)
