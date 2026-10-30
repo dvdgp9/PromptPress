@@ -54,6 +54,33 @@ $actionLabels = [
     </div>
 
     <?php
+    // ASST-V2 F5 — Sugerencias del asistente. Llegan después de cargar (la
+    // auditoría no frena Inicio) y no gastan IA hasta que se pulsa.
+    if ($can('assistant')): ?>
+    <section class="pp-sugg" id="pp-sugg" aria-labelledby="pp-sugg-title" aria-busy="true"
+             data-url="<?= e(base_url('admin/assistant/suggestions')) ?>"
+             data-dismiss-url="<?= e(base_url('admin/assistant/suggestions/dismiss')) ?>"
+             data-csrf="<?= e(\Core\CSRF::token()) ?>">
+        <header class="pp-sugg__head">
+            <span class="pp-sugg__icon" aria-hidden="true"><span class="pp-icon--ai"></span></span>
+            <div>
+                <h3 class="pp-sugg__title" id="pp-sugg-title"><?= e(__('dashboard.sugg.title')) ?></h3>
+                <p class="pp-sugg__subtitle"><?= e(__('dashboard.sugg.subtitle')) ?></p>
+            </div>
+        </header>
+        <ul class="pp-sugg__list" id="pp-sugg-list">
+            <?php for ($i = 0; $i < 3; $i++): ?>
+            <li class="pp-sugg__item pp-sugg__item--skeleton" aria-hidden="true"><span></span><span></span></li>
+            <?php endfor; ?>
+        </ul>
+        <p class="pp-sr-only" id="pp-sugg-status" role="status" aria-live="polite"></p>
+    </section>
+    <?php \Core\View::start('scripts'); ?>
+    <script src="<?= e(base_url('admin/assets/js/dashboard-suggestions.js')) ?>"></script>
+    <?php \Core\View::end(); ?>
+    <?php endif; ?>
+
+    <?php
     // E-GDPR G6 — Widget de cumplimiento. Solo se muestra cuando hay gaps.
     // Todo lo que ofrece lleva a Privacidad, que es cosa del administrador.
     $compliance = $compliance ?? ['level' => 'green', 'gaps' => []];

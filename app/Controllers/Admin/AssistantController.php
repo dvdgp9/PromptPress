@@ -10,6 +10,7 @@ use App\Services\AssistantConversationStore;
 use App\Services\AssistantMediaReferences;
 use App\Services\AssistantScreenContext;
 use App\Services\AssistantSourceEnvelope;
+use App\Services\AssistantSuggestions;
 use App\Services\BlogAssistant;
 use App\Services\AssistantProposal;
 use App\Services\CatalogAssistantEditor;
@@ -105,6 +106,26 @@ class AssistantController
             Response::json(['ok' => false, 'error' => __('asst.conv.save_failed')], 422);
         }
         Response::json(['ok' => true, 'id' => $saved]);
+    }
+
+    // GET /admin/assistant/suggestions — ASST-V2 F5: lo que Inicio propone
+    // arreglar. Se pide tras cargar Inicio (la auditoría no lo frena); sin IA.
+    public function suggestions(): void
+    {
+        $siteId = self::requireSiteId();
+        Response::json(['ok' => true, 'items' => array_map(
+            static fn (array $s): array => array_intersect_key($s, array_flip(['id', 'severity', 'action', 'send', 'title', 'detail', 'prompt', 'cta', 'url'])),
+            AssistantSuggestions::forDashboard($siteId, Auth::role(), 4)
+        )]);
+    }
+
+    // POST /admin/assistant/suggestions/dismiss — «Ahora no» (30 días).
+    public function dismissSuggestion(): void
+    {
+        $siteId = self::requireSiteId();
+        CSRF::check();
+        $ok = AssistantSuggestions::dismiss($siteId, (string) Request::post('id', ''));
+        Response::json(['ok' => $ok], $ok ? 200 : 404);
     }
 
     // GET /admin/assistant/conversations/current — ASST-V2 F2: el panel

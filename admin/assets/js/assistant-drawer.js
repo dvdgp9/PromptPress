@@ -2,7 +2,8 @@
  * ASST-V2 F2 — Panel lateral del asistente.
  *
  * - Se abre con el botón flotante, con Ctrl/⌘ K o con cualquier elemento
- *   [data-assistant-open] (opcional data-assistant-prompt para precargar texto).
+ *   [data-assistant-open] (opcional data-assistant-prompt para precargar texto
+ *   y data-assistant-send para enviarlo directamente).
  * - La primera vez carga los scripts del chat y la conversación en curso; hasta
  *   entonces enseña un esqueleto del hilo.
  * - Recuerda si estaba abierto al cambiar de pantalla (sessionStorage).
@@ -29,6 +30,7 @@
     let loading = null;
     let ready = false;
     let pendingPrompt = '';
+    let pendingSend = false;
     let lastFocus = null;
 
     // Dentro del panel (que se mueve con transform) el selector de medios
@@ -84,7 +86,10 @@
 
     function open(options) {
         const opts = options || {};
-        if (opts.prompt) pendingPrompt = opts.prompt;
+        if (opts.prompt) {
+            pendingPrompt = opts.prompt;
+            pendingSend = !!opts.send;
+        }
         if (!drawer.hidden && drawer.classList.contains('is-open')) {
             applyPendingPrompt();
             focusComposer();
@@ -127,8 +132,10 @@
 
     function applyPendingPrompt() {
         if (!pendingPrompt || !window.PPAssistant) return;
-        window.PPAssistant.prefill(pendingPrompt);
+        if (pendingSend && typeof window.PPAssistant.send === 'function') window.PPAssistant.send(pendingPrompt);
+        else window.PPAssistant.prefill(pendingPrompt);
         pendingPrompt = '';
+        pendingSend = false;
     }
 
     function clearBadge() {
@@ -141,7 +148,10 @@
         ready = true;
         if (skeleton) skeleton.remove();
         drawer.classList.add('is-ready');
-        if (drawer.classList.contains('is-open')) {
+        // `hidden` y no `is-open`: esa clase llega un frame después y, con la
+        // pestaña en segundo plano, ese frame puede no llegar nunca; la
+        // petición de «Arreglar» se perdería.
+        if (!drawer.hidden) {
             applyPendingPrompt();
             focusComposer();
         }
@@ -181,7 +191,7 @@
         const trigger = event.target.closest('[data-assistant-open]');
         if (!trigger) return;
         event.preventDefault();
-        open({ prompt: trigger.dataset.assistantPrompt || '' });
+        open({ prompt: trigger.dataset.assistantPrompt || '', send: trigger.hasAttribute('data-assistant-send') });
     });
 
     document.addEventListener('keydown', (event) => {

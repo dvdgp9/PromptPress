@@ -2404,6 +2404,15 @@
             }
             refreshSendState();
         },
+        // ASST-V2 F5 — «Arreglar» desde Inicio: escribe la petición y la envía.
+        send(text) {
+            if (planning || applying || extracting) {
+                window.PPAssistant.prefill(text);
+                return;
+            }
+            window.PPAssistant.prefill(text);
+            sendRequest();
+        },
         reset() {
             if (planning || applying) return;
             resetConversation();

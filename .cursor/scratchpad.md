@@ -11126,7 +11126,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F1 Conversaciones guardadas + Actividad con deshacer — código y tests; falta ver en navegador
 - [x] F2 Panel lateral global y botones «Llévame» — publicado como v1.15.0 (28/10, «Publícalo»)
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
-- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f (reservas, productos y recursos) publicado como v1.22.0 (30/10, «Publícalo»)
+- [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f (reservas, productos y recursos) publicado como v1.22.0 (30/10, «Publícalo»). F5 (sugerencias en Inicio) publicado como v1.23.0 (30/10, «Publícalo»)
 - [ ] F5 Inicio proactivo
 - [ ] F6 Unificar IA del Studio y composer de formularios
 
@@ -11381,3 +11381,28 @@ Verificación:
 - ProductStore::update y ServiceStore::update normalizan contra defaults: pasar siempre la fila completa o se pierden imagen, impuestos, campos y emails.
 - El lint i18n no sigue claves dinámicas (`'x.' . $k`, `'x_' + k`): usar match/mapas con claves literales.
 - Filas con margen negativo dentro de un contenedor estrecho: dar al contenedor el mismo padding.
+
+## Key Challenges and Analysis (ASST-V2 F5) — 30/10/2026, Planner (usuario: «Sí, sigue con F5»)
+- Inicio enseña 3-4 sugerencias calculadas en LOCAL (auditorías y datos ya existentes), sin llamar a la IA hasta que el usuario pulsa. «Arreglar» abre el panel lateral con la petición escrita y la envía; las que necesitan un dato («pon el horario de…») solo la escriben; las que no tienen ejecutor llevan a su pantalla.
+- Fuentes: SeoTechnicalAuditService (sin meta descripción, H1 ausente o múltiple, imágenes sin alt), LinkAuditService (enlaces internos rotos o a borradores → /admin/links), blog parado (>45 días sin entradas nuevas → posts.ideas), web corta (<4 páginas → pages.ideas), servicios de reserva activos sin horario, productos activos agotados. El cumplimiento legal ya tiene su widget en Inicio: no se duplica.
+- Coste: la auditoría SEO renderiza páginas → endpoint aparte (GET /admin/assistant/suggestions) que el Inicio pide tras cargar, con caché de 10 min por sitio en `settings`. Inicio no se ralentiza.
+- Roles: cada sugerencia lleva su capacidad; se filtra con roleCanExecute (o el permiso de su pantalla). Sin CAP_ASSISTANT no hay tarjeta.
+- «Ahora no»: oculta esa sugerencia 30 días (id estable = regla + elementos afectados; si cambian, vuelve).
+
+## High-level Task Breakdown (ASST-V2 F5)
+1. Test primero (tests/assistant_v2_suggestions.php): reglas con datos de prueba, orden por gravedad, límite, filtro por rol, descartar, caché.
+2. AssistantSuggestions + endpoints (listar, descartar) + envío directo desde el panel (`data-assistant-send`).
+3. Tarjeta en Inicio (cargando, vacía, error) y textos en 4 idiomas; navegador.
+
+## Current Status / Progress Tracking (ASST-V2 F5) — 30/10/2026, Executor
+- Hecho (sin publicar). `AssistantSuggestions`: hechos locales (SEO técnico, enlaces internos, blog, nº de páginas, servicios activos sin horario, productos agotados) con caché de 10 min en `settings` (se cachean HECHOS, no textos: cada usuario los lee en su idioma); reglas puras `fromFacts` ordenadas por gravedad; `visibleFor` por rol (asistente + capacidad, o permiso de la pantalla); «Ahora no» 30 días con id estable (regla + afectados). Las legales quedan fuera de las reglas de SEO.
+- Enlaces rotos → /admin/seo?tab=links (permiso Visibilidad; /admin/links es un redirect legacy y un redactor acabaría en 403).
+- Endpoints GET /admin/assistant/suggestions y POST /admin/assistant/suggestions/dismiss. Tarjeta en Inicio (solo con permiso de asistente): esqueleto, lista, vacío («Todo en orden»), y si falla desaparece. «Arreglar» abre el panel y ENVÍA (`data-assistant-send`, `PPAssistant.send`); «Escribirlo» solo escribe; «Ver enlaces» lleva a la pantalla.
+- Panel lateral: al quedar listo aplica la petición pendiente si el panel no está oculto (antes miraba `is-open`, que llega un frame después; con la pestaña en segundo plano la petición se perdía: reproducido y corregido).
+- Tests: tests/assistant_v2_suggestions.php 21/21; resto de suites del asistente y admin_i18n en verde; lint i18n 42.
+- Navegador (Inicio renderizado con sugerencias de ejemplo): escritorio y móvil, «Arreglar» envía en 5 escenarios de carga, «Escribirlo» no envía, «Ahora no» oculta y avisa por lector de pantalla, estado vacío.
+- Sin probar con login real.
+
+## Lessons (ASST-V2 F5)
+- requestAnimationFrame no corre con la pestaña en segundo plano: no condicionar lógica (no solo animación) a una clase que se pone en un rAF.
+- Antes de enlazar una pantalla, comprobar si la ruta es un redirect y qué permiso pide el destino.
