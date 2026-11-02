@@ -11443,7 +11443,7 @@ Recomendación (la más simple que cumple el objetivo sin empeorar el Studio):
 - [x] F6a Formularios nuevos desde el panel (publicado como v1.24.0, 02/11, «Publícalo»): `forms.create` con vista previa (maqueta del formulario) y apertura en el editor. ✅ test: propose/commit crea inactivo-sin-colocar, token ligado al sitio, rol sin `forms` no lo ve; «crea un formulario de presupuesto» en el panel enseña la maqueta y «Aplicar» lleva al editor.
 - [x] F6b Imagen de referencia en el panel (publicado como v1.25.0, 02/11, «Publícalo») (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
 - [x] F6c Quitar el composer (publicado como v1.26.0, 02/11, «Publícalo»): lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
-- [ ] F6d Studio con historial compartido: los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
+- [x] F6d Studio con historial compartido (publicado como v1.27.0, 02/11, «Publícalo»): los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
 - [ ] F6e Derivar al panel lo que no es de la página: el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
 Cada subfase se puede publicar sola. Orden: F6a → F6b → F6c (formularios, menos riesgo) y luego F6d → F6e (Studio).
 
@@ -11485,3 +11485,20 @@ Usuario: «Sí, sigue con F6c». Hecho (pendiente de verlo y de «Publícalo»):
 - tests/form_ai_builder.php: las 2 comprobaciones de permisos de las rutas viejas pasan a la de crear.
 Verificación: tests/assistant_v2_forms_panel.php nuevo (16 PASS); todas las suites del asistente, formularios, permisos, php80, navegación y JS en verde; lint 40 (antes 42: se fue el ejemplo de forms-ai.js). Navegador (estático): lista con el botón y panel con el texto puesto; editor: sin cambios no frena, con cambios frena, otro formulario no frena, tras aplicar sale el aviso y guardar queda desactivado. NO probado con sesión real ni con la IA real.
 Nota: en pantallas < 1280px el panel tapa el botón «Recargar» del aviso; el panel ya ofrece «Ver el cambio en esta pantalla».
+
+## Current Status / Progress Tracking (ASST-V2 F6d) — 02/11/2026, Executor
+Usuario: «Sí, sigue con F6d». Hecho (pendiente de verlo y de «Publícalo»):
+- MIGRACIÓN `2026_11_02_assistant_conversation_page.php`: `assistant_conversations.page_id INT UNSIGNED NULL` + índice `idx_ac_page`. Aditiva (NULL = conversación del asistente, todas las existentes). Dry-run: solo esta pendiente; aplicada en la BD local. install/schema.sql al día.
+- `AssistantConversationStore::studioThread / appendStudioTurn` (máx. 80 entradas, 8 turnos de memoria, textos de 1200). `latest()` y `find()` ignoran las del Studio (el asistente no las reabre ni las sobrescribe); `recent()` las lista con page_id y título de la página.
+- El turno lo guarda el SERVIDOR en `POST /admin/canvas/{id}/chat` tras aplicar (no una foto del navegador). Nuevos campos opcionales: `scope_label` y `new_thread`. Si falla el guardado, el cambio sigue (solo log).
+- Studio: al abrir, repinta la conversación («Seguimos donde lo dejaste») sin «Deshacer» en mensajes antiguos y devuelve a la IA los últimos turnos como memoria. Botón «Empezar de cero» en la cabecera del chat: limpia y la siguiente petición abre conversación nueva.
+- /admin/assistant → «Conversaciones»: las del Studio salen como «Studio · <página>» y enlazan al Studio de esa página.
+Verificación: tests/assistant_v2_studio_thread.php nuevo (17 PASS); canvas_*, asistente, formularios, permisos, php80, navegación y JS en verde; lint 40. Navegador (estático): conversación repintada, «Empezar de cero» limpia y manda new_thread=1 sin memoria, menú del asistente con la entrada del Studio. NO probado con sesión real ni con la IA real.
+- La conversación anterior no se borra al «Empezar de cero»: sigue en Conversaciones hasta los 30 días. El menú solo deja borrar la conversación del asistente abierta.
+
+## Executor's Feedback or Assistance Requests (ASST-V2 F6d)
+- Error mío: al lanzar las suites con `tests/canvas_*.php` corrieron también `canvas_generate.php` (QA con IA real: 2 llamadas Gemini Flash) y `canvas_demo.php`. Crearon y publicaron en la BD LOCAL la página «Inicio Canvas» /inicio-canvas-49 (id 4930); las -44 a -48 son de pasadas anteriores. No he borrado nada: pendiente de que el usuario diga.
+- Usuario (02/11): «Bórrala» → borrada la página 4930 (/inicio-canvas-49) de la BD local (sin hijas, traducciones ni menús; su versión se fue en cascada) y caché del sitio vaciada. Quedan otras 47 páginas «inicio-canvas-*» de pasadas antiguas del mismo script: no se han tocado.
+
+## Lessons (ASST-V2 F6d)
+- `tests/canvas_generate.php` y `tests/canvas_demo.php` NO son tests: llaman a la IA real y crean páginas publicadas. No lanzar `tests/canvas_*.php` con un glob; excluirlos.

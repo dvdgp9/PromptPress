@@ -37,8 +37,9 @@ foreach ($assistantAssets as $assetUrl): ?>
             <ul class="ppa-conversations__list">
                 <?php foreach ($recentConversations as $c): ?>
                 <li class="<?= $conversation !== null && (int) $conversation['id'] === (int) $c['id'] ? 'is-current' : '' ?>">
-                    <a href="<?= e(base_url('admin/assistant?c=' . (int) $c['id'])) ?>">
-                        <span><?= e($c['title'] !== '' ? $c['title'] : __('asst.conv.untitled')) ?></span>
+                    <?php /* ASST-V2 F6d — las del Studio se retoman en el Studio de su página. */ ?>
+                    <a href="<?= e(base_url(($c['page_id'] ?? 0) > 0 ? 'admin/canvas/' . (int) $c['page_id'] : 'admin/assistant?c=' . (int) $c['id'])) ?>">
+                        <span><?php if (($c['page_id'] ?? 0) > 0): ?><em class="ppa-conversations__where"><?= e(__('asst.conv.studio', ['pagina' => $c['page_title'] !== '' ? $c['page_title'] : '#' . (int) $c['page_id']])) ?></em> <?php endif; ?><?= e($c['title'] !== '' ? $c['title'] : __('asst.conv.untitled')) ?></span>
                         <small><?= e(date('d/m H:i', strtotime((string) $c['updated_at']) ?: time())) ?></small>
                     </a>
                 </li>

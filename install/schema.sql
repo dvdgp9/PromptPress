@@ -704,12 +704,14 @@ CREATE TABLE IF NOT EXISTS assistant_conversations (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     site_id INT UNSIGNED NOT NULL,
     user_id INT UNSIGNED NULL,
+    page_id INT UNSIGNED NULL,
     title VARCHAR(160) NOT NULL DEFAULT '',
     state_json MEDIUMTEXT NULL,
     log_json MEDIUMTEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_ac_owner (site_id, user_id, updated_at),
+    KEY idx_ac_page (site_id, user_id, page_id, updated_at),
     CONSTRAINT fk_ac_site FOREIGN KEY (site_id) REFERENCES sites (id) ON DELETE CASCADE,
     CONSTRAINT fk_ac_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

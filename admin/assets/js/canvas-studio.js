@@ -217,6 +217,49 @@
     return d.innerHTML;
   }
 
+  // ASST-V2 F6d — La conversación de esta página, tal como quedó (la guarda el
+  // servidor en cada cambio). Sin «Deshacer» en los mensajes antiguos: para eso
+  // están Deshacer/Rehacer y el historial de versiones.
+  var newThread = false;
+  var chatNew = document.getElementById('chat-new');
+  (function restoreThread() {
+    var node = document.getElementById('studio-thread');
+    if (!node) return;
+    var data;
+    try { data = JSON.parse(node.textContent || '{}'); } catch (e) { return; }
+    var log = Array.isArray(data.log) ? data.log : [];
+    if (log.length === 0) return;
+    var mark = document.createElement('p');
+    mark.className = 'pp-chat-divider';
+    mark.textContent = pp.t('js.cv.thread_restored');
+    messages.appendChild(mark);
+    log.forEach(function (entry) {
+      var div = document.createElement('div');
+      div.className = 'pp-chat-msg pp-chat-msg--' + (entry.type === 'user' ? 'user' : 'assistant');
+      div.textContent = String(entry.text || '');
+      if (entry.type === 'user' && entry.scope) {
+        var scope = document.createElement('span');
+        scope.className = 'pp-chat-scope';
+        scope.textContent = ' ' + pp.t('js.cv.in_scope', { seccion: String(entry.scope) });
+        div.appendChild(scope);
+      }
+      messages.appendChild(div);
+    });
+    chatHistory = (Array.isArray(data.history) ? data.history : []).slice(-8);
+    messages.scrollTop = messages.scrollHeight;
+  })();
+  if (chatNew) {
+    chatNew.addEventListener('click', function () {
+      if (busy) return;
+      // Se queda el saludo; lo demás se va (sigue en Conversaciones del asistente).
+      Array.prototype.slice.call(messages.children, 1).forEach(function (node) { node.remove(); });
+      chatHistory = [];
+      newThread = true;
+      chatNew.hidden = true;
+      input.focus();
+    });
+  }
+
   // Tiempo relativo legible ("hace 2 min", "hace 1 h"). El backend manda
   // datetime en hora del servidor; lo parseamos como local.
   function relTime(sqlDate) {
@@ -1708,6 +1751,8 @@
     if (selectedElementPath) fd.append('element_path', selectedElementPath);
     if (chatHistory.length) fd.append('history', JSON.stringify(chatHistory.slice(-4)));
     if (modelSelect && modelSelect.value) fd.append('model', modelSelect.value);
+    if (scopeLabel) fd.append('scope_label', scopeLabel);
+    if (newThread) fd.append('new_thread', '1');
 
     currentRequestId = newRequestId();
     currentRequest = ('AbortController' in window) ? new AbortController() : null;
@@ -1741,6 +1786,8 @@
         // B1 — el turno entra en la memoria de la conversación.
         chatHistory.push({ q: text, a: String(data.reply || ''), scope: scopeLabel });
         if (chatHistory.length > 8) chatHistory = chatHistory.slice(-8);
+        newThread = false;
+        if (chatNew) chatNew.hidden = false;
         // B3 — al recargar, señalar la parte tocada.
         pendingFlash = String(data.changed_section || '');
         reloadPreview();

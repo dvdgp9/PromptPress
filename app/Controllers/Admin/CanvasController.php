@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\AI\AIException;
+use App\Services\AssistantConversationStore;
 use App\Services\AI\AIProviderFactory;
 use App\Services\BrandService;
 use App\Services\Canvas\CanvasCancelToken;
@@ -20,6 +21,7 @@ use App\Services\ImageBankService;
 use App\Services\SeoIndexingService;
 use App\Services\SeoRedirectService;
 use App\Services\VisualStyleService;
+use Core\Auth;
 use Core\CSRF;
 use Core\Database;
 use Core\Request;
@@ -83,7 +85,21 @@ final class CanvasController
             'aiModels' => self::chatModelOptions($siteId),
             // ¿Está Unsplash configurado? (habilita la búsqueda en el selector de imágenes)
             'bankAvailable' => ImageBankService::isAvailable(),
+            // ASST-V2 F6d — la conversación del chat sobrevive a recargar.
+            'studioThread' => self::studioThread($siteId, (int) $page['id']),
         ]);
+    }
+
+    /** @return array<string,mixed>|null */
+    private static function studioThread(int $siteId, int $pageId): ?array
+    {
+        try {
+            return AssistantConversationStore::studioThread($siteId, Auth::id(), $pageId);
+        } catch (\Throwable $e) {
+            // Sin la migración el Studio funciona igual, sin memoria.
+            error_log('[canvas studio] thread unavailable page=' . $pageId . ': ' . $e->getMessage());
+            return null;
+        }
     }
 
     /** Render completo de la página (estado actual, aunque sea draft) + overlay. */
@@ -158,6 +174,11 @@ final class CanvasController
             AIProviderFactory::setModelOverride($chosenModel);
         }
 
+        // ASST-V2 F6d — para guardar el turno en la conversación de la página.
+        $userId = Auth::id();
+        $scopeLabel = mb_substr(trim((string) Request::post('scope_label', '')), 0, 160);
+        $freshThread = Request::post('new_thread', '') === '1';
+
         // CANCEL — Identificador de ESTA generación, para poder pararla.
         $requestId = trim((string) Request::post('request_id', ''));
         if (!CanvasCancelToken::isValidId($requestId)) $requestId = '';
@@ -192,6 +213,12 @@ final class CanvasController
 
         if (!$outcome['ok']) {
             Response::json(['ok' => false, 'error' => (string) $outcome['error']], (int) ($outcome['http'] ?? 502));
+        }
+
+        try {
+            AssistantConversationStore::appendStudioTurn($siteId, $userId, $pageId, $instruction, (string) $outcome['reply'], $scopeLabel, $freshThread);
+        } catch (\Throwable $e) {
+            error_log('[canvas chat] thread not saved page=' . $pageId . ': ' . $e->getMessage());
         }
 
         Response::json([

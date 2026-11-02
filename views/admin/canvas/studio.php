@@ -204,9 +204,14 @@ $icon = static function (string $name): string {
     <section class="cvstudio-dock__panel" id="chat-panel" aria-label="<?= e(__('cv.design_assistant')) ?>">
       <header class="cvstudio-dock__head">
         <strong><?= e(__('cv.tell_me')) ?></strong>
+        <?php /* ASST-V2 F6d — empezar la conversación de cero (la anterior queda en Conversaciones). */ ?>
+        <button type="button" id="chat-new" class="cvstudio-dock__new" <?= empty($studioThread) ? 'hidden' : '' ?>><?= e(__('cv.chat_new')) ?></button>
         <button type="button" id="chat-minimize" title="<?= e(__('cv.hide_chat')) ?>" aria-label="<?= e(__('cv.hide_chat')) ?>">▾</button>
       </header>
 
+      <?php if (!empty($studioThread)): ?>
+      <script type="application/json" id="studio-thread"><?= json_encode(['log' => $studioThread['log'], 'history' => $studioThread['history']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+      <?php endif; ?>
       <div class="cvstudio-chat__messages" id="chat-messages" aria-live="polite">
         <div class="pp-chat-msg pp-chat-msg--assistant">
           <p><?= e(__('cv.live_page')) ?></p>
