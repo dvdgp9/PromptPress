@@ -11442,7 +11442,7 @@ Recomendación (la más simple que cumple el objetivo sin empeorar el Studio):
 ## High-level Task Breakdown (ASST-V2 F6) — PENDIENTE de aprobación
 - [x] F6a Formularios nuevos desde el panel (publicado como v1.24.0, 02/11, «Publícalo»): `forms.create` con vista previa (maqueta del formulario) y apertura en el editor. ✅ test: propose/commit crea inactivo-sin-colocar, token ligado al sitio, rol sin `forms` no lo ve; «crea un formulario de presupuesto» en el panel enseña la maqueta y «Aplicar» lleva al editor.
 - [x] F6b Imagen de referencia en el panel (publicado como v1.25.0, 02/11, «Publícalo») (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
-- [ ] F6c Quitar el composer: lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
+- [x] F6c Quitar el composer (publicado como v1.26.0, 02/11, «Publícalo»): lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
 - [ ] F6d Studio con historial compartido: los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
 - [ ] F6e Derivar al panel lo que no es de la página: el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
 Cada subfase se puede publicar sola. Orden: F6a → F6b → F6c (formularios, menos riesgo) y luego F6d → F6e (Studio).
@@ -11475,3 +11475,13 @@ Verificación: tests/assistant_v2_form_images.php nuevo (12 PASS, usa una imagen
 
 ## Lessons (ASST-V2 F6b)
 - createJob vuelve a comprobar cada imagen contra la tabla media (AssistantMediaReferences::resolve): en tests hace falta un media real del sitio, un id inventado se descarta.
+
+## Current Status / Progress Tracking (ASST-V2 F6c) — 02/11/2026, Executor
+Usuario: «Sí, sigue con F6c». Hecho (pendiente de verlo y de «Publícalo»):
+- Fuera el composer: `views/admin/forms/ai-composer.php`, `admin/assets/js/forms-ai.js`, rutas `/formularios/design` y `/formularios/create-ai`, `FormsController::design/createWithAI/generateWithAI/referenceImage`, su CSS y 24 textos `forms.ai.*` que ya no usaba nadie (los que usa el validador se quedan). Todos los roles con `forms` tienen `assistant`: nadie se queda sin IA.
+- Lista: botón «Crear con el asistente» que abre el panel con «Crea un formulario nuevo para » escrito.
+- Panel: `applyPlan` emite `ppa:before-apply` ({items, block}) y no aplica si la pantalla pone `block`; al terminar emite `ppa:applied` con los items hechos.
+- Editor: compara el formulario con el estado al cargar; si el panel va a cambiar ESTE formulario con cambios sin guardar, lo frena con un mensaje en el chat. Tras un cambio del panel en este formulario: aviso «El asistente ha cambiado este formulario» con «Recargar el formulario», el formulario se atenúa y no deja guardar (guardar desharía el cambio). La autorrespuesta con IA del editor sigue.
+- tests/form_ai_builder.php: las 2 comprobaciones de permisos de las rutas viejas pasan a la de crear.
+Verificación: tests/assistant_v2_forms_panel.php nuevo (16 PASS); todas las suites del asistente, formularios, permisos, php80, navegación y JS en verde; lint 40 (antes 42: se fue el ejemplo de forms-ai.js). Navegador (estático): lista con el botón y panel con el texto puesto; editor: sin cambios no frena, con cambios frena, otro formulario no frena, tras aplicar sale el aviso y guardar queda desactivado. NO probado con sesión real ni con la IA real.
+Nota: en pantallas < 1280px el panel tapa el botón «Recargar» del aviso; el panel ya ofrece «Ver el cambio en esta pantalla».

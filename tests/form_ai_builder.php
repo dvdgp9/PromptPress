@@ -104,8 +104,9 @@ $validate = new ReflectionMethod(FormsController::class, 'validate'); $validate-
 check('formulario del ejemplo se puede guardar', $validate->invoke(new FormsController(), $saved) === []);
 $saved['fields'][1]['name'] = $saved['fields'][0]['name'];
 check('editor rechaza identificadores duplicados', $validate->invoke(new FormsController(), $saved) !== []);
-check('redactor no puede generar ni crear formularios', !Permissions::allows(Permissions::ROLE_REDACTOR, '/admin/formularios/design') && !Permissions::allows(Permissions::ROLE_REDACTOR, '/admin/formularios/create-ai'));
-check('admin puede generar formularios', Permissions::allows(Permissions::ROLE_ADMIN, '/admin/formularios/design'));
+// ASST-V2 F6c — el composer (design/create-ai) ya no existe: crear con IA es el panel (forms.create).
+check('redactor no puede crear formularios', !Permissions::allows(Permissions::ROLE_REDACTOR, '/admin/formularios/create'));
+check('admin puede crear formularios', Permissions::allows(Permissions::ROLE_ADMIN, '/admin/formularios/create'));
 $siteId = (int) (Database::selectOne('SELECT id FROM sites ORDER BY id LIMIT 1')['id'] ?? 0);
 if ($siteId) {
     $id = FormStore::create($siteId, array_replace(FormTemplates::content('contact'), $form));

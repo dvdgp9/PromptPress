@@ -320,49 +320,32 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
     function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
 
-    var composer = document.querySelector('[data-form-ai]');
-    var undoState = null;
-    var headerIds = ['pp-f-heading','pp-f-desc','pp-f-submit','pp-f-success','pp-f-ar-subject','pp-f-ar-body'];
-    function snapshot() {
-        return { fields: Array.prototype.map.call(list.children, readRow), headers: headerIds.map(function (id) { return document.getElementById(id).value; }), autoresponder: arToggle.checked };
+    // ASST-V2 F6c — el panel del asistente guarda en vivo. Si aquí hay cambios
+    // sin guardar, no deja aplicar (se pisarían); y si el panel ya cambió este
+    // formulario, guardar esta copia lo desharía: se pide recargar.
+    var FORM_ID = <?= (int) $form_id ?>;
+    var editorForm = document.getElementById('pp-form-editor');
+    var stale = document.getElementById('pp-form-stale');
+    function editorState() {
+        var data = new FormData(editorForm);
+        data.delete('_csrf');
+        return new URLSearchParams(data).toString();
     }
-    composer.addEventListener('form-ai-context', function (event) {
-        var current = snapshot();
-        event.detail.data.append('current_form', JSON.stringify({ heading: current.headers[0], description: current.headers[1], fields: current.fields }));
+    var savedState = editorState();
+    function touchesThisForm(items) {
+        return (items || []).some(function (it) { return it.capability_id === 'forms.edit' && Number(it.form_id) === FORM_ID; });
+    }
+    document.addEventListener('ppa:before-apply', function (event) {
+        if (touchesThisForm(event.detail.items) && editorState() !== savedState) event.detail.block = pp.t('js.form_edit.unsaved_assistant');
     });
-    composer.addEventListener('form-ai-apply', function (event) {
-        var draft = event.detail.draft;
-        var append = event.detail.mode === 'append';
-        if ((append ? list.children.length : 0) + draft.fields.length > 50) return;
-        undoState = snapshot();
-        if (!append) {
-            list.replaceChildren();
-            if (!draft.fields.some(function (field) { return field.field_type === 'email'; })) { arToggle.checked = false; arFields.hidden = true; }
-            var values = [draft.heading, draft.description, draft.submit_text, draft.success_message, draft.autoresponder_subject, draft.autoresponder_body];
-            headerIds.forEach(function (id, index) { document.getElementById(id).value = values[index] || ''; });
-        }
-        var labels = Array.prototype.map.call(list.querySelectorAll('[data-fb-label]'), function (input) { return input.value; });
-        draft.fields.forEach(function (field) {
-            var copy = Object.assign({}, field);
-            var previous = !append && undoState.fields.find(function (field) { return field.label === copy.label; });
-            copy.name = uniqueName((previous && previous.name) || copy.name || slugify(copy.label) || 'field');
-            var base = copy.label.slice(0, 110), suffix = 2;
-            while (labels.indexOf(copy.label) !== -1) copy.label = base + ' ' + suffix++;
-            labels.push(copy.label);
-            makeRow(copy);
-        });
-        composer.querySelector('[data-ai-undo]').hidden = false;
-        event.detail.applied = true;
+    document.addEventListener('ppa:applied', function (event) {
+        if (!touchesThisForm(event.detail.items)) return;
+        stale.hidden = false;
+        editorForm.classList.add('is-stale');
+        editorForm.querySelectorAll('[type="submit"]').forEach(function (button) { button.disabled = true; });
     });
-    composer.addEventListener('form-ai-undo', function () {
-        if (!undoState) return;
-        list.replaceChildren();
-        undoState.fields.forEach(makeRow);
-        arToggle.checked = undoState.autoresponder;
-        arFields.hidden = !arToggle.checked;
-        headerIds.forEach(function (id, index) { document.getElementById(id).value = undoState.headers[index]; });
-        undoState = null;
-        composer.querySelector('[data-ai-undo]').hidden = true;
+    editorForm.addEventListener('submit', function (event) {
+        if (!stale.hidden) event.preventDefault();
     });
 
     var arBtn = document.getElementById('pp-ai-autoresp');
@@ -388,7 +371,6 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
 })();
 </script>
-<script src="<?= e(base_url('admin/assets/js/forms-ai.js')) ?>?v=<?= e((string) filemtime(PP_ROOT . '/admin/assets/js/forms-ai.js')) ?>"></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-forms-wrap pp-forms-wrap--editor">
@@ -403,6 +385,14 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     </button>
 </div>
 
+<?php /* ASST-V2 F6c — el asistente acaba de cambiar este formulario. */ ?>
+<div class="pp-alert pp-alert--warning pp-form-stale" id="pp-form-stale" role="status" hidden>
+    <div>
+        <strong><?= e(__('form_edit.stale_title')) ?></strong>
+        <p><?= e(__('form_edit.stale_text')) ?></p>
+    </div>
+    <a class="pp-btn pp-btn--primary pp-btn--sm" href="<?= e(base_url('admin/formularios/' . $form_id)) ?>"><?= e(__('form_edit.stale_reload')) ?></a>
+</div>
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 <?php if (!empty($flashError)): ?><div class="pp-alert pp-alert--error"><?= e($flashError) ?></div><?php endif; ?>
 <?php if (!empty($errors)): ?>
@@ -501,7 +491,6 @@ $baseIsWrong = $baseLang !== $primaryLang;
 <form method="POST" action="<?= e(base_url('admin/formularios/' . $form_id)) ?>" class="pp-form" id="pp-form-editor" autocomplete="off">
     <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
 
-    <?php $aiEditor = true; require __DIR__ . '/ai-composer.php'; ?>
 
     <section class="pp-ai-config-panel">
         <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.header')) ?></h3><p><?= e(__('form_edit.header_help')) ?></p></div></div>

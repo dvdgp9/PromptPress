@@ -21,6 +21,11 @@ $templates = $templates ?? [];
             <?= __('forms.intro.html', ['enlace' => '<a href="' . e(base_url('admin/forms')) . '">' . e(__('nav.messages')) . '</a>']) ?>
         </p>
     </div>
+    <div class="pp-forms-head-actions">
+    <?php /* ASST-V2 F6c — crear con IA es el panel del asistente (antes, el composer). */ ?>
+    <button type="button" class="pp-btn pp-btn--secondary" data-assistant-open data-assistant-prompt="<?= e(__('forms.ask_assistant_prompt')) ?>">
+        <?= e(__('forms.ask_assistant')) ?>
+    </button>
     <form method="POST" action="<?= e(base_url('admin/formularios/create')) ?>" class="pp-form-create">
         <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
         <label class="pp-form-create__label" for="form-template"><?= e(__('forms.template')) ?></label>
@@ -31,12 +36,12 @@ $templates = $templates ?? [];
         </select>
         <button type="submit" class="pp-btn pp-btn--primary"><?= e(__('forms.new')) ?></button>
     </form>
+    </div>
 </div>
 
 <?php if ($notice): ?><div class="pp-alert pp-alert--success"><?= e($notice) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="pp-alert pp-alert--error"><?= e($error) ?></div><?php endif; ?>
 
-<?php $aiEditor = false; require __DIR__ . '/ai-composer.php'; ?>
 
 <?php if (empty($forms)): ?>
     <div class="pp-empty-state">
@@ -87,5 +92,4 @@ $templates = $templates ?? [];
 </div>
 
 <?php \Core\View::start('scripts'); ?>
-<script src="<?= e(base_url('admin/assets/js/forms-ai.js')) ?>?v=<?= e((string) filemtime(PP_ROOT . '/admin/assets/js/forms-ai.js')) ?>"></script>
 <?php \Core\View::end(); ?>

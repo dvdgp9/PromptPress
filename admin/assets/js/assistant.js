@@ -2103,6 +2103,14 @@
 
     async function applyPlan(plan, applicable, btn) {
         if (applying) return;
+        // ASST-V2 F6c — la pantalla de detrás puede frenar el cambio (p. ej. el
+        // editor de ese mismo formulario con cambios sin guardar).
+        const guard = { items: applicable, block: '' };
+        emit('ppa:before-apply', guard);
+        if (guard.block) {
+            addMessage('assistant', guard.block, 'ppa-msg--error');
+            return;
+        }
         applying = true;
         setBusy(true);
         btn.disabled = true;
@@ -2163,6 +2171,7 @@
             if (job.status === 'done') {
                 btn.textContent = pp.t('js.as.plan_applied');
                 renderReport(job);
+                emit('ppa:applied', { items: job.items.filter((it) => it.status === 'done') });
                 // La IA debe saber en el siguiente mensaje que esto ya está hecho.
                 const done = job.items.filter((it) => it.status === 'done').map(itemLabel);
                 const failed = job.items.filter((it) => it.status === 'failed').map(itemLabel);
