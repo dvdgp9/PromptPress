@@ -211,5 +211,6 @@
     });
 
     renderContext();
-    if (wasOpen()) open();
+    // En el Studio no se reabre solo: taparía la página al entrar (F6e).
+    if (wasOpen() && drawer.dataset.restore !== '0') open();
 })();

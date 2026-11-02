@@ -29,6 +29,10 @@ final class AssistantScreenContext
         if (preg_match('#^/admin/formularios/(\d+)$#', $path, $m) === 1) {
             return self::resolve($siteId, 'form', (int) $m[1]);
         }
+        // ASST-V2 F6e — en el Studio, la página que se está editando.
+        if (preg_match('#^/admin/canvas/(\d+)$#', $path, $m) === 1) {
+            return self::resolve($siteId, 'page', (int) $m[1]);
+        }
         if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $m) === 1) {
             return self::resolve($siteId, 'page', (int) $m[1]);
         }

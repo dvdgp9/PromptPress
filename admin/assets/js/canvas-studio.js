@@ -188,6 +188,8 @@
 
   document.addEventListener('keydown', function (e) {
     if (typingTarget(e.target)) return;
+    // ASST-V2 F6e — dentro del panel del asistente, Esc y compañía son suyos.
+    if (e.target && e.target.closest && e.target.closest('#ppa-drawer')) return;
     if (studioShortcut(e.key, { mod: e.metaKey || e.ctrlKey, shift: e.shiftKey, alt: e.altKey })) {
       e.preventDefault();
     }
@@ -1720,10 +1722,81 @@
     refreshPill();   // plegado, la pastilla dice si se está aplicando algo
   }
 
+  // ------------------------------------------------------------------
+  // ASST-V2 F6e — Lo que no es de esta página (una entrada, otra página, el
+  // menú, la cabecera o el pie, el SEO, toda la web) lo hace mejor el panel del
+  // asistente. Antes de mandarlo, se ofrece; sin IA: frases típicas en los
+  // cuatro idiomas del panel. Equivocarse solo cuesta un clic («Es de esta página»).
+  // ------------------------------------------------------------------
+  var assistantHere = body.dataset.assistant === '1';
+  var skipOutsideCheck = false;
+  // Palabras enteras con letras acentuadas (\b de JS solo entiende ASCII).
+  // i18n-ignore-start: patrones para reconocer peticiones, no textos de pantalla.
+  function words(list) { return '(?<!\\p{L})(?:' + list + ')(?!\\p{L})'; }
+  var OUTSIDE_PAGE = [
+    new RegExp(words('crea|escribe|redacta|publica|create|write|draft|publish|crée|écris|rédige|publie|cria|escreve|redige')
+      + '[^.]{0,40}' + words('entradas?|art[ií]culos?|posts?|blog|nueva p[aá]gina|p[aá]gina nueva|new page|articles?|nouvelle page|artigos?|nova p[aá]gina'), 'iu'),
+    new RegExp(words('men[uú]|cabecera|header|en-t[eê]te|cabe[cç]alho|pie de p[aá]gina|footer|pied de page|rodap[eé]'), 'iu'),
+    new RegExp(words('toda la web|todo el sitio|todas las p[aá]ginas|whole site|entire site|all pages|tout le site|toutes les pages|todo o site|todas as p[aá]ginas'), 'iu'),
+    new RegExp(words('seo|meta ?descripci[oó]n|meta description|m[eé]ta-description'), 'iu')
+  ];
+  // i18n-ignore-end
+  function outsidePage(text) {
+    return OUTSIDE_PAGE.some(function (re) { return re.test(text); });
+  }
+  function offerAssistant(text) {
+    var msg = addMsg('assistant', esc(pp.t('js.cv.outside_page')));
+    var row = document.createElement('div');
+    row.className = 'pp-chat-handoff';
+    var go = document.createElement('button');
+    go.type = 'button';
+    go.textContent = pp.t('js.cv.outside_go');
+    // El panel (assistant-drawer.js) atiende cualquier [data-assistant-open].
+    go.setAttribute('data-assistant-open', '');
+    go.dataset.assistantPrompt = text;
+    go.setAttribute('data-assistant-send', '');
+    go.addEventListener('click', function () {
+      msg.remove();
+      input.value = '';
+    });
+    var here = document.createElement('button');
+    here.type = 'button';
+    here.textContent = pp.t('js.cv.outside_keep_here');
+    here.addEventListener('click', function () {
+      msg.remove();
+      skipOutsideCheck = true;
+      input.value = text;
+      form.dispatchEvent(new Event('submit'));
+    });
+    row.appendChild(go);
+    row.appendChild(here);
+    msg.appendChild(row);
+    go.focus();
+  }
+
+  // Lo que aplique el panel puede cambiar lo que se ve aquí (menú, colores,
+  // un formulario insertado): se recarga la vista. Y una edición de ESTA
+  // página se pide aquí, que es donde está el bloqueo de edición.
+  document.addEventListener('ppa:before-apply', function (event) {
+    var pageId = Number(body.dataset.pageId);
+    var mine = (event.detail.items || []).some(function (it) {
+      return it.capability_id === 'pages.canvas.edit' && Number(it.page_id) === pageId;
+    });
+    if (mine) event.detail.block = pp.t('js.cv.panel_same_page');
+  });
+  document.addEventListener('ppa:applied', function () {
+    reloadPreview();
+  });
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     var text = input.value.trim();
     if (text === '' || busy) return;
+    if (assistantHere && !skipOutsideCheck && outsidePage(text)) {
+      offerAssistant(text);
+      return;
+    }
+    skipOutsideCheck = false;
 
     // F4 — la IA parte del HTML guardado: sin vaciar la cola, trabajaría sobre
     // una versión anterior a lo que el usuario acaba de tocar a mano.

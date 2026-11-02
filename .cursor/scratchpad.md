@@ -11128,7 +11128,7 @@ Orden recomendado (cada fase se puede publicar sola):
 - [x] F3 Vista previa antes/después + riesgo en el registro — publicado como v1.16.0 (29/10, «Publícalo»)
 - [ ] F4 Ejecutores nuevos — F4a publicado como v1.17.0; F4b publicado como v1.18.0; F4c publicado como v1.19.0; F4d (páginas nuevas) publicado como v1.20.0 (29/10, «Publícalo»); F4e (colores y tipografías) publicado como v1.21.0 (29/10, «Publícalo»); F4f (reservas, productos y recursos) publicado como v1.22.0 (30/10, «Publícalo»). F5 (sugerencias en Inicio) publicado como v1.23.0 (30/10, «Publícalo»)
 - [ ] F5 Inicio proactivo
-- [ ] F6 Unificar IA del Studio y composer de formularios
+- [x] F6 Unificar IA del Studio y composer de formularios — F6a-F6e publicadas (v1.24.0 a v1.28.0, 02/11)
 
 ## Current Status / Progress Tracking (ASST-V2) — 28/10/2026, Executor (F1)
 
@@ -11444,7 +11444,7 @@ Recomendación (la más simple que cumple el objetivo sin empeorar el Studio):
 - [x] F6b Imagen de referencia en el panel (publicado como v1.25.0, 02/11, «Publícalo») (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
 - [x] F6c Quitar el composer (publicado como v1.26.0, 02/11, «Publícalo»): lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
 - [x] F6d Studio con historial compartido (publicado como v1.27.0, 02/11, «Publícalo»): los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
-- [ ] F6e Derivar al panel lo que no es de la página: el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
+- [x] F6e Derivar al panel lo que no es de la página (publicado como v1.28.0, 02/11, «Publícalo»): el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
 Cada subfase se puede publicar sola. Orden: F6a → F6b → F6c (formularios, menos riesgo) y luego F6d → F6e (Studio).
 
 ## Current Status / Progress Tracking (ASST-V2 F6a) — 02/11/2026, Executor
@@ -11502,3 +11502,11 @@ Verificación: tests/assistant_v2_studio_thread.php nuevo (17 PASS); canvas_*, a
 
 ## Lessons (ASST-V2 F6d)
 - `tests/canvas_generate.php` y `tests/canvas_demo.php` NO son tests: llaman a la IA real y crean páginas publicadas. No lanzar `tests/canvas_*.php` con un glob; excluirlos.
+
+## Current Status / Progress Tracking (ASST-V2 F6e) — 02/11/2026, Executor
+Usuario: «Sí, sigue con F6e». Hecho (pendiente de verlo y de «Publícalo»):
+- El panel del asistente se incluye en el Studio (studio.php es standalone, no usa layout.php) si el rol tiene /admin/assistant. Sin botón flotante (CSS `.cvstudio-body .ppa-launcher{display:none}`) y sin reabrirse solo al entrar (`data-restore="0"`). Contexto: la página del Studio (`AssistantScreenContext::forPath` entiende /admin/canvas/{id}).
+- Chat del Studio: antes de mandar, `outsidePage()` reconoce sin IA peticiones de otra parte de la web (crear entrada/página, menú, cabecera/pie, SEO, «toda la web»; es/en/fr/pt, con límites de palabra Unicode). Ofrece «Hacerlo con el asistente» (abre el panel y envía, vía [data-assistant-open]) o «Es de esta página» (lo manda al Studio como siempre). Enlace fijo bajo el composer: «¿Es para otra parte de la web? Pídeselo al asistente».
+- Guarda: si el panel va a aplicar pages.canvas.edit sobre la página abierta, `ppa:before-apply` lo frena («pídelo en el chat del Studio»: ahí está el bloqueo de edición). Tras `ppa:applied` el Studio recarga la vista. Esc dentro del panel no lo atiende el Studio.
+Verificación: tests/assistant_v2_studio_panel.php nuevo (17 PASS); 14 frases de prueba bien clasificadas (node); canvas_* (sin los scripts de QA), asistente, formularios, permisos, php80, navegación y JS en verde; lint 40. Navegador (estático + fetch simulado): sin lanzador, el chat ofrece el panel y no manda nada al Studio, «Hacerlo con el asistente» abre el panel con «Viendo: la página…» y envía, «Es de esta página» lo manda al Studio, la guarda frena solo la página abierta. NO probado con sesión real ni con la IA real.
+Con esto quedan hechas F6a-F6e: la F6 completa a falta de publicar F6e.

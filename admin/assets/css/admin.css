@@ -12911,3 +12911,17 @@ body > .ppa-media-picker { z-index: 120; }
 .cvstudio-dock__head .cvstudio-dock__new:focus-visible{outline:2px solid #c2410c;outline-offset:1px}
 .pp-chat-divider{align-self:center;margin:2px 0;font-size:.72rem;color:#6b7280;letter-spacing:.02em}
 .ppa-conversations__where{display:block;font-style:normal;font-size:.72rem;color:#6b7280;margin-bottom:2px}
+
+/* ASST-V2 F6e — el panel del asistente dentro del Studio: sin lanzador propio
+   (lo abre el chat del Studio). Su z-index (110) ya queda por encima del chat y de la barra. */
+.cvstudio-body .ppa-launcher{display:none}
+.cvstudio-chat__other{display:inline-block;margin:2px 0 0;padding:2px 0;border:0;background:none;font:inherit;font-size:.76rem;color:#6b7280;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.cvstudio-chat__other:hover{color:#111827}
+.cvstudio-chat__other:focus-visible{outline:2px solid #c2410c;outline-offset:2px;border-radius:4px}
+.pp-chat-handoff{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.pp-chat-handoff button{border:1px solid #d1d5db;background:#fff;color:#111827;border-radius:999px;padding:6px 12px;font:inherit;font-size:.8rem;cursor:pointer;transition:transform .12s ease}
+.pp-chat-handoff button:first-child{background:#c2410c;border-color:#c2410c;color:#fff}
+.pp-chat-handoff button:active{transform:scale(.98)}
+.pp-chat-handoff button:focus-visible{outline:2px solid #c2410c;outline-offset:2px}
+@media (prefers-reduced-motion: reduce){.pp-chat-handoff button{transition:none}}
+

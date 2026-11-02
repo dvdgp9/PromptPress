@@ -6,6 +6,7 @@
  * chat (composer, PDF, assistant.js) se cargan la primera vez que se abre.
  *
  * @var array{type:string,id:int,label:string}|null $assistantContext
+ * @var bool|null $assistantRestoreOpen  false = no reabrirse solo (el Studio)
  */
 $assistantMode = 'drawer';
 $maxMb = round(\App\Controllers\Admin\DocumentController::MAX_SIZE / 1024 / 1024);
@@ -24,6 +25,7 @@ $drawerJs = PP_ROOT . '/admin/assets/js/assistant-drawer.js';
 </button>
 
 <aside class="ppa-drawer" id="ppa-drawer" aria-labelledby="ppa-drawer-title" hidden
+       data-restore="<?= ($assistantRestoreOpen ?? true) ? '1' : '0' ?>"
        data-assets="<?= e(json_encode($assistantAssets, JSON_UNESCAPED_SLASHES)) ?>">
     <header class="ppa-drawer__head">
         <div class="ppa-drawer__bar">

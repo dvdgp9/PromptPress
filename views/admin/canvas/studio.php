@@ -4,6 +4,10 @@
  * Vista standalone (sin layout admin). Variables: $page, $sections, $versionsCount.
  */
 $pageId = (int) $page['id'];
+// ASST-V2 F6e — el panel del asistente, para lo que no es de esta página. Sin
+// botón flotante: lo abre el chat del Studio. Mismo permiso que /admin/assistant.
+$studioAssistant = \Core\Auth::siteId() !== null
+    && \App\Services\Permissions::allows(\Core\Auth::role(), '/admin/assistant');
 $isPublished = ($page['status'] ?? '') === 'published';
 // Cache-busting por filemtime (igual que views/admin/layout.php): sin esto el
 // navegador sirve versiones viejas del CSS/JS del studio tras cada cambio.
@@ -56,6 +60,7 @@ $icon = static function (string $name): string {
       data-page-id="<?= $pageId ?>"
       data-preview-url="<?= e(base_url('admin/canvas/' . $pageId . '/preview')) ?>"
       data-chat-url="<?= e(base_url('admin/canvas/' . $pageId . '/chat')) ?>"
+      data-assistant="<?= $studioAssistant ? '1' : '0' ?>"
       data-cancel-url="<?= e(base_url('admin/canvas/' . $pageId . '/cancel')) ?>"
       data-versions-url="<?= e(base_url('admin/canvas/' . $pageId . '/versions')) ?>"
       data-restore-url="<?= e(base_url('admin/canvas/' . $pageId . '/restore')) ?>"
@@ -228,6 +233,9 @@ $icon = static function (string $name): string {
           <textarea id="chat-input" rows="2" maxlength="1200"
             placeholder="<?= e(__('cv.chat_placeholder')) ?>"></textarea>
           <p class="cvstudio-insert__hint"><?= e(__('cv.reference_hint')) ?></p>
+          <?php if ($studioAssistant): ?>
+          <button type="button" class="cvstudio-chat__other" data-assistant-open><?= e(__('cv.ask_assistant_other')) ?></button>
+          <?php endif; ?>
           <div class="cvstudio-chat__formfoot">
             <button type="submit" id="chat-send" class="cvstudio-primary-btn"><?= e(__('cv.apply_change')) ?></button>
             <button type="button" id="chat-cancel" class="cvstudio-cancel-btn" hidden><?= e(__('cv.stop')) ?></button>
@@ -566,5 +574,16 @@ $icon = static function (string $name): string {
 ) ?>;</script>
 <script src="<?= e(base_url('admin/assets/js/pp-i18n.js')) ?>"></script>
 <script src="<?= e(base_url('admin/assets/js/canvas-studio.js')) ?>?v=<?= e($jsVer) ?>"></script>
+<?php
+if ($studioAssistant) {
+    try {
+        $assistantContext = \App\Services\AssistantScreenContext::resolve((int) \Core\Auth::siteId(), 'page', $pageId);
+    } catch (\Throwable $e) {
+        $assistantContext = null;
+    }
+    $assistantRestoreOpen = false;
+    include PP_ROOT . '/views/admin/assistant/_drawer.php';
+}
+?>
 </body>
 </html>
