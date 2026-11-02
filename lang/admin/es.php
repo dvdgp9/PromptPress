@@ -2188,6 +2188,7 @@ return [
     'asst.err.form_no_valid_change' => 'La IA no devolvió un cambio válido para este formulario. El formulario no ha cambiado.',
     'asst.form.label' => 'Formulario «{formulario}»',
     'asst.form.updated' => 'Formulario «{formulario}» actualizado. Preguntas: {preguntas}.',
+    'asst.form.created' => 'Formulario «{formulario}» creado. Preguntas: {preguntas}. Aún no está en ninguna página.',
     // ASST-V2 F4d — páginas nuevas
     'js.as.page_ideas_pick' => 'Elige qué páginas crear',
     'js.as.pages_creating_progress' => 'Creando páginas… ({n}/{total})',
@@ -2483,6 +2484,10 @@ return [
     'js.as.form_live_done' => 'Los formularios ya están actualizados en tu web. Si algo no te convence, ábrelo y pulsa «Restaurar» para deshacer.',
     'js.as.view_form' => 'Ver formulario →',
     'js.as.form_unchanged' => 'El formulario no ha cambiado; puedes volver a pedirlo.',
+    'js.as.form_not_created' => 'No se ha creado ningún formulario; puedes volver a pedirlo.',
+    'js.as.form_open_new' => 'Abrir el formulario →',
+    'js.as.form_new_note' => 'Se crea con {n} preguntas y no se coloca en ninguna página: no se verá en la web hasta que lo insertes.',
+    'js.as.form_new_x' => 'Formulario nuevo «{formulario}»',
     'form_edit.assistant_history' => 'Cambios del asistente',
     'form_edit.assistant_history_note' => 'Antes de cada cambio del asistente se guarda una copia. Restaurarla deja el formulario como estaba.',
     'form_edit.before_assistant' => 'Antes del cambio del asistente',

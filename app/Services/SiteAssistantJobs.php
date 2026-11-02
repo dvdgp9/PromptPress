@@ -124,6 +124,31 @@ final class SiteAssistantJobs
                 ];
                 continue;
             }
+            // ASST-V2 F6a — formulario nuevo. Con la vista previa se guarda lo
+            // que se vio; sin ella (o si caducó) se pide a la IA al aplicar.
+            if (($item['capability_id'] ?? '') === 'forms.create') {
+                $instruction = trim((string) ($item['instruction'] ?? ''));
+                if ($instruction === '' || mb_strlen($instruction) > 4000) {
+                    continue;
+                }
+                $proposal = trim((string) ($item['preview_token'] ?? ''));
+                $opened = $proposal !== '' ? AssistantProposal::open($proposal, 'form_new', $siteId, $siteId, $instruction) : null;
+                if ($proposal !== '' && $opened === null) {
+                    error_log('[assistant job create] site=' . $siteId . ' forms.create preview token rejected');
+                }
+                $clean[] = [
+                    'capability_id' => 'forms.create',
+                    'proposal_token' => $opened !== null ? $proposal : null,
+                    'page_id'     => 0,
+                    'form_id'     => null,
+                    'page_title'  => mb_substr((string) ($opened['content']['heading'] ?? BlogAssistant::topicFrom($instruction)), 0, 255),
+                    'section'     => '',
+                    'instruction' => $instruction,
+                    'source_block_ids' => [],
+                    'media_ids' => [],
+                ];
+                continue;
+            }
             // ASST-V2 F4f — servicio, producto o recurso. Una edición SOLO se
             // aplica con la propuesta firmada de su vista previa (lo que se vio es
             // lo que se guarda) y, si toca precio, tiempos, stock u horario, con
@@ -358,7 +383,7 @@ final class SiteAssistantJobs
     {
         return ($item['status'] ?? '') === 'aplicar'
             && ($item['category'] ?? '') === 'automatable_now'
-            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'seo.page.edit', 'chrome.edit', 'design.edit', 'posts.create', 'pages.create',
+            && in_array($item['capability_id'] ?? '', ['pages.canvas.edit', 'forms.edit', 'forms.create', 'seo.page.edit', 'chrome.edit', 'design.edit', 'posts.create', 'pages.create',
                 'booking.service.edit', 'booking.service.create', 'commerce.product.edit', 'commerce.product.create', 'resources.edit'], true);
     }
 
@@ -470,7 +495,16 @@ final class SiteAssistantJobs
         $pageId = (int) ($item['page_id'] ?? 0);
         $capability = (string) ($item['capability_id'] ?? '');
 
-        if ($formId > 0) {
+        if ($capability === 'forms.create') {
+            $kind = 'form_new';
+            $aiError = 'asst.err.form_no_valid_change';
+            $run = static function () use ($siteId, $instruction, $token): array {
+                $p = AssistantProposal::open($token, 'form_new', $siteId, $siteId, $instruction);
+                $p ??= FormAssistantEditor::proposeNew($siteId, $instruction);
+                if (($p['ok'] ?? true) === false) return $p;
+                return FormAssistantEditor::create($siteId, $p['content']);
+            };
+        } elseif ($formId > 0) {
             $kind = 'form';
             $aiError = 'asst.err.form_no_valid_change';
             $run = static function () use ($siteId, $formId, $instruction, $token, $userId): array {
@@ -545,8 +579,9 @@ final class SiteAssistantJobs
             if ($outcome['ok']) {
                 // Una entrada nueva: el item apunta a ella desde ahora.
                 Database::execute(
-                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL, page_id = ? WHERE id = ?',
-                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), (int) ($outcome['page_id'] ?? $outcome['entity_id'] ?? $item['page_id']), $item['id']]
+                    'UPDATE assistant_job_items SET status = "done", reply = ?, error = NULL, page_id = ?, form_id = ? WHERE id = ?',
+                    [mb_substr((string) ($outcome['reply'] ?? ''), 0, 1000), (int) ($outcome['page_id'] ?? $outcome['entity_id'] ?? $item['page_id']),
+                        isset($outcome['form_id']) ? (int) $outcome['form_id'] : ($item['form_id'] ?? null), $item['id']]
                 );
                 return true;
             }

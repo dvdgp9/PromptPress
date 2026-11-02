@@ -11406,3 +11406,58 @@ Verificación:
 ## Lessons (ASST-V2 F5)
 - requestAnimationFrame no corre con la pestaña en segundo plano: no condicionar lógica (no solo animación) a una clase que se pone en un rAF.
 - Antes de enlazar una pantalla, comprobar si la ruta es un redirect y qué permiso pide el destino.
+
+## Background and Motivation (ASST-V2 F6) — 30/10/2026, Planner
+Usuario: «Sí, sigue con F6». Objetivo de la hoja de ruta: unificar el chat del Studio y el composer de formularios en el panel del asistente (mismo motor, mismo historial y coste).
+
+## Key Challenges and Analysis (ASST-V2 F6)
+Mapa de lo que hay hoy:
+- **Chat del Studio** (`canvas-studio.js`, `POST /admin/canvas/{id}/chat` → `CanvasChatService::applyInstruction`):
+  - aplica al momento, sin plan ni aprobación; ámbito de sección o de elemento seleccionado en el iframe;
+  - modelo elegible, botón Parar (`CanvasCancelToken`), 4 turnos de memoria solo en el navegador, deshacer a un clic, reintentar, mensajes de error por causa, recarga del iframe y salto a la sección cambiada.
+  - El **motor ya es el mismo** que usa el asistente para `pages.canvas.edit` (CanvasChatService). Cada cambio ya crea `page_versions`, así que ya sale en Actividad.
+  - Lo que NO comparte: el historial (vive en memoria del navegador y se pierde al recargar; no está en `assistant_conversations`).
+- **Composer de formularios** (`views/admin/forms/ai-composer.php` + `forms-ai.js`, `POST /admin/formularios/design` y `/create-ai`, acción DESIGN_FORM):
+  - en la lista: crea un formulario nuevo (no existe en el asistente: `forms.manage` es manual);
+  - en el editor: rellena el editor SIN guardar (reemplazar o añadir) con deshacer local;
+  - admite una imagen de referencia (visión); el panel no tiene eso, solo documentos adjuntos.
+  - El editor ya tiene «Pídeselo al asistente» y el panel ya edita formularios con vista previa (`forms.edit`).
+- **Coste**: todo pasa por `AIActionRunner` → `AILogger` (tabla de uso por action_type). El coste ya está unificado; no hay nada que migrar.
+
+Riesgos:
+- (a) Meter el Studio en el panel tal cual añadiría una llamada al planner (más coste y espera) y un clic de aprobación a cada retoque. Empeora la herramienta más usada.
+- (b) Dos chats en la misma pantalla del Studio confunden.
+- (c) Formularios: si el panel guarda en vivo mientras el editor tiene cambios sin guardar, el editor queda desfasado o pisa lo aplicado.
+- (d) Quitar el composer pierde la imagen de referencia, salvo que el panel la acepte.
+
+Recomendación (la más simple que cumple el objetivo sin empeorar el Studio):
+- **Studio**: se conserva su chat rápido (es una herramienta de edición, no de planificación), pero comparte el historial.
+  - Cada turno se guarda en la conversación del asistente, como un hilo «Studio: <página>», y se retoma al recargar.
+  - Las peticiones que no son de la página (por ejemplo «crea una entrada», «cambia el menú») se derivan al panel con un botón «Hacerlo con el asistente», sin abrir un segundo chat.
+- **Formularios**: el composer desaparece y todo va al panel.
+  - Nuevo ejecutor `forms.create` (formulario nuevo sin colocar en ninguna página = sin efecto en la web; vista previa firmada como los demás; deshacer = borrarlo si sigue sin usarse).
+  - Imagen de referencia en el panel para formularios.
+  - En el editor, si hay cambios sin guardar, el panel avisa antes de aplicar; tras aplicar, «Ver el cambio» recarga.
+
+## High-level Task Breakdown (ASST-V2 F6) — PENDIENTE de aprobación
+- [x] F6a Formularios nuevos desde el panel (publicado como v1.24.0, 02/11, «Publícalo»): `forms.create` con vista previa (maqueta del formulario) y apertura en el editor. ✅ test: propose/commit crea inactivo-sin-colocar, token ligado al sitio, rol sin `forms` no lo ve; «crea un formulario de presupuesto» en el panel enseña la maqueta y «Aplicar» lleva al editor.
+- [ ] F6b Imagen de referencia en el panel (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
+- [ ] F6c Quitar el composer: lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
+- [ ] F6d Studio con historial compartido: los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
+- [ ] F6e Derivar al panel lo que no es de la página: el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
+Cada subfase se puede publicar sola. Orden: F6a → F6b → F6c (formularios, menos riesgo) y luego F6d → F6e (Studio).
+
+## Current Status / Progress Tracking (ASST-V2 F6a) — 02/11/2026, Executor
+Usuario: «Yes, start F6a». Hecho (pendiente de que el usuario lo vea y diga si se publica):
+- Nueva capacidad `forms.create` (automática, riesgo draft, sin deshacer, permiso CAP_FORMS). `forms.manage` ya no incluye «crear».
+- `FormAssistantEditor::proposeNew / newContent / create / previewNew`: el mismo DESIGN_FORM y la misma plantilla de contacto que el composer (base legal, aviso por email; autorrespuesta apagada, tipo custom). El formulario nace sin colocar en ninguna página.
+- Planner: regla FORMULARIOS actualizada (crear = forms.create, site-wide, page_id/form_id 0). Vista previa `form_new` firmada y ligada al sitio; sin vista previa se pide a la IA al aplicar; un token ajeno se descarta.
+- Job: al crear, el item guarda el form_id nuevo, así el informe enseña «Abrir el formulario →».
+- Panel: tarjeta «Formulario nuevo «X»» con nota y maqueta del formulario (sin pestañas antes/después); textos en es/en/fr/pt; la nota «pulsa Restaurar» no sale para formularios nuevos.
+- Decisión respecto al plan: NO se añade deshacer en Actividad (como servicios, productos y páginas nuevas: no se ven en la web hasta colocarlos). Borrar sigue siendo manual.
+Verificación: tests/assistant_v2_form_create.php nuevo (20 PASS, crea y borra su formulario de prueba); capacidades, demás suites del asistente, formularios, permisos y php80 en verde; lint 42 (igual que antes). Navegador con página estática y fetch simulado: plan → tarjeta con maqueta → Aplicar → informe con «Abrir el formulario». NO probado con la IA real ni con sesión real.
+
+## Lessons (ASST-V2 F6a)
+- `createJob` devuelve el id en `job.id`, no en `job_id`.
+- Al renderizar páginas por CLI, base_url sale sin puerto: hay que reescribir a localhost:8765 para la vista estática.
+- El sandbox no deja a `python3 -m http.server` leer el scratchpad: usar `php -S`. preview_start puede anunciar otro puerto si el configurado parece ocupado, pero php escucha en el que va en runtimeArgs.

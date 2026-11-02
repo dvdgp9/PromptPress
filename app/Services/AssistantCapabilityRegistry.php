@@ -74,6 +74,7 @@ final class AssistantCapabilityRegistry
         'design.edit'        => 'live',
         'design.manage'      => 'live',
         'forms.edit'         => 'live',
+        'forms.create'       => 'draft',
         'forms.manage'       => 'live',
         'media.manage'       => 'live',
         'seo.page.edit'      => 'live',
@@ -98,6 +99,7 @@ final class AssistantCapabilityRegistry
     public const EXECUTOR_PERMISSION = [
         'pages.canvas.edit' => Permissions::CAP_CONTENT,
         'forms.edit'        => Permissions::CAP_FORMS,
+        'forms.create'      => Permissions::CAP_FORMS,
         'seo.page.edit'     => Permissions::CAP_VISIBILITY,
         // El editor del header y el pie es solo de administradores
         // (ChromeController::save), no de todo el que tiene Apariencia.
@@ -260,15 +262,28 @@ final class AssistantCapabilityRegistry
                 (int) ($counts['forms'] ?? 0),
                 ['Formulario existente del MAPA DE FORMULARIOS', 'preguntas u opciones concretas']
             ),
+            // ASST-V2 F6a — formulario nuevo: no se coloca en ninguna página,
+            // así que no cambia la web hasta que alguien lo inserte.
+            // i18n-ignore-start: etiquetas que lee el planner en el prompt.
+            self::capability(
+                'forms.create',
+                'Crear un formulario nuevo (preguntas, opciones y textos); no se coloca en ninguna página',
+                'automatic',
+                '/admin/formularios',
+                'form_create',
+                (int) ($counts['forms'] ?? 0),
+                ['Para qué es el formulario y qué preguntas lleva']
+            ),
             self::capability(
                 'forms.manage',
-                'Crear formularios nuevos o configurar destinatarios, consentimientos y autorrespuesta',
+                'Configurar destinatarios, consentimientos y autorrespuesta de un formulario',
                 'manual',
                 '/admin/formularios',
                 null,
                 (int) ($counts['forms'] ?? 0),
                 ['Campos', 'destinatario y consentimiento aplicable']
             ),
+            // i18n-ignore-end
             self::capability(
                 'media.manage',
                 'Subir, describir o gestionar archivos de la biblioteca',

@@ -115,6 +115,79 @@ final class FormAssistantEditor
         return ['ok' => true, 'reply' => self::describe($content, FormI18n::translatedLanguages($form))];
     }
 
+    /**
+     * ASST-V2 F6a — Formulario nuevo, sin guardar: el mismo diseñador que el
+     * composer de /admin/formularios.
+     *
+     * @return array{ok:bool, error?:string, before?:array<string,mixed>, content?:array<string,mixed>, base_hash?:string}
+     * @throws \App\Services\AI\AIException si falla la llamada al modelo
+     */
+    public static function proposeNew(int $siteId, string $instruction): array
+    {
+        // i18n-ignore-start: contexto que viaja al prompt.
+        $result = AIActionRunner::run(Actions::DESIGN_FORM, [
+            'description'   => $instruction,
+            'extra_context' => 'Idioma del formulario: ' . LanguageService::promptLabel(LanguageService::primaryFor($siteId))
+                . "\nEs un formulario NUEVO: diseña solo lo que se pide.",
+        ], $siteId);
+        // i18n-ignore-end
+        return self::newContent($siteId, (array) $result['data']);
+    }
+
+    /**
+     * Content de un formulario nuevo a partir del borrador de la IA, sobre la
+     * plantilla de contacto (destinatario, base legal y consentimiento de
+     * siempre) y sin autorrespuesta, igual que FormsController::createWithAI.
+     *
+     * @param array<string,mixed> $aiData
+     * @return array{ok:bool, error?:string, before?:array<string,mixed>, content?:array<string,mixed>, base_hash?:string}
+     */
+    public static function newContent(int $siteId, array $aiData): array
+    {
+        try {
+            $draft = FormDefinition::fromAI($aiData);
+        } catch (\InvalidArgumentException $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+        $content = array_replace(FormTemplates::content('contact', LanguageService::primaryFor($siteId)), $draft);
+        $content['autoresponder_enabled'] = '0';
+        $content['form_type'] = 'custom';
+        $errors = FormDefinition::contentErrors($content);
+        if ($errors !== []) {
+            return ['ok' => false, 'error' => implode(' ', $errors)];
+        }
+        return ['ok' => true, 'before' => [], 'content' => $content, 'base_hash' => ''];
+    }
+
+    /**
+     * Guarda el formulario nuevo. No se coloca en ninguna página: hasta que
+     * alguien lo inserte, no se ve en la web.
+     *
+     * @param array<string,mixed> $content
+     * @return array{ok:bool, reply?:string, error?:string, form_id?:int}
+     */
+    public static function create(int $siteId, array $content): array
+    {
+        unset($content['id']);
+        $errors = FormDefinition::contentErrors($content);
+        if ($errors !== []) {
+            return ['ok' => false, 'error' => implode(' ', $errors)];
+        }
+        $id = FormStore::create($siteId, $content);
+        $labels = array_map(static fn (array $f): string => (string) $f['label'], (array) $content['fields']);
+        return [
+            'ok'      => true,
+            'form_id' => $id,
+            'reply'   => __('asst.form.created', ['formulario' => (string) $content['heading'], 'preguntas' => implode(', ', $labels)]),
+        ];
+    }
+
+    /** Lo que enseña la tarjeta de un formulario nuevo. @param array<string,mixed> $content */
+    public static function previewNew(array $content): array
+    {
+        return ['kind' => 'form_new', 'after' => self::outline($content), 'changes' => []];
+    }
+
     /** Huella del contenido guardado de un formulario (sin su id). @param array<string,mixed> $form */
     public static function contentHash(array $form): string
     {

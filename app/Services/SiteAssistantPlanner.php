@@ -467,10 +467,10 @@ final class SiteAssistantPlanner
             $isForm = $capabilityId === 'forms.edit';
             // ASST-V2 F2 — también forms.manage conserva su formulario: no se
             // ejecuta, pero el botón «Llévame» abre ese formulario concreto.
-            $form = str_starts_with($capabilityId, 'forms.') ? ($forms[$formId] ?? null) : null;
+            $form = str_starts_with($capabilityId, 'forms.') && $capabilityId !== 'forms.create' ? ($forms[$formId] ?? null) : null;
             // ASST-V2 F4b — el header y el pie son de todo el sitio.
             // ASST-V2 F4c — las entradas nuevas y las ideas tampoco son de una página.
-            $isSiteWide = in_array($capabilityId, ['chrome.edit', 'design.edit', 'posts.create', 'posts.ideas', 'pages.create', 'pages.ideas'], true);
+            $isSiteWide = in_array($capabilityId, ['chrome.edit', 'design.edit', 'posts.create', 'posts.ideas', 'pages.create', 'pages.ideas', 'forms.create'], true);
             // ASST-V2 F4f — servicio, producto o recurso: su id va en target_id.
             $catalogKind = CatalogAssistantEditor::kindFor($capabilityId);
             $catalogCreate = $catalogKind !== null && CatalogAssistantEditor::isCreate($capabilityId);

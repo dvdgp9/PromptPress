@@ -599,6 +599,7 @@
     function wantsPreview(it) {
         if (it.status !== 'aplicar') return false;
         return (it.capability_id === 'forms.edit' && Number(it.form_id) > 0)
+            || it.capability_id === 'forms.create'
             || (it.capability_id === 'seo.page.edit' && Number(it.page_id) > 0)
             || it.capability_id === 'chrome.edit'
             || it.capability_id === 'design.edit'
@@ -1270,6 +1271,20 @@
             renderPageBrief(box, data, it, onSettled, it._plan);
             return;
         }
+        // ASST-V2 F6a — formulario nuevo: no hay «antes», solo cómo quedará.
+        if (data.kind === 'form_new') {
+            box.textContent = '';
+            box.className = 'ppa-preview is-ready';
+            const note = document.createElement('p');
+            note.className = 'ppa-preview__note';
+            note.textContent = pp.t('js.as.form_new_note', { n: (data.after.fields || []).length });
+            box.appendChild(note);
+            const stage = document.createElement('div');
+            stage.className = 'ppa-preview__stage';
+            stage.appendChild(renderFormMock(data.after, {}));
+            box.appendChild(stage);
+            return;
+        }
         box.textContent = '';
         box.className = 'ppa-preview is-ready';
         const changes = data.changes || [];
@@ -1518,6 +1533,8 @@
                         ? pp.t('js.as.page_ideas_title')
                     : it.capability_id === 'pages.create'
                         ? pp.t('js.as.page_new_x', { pagina: postTopic(it) })
+                    : it.capability_id === 'forms.create'
+                        ? pp.t('js.as.form_new_x', { formulario: postTopic(it) })
                     : it.capability_id === 'posts.create'
                         ? pp.t('js.as.post_x', { titulo: postTopic(it) })
                     : it.capability_id === 'seo.page.edit' && it.page_title
@@ -1799,6 +1816,7 @@
     function itemLabel(it) {
         if (it.capability_id === 'posts.create') return pp.t('js.as.post_x', { titulo: it.page_title });
         if (it.capability_id === 'pages.create') return pp.t('js.as.page_new_x', { pagina: it.page_title });
+        if (it.capability_id === 'forms.create') return pp.t('js.as.form_new_x', { formulario: it.page_title });
         return it.page_title + (it.section ? ' · «' + it.section + '»' : '');
     }
 
@@ -1905,7 +1923,7 @@
                 link.className = 'ppa-item__link';
                 link.href = cfg.formsUrl + it.form_id;
                 link.target = '_blank';
-                link.textContent = pp.t('js.as.view_form');
+                link.textContent = pp.t(it.capability_id === 'forms.create' ? 'js.as.form_open_new' : 'js.as.view_form');
                 head.appendChild(link);
             } else if (!seenPages.has(it.page_id)) {
                 seenPages.add(it.page_id);
@@ -1942,7 +1960,7 @@
             card.appendChild(head);
             const body = document.createElement('div');
             body.className = 'ppa-item__body';
-            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'design.edit' ? 'js.as.design_unchanged' : isCatalogItem(it) ? 'js.as.catalog_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
+            body.textContent = (it.error || pp.t('js.as.unknown_error')) + ' ' + pp.t(it.capability_id === 'forms.create' ? 'js.as.form_not_created' : it.form_id ? 'js.as.form_unchanged' : it.capability_id === 'seo.page.edit' ? 'js.as.seo_unchanged' : it.capability_id === 'chrome.edit' ? 'js.as.chrome_unchanged' : it.capability_id === 'design.edit' ? 'js.as.design_unchanged' : isCatalogItem(it) ? 'js.as.catalog_unchanged' : it.capability_id === 'posts.create' ? 'js.as.post_not_created' : it.capability_id === 'pages.create' ? 'js.as.page_not_created' : 'js.as.page_unchanged');
             card.appendChild(body);
             bubble.appendChild(card);
         });
@@ -1989,7 +2007,7 @@
             seoNote.textContent = pp.t('js.as.seo_live_done');
             bubble.appendChild(seoNote);
         }
-        if (doneItems.some((it) => it.form_id)) {
+        if (doneItems.some((it) => it.form_id && it.capability_id !== 'forms.create')) {
             const formNote = document.createElement('p');
             formNote.className = 'ppa-plan__note';
             formNote.textContent = pp.t('js.as.form_live_done');

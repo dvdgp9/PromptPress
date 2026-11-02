@@ -376,6 +376,7 @@ class AssistantController
         // tipo de propuesta + elemento al que se ata la firma
         [$kind, $targetId] = match ($capability) {
             'forms.edit'    => ['form', (int) ($item['form_id'] ?? 0)],
+            'forms.create'  => ['form_new', $siteId],
             'seo.page.edit' => ['seo', (int) ($item['page_id'] ?? 0)],
             'chrome.edit'   => ['chrome', $siteId],
             'design.edit'   => ['design', $siteId],
@@ -407,13 +408,14 @@ class AssistantController
         try {
             $proposal = match ($kind) {
                 'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction),
+                'form_new' => FormAssistantEditor::proposeNew($siteId, $instruction),
                 'seo'    => PageSeoAssistantEditor::propose($siteId, $targetId, $instruction),
                 'chrome' => ChromeAssistantEditor::propose($siteId, $instruction),
                 'design' => DesignAssistantEditor::propose($siteId, $instruction),
             };
         } catch (AIException $e) {
             error_log('[assistant preview] site=' . $siteId . ' ' . $capability . ' target=' . $targetId . ' ai status=' . $e->getHttpStatus() . ': ' . $e->getMessage());
-            Response::json(['ok' => false, 'error' => __('asst.err.' . $kind . '_no_valid_change')], 502);
+            Response::json(['ok' => false, 'error' => __('asst.err.' . ($kind === 'form_new' ? 'form' : $kind) . '_no_valid_change')], 502);
         }
         if (!$proposal['ok']) {
             Response::json(['ok' => false, 'error' => (string) $proposal['error']], 422);
@@ -422,6 +424,7 @@ class AssistantController
         $token = AssistantProposal::seal($kind, $siteId, $targetId, $instruction, $proposal['content'], $proposal['base_hash']);
         $preview = match ($kind) {
             'form'   => FormAssistantEditor::preview($proposal['before'], $proposal['content']),
+            'form_new' => FormAssistantEditor::previewNew($proposal['content']),
             'seo'    => PageSeoAssistantEditor::preview($siteId, $targetId, $proposal['before'], $proposal['content']),
             'chrome' => ChromeAssistantEditor::preview($siteId, $proposal['before'], $proposal['content']),
             'design' => DesignAssistantEditor::preview($siteId, $proposal['before'], $proposal['content'], $proposal['notes'] ?? []),
