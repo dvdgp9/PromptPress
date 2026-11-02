@@ -1436,7 +1436,9 @@
                 method: 'POST',
                 body: new URLSearchParams({
                     _csrf: cfg.csrf,
-                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, page_id: it.page_id, target_id: it.target_id, instruction: it.instruction })
+                    item: JSON.stringify({ capability_id: it.capability_id, form_id: it.form_id, page_id: it.page_id, target_id: it.target_id, instruction: it.instruction, media_ids: it.media_ids || [] }),
+                    // ASST-V2 F6b — la imagen de referencia viaja dentro del material firmado.
+                    source_token: (it._plan && it._plan.source_token) || conversation.sourceToken || ''
                 })
             });
             const data = await res.json().catch(() => ({}));

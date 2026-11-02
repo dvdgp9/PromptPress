@@ -405,10 +405,15 @@ class AssistantController
         if ($kind === 'page') {
             $this->previewPage($siteId, $instruction, $started);
         }
+        // ASST-V2 F6b — la imagen de referencia de un formulario, solo si viene
+        // en el material firmado del plan.
+        $images = in_array($kind, ['form', 'form_new'], true)
+            ? SiteAssistantJobs::previewReferenceImages($siteId, (string) Request::post('source_token', ''), (array) ($item['media_ids'] ?? []))
+            : [];
         try {
             $proposal = match ($kind) {
-                'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction),
-                'form_new' => FormAssistantEditor::proposeNew($siteId, $instruction),
+                'form'   => FormAssistantEditor::propose($siteId, $targetId, $instruction, $images),
+                'form_new' => FormAssistantEditor::proposeNew($siteId, $instruction, $images),
                 'seo'    => PageSeoAssistantEditor::propose($siteId, $targetId, $instruction),
                 'chrome' => ChromeAssistantEditor::propose($siteId, $instruction),
                 'design' => DesignAssistantEditor::propose($siteId, $instruction),
@@ -429,8 +434,8 @@ class AssistantController
             'chrome' => ChromeAssistantEditor::preview($siteId, $proposal['before'], $proposal['content']),
             'design' => DesignAssistantEditor::preview($siteId, $proposal['before'], $proposal['content'], $proposal['notes'] ?? []),
         };
-        error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d ms=%d',
-            $siteId, $capability, $targetId, count($preview['changes']), (int) ((microtime(true) - $started) * 1000)));
+        error_log(sprintf('[assistant preview] site=%d %s target=%d changes=%d images=%d ms=%d',
+            $siteId, $capability, $targetId, count($preview['changes']), count($images), (int) ((microtime(true) - $started) * 1000)));
         Response::json(['ok' => true, 'preview' => $preview, 'token' => $token]);
     }
 

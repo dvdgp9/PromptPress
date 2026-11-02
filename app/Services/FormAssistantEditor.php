@@ -35,9 +35,9 @@ final class FormAssistantEditor
      * @return array{ok:bool, reply?:string, error?:string}
      * @throws \App\Services\AI\AIException si falla la llamada al modelo
      */
-    public static function apply(int $siteId, int $formId, string $instruction, ?int $userId): array
+    public static function apply(int $siteId, int $formId, string $instruction, ?int $userId, array $images = []): array
     {
-        $proposal = self::propose($siteId, $formId, $instruction);
+        $proposal = self::propose($siteId, $formId, $instruction, $images);
         if (!$proposal['ok']) {
             return $proposal;
         }
@@ -50,7 +50,7 @@ final class FormAssistantEditor
      * @return array{ok:bool, error?:string, before?:array<string,mixed>, content?:array<string,mixed>, base_hash?:string}
      * @throws \App\Services\AI\AIException si falla la llamada al modelo
      */
-    public static function propose(int $siteId, int $formId, string $instruction): array
+    public static function propose(int $siteId, int $formId, string $instruction, array $images = []): array
     {
         $form = FormStore::find($siteId, $formId);
         if ($form === null) {
@@ -63,12 +63,9 @@ final class FormAssistantEditor
             $current[$key] = $form[$key] ?? ($key === 'fields' ? [] : '');
         }
         // i18n-ignore-start: contexto que viaja al prompt.
-        $result = AIActionRunner::run(Actions::DESIGN_FORM, [
-            'description'   => $instruction,
-            'extra_context' => 'Idioma del formulario: ' . LanguageService::promptLabel($lang)
-                . "\nEs un formulario que YA EXISTE: aplica solo el cambio pedido y conserva igual todo lo demás (preguntas, etiquetas, opciones y textos que no se mencionan)."
-                . "\nFormulario actual:\n" . json_encode($current, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        ], $siteId);
+        $result = AIActionRunner::run(Actions::DESIGN_FORM, self::designInput($instruction, 'Idioma del formulario: ' . LanguageService::promptLabel($lang)
+            . "\nEs un formulario que YA EXISTE: aplica solo el cambio pedido y conserva igual todo lo demás (preguntas, etiquetas, opciones y textos que no se mencionan)."
+            . "\nFormulario actual:\n" . json_encode($current, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $images), $siteId);
         // i18n-ignore-end
 
         try {
@@ -122,16 +119,34 @@ final class FormAssistantEditor
      * @return array{ok:bool, error?:string, before?:array<string,mixed>, content?:array<string,mixed>, base_hash?:string}
      * @throws \App\Services\AI\AIException si falla la llamada al modelo
      */
-    public static function proposeNew(int $siteId, string $instruction): array
+    public static function proposeNew(int $siteId, string $instruction, array $images = []): array
     {
         // i18n-ignore-start: contexto que viaja al prompt.
-        $result = AIActionRunner::run(Actions::DESIGN_FORM, [
-            'description'   => $instruction,
-            'extra_context' => 'Idioma del formulario: ' . LanguageService::promptLabel(LanguageService::primaryFor($siteId))
-                . "\nEs un formulario NUEVO: diseña solo lo que se pide.",
-        ], $siteId);
+        $result = AIActionRunner::run(Actions::DESIGN_FORM, self::designInput($instruction, 'Idioma del formulario: '
+            . LanguageService::promptLabel(LanguageService::primaryFor($siteId))
+            . "\nEs un formulario NUEVO: diseña solo lo que se pide.", $images), $siteId);
         // i18n-ignore-end
         return self::newContent($siteId, (array) $result['data']);
+    }
+
+    /**
+     * ASST-V2 F6b — Entrada de DESIGN_FORM. Con imágenes adjuntas (un
+     * formulario en papel, una captura) van por visión, como en el composer.
+     *
+     * @param array<int,array<string,mixed>> $images salida de AssistantVisionImages::prepare
+     * @return array<string,mixed>
+     */
+    public static function designInput(string $instruction, string $context, array $images): array
+    {
+        $input = ['description' => $instruction, 'extra_context' => $context];
+        $images = array_slice(array_values($images), 0, 3);
+        if ($images !== []) {
+            // i18n-ignore-start: contexto que viaja al prompt.
+            $input['extra_context'] .= "\nSe adjunta una imagen de referencia: reproduce sus preguntas, opciones y textos tal como aparecen, salvo que la petición diga otra cosa.";
+            // i18n-ignore-end
+            $input['_images'] = $images;
+        }
+        return $input;
     }
 
     /**

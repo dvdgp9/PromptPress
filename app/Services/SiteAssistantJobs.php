@@ -120,7 +120,7 @@ final class SiteAssistantJobs
                     'section'     => '',
                     'instruction' => $instruction,
                     'source_block_ids' => [],
-                    'media_ids' => [],
+                    'media_ids' => self::validMediaIds($item['media_ids'] ?? [], $allowedMedia),
                 ];
                 continue;
             }
@@ -145,7 +145,7 @@ final class SiteAssistantJobs
                     'section'     => '',
                     'instruction' => $instruction,
                     'source_block_ids' => [],
-                    'media_ids' => [],
+                    'media_ids' => self::validMediaIds($item['media_ids'] ?? [], $allowedMedia),
                 ];
                 continue;
             }
@@ -498,20 +498,20 @@ final class SiteAssistantJobs
         if ($capability === 'forms.create') {
             $kind = 'form_new';
             $aiError = 'asst.err.form_no_valid_change';
-            $run = static function () use ($siteId, $instruction, $token): array {
+            $run = static function () use ($siteId, $instruction, $token, $job, $item): array {
                 $p = AssistantProposal::open($token, 'form_new', $siteId, $siteId, $instruction);
-                $p ??= FormAssistantEditor::proposeNew($siteId, $instruction);
+                $p ??= FormAssistantEditor::proposeNew($siteId, $instruction, self::referenceImagesFor($job, $item, $siteId));
                 if (($p['ok'] ?? true) === false) return $p;
                 return FormAssistantEditor::create($siteId, $p['content']);
             };
         } elseif ($formId > 0) {
             $kind = 'form';
             $aiError = 'asst.err.form_no_valid_change';
-            $run = static function () use ($siteId, $formId, $instruction, $token, $userId): array {
+            $run = static function () use ($siteId, $formId, $instruction, $token, $userId, $job, $item): array {
                 $p = FormAssistantEditor::openProposal($token, $siteId, $formId, $instruction);
                 return $p !== null
                     ? FormAssistantEditor::commit($siteId, $formId, $p['content'], $p['base_hash'], $userId)
-                    : FormAssistantEditor::apply($siteId, $formId, $instruction, $userId);
+                    : FormAssistantEditor::apply($siteId, $formId, $instruction, $userId, self::referenceImagesFor($job, $item, $siteId));
             };
         } elseif ($capability === 'seo.page.edit') {
             $kind = 'seo';
@@ -685,6 +685,30 @@ final class SiteAssistantJobs
             error_log('[assistant job] reference images unavailable: ' . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * ASST-V2 F6b — imágenes de referencia para una vista previa: solo las del
+     * material firmado del plan, nunca ids sueltos del navegador.
+     *
+     * @param array<int,mixed> $mediaIds
+     * @return array<int,array<string,mixed>>
+     */
+    public static function previewReferenceImages(int $siteId, string $sourceToken, array $mediaIds): array
+    {
+        if ($sourceToken === '' || $mediaIds === []) {
+            return [];
+        }
+        try {
+            $source = AssistantSourceEnvelope::open($sourceToken, $siteId);
+        } catch (\InvalidArgumentException $e) {
+            return [];
+        }
+        return self::referenceImagesFor(
+            ['source_bundle_json' => json_encode($source['bundle'])],
+            ['media_ids_json' => json_encode(array_values(array_map('intval', $mediaIds)))],
+            $siteId
+        );
     }
 
     /**

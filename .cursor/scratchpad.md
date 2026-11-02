@@ -11441,7 +11441,7 @@ Recomendación (la más simple que cumple el objetivo sin empeorar el Studio):
 
 ## High-level Task Breakdown (ASST-V2 F6) — PENDIENTE de aprobación
 - [x] F6a Formularios nuevos desde el panel (publicado como v1.24.0, 02/11, «Publícalo»): `forms.create` con vista previa (maqueta del formulario) y apertura en el editor. ✅ test: propose/commit crea inactivo-sin-colocar, token ligado al sitio, rol sin `forms` no lo ve; «crea un formulario de presupuesto» en el panel enseña la maqueta y «Aplicar» lleva al editor.
-- [ ] F6b Imagen de referencia en el panel (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
+- [x] F6b Imagen de referencia en el panel (publicado como v1.25.0, 02/11, «Publícalo») (solo para formularios, mismas reglas: png/jpg/webp ≤ 8 MB). ✅ la vista previa de formulario usa la imagen; otras capacidades la ignoran.
 - [ ] F6c Quitar el composer: lista → botón «Crear con el asistente»; editor → aviso de cambios sin guardar antes de aplicar y recarga tras aplicar. ✅ no queda `forms-ai.js` cargado; los endpoints antiguos responden igual 30 días (compatibilidad) o se retiran.
 - [ ] F6d Studio con historial compartido: los turnos del chat del Studio se guardan en `assistant_conversations` (hilo por página) y se repintan al recargar; aparecen en «Conversaciones» del asistente. ✅ recargar el Studio conserva el chat; el hilo se abre desde /admin/assistant.
 - [ ] F6e Derivar al panel lo que no es de la página: el panel global también carga en el Studio (plegado, con contexto de la página) y el chat del Studio ofrece «Hacerlo con el asistente» cuando la petición no es de esta página. ✅ en el Studio, «añade una entrada al blog» acaba en el panel con la petición escrita.
@@ -11461,3 +11461,17 @@ Verificación: tests/assistant_v2_form_create.php nuevo (20 PASS, crea y borra s
 - `createJob` devuelve el id en `job.id`, no en `job_id`.
 - Al renderizar páginas por CLI, base_url sale sin puerto: hay que reescribir a localhost:8765 para la vista estática.
 - El sandbox no deja a `python3 -m http.server` leer el scratchpad: usar `php -S`. preview_start puede anunciar otro puerto si el configurado parece ocupado, pero php escucha en el que va en runtimeArgs.
+
+## Current Status / Progress Tracking (ASST-V2 F6b) — 02/11/2026, Executor
+Usuario: «Sí, sigue con F6b». Hecho (pendiente de verlo y de «Publícalo»):
+- Reutiliza lo que el panel ya tenía: arrastrar/pegar imágenes → material firmado (AssistantSourceEnvelope) → media_ids por item con role reference. No hay subida nueva ni endpoint nuevo.
+- `FormAssistantEditor::designInput` (pura): con imágenes añade `_images` (máx. 3) y una línea al contexto («reproduce sus preguntas…»); `propose`, `proposeNew` y `apply` aceptan imágenes.
+- `SiteAssistantJobs::previewReferenceImages(site, source_token, media_ids)`: solo imágenes del material firmado y con role reference; token roto o ids sueltos → ninguna.
+- Vista previa (`/assistant/preview`) de form y form_new recibe `source_token` + `media_ids` y los pasa al diseñador; el log cuenta `images=`.
+- Trabajo: forms.edit y forms.create conservan media_ids validados contra el material; si al aplicar no hay vista previa válida, la IA recibe las imágenes (referenceImagesFor).
+- Planner: regla FORMULARIOS dice que la imagen de un formulario va como reference en media_ids del item forms.create/forms.edit.
+- La miniatura en la tarjeta ya la pinta renderItemMedia (genérico).
+Verificación: tests/assistant_v2_form_images.php nuevo (12 PASS, usa una imagen real del sitio 1 solo en lectura); demás suites del asistente, formularios, permisos, php80 y JS en verde; lint 42. Navegador (estático + fetch simulado): la petición de vista previa lleva media_ids y source_token. NO probado con la IA real (no sé cómo de fiel copia la IA un formulario en foto) ni con sesión real.
+
+## Lessons (ASST-V2 F6b)
+- createJob vuelve a comprobar cada imagen contra la tabla media (AssistantMediaReferences::resolve): en tests hace falta un media real del sitio, un id inventado se descarta.
