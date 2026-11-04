@@ -12,6 +12,7 @@ declare(strict_types=1);
 use App\Modules\Booking\BookingAdminController;
 use App\Modules\Booking\BookingApiController;
 use App\Modules\Booking\BookingCancelController;
+use App\Modules\Booking\BookingPaymentController;
 use App\Modules\ModuleRegistry;
 use Core\Router;
 
@@ -31,6 +32,9 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
     // Link de cancelación del email (B5): GET confirma, POST ejecuta.
     $router->get('/_booking/cancel/{id}',  [BookingCancelController::class, 'show'],   [$guard]);
     $router->post('/_booking/cancel/{id}', [BookingCancelController::class, 'cancel'], [$guard]);
+    // BOOK-PAGO — vuelta de Stripe y reintento del pago.
+    $router->get('/_booking/pago/{id}',        [BookingPaymentController::class, 'show'],   [$guard]);
+    $router->get('/_booking/pago/{id}/stripe', [BookingPaymentController::class, 'stripe'], [$guard]);
 
     $router->group('/admin', function (Router $r) use ($guard): void {
         $r->get('/booking',                        [BookingAdminController::class, 'index'],   [$guard]);

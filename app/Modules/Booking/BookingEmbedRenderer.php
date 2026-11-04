@@ -68,7 +68,7 @@ final class BookingEmbedRenderer
             return [];
         }
         $rows = Database::select(
-            'SELECT id, name, duration_min, price_label
+            'SELECT id, name, duration_min, price_label, requires_payment, price_cents
                FROM booking_services
               WHERE site_id = ? AND active = 1
               ORDER BY name ASC',
@@ -78,7 +78,7 @@ final class BookingEmbedRenderer
             'id'           => (int) $r['id'],
             'name'         => (string) $r['name'],
             'duration_min' => (int) $r['duration_min'],
-            'price_label'  => (string) ($r['price_label'] ?? ''),
+            'price_label'  => (string) (BookingApiController::priceLabel($r) ?? ''),
         ], $rows);
     }
 
@@ -191,13 +191,14 @@ final class BookingEmbedRenderer
             ? \App\Services\LanguageService::normalize((string) $opts['lang'])
             : self::lang($siteId);
         $service = Database::selectOne(
-            'SELECT name, duration_min, price_label FROM booking_services WHERE id = ? LIMIT 1',
+            'SELECT name, duration_min, price_label, requires_payment, price_cents FROM booking_services WHERE id = ? LIMIT 1',
             [$serviceId]
         );
         $name = (string) ($service['name'] ?? '');
         $sub  = (int) ($service['duration_min'] ?? 0) . ' min';
-        if (trim((string) ($service['price_label'] ?? '')) !== '') {
-            $sub .= ' · ' . (string) $service['price_label'];
+        $price = $service !== null ? BookingApiController::priceLabel($service) : null;
+        if ($price !== null) {
+            $sub .= ' · ' . $price;
         }
 
         // Clases propias, no las del widget: el CSS de `.ppbk` lo inyecta el JS

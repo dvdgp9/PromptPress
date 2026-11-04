@@ -185,14 +185,32 @@ final class BookingAdminController
             $errors[] = __('bk.err.name_empty');
         }
 
+        // BOOK-PAGO — cobro al reservar (se guarda aparte: ServiceStore::savePayment).
+        $payment = [
+            'requires_payment' => (string) Request::post('requires_payment', '0') === '1' ? 1 : 0,
+            'price_cents'      => \App\Modules\Commerce\CommerceSettings::eurosToCents((string) Request::post('price_amount', '')),
+            'tax_rate'         => max(0.0, min(99.0, (float) str_replace(',', '.', (string) Request::post('tax_rate', '21')))),
+        ];
+        if ($payment['requires_payment'] === 1) {
+            if ($payment['price_cents'] <= 0) {
+                $errors[] = __('bk.err.payment_price');
+            }
+            // Ya activo y Stripe se cae: se deja guardar (la reserva lo frena
+            // con 503); activarlo nuevo sin Stripe, no.
+            if ((int) ($existing['requires_payment'] ?? 0) !== 1 && !BookingPayment::available($siteId)) {
+                $errors[] = __('bk.err.payment_needs_stripe');
+            }
+        }
+
         if ($errors !== []) {
             // Repintar con lo enviado (sin persistir) para no perder la edición.
-            $draft = array_merge($existing, $fields, ['id' => $id, 'hours' => $hours, 'exceptions' => $exceptions]);
+            $draft = array_merge($existing, $fields, $payment, ['id' => $id, 'hours' => $hours, 'exceptions' => $exceptions]);
             $this->renderEditor($draft, $errors);
             return;
         }
 
         ServiceStore::update($siteId, $id, $fields, $hours, $exceptions);
+        ServiceStore::savePayment($siteId, $id, $payment);
         Session::flash('notice', __('bk.ok.service_saved'));
         Response::redirect(base_url('admin/booking/services/' . $id));
     }
@@ -218,6 +236,8 @@ final class BookingAdminController
     public function bookings(): void
     {
         $siteId = $this->requireSiteId();
+        // BOOK-PAGO — las que caducaron sin pagar pasan a canceladas (sin cron).
+        BookingPayment::expireStale($siteId);
 
         $status  = (string) Request::get('status', '');
         $service = (int) Request::get('service', 0);
@@ -225,7 +245,7 @@ final class BookingAdminController
 
         $where = ['b.site_id = ?'];
         $args  = [$siteId];
-        if (in_array($status, ['pending', 'confirmed', 'cancelled'], true)) {
+        if (in_array($status, ['pending', 'confirmed', 'cancelled', 'awaiting_payment'], true)) {
             $where[] = 'b.status = ?';
             $args[]  = $status;
         }
@@ -241,9 +261,10 @@ final class BookingAdminController
         }
 
         $rows = Database::select(
-            'SELECT b.*, s.name AS service_name
+            'SELECT b.*, s.name AS service_name, o.status AS order_status, o.order_number
                FROM booking_bookings b
                JOIN booking_services s ON s.id = b.service_id
+               LEFT JOIN commerce_orders o ON o.id = b.order_id AND o.site_id = b.site_id
               WHERE ' . implode(' AND ', $where) . '
               ORDER BY b.starts_at_utc ' . ($scope === 'past' ? 'DESC' : 'ASC') . '
               LIMIT 200',
@@ -286,11 +307,19 @@ final class BookingAdminController
             Session::flash('notice', __('bk.ok.already_status'));
             Response::redirect($this->bookingsUrl());
         }
+        // BOOK-PAGO — una reserva que espera el pago solo se confirma pagando
+        // (o marcando pagado su pedido en la Tienda): confirmarla aquí dejaría
+        // la sesión de Stripe abierta y el pedido sin cobrar.
+        if ((string) $booking['status'] === 'awaiting_payment' && $to === 'confirmed') {
+            Session::flash('error', __('bk.err.awaiting_payment'));
+            Response::redirect($this->bookingsUrl());
+        }
 
         Database::execute(
             'UPDATE booking_bookings SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?',
             [$to, $id]
         );
+        $paid = $to === 'cancelled' && BookingPayment::onBookingCancelled($siteId, $id);
         $mail = 'failed';
         try {
             $mail = BookingMailer::sendStatusChange($siteId, $id, $to);
@@ -303,7 +332,7 @@ final class BookingAdminController
         if ($mail !== 'sent') {
             $key .= $mail === 'skipped' ? '_no_mail' : '_mail_failed';
         }
-        Session::flash('notice', __($key));
+        Session::flash('notice', __($key) . ($paid ? ' ' . __('bk.ok.refund_note') : ''));
         Response::redirect($this->bookingsUrl());
     }
 
@@ -443,6 +472,10 @@ final class BookingAdminController
             // Si el sitio no puede enviar correo, todo esto no sirve de nada:
             // el editor lo dice y lleva a configurarlo.
             'mailReady' => \App\Services\Mail\MailService::isConfigured(Auth::siteId() ?? 0),
+            // BOOK-PAGO — cobrar al reservar necesita Tienda + Stripe.
+            'paymentReady'     => BookingPayment::available(Auth::siteId() ?? 0),
+            'commerceOn'       => \App\Modules\ModuleRegistry::isEnabled(Auth::siteId() ?? 0, 'commerce'),
+            'pricesIncludeTax' => \App\Modules\Commerce\CommerceSettings::pricesIncludeTax(Auth::siteId() ?? 0),
             'errors'   => $errors,
             'notice'   => Session::flash('notice'),
             'csrf'     => CSRF::token(),

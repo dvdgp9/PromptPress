@@ -432,7 +432,8 @@
             });
 
             var hp = h('input', 'ppbk-hp'); hp.name = 'company_url'; hp.tabIndex = -1; hp.autocomplete = 'off';
-            var submit = h('button', 'ppbk-submit', Tv('book_at', '', { time: fmtTime(state.selSlot) }));
+            // BOOK-PAGO — si el servicio se cobra al reservar, el botón lo dice.
+            var submit = h('button', 'ppbk-submit', Tv(state.service && state.service.requires_payment ? 'book_pay' : 'book_at', '', { time: fmtTime(state.selSlot) }));
             submit.type = 'submit';
             form.appendChild(hp);
             form.appendChild(submit);
@@ -455,7 +456,12 @@
                     payload[k] = node.type === 'checkbox' ? (node.checked ? '1' : '') : node.value;
                 });
                 req('POST', api + '/bookings', payload).then(function (r) {
-                    if (r.status === 201) {
+                    if (r.status === 201 && r.data && r.data.payment_url) {
+                        // BOOK-PAGO — hueco guardado: a pagar en Stripe.
+                        root.innerHTML = '';
+                        root.appendChild(h('div', 'ppbk-msg ok', T('redirecting_pay')));
+                        window.location.href = r.data.payment_url;
+                    } else if (r.status === 201) {
                         root.innerHTML = '';
                         root.appendChild(h('h3', null, T('sent_title')));
                         var ok = h('div', 'ppbk-msg ok', r.data.message || T('registered'));
@@ -468,6 +474,10 @@
                     } else if (r.status === 429) {
                         msg.className = 'ppbk-msg err';
                         msg.textContent = T('too_many');
+                        submit.disabled = false;
+                    } else if (r.status === 503) {
+                        msg.className = 'ppbk-msg err';
+                        msg.textContent = T('payment_unavailable');
                         submit.disabled = false;
                     } else {
                         var fields = (r.data && r.data.fields) || {};

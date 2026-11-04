@@ -11510,3 +11510,52 @@ Usuario: «Sí, sigue con F6e». Hecho (pendiente de verlo y de «Publícalo»):
 - Guarda: si el panel va a aplicar pages.canvas.edit sobre la página abierta, `ppa:before-apply` lo frena («pídelo en el chat del Studio»: ahí está el bloqueo de edición). Tras `ppa:applied` el Studio recarga la vista. Esc dentro del panel no lo atiende el Studio.
 Verificación: tests/assistant_v2_studio_panel.php nuevo (17 PASS); 14 frases de prueba bien clasificadas (node); canvas_* (sin los scripts de QA), asistente, formularios, permisos, php80, navegación y JS en verde; lint 40. Navegador (estático + fetch simulado): sin lanzador, el chat ofrece el panel y no manda nada al Studio, «Hacerlo con el asistente» abre el panel con «Viendo: la página…» y envía, «Es de esta página» lo manda al Studio, la guarda frena solo la página abierta. NO probado con sesión real ni con la IA real.
 Con esto quedan hechas F6a-F6e: la F6 completa a falta de publicar F6e.
+
+---
+
+## Background and Motivation (BOOK-PAGO) — 04/11/2026, Planner
+La compañera del usuario quiere cobrar con Stripe las **consultas** (servicios del módulo Reservas), igual que ya se cobra en la Tienda y en los ebooks. Hoy `booking_services.price_label` es solo texto informativo («30 €»). El usuario eligió la opción B: **cobro integrado** (Stripe Checkout + webhook), no un Payment Link pegado a mano, para que funcione igual que el resto de la plataforma.
+
+## Key Challenges and Analysis (BOOK-PAGO)
+- **Reutilizar Commerce, no duplicar Stripe.** Commerce ya tiene la configuración de las claves, `StripeCheckout::start`, el webhook idempotente (`markPaid` → `OrderStore::transition`), la página de gracias con reintento y los emails. Si cada reserva de pago crea un **pedido de Commerce** de una línea («Consulta 30 min — 12/11 10:00»), se aprovecha todo eso, el pago aparece en Pedidos y se puede conciliar en Stripe. Es el mismo patrón que EBOOK-PAGO (Recursos dueño del contenido, Commerce del cobro).
+- **El hueco mientras se paga.** Si el hueco no se bloquea, dos personas pagan la misma hora. Estado nuevo `awaiting_payment` en `booking_bookings`, que **ocupa plaza solo mientras no caduca** (`hold_until_utc`). La liberación es perezosa: el recuento de disponibilidad ignora las reservas caducadas, así que no hace falta cron. Además, el webhook `checkout.session.expired` las pasa a `cancelled` para dejar limpio el panel.
+- **Pago que llega tarde.** La sesión de Stripe se crea con `expires_at` igual a la caducidad del hueco (Stripe exige un mínimo de 30 min), así que no se puede pagar un hueco ya liberado. Si aun así llegara un pago con el hueco ocupado, la reserva se marca pagada, se avisa al admin por email y se registra en el log (el caso límite se resuelve a mano).
+- **Pagada = confirmada**, sea cual sea `auto_confirm`.
+- **Emails:** con pago no se envía «reserva recibida» al crearla. Cuando se paga, se envían el de confirmación al cliente y el aviso al admin, reutilizando `BookingMailer`.
+- **Widget externo (`pp-booking-widget.js`):** la respuesta de `POST /bookings` añade `payment_url`, y el widget redirige a Stripe. La vuelta va a una página de la web (`/_booking/pagado/{id}?k=…`) que reconcilia el pago, como `ShopController::thanks`, y muestra el resultado o un botón para reintentar.
+- **Requisitos:** el módulo Commerce debe estar activo y Stripe configurado para marcar un servicio como «de pago» (mismo 409 que los ebooks de venta).
+- **PHP 8.0** en producción. La migración va a `database/migrations` **y** a `install/schema.sql`.
+
+### Decisiones abiertas (valores por defecto propuestos)
+1. Tiempo de bloqueo del hueco sin pagar: **30 min**.
+2. Cancelación de una reserva pagada con el enlace del email: **se permite**; la devolución la hace el admin a mano en Stripe y recibe un aviso.
+3. Precio: **IVA incluido** con tipo por servicio (21 % por defecto), siguiendo el ajuste de impuestos de la Tienda.
+4. Solo Stripe (sin transferencia) para servicios en v1.
+
+## High-level Task Breakdown (BOOK-PAGO) — PENDIENTE de aprobación
+1. **Migración**: `booking_services` + `price_cents INT NULL`, `tax_rate DECIMAL(4,2)`, `requires_payment TINYINT`. `booking_bookings` + estado `awaiting_payment`, `hold_until_utc DATETIME NULL`, `order_id INT NULL`. `commerce_order_items` + `booking_id INT NULL`. Éxito: `tests/php80_compat.php` pasa y una instalación limpia tiene las columnas.
+2. **Disponibilidad**: `AvailabilityEngine` y `BookingService` cuentan `awaiting_payment` solo si `hold_until_utc > now`. Éxito: test nuevo en `tests/booking_payment.php` (hueco ocupado durante el bloqueo, libre al caducar, sin doble reserva concurrente).
+3. **Crear reserva de pago**: `BookingService::create` → `awaiting_payment` + pedido Commerce de una línea + sesión Stripe con `expires_at`. La API devuelve `payment_url`. Éxito: test con `StripeApi` simulado.
+4. **Webhook**: `markPaid` de un pedido con `booking_id` → reserva `confirmed` + emails; `checkout.session.expired` → reserva `cancelled`. Éxito: test con payload firmado, que también compruebe que la idempotencia se mantiene.
+5. **Vuelta de Stripe y widget**: página `/_booking/pagado/{id}` (reconciliación + reintento) y redirección en `pp-booking-widget.js`. Éxito: flujo en el navegador local con claves de prueba de Stripe.
+6. **Admin**: en el editor de servicio, campo «Cobrar al reservar» + precio + IVA, con bloqueo si Commerce/Stripe no está listo. Listado de reservas con la etiqueta «Pendiente de pago»/«Pagada» y enlace al pedido. Textos en `lang/admin/*`. Éxito: verificación en el navegador.
+7. **Cancelación**: el enlace del cliente cancela una reserva pagada y avisa al admin (decisión 2). Éxito: test.
+8. Versión + release (ver release-workflow).
+
+## Current Status / Progress Tracking (BOOK-PAGO) — 04/11/2026, Executor
+- [x] 1. Migración `2026_11_04_booking_payment.php` (idempotente, aplicada 2 veces en local).
+- [x] 2. `BookingService::ACTIVE_SQL`: `awaiting_payment` ocupa plaza solo con `hold_until_utc` vigente (disponibilidad, recuento con lock y nº de reservas futuras).
+- [x] 3. `BookingService::create` → `awaiting_payment` + bloqueo de 31 min + pedido (`OrderStore::createForBooking`). `BookingPayment::checkoutUrl` crea la sesión (expira con el bloqueo) o reutiliza la abierta. La API devuelve `payment_url`, o 503 `payment_unavailable` si no hay Stripe.
+- [x] 4. `OrderStore::transition` → `BookingPayment::syncFromOrder` (pagado = confirmada + emails de reserva; cancelado = cancelada). Webhook `checkout.session.expired` solo para la sesión vigente. `CommerceMailer` no duplica emails en pedidos de reservas.
+- [x] 5. `/_booking/pago/{id}` (estado, reconciliación, reintento) y `/_booking/pago/{id}/stripe`. El widget cambia el botón a «Reservar y pagar» y redirige a Stripe.
+- [x] 6. Editor del servicio: sección «Cobro» (casilla, importe, IVA, aviso si no hay Tienda o Stripe). Listado: «Pendiente de pago» y enlace al pedido. Limpieza perezosa (`expireStale`) al abrir reservas y pedidos.
+- [x] 7. Cancelar sin pagar cancela el pedido; cancelar pagada deja el pedido pagado y avisa al gestor (devolución a mano), y al cliente se le dice que le contactarán.
+- [x] 8. `tests/booking_payment.php`: 39/39. Siguen pasando booking_* y commerce_*, y `php80_compat` da ALL PASS. PP_VERSION → 1.29.0 (sin commit ni push: pendiente de que lo confirme el usuario).
+
+## Executor's Feedback or Assistance Requests (BOOK-PAGO)
+- `tests/booking_api.php` tiene 2 FAIL («la reserva guarda el idioma pedido por la página»), que **ya fallaban antes** de este cambio (comprobado con git stash). Ese test deja además workers de `php -S` vivos en el puerto 8799 (PHP_CLI_SERVER_WORKERS + proc_terminate).
+- No probado contra Stripe real (solo con un Stripe falso y un webhook firmado en local). La primera reserva de pago real conviene hacerla en modo test.
+
+## Lessons (BOOK-PAGO)
+- `ServiceStore::update()` rellena con DEFAULTS todo lo que no llega: los campos nuevos de un servicio que otros caminos (el asistente) no conocen van con su propio `save…()`, o se pierden al guardar desde ahí.
+- Stripe Checkout exige `expires_at` de 30 min como mínimo: el bloqueo del hueco dura 31 min para que la sesión caduque antes que él.

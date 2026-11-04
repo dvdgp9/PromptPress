@@ -60,6 +60,44 @@ $exceptions = is_array($service['exceptions'] ?? null) ? $service['exceptions'] 
         </div>
     </section>
 
+    <?php /* BOOK-PAGO — cobrar con Stripe al reservar. El cobro es un pedido
+             de la Tienda: sin Tienda activa ni Stripe configurado no se ofrece. */ ?>
+    <?php $payOn = (int) ($service['requires_payment'] ?? 0) === 1; ?>
+    <section class="pp-ai-config-panel">
+        <div class="pp-ai-section-head"><div><h3><?= e(__('bk.pay.title')) ?></h3><p><?= e(__('bk.pay.lead')) ?></p></div></div>
+        <?php if (empty($paymentReady)): ?>
+        <div class="pp-alert pp-alert--warning pp-booking-mailwarn" data-pp-persist>
+            <div>
+                <strong><?= e(__('bk.pay.off_title')) ?></strong>
+                <p><?= e(__('bk.pay.off_text')) ?></p>
+            </div>
+            <a class="pp-btn pp-btn--secondary pp-btn--sm" href="<?= e(base_url($commerceOn ? 'admin/commerce/pagos' : 'admin/modules')) ?>"><?= e(__('bk.pay.off_cta')) ?></a>
+        </div>
+        <?php endif; ?>
+        <div class="pp-form-group">
+            <label class="pp-booking-field__toggle">
+                <input type="hidden" name="requires_payment" value="0">
+                <input type="checkbox" name="requires_payment" value="1" <?= $payOn ? 'checked' : '' ?> <?= empty($paymentReady) && !$payOn ? 'disabled' : '' ?>>
+                <?= e(__('bk.pay.toggle')) ?>
+            </label>
+            <small><?= e(__('bk.pay.toggle_help', ['minutos' => (string) \App\Modules\Booking\BookingService::PAYMENT_HOLD_MINUTES])) ?></small>
+        </div>
+        <div class="pp-form-grid-2">
+            <div class="pp-form-group">
+                <label for="pp-bs-pay-price"><?= e(__('bk.pay.price')) ?></label>
+                <input type="text" id="pp-bs-pay-price" name="price_amount" inputmode="decimal" maxlength="12"
+                       value="<?= e((int) ($service['price_cents'] ?? 0) > 0 ? \App\Modules\Commerce\CommerceSettings::centsToInput((int) $service['price_cents']) : '') ?>"
+                       placeholder="30,00">
+                <small><?= e(__($pricesIncludeTax ? 'bk.pay.price_help_incl' : 'bk.pay.price_help_excl')) ?></small>
+            </div>
+            <div class="pp-form-group">
+                <label for="pp-bs-pay-tax"><?= e(__('bk.pay.tax')) ?></label>
+                <input type="number" id="pp-bs-pay-tax" name="tax_rate" min="0" max="99" step="0.01"
+                       value="<?= e(rtrim(rtrim(number_format((float) ($service['tax_rate'] ?? 21), 2, '.', ''), '0'), '.')) ?>">
+            </div>
+        </div>
+    </section>
+
     <section class="pp-ai-config-panel">
         <div class="pp-ai-section-head"><div><h3><?= e(__('bk.slots.title')) ?></h3><p><?= e(__('bk.slots.lead')) ?></p></div></div>
         <div class="pp-form-grid-2">

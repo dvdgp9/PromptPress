@@ -107,6 +107,16 @@ final class CommerceMailer
         if (!in_array($newStatus, ['paid', 'shipped', 'cancelled'], true)) {
             return 'skipped';
         }
+        // BOOK-PAGO — el pedido de una reserva no escribe por su cuenta: quien
+        // avisa es la reserva (confirmación con .ics o cancelación), que ya
+        // salió en OrderStore::transition. Se devuelve cómo fue ESE envío.
+        foreach ($order['items'] ?? [] as $it) {
+            if (!empty($it['booking_id'])) {
+                $b = \Core\Database::selectOne('SELECT email_status FROM booking_bookings WHERE id = ?', [(int) $it['booking_id']]);
+                $st = (string) ($b['email_status'] ?? '');
+                return in_array($st, ['sent', 'failed'], true) ? $st : 'skipped';
+            }
+        }
         $lang = self::language($siteId, $order);
         $t = static fn (string $key, array $vars = []): string => Microcopy::t($key, $lang, $vars);
         $number = (string) $order['order_number'];

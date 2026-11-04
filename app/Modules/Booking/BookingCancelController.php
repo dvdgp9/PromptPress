@@ -60,21 +60,28 @@ final class BookingCancelController
     public function cancel(array $params = []): void
     {
         [$booking] = $this->load($params, (string) Request::post('token', ''));
+        $before = $booking;
         $siteId = (int) $booking['site_id'];
         $result = BookingService::cancelWithToken($siteId, (int) $booking['id'], (string) Request::post('token', ''));
         if (!$result['ok']) {
             Response::notFound();
         }
-        try {
-            BookingMailer::notifyCustomerCancelled($siteId, (int) $booking['id']);
-        } catch (\Throwable) {
-            // el aviso nunca rompe la cancelación
+        // BOOK-PAGO — una reserva que nunca se pagó no llegó a avisar al
+        // gestor: tampoco hay que avisarle de que se cancela.
+        if ((string) ($before['status'] ?? '') !== 'awaiting_payment') {
+            try {
+                BookingMailer::notifyCustomerCancelled($siteId, (int) $booking['id']);
+            } catch (\Throwable) {
+                // el aviso nunca rompe la cancelación
+            }
         }
         $lang = self::bookingLanguage($booking, $siteId);
         $this->page(
             $siteId,
             Microcopy::t('booking.cancelled_title', $lang),
             '<p>' . e(Microcopy::t('booking.cancelled_body', $lang)) . '</p>'
+            // BOOK-PAGO — estaba pagada: la devolución la tramita el negocio.
+            . (!empty($result['paid']) ? '<p>' . e(Microcopy::t('booking.cancelled_paid_note', $lang)) . '</p>' : '')
             . '<p class="soft">' . e(Microcopy::t('booking.cancelled_again', $lang)) . '</p>',
             $lang
         );
@@ -116,6 +123,16 @@ final class BookingCancelController
 
     private function page(int $siteId, string $title, string $bodyHtml, ?string $lang = null): never
     {
+        self::renderPage($siteId, $title, $bodyHtml, $lang);
+    }
+
+    /**
+     * Tarjeta autónoma que comparten las páginas públicas de una reserva
+     * (cancelación y, desde BOOK-PAGO, la de pago). `.btn` es un enlace con
+     * el mismo aspecto que el botón.
+     */
+    public static function renderPage(int $siteId, string $title, string $bodyHtml, ?string $lang = null): never
+    {
         $lang = $lang !== null ? LanguageService::normalize($lang) : LanguageService::codeFor($siteId);
         Response::html(
             '<!doctype html><html lang="' . e($lang) . '"><head><meta charset="utf-8">'
@@ -127,7 +144,9 @@ final class BookingCancelController
             . '.card{background:#fff;border:1px solid #e5e2dc;border-radius:14px;padding:32px;max-width:420px;width:100%;box-shadow:0 8px 24px -12px rgba(0,0,0,.15)}'
             . 'h1{font-size:1.25rem;margin:0 0 12px}p{line-height:1.55;margin:0 0 14px}.detail{background:#f7f6f3;border-radius:10px;padding:12px 14px}'
             . '.soft{color:#6b7280;font-size:.88rem}button{background:#c2410c;color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:1rem;cursor:pointer;width:100%}'
-            . 'button:hover{background:#9a3412}</style></head>'
+            . 'button:hover{background:#9a3412}'
+            . '.btn{display:block;text-align:center;text-decoration:none;background:#c2410c;color:#fff;border-radius:10px;padding:11px 18px;font-size:1rem}'
+            . '.btn:hover{background:#9a3412}.ok{color:#166534}</style></head>'
             . '<body><div class="card"><h1>' . e($title) . '</h1>' . $bodyHtml . '</div></body></html>'
         );
     }

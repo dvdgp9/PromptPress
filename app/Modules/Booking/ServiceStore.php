@@ -46,7 +46,8 @@ final class ServiceStore
             'SELECT s.*,
                     (SELECT COUNT(*) FROM booking_bookings b
                       WHERE b.service_id = s.id
-                        AND b.status IN (\'pending\', \'confirmed\')
+                        AND (b.status IN (\'pending\', \'confirmed\')
+                             OR (b.status = \'awaiting_payment\' AND b.hold_until_utc > UTC_TIMESTAMP()))
                         AND b.starts_at_utc >= UTC_TIMESTAMP()) AS upcoming_count
                FROM booking_services s
               WHERE s.site_id = ?
@@ -235,6 +236,28 @@ final class ServiceStore
         } catch (\Throwable) {
             // la caché nunca rompe una operación sobre los servicios
         }
+    }
+
+    /**
+     * BOOK-PAGO — guarda el cobro al reservar. Va aparte de update() a propósito:
+     * otros caminos (el asistente) actualizan el servicio sin conocer estos
+     * campos, y con los DEFAULTS de normalize() lo dejarían gratis sin querer.
+     *
+     * @param array{requires_payment:int, price_cents:int, tax_rate:float} $p
+     */
+    public static function savePayment(int $siteId, int $id, array $p): void
+    {
+        Database::execute(
+            'UPDATE booking_services SET requires_payment = ?, price_cents = ?, tax_rate = ?, updated_at = UTC_TIMESTAMP()
+              WHERE site_id = ? AND id = ?',
+            [
+                (int) $p['requires_payment'] === 1 ? 1 : 0,
+                (int) $p['price_cents'] > 0 ? (int) $p['price_cents'] : null,
+                round(max(0.0, min(99.0, (float) $p['tax_rate'])), 2),
+                $siteId, $id,
+            ]
+        );
+        self::flushPageCache($siteId);
     }
 
     /**

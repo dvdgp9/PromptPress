@@ -44,7 +44,8 @@ final class BookingApiController
             self::denyCors();
         }
         $rows = Database::select(
-            'SELECT id, name, description, duration_min, capacity, price_label, language, fields_json
+            'SELECT id, name, description, duration_min, capacity, price_label, requires_payment, price_cents,
+                    language, fields_json
                FROM booking_services WHERE site_id = ? AND active = 1 ORDER BY name',
             [$siteId]
         );
@@ -84,7 +85,9 @@ final class BookingApiController
                 'description'  => (string) ($r['description'] ?? ''),
                 'duration_min' => (int) $r['duration_min'],
                 'capacity'     => (int) $r['capacity'],
-                'price_label'  => $r['price_label'] !== null ? (string) $r['price_label'] : null,
+                'price_label'  => self::priceLabel($r),
+                // BOOK-PAGO — el widget cambia el botón a «Reservar y pagar».
+                'requires_payment' => BookingPayment::requiresPayment($r),
                 'language'     => BookingService::serviceLanguage($siteId, $r),
                 // MODULOS M8 — qué se le pide al cliente en ESTE servicio. El
                 // widget lo pinta tal cual; la validación de verdad es la del
@@ -165,18 +168,29 @@ final class BookingApiController
                     Response::json(['error' => 'rate_limited'], 429);
                 case 'not_found':
                     Response::json(['error' => 'not_found'], 404);
+                case 'payment_unavailable':
+                    // Servicio de pago sin Stripe listo: no se reserva gratis.
+                    Response::json(['error' => 'payment_unavailable'], 503);
                 default:
                     Response::json(['error' => 'slot_unavailable'], 409);
             }
         }
 
         $booking = $result['booking'];
+        $paymentUrl = null;
 
-        // Emails de creación (cliente + aviso admin). Nunca rompen la reserva.
-        try {
-            BookingMailer::sendCreated($siteId, (int) $booking['id']);
-        } catch (\Throwable) {
-            // silencioso a propósito
+        if (!empty($booking['payment_required'])) {
+            // BOOK-PAGO — sin email todavía: la confirmación sale al pagar
+            // (BookingPayment::syncFromOrder). Si Stripe no responde, la URL es
+            // la página de la reserva, que ofrece reintentar.
+            $paymentUrl = BookingPayment::checkoutUrl($siteId, (int) $booking['id']);
+        } else {
+            // Emails de creación (cliente + aviso admin). Nunca rompen la reserva.
+            try {
+                BookingMailer::sendCreated($siteId, (int) $booking['id']);
+            } catch (\Throwable) {
+                // silencioso a propósito
+            }
         }
 
         // Conversión en Analytics (si el módulo está activo): jamás rompe la reserva.
@@ -191,6 +205,8 @@ final class BookingApiController
         }
 
         $status = (string) $booking['status'];
+        $msgKey = $status === 'confirmed' ? 'booking.created_confirmed'
+            : ($status === 'awaiting_payment' ? 'booking.created_payment' : 'booking.created_pending');
         Response::json([
             'id'      => (int) $booking['id'],
             'status'  => $status,
@@ -198,10 +214,8 @@ final class BookingApiController
             'start'   => $booking['start'],
             'end'     => $booking['end'],
             'cancel_token' => $booking['cancel_token'],
-            'message' => Microcopy::t(
-                $status === 'confirmed' ? 'booking.created_confirmed' : 'booking.created_pending',
-                (string) ($booking['language'] ?? LanguageService::codeFor($siteId))
-            ),
+            'payment_url'  => $paymentUrl,
+            'message' => Microcopy::t($msgKey, (string) ($booking['language'] ?? LanguageService::codeFor($siteId))),
         ], 201);
     }
 
@@ -214,14 +228,19 @@ final class BookingApiController
         }
         $data = Request::isJson() ? Request::json() : Request::all();
         $bookingId = (int) ($params['id'] ?? 0);
+        $before = Database::selectOne('SELECT status FROM booking_bookings WHERE site_id = ? AND id = ?', [$siteId, $bookingId]);
         $result = BookingService::cancelWithToken($siteId, $bookingId, trim((string) ($data['token'] ?? '')));
         if (!$result['ok']) {
             Response::json(['error' => 'not_found'], 404);
         }
-        try {
-            BookingMailer::notifyCustomerCancelled($siteId, $bookingId);
-        } catch (\Throwable) {
-            // silencioso a propósito
+        // BOOK-PAGO — una reserva que nunca se pagó no llegó a avisar al
+        // gestor: tampoco hay que avisarle de que se cancela.
+        if ((string) ($before['status'] ?? '') !== 'awaiting_payment') {
+            try {
+                BookingMailer::notifyCustomerCancelled($siteId, $bookingId);
+            } catch (\Throwable) {
+                // silencioso a propósito
+            }
         }
         Response::json(['status' => 'cancelled']);
     }
@@ -257,6 +276,8 @@ final class BookingApiController
             'pick_day', 'pick_time', 'pick_data', 'pick_day_first', 'no_day_slots',
             'part_morning', 'part_afternoon', 'part_evening',
             'month_prev', 'month_next', 'chosen', 'change_choice',
+            // BOOK-PAGO
+            'book_pay', 'redirecting_pay', 'payment_unavailable',
         ];
         $out = [];
         foreach ($keys as $key) {
@@ -270,6 +291,21 @@ final class BookingApiController
     // ======================================================================
     // Helpers
     // ======================================================================
+
+    /**
+     * Texto del precio: el que escribió el gestor, y si un servicio de pago no
+     * lo tiene, el importe real (no se cobra nada que el cliente no haya visto).
+     *
+     * @param array<string,mixed> $service
+     */
+    public static function priceLabel(array $service): ?string
+    {
+        $label = trim((string) ($service['price_label'] ?? ''));
+        if ($label === '' && BookingPayment::requiresPayment($service)) {
+            return \App\Modules\Commerce\CommerceSettings::format((int) $service['price_cents']);
+        }
+        return $label !== '' ? $label : null;
+    }
 
     private static function siteId(): int
     {

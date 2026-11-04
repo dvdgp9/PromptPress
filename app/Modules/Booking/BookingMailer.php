@@ -62,7 +62,9 @@ final class BookingMailer
         // idioma y la fecha en otro queda peor que cualquiera de los dos.
         $whenAdmin = self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale());
         self::notifyAdmin($siteId, __('bk.mail.admin_new_body', [
-            'estado'   => __($confirmed ? 'bk.mail.admin_auto_confirmed' : 'bk.mail.admin_pending'),
+            // BOOK-PAGO — confirmada porque se ha pagado, no por auto_confirm.
+            'estado'   => __(!empty($booking['order_id']) && $confirmed ? 'bk.mail.admin_paid'
+                : ($confirmed ? 'bk.mail.admin_auto_confirmed' : 'bk.mail.admin_pending')),
             'servicio' => (string) $service['name'],
             'fecha'    => $whenAdmin,
             'cliente'  => (string) $booking['customer_name'],
@@ -117,13 +119,39 @@ final class BookingMailer
             return;
         }
         [$booking, $service, , $tz] = $ctx;
-        self::notifyAdmin($siteId, __('bk.mail.admin_cancel_body', [
+        $body = __('bk.mail.admin_cancel_body', [
             'servicio' => (string) $service['name'],
             'fecha'    => self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale()),
             'cliente'  => (string) $booking['customer_name'],
             'email'    => (string) $booking['customer_email'],
             'url'      => base_url('admin/booking/reservas'),
-        ]), __('bk.mail.admin_cancel_subject', ['servicio' => (string) $service['name']]));
+        ]);
+        // BOOK-PAGO — si estaba pagada, la devolución es cosa del gestor.
+        if (BookingPayment::isPaid($siteId, $booking)) {
+            $body .= "\n\n" . __('bk.mail.admin_refund_note');
+        }
+        self::notifyAdmin($siteId, $body, __('bk.mail.admin_cancel_subject', ['servicio' => (string) $service['name']]));
+    }
+
+    /**
+     * BOOK-PAGO — llegó el pago de una reserva que ya estaba cancelada (pagó
+     * con la pestaña de Stripe abierta tras cancelar). No se reabre el hueco:
+     * se avisa al gestor para que devuelva el dinero.
+     */
+    public static function notifyAdminPaidCancelled(int $siteId, int $bookingId): void
+    {
+        $ctx = self::context($siteId, $bookingId);
+        if ($ctx === null) {
+            return;
+        }
+        [$booking, $service, , $tz] = $ctx;
+        self::notifyAdmin($siteId, __('bk.mail.admin_paid_cancelled_body', [
+            'servicio' => (string) $service['name'],
+            'fecha'    => self::humanWhen($booking, $tz, \App\Services\AdminI18n::locale()),
+            'cliente'  => (string) $booking['customer_name'],
+            'email'    => (string) $booking['customer_email'],
+            'url'      => base_url('admin/booking/reservas'),
+        ]), __('bk.mail.admin_paid_cancelled_subject', ['servicio' => (string) $service['name']]));
     }
 
     /**

@@ -1733,6 +1733,105 @@ final class Microcopy
             'fr' => 'Si vous cherchez un autre créneau, vous pouvez réserver à nouveau quand vous voulez.',
             'pt' => 'Se quiser outro horário, pode reservar de novo quando quiser.',
         ],
+
+        // BOOK-PAGO — servicios que se pagan con Stripe al reservar.
+        'booking.book_pay' => [
+            'es' => 'Reservar y pagar {time}', 'en' => 'Book and pay {time}', 'ca' => 'Reserva i paga {time}',
+            'gl' => 'Reservar e pagar {time}', 'fr' => 'Réserver et payer à {time}', 'pt' => 'Reservar e pagar {time}',
+        ],
+        'booking.redirecting_pay' => [
+            'es' => 'Te llevamos al pago seguro…', 'en' => 'Taking you to secure payment…',
+            'ca' => 'Et portem al pagament segur…', 'gl' => 'Levámoste ao pagamento seguro…',
+            'fr' => 'Redirection vers le paiement sécurisé…', 'pt' => 'A levá-lo para o pagamento seguro…',
+        ],
+        'booking.payment_unavailable' => [
+            'es' => 'Ahora mismo no se puede pagar esta reserva. Inténtalo más tarde o contacta con nosotros.',
+            'en' => 'This booking cannot be paid right now. Please try later or contact us.',
+            'ca' => 'Ara mateix no es pot pagar aquesta reserva. Torna-ho a provar més tard o contacta amb nosaltres.',
+            'gl' => 'Agora mesmo non se pode pagar esta reserva. Téntao máis tarde ou contacta connosco.',
+            'fr' => 'Cette réservation ne peut pas être payée pour le moment. Réessayez plus tard ou contactez-nous.',
+            'pt' => 'Neste momento não é possível pagar esta reserva. Tente mais tarde ou contacte-nos.',
+        ],
+        'booking.created_payment' => [
+            'es' => 'Hueco guardado. Completa el pago para confirmar la reserva.',
+            'en' => 'Slot held. Complete the payment to confirm your booking.',
+            'ca' => 'Hora guardada. Completa el pagament per confirmar la reserva.',
+            'gl' => 'Oco gardado. Completa o pagamento para confirmar a reserva.',
+            'fr' => 'Créneau réservé. Finalisez le paiement pour confirmer la réservation.',
+            'pt' => 'Horário guardado. Conclua o pagamento para confirmar a reserva.',
+        ],
+        'booking.pay_done_title' => [
+            'es' => 'Reserva confirmada', 'en' => 'Booking confirmed', 'ca' => 'Reserva confirmada',
+            'gl' => 'Reserva confirmada', 'fr' => 'Réservation confirmée', 'pt' => 'Reserva confirmada',
+        ],
+        'booking.pay_done_body' => [
+            'es' => 'Pago recibido. Te hemos enviado la confirmación por email.',
+            'en' => 'Payment received. We have emailed you the confirmation.',
+            'ca' => 'Pagament rebut. T’hem enviat la confirmació per correu.',
+            'gl' => 'Pagamento recibido. Enviámosche a confirmación por correo.',
+            'fr' => 'Paiement reçu. Nous vous avons envoyé la confirmation par e-mail.',
+            'pt' => 'Pagamento recebido. Enviámos-lhe a confirmação por e-mail.',
+        ],
+        'booking.pay_pending_title' => [
+            'es' => 'Falta el pago', 'en' => 'Payment pending', 'ca' => 'Falta el pagament',
+            'gl' => 'Falta o pagamento', 'fr' => 'Paiement en attente', 'pt' => 'Falta o pagamento',
+        ],
+        'booking.pay_pending_body' => [
+            'es' => 'Tu hueco está guardado, pero la reserva no se confirma hasta que pagues.',
+            'en' => 'Your slot is held, but the booking is not confirmed until you pay.',
+            'ca' => 'La teva hora està guardada, però la reserva no es confirma fins que paguis.',
+            'gl' => 'O teu oco está gardado, pero a reserva non se confirma ata que pagues.',
+            'fr' => 'Votre créneau est retenu, mais la réservation n’est confirmée qu’après le paiement.',
+            'pt' => 'O seu horário está guardado, mas a reserva só fica confirmada depois de pagar.',
+        ],
+        'booking.pay_cancelled_note' => [
+            'es' => 'No se ha completado el pago. Puedes intentarlo de nuevo mientras el hueco siga guardado.',
+            'en' => 'The payment was not completed. You can try again while the slot is still held.',
+            'ca' => 'No s’ha completat el pagament. Pots tornar-ho a provar mentre l’hora continuï guardada.',
+            'gl' => 'Non se completou o pagamento. Podes tentalo de novo mentres o oco siga gardado.',
+            'fr' => 'Le paiement n’a pas abouti. Vous pouvez réessayer tant que le créneau est retenu.',
+            'pt' => 'O pagamento não foi concluído. Pode tentar de novo enquanto o horário estiver guardado.',
+        ],
+        'booking.pay_processing' => [
+            'es' => 'Estamos recibiendo la confirmación del pago. Recarga la página en unos segundos.',
+            'en' => 'We are receiving the payment confirmation. Reload this page in a few seconds.',
+            'ca' => 'Estem rebent la confirmació del pagament. Torna a carregar la pàgina d’aquí a uns segons.',
+            'gl' => 'Estamos a recibir a confirmación do pagamento. Recarga a páxina nuns segundos.',
+            'fr' => 'Nous recevons la confirmation du paiement. Rechargez la page dans quelques secondes.',
+            'pt' => 'Estamos a receber a confirmação do pagamento. Recarregue a página dentro de segundos.',
+        ],
+        'booking.pay_button' => [
+            'es' => 'Pagar ahora', 'en' => 'Pay now', 'ca' => 'Paga ara',
+            'gl' => 'Pagar agora', 'fr' => 'Payer maintenant', 'pt' => 'Pagar agora',
+        ],
+        'booking.pay_hold_note' => [
+            'es' => 'Guardamos el hueco hasta las {time}. Después se libera.',
+            'en' => 'We hold the slot until {time}. After that it is released.',
+            'ca' => 'Guardem l’hora fins a les {time}. Després s’allibera.',
+            'gl' => 'Gardamos o oco ata as {time}. Despois libérase.',
+            'fr' => 'Nous retenons le créneau jusqu’à {time}. Ensuite, il est libéré.',
+            'pt' => 'Guardamos o horário até às {time}. Depois fica livre.',
+        ],
+        'booking.pay_expired_title' => [
+            'es' => 'Tiempo de pago agotado', 'en' => 'Payment time expired', 'ca' => 'Temps de pagament esgotat',
+            'gl' => 'Tempo de pagamento esgotado', 'fr' => 'Délai de paiement dépassé', 'pt' => 'Tempo de pagamento esgotado',
+        ],
+        'booking.pay_expired_body' => [
+            'es' => 'La reserva no se pagó a tiempo y el hueco se ha liberado. No se te ha cobrado nada; puedes reservar de nuevo.',
+            'en' => 'The booking was not paid in time and the slot has been released. You have not been charged; you can book again.',
+            'ca' => 'La reserva no es va pagar a temps i l’hora s’ha alliberat. No se t’ha cobrat res; pots reservar de nou.',
+            'gl' => 'A reserva non se pagou a tempo e o oco liberouse. Non se che cobrou nada; podes reservar de novo.',
+            'fr' => 'La réservation n’a pas été payée à temps et le créneau a été libéré. Rien ne vous a été débité ; vous pouvez réserver à nouveau.',
+            'pt' => 'A reserva não foi paga a tempo e o horário ficou livre. Não lhe foi cobrado nada; pode reservar de novo.',
+        ],
+        'booking.cancelled_paid_note' => [
+            'es' => 'Como ya la habías pagado, nos pondremos en contacto contigo para la devolución.',
+            'en' => 'As you had already paid, we will contact you about the refund.',
+            'ca' => 'Com que ja l’havies pagat, ens posarem en contacte amb tu per al retorn.',
+            'gl' => 'Como xa a pagaras, poñerémonos en contacto contigo para a devolución.',
+            'fr' => 'Comme vous l’aviez déjà payée, nous vous contacterons pour le remboursement.',
+            'pt' => 'Como já a tinha pago, entraremos em contacto consigo para o reembolso.',
+        ],
     ];
 
     /**

@@ -26,6 +26,20 @@ final class BookingService
     public const RATE_LIMIT_WINDOW = 10;   // …cada N minutos
 
     /**
+     * BOOK-PAGO — Minutos que una reserva de pago guarda el hueco mientras el
+     * cliente paga. Stripe no acepta sesiones de menos de 30 min, y la sesión
+     * caduca a la vez que el bloqueo: no se puede pagar un hueco ya liberado.
+     */
+    public const PAYMENT_HOLD_MINUTES = 30;
+
+    /**
+     * Qué reservas ocupan plaza. `awaiting_payment` solo mientras su bloqueo
+     * no haya caducado: así el hueco se libera solo, sin cron.
+     */
+    public const ACTIVE_SQL = "(status IN ('pending','confirmed')
+        OR (status = 'awaiting_payment' AND hold_until_utc > UTC_TIMESTAMP()))";
+
+    /**
      * Crea una reserva si el hueco es legal y queda plaza.
      *
      * @param array<string,mixed> $input  {service_id:int, start:string ISO-8601,
@@ -66,6 +80,12 @@ final class BookingService
         );
         if ($service === null) {
             return ['ok' => false, 'error' => 'not_found'];
+        }
+        // BOOK-PAGO — un servicio de pago sin Stripe listo no se puede reservar:
+        // aceptar la reserva gratis sería peor que rechazarla.
+        $needsPayment = BookingPayment::requiresPayment($service);
+        if ($needsPayment && !BookingPayment::available($siteId)) {
+            return ['ok' => false, 'error' => 'payment_unavailable'];
         }
         $timezone = self::siteTimezone($siteId);
         $now = $nowUtc ?? new DateTimeImmutable('now', new DateTimeZone('UTC'));
@@ -117,7 +137,7 @@ final class BookingService
 
             $stmt = $pdo->prepare(
                 "SELECT COUNT(*) AS n FROM booking_bookings
-                  WHERE service_id = ? AND status IN ('pending','confirmed')
+                  WHERE service_id = ? AND " . self::ACTIVE_SQL . "
                     AND starts_at_utc < ? AND ends_at_utc > ?"
             );
             $stmt->execute([$serviceId, $slot['end_utc'], $slot['start_utc']]);
@@ -127,14 +147,19 @@ final class BookingService
                 return ['ok' => false, 'error' => 'slot_unavailable'];
             }
 
-            $status = (int) $service['auto_confirm'] === 1 ? 'confirmed' : 'pending';
+            // De pago: guarda el hueco mientras paga; pagada = confirmada, sea
+            // cual sea auto_confirm (BookingPayment::syncFromOrder).
+            $status = $needsPayment
+                ? 'awaiting_payment'
+                : ((int) $service['auto_confirm'] === 1 ? 'confirmed' : 'pending');
+            $holdUntil = $needsPayment ? gmdate('Y-m-d H:i:s', time() + BookingPayment::holdMinutes() * 60) : null;
             $token  = bin2hex(random_bytes(16));
             $ins = $pdo->prepare(
                 'INSERT INTO booking_bookings
-                    (site_id, service_id, starts_at_utc, ends_at_utc, status, language,
+                    (site_id, service_id, starts_at_utc, ends_at_utc, status, hold_until_utc, language,
                      customer_name, customer_email, customer_phone, notes, extra_json,
                      cancel_token, ip_hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $ins->execute([
                 // Idioma con el que el cliente reservó: manda en sus emails y en
@@ -143,7 +168,7 @@ final class BookingService
                 // ese manda — quien reserva en francés espera que le escriban en
                 // francés. Si no llega (webs ajenas), el idioma del SERVICIO,
                 // porque en una web multi-idioma cada idioma tiene el suyo.
-                $siteId, $serviceId, $slot['start_utc'], $slot['end_utc'], $status,
+                $siteId, $serviceId, $slot['start_utc'], $slot['end_utc'], $status, $holdUntil,
                 $lang,
                 $name, $email, $phone !== '' ? $phone : null, $notes !== '' ? $notes : null,
                 $extraJson,
@@ -156,6 +181,22 @@ final class BookingService
                 $pdo->rollBack();
             }
             throw $e;
+        }
+
+        // BOOK-PAGO — el pedido que la cobra, fuera del lock del servicio (el
+        // de pedidos bloquea el sitio: dos locks anidados invitan a deadlocks).
+        // Si falla, la reserva no puede quedarse ocupando el hueco sin pedido.
+        if ($needsPayment) {
+            try {
+                $row = Database::selectOne('SELECT * FROM booking_bookings WHERE id = ?', [$id]) ?? [];
+                BookingPayment::createOrder($siteId, $service, $row, $ipHash);
+            } catch (\Throwable $e) {
+                Database::execute(
+                    "UPDATE booking_bookings SET status = 'cancelled', updated_at = UTC_TIMESTAMP() WHERE id = ?",
+                    [$id]
+                );
+                throw $e;
+            }
         }
 
         return [
@@ -171,6 +212,7 @@ final class BookingService
                 'start'        => self::toLocalIso($slot['start_utc'], $timezone),
                 'end'          => self::toLocalIso($slot['end_utc'], $timezone),
                 'cancel_token' => $token,
+                'payment_required' => $needsPayment,
             ],
         ];
     }
@@ -179,7 +221,7 @@ final class BookingService
      * Cancela una reserva con su token (link del email). Idempotente: cancelar
      * una reserva ya cancelada devuelve ok.
      *
-     * @return array{ok:bool, error?:string}
+     * @return array{ok:bool, error?:string, paid?:bool}
      */
     public static function cancelWithToken(int $siteId, int $bookingId, string $token): array
     {
@@ -193,13 +235,18 @@ final class BookingService
         if ($row === null || !hash_equals((string) $row['cancel_token'], $token)) {
             return ['ok' => false, 'error' => 'not_found'];
         }
+        $paid = false;
         if ((string) $row['status'] !== 'cancelled') {
             Database::execute(
                 "UPDATE booking_bookings SET status = 'cancelled', updated_at = UTC_TIMESTAMP() WHERE id = ?",
                 [$bookingId]
             );
+            // BOOK-PAGO — sin pagar: se cancela su pedido (y la sesión de Stripe
+            // deja de poder cobrar un hueco liberado). Pagada: el pedido sigue
+            // pagado y el gestor devuelve a mano; el aviso al admin lo dice.
+            $paid = BookingPayment::onBookingCancelled($siteId, $bookingId);
         }
-        return ['ok' => true];
+        return ['ok' => true, 'paid' => $paid];
     }
 
     /** Zona horaria del sitio (columna sites.timezone, fallback Madrid). */
@@ -258,7 +305,7 @@ final class BookingService
         }
         return Database::select(
             "SELECT starts_at_utc, ends_at_utc, status FROM booking_bookings
-              WHERE service_id = ? AND status IN ('pending','confirmed')
+              WHERE service_id = ? AND " . self::ACTIVE_SQL . "
                 AND starts_at_utc >= DATE_SUB(?, INTERVAL 1 DAY)
                 AND starts_at_utc <  DATE_ADD(?, INTERVAL 2 DAY)",
             [$serviceId, $day . ' 00:00:00', $day . ' 00:00:00']

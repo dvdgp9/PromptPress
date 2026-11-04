@@ -64,6 +64,9 @@ final class StripeWebhookController
             logger('Stripe: pago diferido fallido para el pedido '
                     . (string) ($session['metadata']['order_number'] ?? '?'), 'WARNING');
                 break;
+            case 'checkout.session.expired':
+                self::expireBookingSession($siteId, $session);
+                break;
             default:
                 // Evento que no nos interesa: 200 para que Stripe no reintente.
                 break;
@@ -105,6 +108,29 @@ final class StripeWebhookController
                 // el email nunca rompe la confirmación
             }
         }
+    }
+
+    /**
+     * BOOK-PAGO — la sesión de una reserva caducó sin pagar: se cancela el
+     * pedido (y con él la reserva, vía OrderStore::transition). Solo si es la
+     * sesión VIGENTE del pedido: una anterior que caduca no debe tumbar un
+     * reintento. Los pedidos de la Tienda no se tocan (el cliente puede volver
+     * a pagar desde su página de pedido).
+     *
+     * @param array<string,mixed> $session
+     */
+    public static function expireBookingSession(int $siteId, array $session): void
+    {
+        if ((int) ($session['metadata']['booking_id'] ?? 0) <= 0
+            || (int) ($session['metadata']['site_id'] ?? 0) !== $siteId) {
+            return;
+        }
+        $order = OrderStore::find($siteId, (int) ($session['metadata']['order_id'] ?? 0));
+        if ($order === null || (string) $order['status'] !== 'pending_payment'
+            || (string) ($order['payment_ref'] ?? '') !== (string) ($session['id'] ?? '')) {
+            return;
+        }
+        OrderStore::transition($siteId, (int) $order['id'], 'cancelled');
     }
 
     /** Acepta la firma de cualquiera de los dos modos (cubre el cambio test↔live). */

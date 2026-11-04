@@ -204,13 +204,78 @@ final class OrderStore
                 }
             }
             $pdo->commit();
-            return true;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
             throw $e;
         }
+
+        // BOOK-PAGO — un pedido que cobra una reserva arrastra la reserva
+        // (webhook de Stripe o admin de la Tienda, mismo camino). Nunca
+        // revierte la transición del pedido, que ya está hecha.
+        try {
+            \App\Modules\Booking\BookingPayment::syncFromOrder($siteId, $orderId, $to);
+        } catch (\Throwable $e) {
+            // i18n-ignore: línea de log.
+            logger('OrderStore: sync de reserva del pedido ' . $orderId . ': ' . $e->getMessage(), 'ERROR');
+        }
+        return true;
+    }
+
+    /**
+     * BOOK-PAGO — Pedido de una línea que cobra una reserva. Mismo número
+     * PC-<año>-<seq> y mismo lock que el checkout; sin envío ni stock. Los
+     * importes llegan ya resueltos (CartService::lineAmounts).
+     *
+     * @param array{name:string, email:string, phone?:string} $customer
+     * @param array{booking_id:int, name:string, unit_price_cents:int, tax_rate:float,
+     *              total_cents:int, tax_cents:int} $line
+     * @return array<string,mixed> pedido con items
+     */
+    public static function createForBooking(int $siteId, array $customer, array $line, string $lang, ?string $ipHash): array
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $lock = $pdo->prepare('SELECT id FROM sites WHERE id = ? FOR UPDATE');
+            $lock->execute([$siteId]);
+            $number = self::nextOrderNumber($pdo, $siteId);
+            $total = (int) $line['total_cents'];
+            $tax = (int) $line['tax_cents'];
+            $pdo->prepare(
+                'INSERT INTO commerce_orders
+                    (site_id, order_number, status, payment_method, access_key, currency, language,
+                     subtotal_cents, shipping_cents, tax_cents, total_cents,
+                     customer_name, customer_email, customer_phone, ip_hash, created_at, updated_at)
+                 VALUES (?, ?, \'pending_payment\', \'stripe\', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            )->execute([
+                $siteId, $number, bin2hex(random_bytes(16)), CommerceSettings::CURRENCY,
+                $lang !== '' ? $lang : LanguageService::codeFor($siteId),
+                // subtotal = suma de líneas con IVA (mismo criterio que CartService::totals).
+                $total, $tax, $total,
+                mb_substr(trim((string) $customer['name']), 0, 120),
+                mb_substr(trim((string) $customer['email']), 0, 190),
+                self::nullable((string) ($customer['phone'] ?? ''), 40),
+                $ipHash,
+            ]);
+            $orderId = (int) $pdo->lastInsertId();
+            $pdo->prepare(
+                'INSERT INTO commerce_order_items
+                    (order_id, product_id, resource_id, booking_id, product_name, unit_price_cents, tax_rate, quantity, line_total_cents)
+                 VALUES (?, NULL, NULL, ?, ?, ?, ?, 1, ?)'
+            )->execute([
+                $orderId, (int) $line['booking_id'], mb_substr((string) $line['name'], 0, 160),
+                (int) $line['unit_price_cents'], (float) $line['tax_rate'], $total,
+            ]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+        return self::find($siteId, $orderId) ?? [];
     }
 
     /**

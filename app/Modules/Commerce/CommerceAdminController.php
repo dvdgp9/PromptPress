@@ -240,6 +240,8 @@ final class CommerceAdminController
     public function orders(): void
     {
         $siteId = $this->requireSiteId();
+        // BOOK-PAGO — pedidos de reservas que caducaron sin pagar → cancelados.
+        \App\Modules\Booking\BookingPayment::expireStale($siteId);
         $filters = [
             'status' => (string) Request::get('status', ''),
             'method' => (string) Request::get('method', ''),

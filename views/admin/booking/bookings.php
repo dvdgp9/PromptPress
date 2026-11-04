@@ -13,8 +13,8 @@
  */
 \Core\View::extend('admin/layout');
 
-$statusLabels = ['pending' => __('bk.st.pending'), 'confirmed' => __('bk.st.confirmed'), 'cancelled' => __('bk.st.cancelled')];
-$statusPills  = ['pending' => '', 'confirmed' => ' pp-status-pill--green', 'cancelled' => ' pp-status-pill--muted'];
+$statusLabels = ['pending' => __('bk.st.pending'), 'confirmed' => __('bk.st.confirmed'), 'cancelled' => __('bk.st.cancelled'), 'awaiting_payment' => __('bk.st.awaiting_payment')];
+$statusPills  = ['pending' => '', 'confirmed' => ' pp-status-pill--green', 'cancelled' => ' pp-status-pill--muted', 'awaiting_payment' => ''];
 $tz = new DateTimeZone($timezone);
 $fmt = static function (string $utc) use ($tz): string {
     return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone($tz)->format('d/m/Y H:i');
@@ -109,7 +109,13 @@ $fmt = static function (string $utc) use ($tz): string {
                             <br><span class="pp-booking-soft"><strong><?= e($ans['label']) ?>:</strong> <?= e(mb_substr($ans['value'], 0, 140)) ?></span>
                         <?php endforeach; ?>
                     </td>
-                    <td><span class="pp-status-pill<?= $statusPills[$st] ?? '' ?>"><?= e($statusLabels[$st] ?? $st) ?></span></td>
+                    <td>
+                        <span class="pp-status-pill<?= $statusPills[$st] ?? '' ?>"><?= e($statusLabels[$st] ?? $st) ?></span>
+                        <?php /* BOOK-PAGO — el cobro vive en un pedido de la Tienda. */ ?>
+                        <?php if (!empty($b['order_number'])): ?>
+                            <br><a class="pp-booking-soft" href="<?= e(base_url('admin/commerce/pedidos/' . (int) $b['order_id'])) ?>"><?= e(in_array((string) $b['order_status'], ['paid', 'shipped'], true) ? __('bk.paid_order', ['pedido' => (string) $b['order_number']]) : __('bk.unpaid_order', ['pedido' => (string) $b['order_number']])) ?></a>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php $es = (string) $b['email_status']; ?>
                         <span class="pp-booking-soft" <?= $es === 'failed' && $b['email_error'] !== null ? 'title="' . e((string) $b['email_error']) . '"' : '' ?>>

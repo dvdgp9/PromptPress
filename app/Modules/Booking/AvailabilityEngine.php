@@ -191,7 +191,7 @@ final class AvailabilityEngine
         // Margen de 1 día a cada lado por el desfase local↔UTC de las reservas.
         $bookings = Database::select(
             "SELECT starts_at_utc, ends_at_utc FROM booking_bookings
-              WHERE service_id = ? AND status IN ('pending','confirmed')
+              WHERE service_id = ? AND " . BookingService::ACTIVE_SQL . "
                 AND starts_at_utc >= DATE_SUB(?, INTERVAL 1 DAY)
                 AND starts_at_utc <  DATE_ADD(?, INTERVAL 2 DAY)",
             [$serviceId, $fromDate . ' 00:00:00', $toDate . ' 00:00:00']
@@ -273,7 +273,8 @@ final class AvailabilityEngine
         $out = [];
         foreach ($bookings as $b) {
             $status = (string) ($b['status'] ?? 'pending');
-            if (!in_array($status, ['pending', 'confirmed'], true)) {
+            // awaiting_payment llega ya filtrado por ACTIVE_SQL (solo con el bloqueo vigente).
+            if (!in_array($status, ['pending', 'confirmed', 'awaiting_payment'], true)) {
                 continue;
             }
             $out[] = [
