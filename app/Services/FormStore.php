@@ -15,8 +15,8 @@ use Core\Database;
  * contenedora oculta** por sitio (no publicada, fuera de nav/sitemap), de modo
  * que se gestionan de forma centralizada e independiente del árbol de páginas.
  *
- * La autorrespuesta, el destino y el mensaje del aviso se guardan en el JSON
- * del propio formulario (claves autoresponder_*, notify_email y notify_body).
+ * La autorrespuesta y el aviso se guardan en el JSON del propio formulario
+ * (claves autoresponder_*, notify_email, notify_subject y notify_body).
  */
 final class FormStore
 {

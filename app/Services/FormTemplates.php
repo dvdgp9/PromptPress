@@ -234,6 +234,8 @@ final class FormTemplates
             'autoresponder_body'    => Microcopy::template('form.tpl.autoresponder_body', $lang),
             'notify_email'          => '',
             'notify_body'           => '',
+            'notify_subject'        => '',
+            'notify_template_version' => 2,
         ];
         return array_merge($defaults, $partial, ['form_type' => $type]);
     }

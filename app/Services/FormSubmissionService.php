@@ -114,28 +114,7 @@ final class FormSubmissionService
     /** @param array<string,mixed> $payload */
     public static function emailBody(array $meta, array $payload, string $notifyBody = ''): string
     {
-        // Este correo lo recibe QUIEN GESTIONA el sitio, no el visitante: va en
-        // el idioma del panel (igual que los avisos de Reservas y Tienda).
-        $lines = [
-            trim($notifyBody) !== '' ? trim($notifyBody) : __('form.mail.new_message'),
-            '',
-            __('form.mail.page') . ': ' . (string) ($meta['page_title'] ?? ''),
-            __('form.mail.section') . ': ' . (string) ($meta['section_heading'] ?? __('form.mail.form')),
-            __('form.mail.date') . ': ' . date('Y-m-d H:i:s'),
-            '',
-            __('form.mail.submitted_data') . ':',
-        ];
-
-        foreach ($payload as $label => $value) {
-            if (is_array($value) && ($value['type'] ?? '') === 'file') {
-                $lines[] = '- ' . $label . ': ' . (string) ($value['original_name'] ?? __('form.mail.attachment'))
-                    . ' (' . self::formatBytes((int) ($value['size'] ?? 0)) . ')';
-                continue;
-            }
-            $lines[] = '- ' . $label . ': ' . (is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string) $value);
-        }
-
-        return implode("\n", $lines);
+        return FormNotification::render(['notify_body' => $notifyBody], $meta, $payload)['text'];
     }
 
     /** @return array<int,string> */

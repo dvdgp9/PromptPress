@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Services\FormI18n;
+use App\Services\FormNotification;
 use App\Services\FormDefinition;
 use App\Services\FormStore;
 use App\Services\FormTemplates;
@@ -118,6 +119,24 @@ class FormsController
         Response::redirect(base_url('admin/formularios'));
     }
 
+    /** Preview current unsaved settings with sample answers; never sends email. */
+    public function previewNotification(array $params = []): void
+    {
+        CSRF::check();
+        $siteId = $this->requireSiteId();
+        if (FormStore::find($siteId, (int) ($params['id'] ?? 0)) === null) {
+            Response::json(['ok' => false, 'message' => __('forms.error.not_found')], 404);
+        }
+        $content = $this->collectInput();
+        $site = Database::selectOne('SELECT name, timezone FROM sites WHERE id = ? LIMIT 1', [$siteId]);
+        $preview = FormNotification::preview($content, [
+            'site_name' => (string) ($site['name'] ?? ''),
+            'timezone' => (string) ($site['timezone'] ?? 'Europe/Madrid'),
+            'page_title' => __('form.notice.sample_page'),
+        ]);
+        Response::json(['ok' => true] + $preview);
+    }
+
     /**
      * FORMS-LANG T5/T8 — POST /admin/formularios/{id}/translate
      *
@@ -226,6 +245,8 @@ class FormsController
             'autoresponder_body'    => mb_substr((string) Request::post('autoresponder_body', ''), 0, 4000),
             'notify_email'    => mb_substr(trim((string) Request::post('notify_email', '')), 0, 255),
             'notify_body'     => mb_substr(trim((string) Request::post('notify_body', '')), 0, 4000),
+            'notify_subject'  => mb_substr(trim((string) preg_replace('/[\r\n]+/', ' ', (string) Request::post('notify_subject', ''))), 0, 200),
+            'notify_template_version' => 2,
         ];
     }
 

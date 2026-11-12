@@ -302,6 +302,7 @@ $router->group('/admin', function (\Core\Router $r) {
     $r->post('/formularios/{id}/delete', [FormsController::class, 'destroy']);
     $r->post('/formularios/{id}/translate', [FormsController::class, 'translate']);
     $r->post('/formularios/{id}/restore', [FormsController::class, 'restore']);
+    $r->post('/formularios/{id}/preview-notification', [FormsController::class, 'previewNotification']);
 
     // Mensajes de formularios públicos
     $r->get('/forms',                              [FormSubmissionController::class, 'index']);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Public;
 
 use App\Services\FormI18n;
+use App\Services\FormNotification;
 use App\Services\FormDefinition;
 use App\Services\FormSubmissionService;
 use App\Services\LanguageService;
@@ -138,16 +139,19 @@ final class FormController
         $emailStatus = 'skipped';
         $emailError = null;
         if ($recipient !== null && MailService::isConfigured($siteId)) {
-            $subject = 'Nuevo mensaje desde ' . (string) ($section['page_title'] ?? 'PromptPress');
-            $body = FormSubmissionService::emailBody([
-                'page_title' => (string) ($section['page_title'] ?? ''),
-                'section_heading' => (string) ($content['heading'] ?? 'Formulario'),
-            ], $payload, (string) ($content['notify_body'] ?? ''));
+            $site = Database::selectOne('SELECT name, timezone FROM sites WHERE id = ? LIMIT 1', [$siteId]);
+            $notification = FormNotification::render($content, [
+                'site_name' => (string) ($site['name'] ?? ''),
+                'timezone' => (string) ($site['timezone'] ?? 'Europe/Madrid'),
+                'page_title' => (string) $originPage['title'],
+                'page_slug' => (string) $originPage['slug'],
+                'fields' => $fields,
+            ], $payload, $sender);
             $message = new MailMessage(
                 $recipient,
-                $subject,
-                $body,
-                '',
+                $notification['subject'],
+                $notification['text'],
+                $notification['html'],
                 '',
                 ($sender['email'] ?? '') !== '' ? $sender['email'] : null, // Reply-To: responder va al visitante
                 ($sender['name'] ?? '') !== '' ? $sender['name'] : null
@@ -481,9 +485,13 @@ final class FormController
                 [$siteId, trim($path, '/'), 'published']
             );
         }
+        $fallbackContent = json_decode((string) ($fallback['content'] ?? '{}'), true);
+        $fallbackTitle = ($fallback['slug'] ?? '') === '__forms'
+            ? (trim((string) ($fallbackContent['heading'] ?? '')) ?: __('form.mail.form'))
+            : (string) ($fallback['page_title'] ?? __('form.mail.form'));
         return $page ?? [
             'id' => (int) ($fallback['page_id'] ?? 0),
-            'title' => (string) ($fallback['page_title'] ?? 'Formulario'),
+            'title' => $fallbackTitle,
             'slug' => (string) ($fallback['slug'] ?? ''),
         ];
     }

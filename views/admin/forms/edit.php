@@ -371,6 +371,7 @@ $renderFieldRow = function (int $i, array $f) use ($fieldTypes, $filePresets): s
     }
 })();
 </script>
+<script src="<?= e(base_url('admin/assets/js/form-notification-editor.js')) ?>?v=<?= (int) filemtime(PP_ROOT . '/admin/assets/js/form-notification-editor.js') ?>" defer></script>
 <?php \Core\View::end(); ?>
 
 <div class="pp-forms-wrap pp-forms-wrap--editor">
@@ -524,20 +525,47 @@ $baseIsWrong = $baseLang !== $primaryLang;
                 <input type="text" id="pp-f-submit" name="submit_text" maxlength="60" value="<?= e((string) ($form['submit_text'] ?? 'Enviar')) ?>" placeholder="Enviar">
             </div>
             <div class="pp-form-group">
-                <label for="pp-f-notify"><?= e(__('form_edit.notify_email')) ?></label>
-                <input type="email" id="pp-f-notify" name="notify_email" maxlength="255" value="<?= e((string) ($form['notify_email'] ?? '')) ?>" placeholder="Por defecto, el del sitio">
-                <small><?= e(__('form_edit.notify_help')) ?></small>
+                <label for="pp-f-success"><?= e(__('form_edit.success_message')) ?></label>
+                <input type="text" id="pp-f-success" name="success_message" maxlength="240" value="<?= e((string) ($form['success_message'] ?? '')) ?>" placeholder="Gracias, te contactaremos pronto.">
+                <small><?= e(__('form_edit.success_help')) ?></small>
             </div>
         </div>
+    </section>
+
+    <section class="pp-ai-config-panel pp-notification-editor" id="pp-notification-editor" data-preview-url="<?= e(base_url('admin/formularios/' . $form_id . '/preview-notification')) ?>">
+        <div class="pp-ai-section-head"><div><h3><?= e(__('form_edit.notify_title')) ?></h3><p><?= e(__('form_edit.notify_intro')) ?></p></div></div>
         <div class="pp-form-group">
-            <label for="pp-f-notify-body"><?= e(__('form_edit.notify_body')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></label>
-            <textarea id="pp-f-notify-body" name="notify_body" rows="5" maxlength="4000" aria-describedby="pp-f-notify-body-help" placeholder="<?= e(__('form.mail.new_message')) ?>"><?= e((string) ($form['notify_body'] ?? '')) ?></textarea>
-            <small id="pp-f-notify-body-help"><?= e(__('form_edit.notify_body_help')) ?></small>
+            <label for="pp-f-notify"><?= e(__('form_edit.notify_email')) ?></label>
+            <input type="email" id="pp-f-notify" name="notify_email" maxlength="255" value="<?= e((string) ($form['notify_email'] ?? '')) ?>" placeholder="<?= e(__('form_edit.notify_default_email')) ?>">
+            <small><?= e(__('form_edit.notify_help')) ?></small>
         </div>
         <div class="pp-form-group">
-            <label for="pp-f-success"><?= e(__('form_edit.success_message')) ?></label>
-            <input type="text" id="pp-f-success" name="success_message" maxlength="240" value="<?= e((string) ($form['success_message'] ?? '')) ?>" placeholder="Gracias, te contactaremos pronto.">
-            <small><?= e(__('form_edit.success_help')) ?></small>
+            <label for="pp-f-notify-subject"><?= e(__('form_edit.subject')) ?></label>
+            <input type="text" id="pp-f-notify-subject" name="notify_subject" maxlength="200" value="<?= e((string) ($form['notify_subject'] ?? '')) ?>" placeholder="<?= e(__('form.notice.default_subject')) ?>">
+        </div>
+        <div class="pp-form-group">
+            <label for="pp-f-notify-body"><?= e(__('form_edit.notify_body')) ?></label>
+            <textarea id="pp-f-notify-body" name="notify_body" rows="10" maxlength="4000" aria-describedby="pp-f-notify-body-help"><?= e(\App\Services\FormNotification::bodyTemplate($form)) ?></textarea>
+            <small id="pp-f-notify-body-help"><?= e(__('form_edit.notify_body_help')) ?></small>
+        </div>
+        <div class="pp-notification-tokens" aria-label="<?= e(__('form_edit.notify_insert')) ?>">
+            <span><?= e(__('form_edit.notify_insert')) ?></span>
+            <?php foreach (['respuestas', 'nombre', 'email', 'telefono', 'formulario', 'sitio', 'pagina', 'fecha'] as $token): ?>
+                <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" data-notify-token="{{<?= e($token) ?>}}" <?= $token === 'respuestas' ? 'data-notify-body-only' : '' ?>><?= e(__('form_edit.token.' . $token)) ?></button>
+            <?php endforeach; ?>
+        </div>
+        <details class="pp-notification-field-tokens">
+            <summary><?= e(__('form_edit.notify_field_tokens')) ?></summary>
+            <div class="pp-notification-tokens" id="pp-notify-field-tokens"></div>
+        </details>
+        <div class="pp-notification-preview-actions">
+            <button type="button" class="pp-btn pp-btn--secondary" id="pp-notify-preview-button"><?= e(__('form_edit.notify_preview')) ?></button>
+            <span><?= e(__('form_edit.notify_preview_help')) ?></span>
+        </div>
+        <p id="pp-notify-preview-status" role="status" aria-live="polite" hidden></p>
+        <div class="pp-notification-preview" id="pp-notify-preview" hidden>
+            <div class="pp-notification-preview-subject"><span><?= e(__('form_edit.subject')) ?></span><strong id="pp-notify-preview-subject"></strong></div>
+            <iframe id="pp-notify-preview-frame" title="<?= e(__('form_edit.notify_preview')) ?>" sandbox=""></iframe>
         </div>
     </section>
 
