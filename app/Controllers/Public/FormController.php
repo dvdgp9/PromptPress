@@ -142,7 +142,7 @@ final class FormController
             $body = FormSubmissionService::emailBody([
                 'page_title' => (string) ($section['page_title'] ?? ''),
                 'section_heading' => (string) ($content['heading'] ?? 'Formulario'),
-            ], $payload);
+            ], $payload, (string) ($content['notify_body'] ?? ''));
             $message = new MailMessage(
                 $recipient,
                 $subject,

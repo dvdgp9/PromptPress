@@ -233,6 +233,7 @@ final class FormTemplates
             // y `t()` limpia los `{token}` sin valor —dejaría el saludo a medias—.
             'autoresponder_body'    => Microcopy::template('form.tpl.autoresponder_body', $lang),
             'notify_email'          => '',
+            'notify_body'           => '',
         ];
         return array_merge($defaults, $partial, ['form_type' => $type]);
     }

@@ -225,6 +225,7 @@ class FormsController
             'autoresponder_subject' => mb_substr(trim((string) Request::post('autoresponder_subject', '')), 0, 200),
             'autoresponder_body'    => mb_substr((string) Request::post('autoresponder_body', ''), 0, 4000),
             'notify_email'    => mb_substr(trim((string) Request::post('notify_email', '')), 0, 255),
+            'notify_body'     => mb_substr(trim((string) Request::post('notify_body', '')), 0, 4000),
         ];
     }
 

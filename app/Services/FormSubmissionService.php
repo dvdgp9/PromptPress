@@ -112,12 +112,12 @@ final class FormSubmissionService
     }
 
     /** @param array<string,mixed> $payload */
-    public static function emailBody(array $meta, array $payload): string
+    public static function emailBody(array $meta, array $payload, string $notifyBody = ''): string
     {
         // Este correo lo recibe QUIEN GESTIONA el sitio, no el visitante: va en
         // el idioma del panel (igual que los avisos de Reservas y Tienda).
         $lines = [
-            __('form.mail.new_message'),
+            trim($notifyBody) !== '' ? trim($notifyBody) : __('form.mail.new_message'),
             '',
             __('form.mail.page') . ': ' . (string) ($meta['page_title'] ?? ''),
             __('form.mail.section') . ': ' . (string) ($meta['section_heading'] ?? __('form.mail.form')),

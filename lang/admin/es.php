@@ -3666,6 +3666,8 @@ return [
     'form_edit.on_submit_help' => 'Qué pasa cuando alguien completa el formulario.',
     'form_edit.button_text'    => 'Texto del botón',
     'form_edit.notify_email'   => 'Avisar a este email',
+    'form_edit.notify_body'    => 'Mensaje del aviso al destinatario',
+    'form_edit.notify_body_help' => 'Texto del correo que recibe el destinatario de este formulario. Debajo se añaden automáticamente los datos enviados. Si lo dejas vacío, se usa el mensaje predeterminado.',
     'form_edit.notify_help'    => 'A dónde llega el aviso con cada respuesta. Si lo dejas vacío, usamos el del sitio.',
     'form_edit.success_message' => 'Mensaje de éxito',
     'form_edit.success_help'    => 'Lo que ve el visitante tras enviar.',

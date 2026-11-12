@@ -530,6 +530,11 @@ $baseIsWrong = $baseLang !== $primaryLang;
             </div>
         </div>
         <div class="pp-form-group">
+            <label for="pp-f-notify-body"><?= e(__('form_edit.notify_body')) ?> <span class="pp-ai-optional-tag"><?= e(__('common.optional')) ?></span></label>
+            <textarea id="pp-f-notify-body" name="notify_body" rows="5" maxlength="4000" aria-describedby="pp-f-notify-body-help" placeholder="<?= e(__('form.mail.new_message')) ?>"><?= e((string) ($form['notify_body'] ?? '')) ?></textarea>
+            <small id="pp-f-notify-body-help"><?= e(__('form_edit.notify_body_help')) ?></small>
+        </div>
+        <div class="pp-form-group">
             <label for="pp-f-success"><?= e(__('form_edit.success_message')) ?></label>
             <input type="text" id="pp-f-success" name="success_message" maxlength="240" value="<?= e((string) ($form['success_message'] ?? '')) ?>" placeholder="Gracias, te contactaremos pronto.">
             <small><?= e(__('form_edit.success_help')) ?></small>
