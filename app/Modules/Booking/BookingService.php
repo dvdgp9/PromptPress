@@ -109,7 +109,7 @@ final class BookingService
 
         // --- Validación del hueco (fuera de la transacción: solo lectura) ----
         $rules = Database::select(
-            'SELECT service_id, weekday, date, start_time, end_time, closed
+            'SELECT service_id, weekday, date, date_end, start_time, end_time, closed
                FROM booking_hours WHERE site_id = ? AND (service_id = ? OR service_id IS NULL)',
             [$siteId, $serviceId]
         );

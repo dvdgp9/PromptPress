@@ -180,6 +180,11 @@ final class Auth
             Response::redirect(base_url('admin/login'));
             return false;
         }
+        // ANL-ADMIN — quien usa el panel no cuenta en la analítica de su web
+        // (cookie de dispositivo; ver DeviceOptOut).
+        if (class_exists(\App\Modules\Analytics\DeviceOptOut::class)) {
+            \App\Modules\Analytics\DeviceOptOut::markAdminDevice();
+        }
         return true;
     }
 

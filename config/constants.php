@@ -5,7 +5,7 @@
  */
 
 if (!defined('PP_VERSION')) {
-    define('PP_VERSION', '1.30.1');
+    define('PP_VERSION', '1.31.0');
 }
 
 /**

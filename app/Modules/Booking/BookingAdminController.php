@@ -211,7 +211,24 @@ final class BookingAdminController
 
         ServiceStore::update($siteId, $id, $fields, $hours, $exceptions);
         ServiceStore::savePayment($siteId, $id, $payment);
-        Session::flash('notice', __('bk.ok.service_saved'));
+
+        // BOOK-VAC — llevar el horario recién guardado a otros calendarios.
+        $notice = __('bk.ok.service_saved');
+        $copyTo = Request::post('copy_to', []);
+        if (is_array($copyTo) && $copyTo !== []) {
+            $what = (string) Request::post('copy_what', 'exceptions');
+            $copied = ServiceStore::copySchedule(
+                $siteId,
+                $id,
+                array_map('intval', $copyTo),
+                in_array($what, ['hours', 'both'], true),
+                in_array($what, ['exceptions', 'both'], true)
+            );
+            if ($copied > 0) {
+                $notice .= ' ' . __('bk.ok.schedule_copied', ['n' => (string) $copied]);
+            }
+        }
+        Session::flash('notice', $notice);
         Response::redirect(base_url('admin/booking/services/' . $id));
     }
 
@@ -356,7 +373,7 @@ final class BookingAdminController
      *
      * Formato esperado:
      *   hours[<weekday>][<i>][start|end]  (HH:MM)
-     *   exceptions[<i>][date|closed|start|end]
+     *   exceptions[<i>][date|date_end|closed|start|end]  (date_end vacío = un día)
      *
      * @return array{0: array<int, array<int, array{start:string,end:string}>>,
      *               1: array<int, array{date:string,closed:bool,start:?string,end:?string}>,
@@ -412,6 +429,19 @@ final class BookingAdminController
                     $errors[] = __('bk.err.exc_date', ['fecha' => $date]);
                     continue;
                 }
+                // BOOK-VAC — último día opcional: vacío = solo ese día.
+                $dateEnd = trim((string) ($ex['date_end'] ?? ''));
+                if ($dateEnd !== '') {
+                    $de = \DateTimeImmutable::createFromFormat('Y-m-d', $dateEnd);
+                    if ($de === false || $de->format('Y-m-d') !== $dateEnd || $dateEnd < $date
+                        || (int) $d->diff($de)->days >= AvailabilityEngine::MAX_PERIOD_DAYS) {
+                        $errors[] = __('bk.err.exc_period', ['fecha' => $date]);
+                        continue;
+                    }
+                    if ($dateEnd === $date) {
+                        $dateEnd = '';
+                    }
+                }
                 $closed = (string) ($ex['closed'] ?? '0') === '1';
                 $start = $closed ? null : $this->cleanTime((string) ($ex['start'] ?? ''));
                 $end   = $closed ? null : $this->cleanTime((string) ($ex['end'] ?? ''));
@@ -419,10 +449,13 @@ final class BookingAdminController
                     $errors[] = __('bk.err.exc_range', ['fecha' => $date]);
                     continue;
                 }
-                $key = $date . '|' . ($start ?? 'closed');
+                $key = $date . '|' . $dateEnd . '|' . ($start ?? 'closed');
                 if (isset($seen[$key])) continue;
                 $seen[$key] = true;
-                $exceptions[] = ['date' => $date, 'closed' => $closed, 'start' => $start, 'end' => $end];
+                $exceptions[] = [
+                    'date' => $date, 'date_end' => $dateEnd !== '' ? $dateEnd : null,
+                    'closed' => $closed, 'start' => $start, 'end' => $end,
+                ];
             }
         }
 
@@ -450,8 +483,14 @@ final class BookingAdminController
     /** @param array<string,mixed> $service @param string[] $errors */
     private function renderEditor(array $service, array $errors): void
     {
+        $siteId = Auth::siteId() ?? 0;
         View::send('admin/booking/edit', [
             'service'  => $service,
+            // BOOK-VAC — los demás calendarios, para copiarles el horario.
+            'otherServices' => array_values(array_filter(
+                ServiceStore::all($siteId),
+                static fn (array $s): bool => (int) $s['id'] !== (int) ($service['id'] ?? 0)
+            )),
             'weekdays' => self::weekdayLabels(),
             // Definición efectiva de los campos del formulario de reserva: si el
             // servicio no tiene nada guardado, los de siempre.

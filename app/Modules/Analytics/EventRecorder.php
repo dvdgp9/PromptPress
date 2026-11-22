@@ -43,6 +43,10 @@ final class EventRecorder
             if (self::isBot($userAgent)) {
                 return false;
             }
+            // ANL-ADMIN — navegador de alguien del equipo: no cuenta.
+            if (DeviceOptOut::isExcluded()) {
+                return false;
+            }
 
             $eventType = self::sanitizeEventType($eventType);
             $path      = self::sanitizePath($path);

@@ -11559,3 +11559,39 @@ La compañera del usuario quiere cobrar con Stripe las **consultas** (servicios 
 ## Lessons (BOOK-PAGO)
 - `ServiceStore::update()` rellena con DEFAULTS todo lo que no llega: los campos nuevos de un servicio que otros caminos (el asistente) no conocen van con su propio `save…()`, o se pierden al guardar desde ahí.
 - Stripe Checkout exige `expires_at` de 30 min como mínimo: el bloqueo del hueco dura 31 min para que la sesión caduque antes que él.
+
+---
+
+# BOOK-VAC + ANL-ADMIN — Vacaciones por periodo, copiar horario y no contar a las admins (22/11/2026)
+
+## Background and Motivation (BOOK-VAC + ANL-ADMIN) — Planner
+Una usuaria (web en francés, dos admins: ella y Margaux) pide:
+1. Excepciones de reservas por **periodo** (vacaciones del X al Y), no día a día, y **replicar** horario/excepciones de un calendario a los demás.
+2. Que sus visitas (las de las dos admins) **no cuenten** en la analítica.
+Usuario: «Sí, las dos» (22/11/2026).
+
+## Key Challenges and Analysis (BOOK-VAC + ANL-ADMIN)
+- Excepciones viven en `booking_hours` (una fila por fecha). Se añade `date_end DATE NULL`: NULL = un día. El motor (`AvailabilityEngine::indexRules`) expande el rango a días (tope 366) y las dos lecturas (`forService`, `BookingService::create`) piden la columna. Así las excepciones viejas no cambian.
+- Copiar: en vez de un botón aparte que copiaría lo GUARDADO (y no lo que se está editando), va dentro del formulario: «Al guardar, aplicar también a: [servicios]» + qué copiar (horario / excepciones / ambos). Horario = se sustituye; excepciones = se añaden sin duplicar. Solo toca `booking_hours`, nunca los demás campos del servicio (lección BOOK-PAGO).
+- Analítica: todo pasa por `EventRecorder::record`. Cookie técnica `pp_notrack=1` (1 año, HttpOnly, SameSite=Lax) que se pone al entrar al panel una admin; `record()` descarta si está. Interruptor en la página de Analítica para quitarla/ponerla. Va por dispositivo; lo histórico no se borra.
+
+## High-level Task Breakdown (BOOK-VAC + ANL-ADMIN)
+1. Migración `date_end` + ServiceStore (leer/escribir) + motor. Éxito: test que un periodo cierra todos sus días y nada fuera.
+2. Editor: campo «hasta» en cada excepción + validación (fin ≥ inicio, ≤ 366 días). Éxito: guardar 24/11–08/12 cerrado y verlo en el calendario público.
+3. Copiar a otros calendarios al guardar. Éxito: test de `ServiceStore::copySchedule` (horario sustituido, excepciones sin duplicar, otro sitio intocable).
+4. Analítica: cookie al entrar al panel + descarte en `record()` + interruptor. Éxito: test con y sin cookie.
+5. Textos en es/en/fr/pt, tests, php80_compat, verificación en navegador, versión 1.31.0.
+
+## Project Status Board (BOOK-VAC + ANL-ADMIN)
+- [x] 1. Migración `2026_11_22_booking_exception_periods` (`booking_hours.date_end`), `ServiceStore` lee/escribe `date_end`, `AvailabilityEngine::exceptionDates` expande el periodo (tope 366 días) en `indexRules`; las dos lecturas de reglas piden la columna.
+- [x] 2. Editor: «hasta» en cada excepción (min = inicio por JS), validación en `collectSchedule` (`bk.err.exc_period`).
+- [x] 3. «Aplicar a otros calendarios» dentro del formulario (`copy_to[]` + `copy_what`), `ServiceStore::copySchedule` (horario sustituye, excepciones se suman sin duplicar, solo `booking_hours`, solo el mismo sitio).
+- [x] 4. `DeviceOptOut` (cookie `pp_notrack` + `pp_notrack_t`), marcada en `Auth::requireAuth`; `EventRecorder::record` descarta; interruptor en Analítica (`POST /admin/analytics/device`).
+- [x] 5. Textos es/en/fr/pt; tests nuevos `booking_exception_periods` (19/19) y `analytics_admin_device` (8/8); siguen en verde booking_services/availability/payment/calendar_ui, analytics_events/rollup, admin_i18n, php80_compat. PP_VERSION → 1.31.0.
+
+## Current Status / Progress Tracking (BOOK-VAC + ANL-ADMIN) — 22/11/2026, Executor
+Verificado en navegador (8788): periodo 21/12–06/01 guardado en el servicio 3 y copiado al 147; la API pública del 147 no da días entre el 21/12 y el 06/01 y sí el 20/12 y el 07/01. Analítica: con el navegador admin el beacon no se guarda; con curl (sin cookie) sí; «Que cuenten» lo vuelve a guardar. Datos de prueba limpiados y `booking_hours` restaurado.
+
+## Lessons (BOOK-VAC + ANL-ADMIN)
+- El layout del panel solo pinta los flash `success`/`error`/`warning`; un flash `notice` solo sale si la vista lo pinta ella misma (como el editor de reservas).
+- La cookie `pp_notrack` es por navegador: cada admin tiene que entrar al panel una vez desde cada dispositivo. Lo ya registrado no se borra.

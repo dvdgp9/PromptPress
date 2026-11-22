@@ -31,7 +31,23 @@ final class AnalyticsController
         View::send('admin/analytics/index', [
             'stats'  => StatsService::forRange($siteId, $range),
             'ranges' => StatsService::RANGES,
+            'deviceExcluded' => DeviceOptOut::isExcluded(),
+            'csrf'   => \Core\CSRF::token(),
         ]);
+    }
+
+    /** POST /admin/analytics/device — que este navegador cuente o no (ANL-ADMIN). */
+    public function device(array $params = []): void
+    {
+        \Core\CSRF::check();
+        if ((string) Request::post('exclude', '1') === '1') {
+            DeviceOptOut::exclude();
+            Session::flash('success', __('analytics.device.ok_excluded'));
+        } else {
+            DeviceOptOut::count();
+            Session::flash('success', __('analytics.device.ok_counted'));
+        }
+        Response::redirect(base_url('admin/analytics'));
     }
 
     /** GET /admin/analytics/data?range=N — JSON para el selector de rango. */

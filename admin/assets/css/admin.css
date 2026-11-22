@@ -10532,6 +10532,28 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Crect x='7' y='12' width='3' height='6' rx='1'/%3E%3Crect x='12' y='8' width='3' height='10' rx='1'/%3E%3Crect x='17' y='5' width='3' height='13' rx='1'/%3E%3C/svg%3E");
 }
 
+/* ANL-ADMIN — «este dispositivo no cuenta» */
+.pp-analytics-device {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius);
+    background: #fff;
+}
+.pp-analytics-device.is-excluded {
+    border-color: var(--pp-primary);
+    background: var(--pp-primary-soft);
+}
+.pp-analytics-device__text {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
 .pp-analytics-ranges {
     display: inline-flex;
     background: var(--pp-surface);
@@ -11176,6 +11198,41 @@ button.cvstudio-crumb:hover{background:#eceef1;color:#111827}
 /* El atributo hidden no basta con display:inline-flex (lección FEAT-3). */
 .pp-booking-exception__range[hidden] {
     display: none;
+}
+/* BOOK-VAC — «hasta» entre la fecha de inicio y la de fin del periodo. */
+.pp-booking-exception__until {
+    font-size: 0.85rem;
+    color: var(--pp-text-muted, #6b6b6b);
+}
+
+/* BOOK-VAC — Aplicar el horario a otros calendarios */
+.pp-booking-copy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+}
+.pp-booking-copy fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 200px;
+}
+.pp-booking-copy legend {
+    font-weight: 600;
+    font-size: 0.88rem;
+    margin-bottom: 6px;
+}
+.pp-booking-copy__option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+.pp-booking-copy__muted {
+    color: var(--pp-text-muted, #6b6b6b);
 }
 
 /* Reservas recibidas (FEAT-3 B5) */

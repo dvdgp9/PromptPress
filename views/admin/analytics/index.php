@@ -8,6 +8,7 @@
  *
  * @var array $stats   datos de StatsService::forRange
  * @var array $ranges  [7, 30, 90]
+ * @var bool  $deviceExcluded  este navegador no cuenta (ANL-ADMIN)
  */
 \Core\View::extend('admin/layout');
 ?>
@@ -30,6 +31,17 @@
         <?php endforeach; ?>
     </div>
 </div>
+
+<?php /* ANL-ADMIN — este navegador (de alguien del equipo) cuenta o no. */ ?>
+<form method="post" action="<?= e(base_url('admin/analytics/device')) ?>" class="pp-analytics-device<?= !empty($deviceExcluded) ? ' is-excluded' : '' ?>">
+    <input type="hidden" name="_csrf" value="<?= e((string) ($csrf ?? '')) ?>">
+    <input type="hidden" name="exclude" value="<?= !empty($deviceExcluded) ? '0' : '1' ?>">
+    <p class="pp-analytics-device__text">
+        <strong><?= e(__(!empty($deviceExcluded) ? 'analytics.device.excluded' : 'analytics.device.counted')) ?></strong>
+        <?= e(__('analytics.device.hint')) ?>
+    </p>
+    <button type="submit" class="pp-btn pp-btn--ghost pp-btn--sm"><?= e(__(!empty($deviceExcluded) ? 'analytics.device.count_it' : 'analytics.device.exclude_it')) ?></button>
+</form>
 
 <div id="pp-analytics" data-endpoint="<?= e(base_url('admin/analytics/data')) ?>">
 

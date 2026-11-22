@@ -24,5 +24,6 @@ return function (Router $router, string $key, array $adminMiddlewares): void {
     $router->group('/admin', function (Router $r) use ($guard): void {
         $r->get('/analytics',      [AnalyticsController::class, 'dashboard'], [$guard]);
         $r->get('/analytics/data', [AnalyticsController::class, 'data'],      [$guard]);
+        $r->post('/analytics/device', [AnalyticsController::class, 'device'], [$guard]);
     }, $adminMiddlewares);
 };

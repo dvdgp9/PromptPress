@@ -97,12 +97,14 @@ final class ServiceStore
     /**
      * Excepciones de fecha del servicio, ordenadas por fecha.
      *
-     * @return array<int, array{date:string, closed:bool, start:?string, end:?string}>
+     * `date_end` es null en las de un solo día (BOOK-VAC).
+     *
+     * @return array<int, array{date:string, date_end:?string, closed:bool, start:?string, end:?string}>
      */
     public static function exceptions(int $serviceId): array
     {
         $rows = Database::select(
-            'SELECT date, closed, start_time, end_time FROM booking_hours
+            'SELECT date, date_end, closed, start_time, end_time FROM booking_hours
               WHERE service_id = ? AND date IS NOT NULL
               ORDER BY date, start_time',
             [$serviceId]
@@ -110,8 +112,9 @@ final class ServiceStore
         $out = [];
         foreach ($rows as $r) {
             $out[] = [
-                'date'   => (string) $r['date'],
-                'closed' => (bool) $r['closed'],
+                'date'     => (string) $r['date'],
+                'date_end' => $r['date_end'] !== null && (string) $r['date_end'] > (string) $r['date'] ? (string) $r['date_end'] : null,
+                'closed'   => (bool) $r['closed'],
                 'start'  => $r['start_time'] !== null ? substr((string) $r['start_time'], 0, 5) : null,
                 'end'    => $r['end_time'] !== null ? substr((string) $r['end_time'], 0, 5) : null,
             ];
@@ -155,7 +158,7 @@ final class ServiceStore
      *
      * @param array<string,mixed> $fields
      * @param array<int, array<int, array{start:string, end:string}>> $hours
-     * @param array<int, array{date:string, closed:bool, start:?string, end:?string}> $exceptions
+     * @param array<int, array{date:string, date_end?:?string, closed:bool, start:?string, end:?string}> $exceptions
      */
     public static function update(int $siteId, int $id, array $fields, array $hours, array $exceptions): bool
     {
@@ -193,19 +196,95 @@ final class ServiceStore
             }
         }
         foreach ($exceptions as $ex) {
-            Database::execute(
-                'INSERT INTO booking_hours (site_id, service_id, date, start_time, end_time, closed)
-                 VALUES (?, ?, ?, ?, ?, ?)',
-                [
-                    $siteId, $id, $ex['date'],
-                    $ex['closed'] ? null : ($ex['start'] . ':00'),
-                    $ex['closed'] ? null : ($ex['end'] . ':00'),
-                    $ex['closed'] ? 1 : 0,
-                ]
-            );
+            self::insertException($siteId, $id, $ex);
         }
         self::flushPageCache($siteId);
         return true;
+    }
+
+    /** @param array{date:string, date_end?:?string, closed:bool, start:?string, end:?string} $ex */
+    private static function insertException(int $siteId, int $serviceId, array $ex): void
+    {
+        $end = isset($ex['date_end']) && $ex['date_end'] !== null && (string) $ex['date_end'] > (string) $ex['date']
+            ? (string) $ex['date_end'] : null;
+        Database::execute(
+            'INSERT INTO booking_hours (site_id, service_id, date, date_end, start_time, end_time, closed)
+             VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                $siteId, $serviceId, $ex['date'], $end,
+                $ex['closed'] ? null : ($ex['start'] . ':00'),
+                $ex['closed'] ? null : ($ex['end'] . ':00'),
+                $ex['closed'] ? 1 : 0,
+            ]
+        );
+    }
+
+    /**
+     * BOOK-VAC — lleva el horario de un servicio a otros del mismo sitio.
+     *
+     * Solo toca `booking_hours` (nunca nombre, precio, cobro…). El horario
+     * semanal se SUSTITUYE; las excepciones se AÑADEN a las que ya tenga cada
+     * destino, sin repetir una idéntica (misma fecha, fin y franja).
+     *
+     * @param int[] $targetIds
+     * @return int nº de servicios destino actualizados
+     */
+    public static function copySchedule(int $siteId, int $fromId, array $targetIds, bool $hours, bool $exceptions): int
+    {
+        if (!$hours && !$exceptions) {
+            return 0;
+        }
+        $source = self::find($siteId, $fromId);
+        if ($source === null) {
+            return 0;
+        }
+        $done = 0;
+        foreach (array_unique(array_map('intval', $targetIds)) as $tid) {
+            if ($tid <= 0 || $tid === $fromId) {
+                continue;
+            }
+            // El destino tiene que ser del mismo sitio: los ids llegan del POST.
+            if (Database::selectOne('SELECT id FROM booking_services WHERE site_id = ? AND id = ? LIMIT 1', [$siteId, $tid]) === null) {
+                continue;
+            }
+            if ($hours) {
+                Database::execute('DELETE FROM booking_hours WHERE service_id = ? AND weekday IS NOT NULL', [$tid]);
+                foreach ($source['hours'] as $weekday => $ranges) {
+                    foreach ($ranges as $range) {
+                        Database::execute(
+                            'INSERT INTO booking_hours (site_id, service_id, weekday, start_time, end_time, closed)
+                             VALUES (?, ?, ?, ?, ?, 0)',
+                            [$siteId, $tid, $weekday, $range['start'] . ':00', $range['end'] . ':00']
+                        );
+                    }
+                }
+            }
+            if ($exceptions) {
+                $have = [];
+                foreach (self::exceptions($tid) as $ex) {
+                    $have[self::exceptionKey($ex)] = true;
+                }
+                foreach ($source['exceptions'] as $ex) {
+                    $key = self::exceptionKey($ex);
+                    if (isset($have[$key])) {
+                        continue;
+                    }
+                    $have[$key] = true;
+                    self::insertException($siteId, $tid, $ex);
+                }
+            }
+            $done++;
+        }
+        if ($done > 0) {
+            self::flushPageCache($siteId);
+        }
+        return $done;
+    }
+
+    /** @param array{date:string, date_end?:?string, closed:bool, start:?string, end:?string} $ex */
+    private static function exceptionKey(array $ex): string
+    {
+        return $ex['date'] . '|' . ($ex['date_end'] ?? '') . '|' . ($ex['closed'] ? 'closed' : ($ex['start'] . '-' . $ex['end']));
     }
 
     /** Borra el servicio (las reglas y reservas caen por FK CASCADE). */

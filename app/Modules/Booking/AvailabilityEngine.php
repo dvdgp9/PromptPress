@@ -183,7 +183,7 @@ final class AvailabilityEngine
             return ['service' => null, 'days' => []];
         }
         $rules = Database::select(
-            'SELECT service_id, weekday, date, start_time, end_time, closed
+            'SELECT service_id, weekday, date, date_end, start_time, end_time, closed
                FROM booking_hours
               WHERE site_id = ? AND (service_id = ? OR service_id IS NULL)',
             [$siteId, $serviceId]
@@ -231,19 +231,52 @@ final class AvailabilityEngine
                 }
             }
             if (isset($r['date']) && $r['date'] !== null && $r['date'] !== '') {
-                $date = (string) $r['date'];
                 $bucket = ($r['service_id'] ?? null) === null ? 'exGlobal' : 'exService';
-                // null = día cerrado; array = franjas especiales acumulables.
-                if ($closed) {
-                    ${$bucket}[$date] = null;
-                } elseif ($range !== null && (${$bucket}[$date] ?? []) !== null) {
-                    ${$bucket}[$date][] = $range;
+                // BOOK-VAC — una excepción puede ser un periodo (date..date_end):
+                // cuenta igual que si cada día tuviera su propia fila.
+                foreach (self::exceptionDates((string) $r['date'], $r['date_end'] ?? null) as $date) {
+                    // null = día cerrado; array = franjas especiales acumulables.
+                    if ($closed) {
+                        ${$bucket}[$date] = null;
+                    } elseif ($range !== null && (${$bucket}[$date] ?? []) !== null) {
+                        ${$bucket}[$date][] = $range;
+                    }
                 }
             } elseif (isset($r['weekday']) && $r['weekday'] !== null && $range !== null) {
                 $recurring[(int) $r['weekday']][] = $range;
             }
         }
         return ['recurring' => $recurring, 'exService' => $exService, 'exGlobal' => $exGlobal];
+    }
+
+    /** Tope de días de un periodo de excepción (un año). */
+    public const MAX_PERIOD_DAYS = 366;
+
+    /**
+     * BOOK-VAC — días que cubre una excepción. Sin fin (o fin inválido o
+     * anterior al inicio) es un solo día; un periodo se corta en
+     * MAX_PERIOD_DAYS para que una fecha mal escrita no genere miles de días.
+     *
+     * @return string[] fechas Y-m-d
+     */
+    public static function exceptionDates(string $date, $dateEnd): array
+    {
+        $dateEnd = $dateEnd !== null ? (string) $dateEnd : '';
+        if ($dateEnd === '' || $dateEnd <= $date) {
+            return [$date];
+        }
+        try {
+            $d   = new DateTimeImmutable($date);
+            $end = new DateTimeImmutable($dateEnd);
+        } catch (\Exception $e) {
+            return [$date];
+        }
+        $out = [];
+        while ($d <= $end && count($out) < self::MAX_PERIOD_DAYS) {
+            $out[] = $d->format('Y-m-d');
+            $d = $d->modify('+1 day');
+        }
+        return $out;
     }
 
     /**

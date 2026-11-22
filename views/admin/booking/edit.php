@@ -3,7 +3,8 @@
  * Reservas — editor de servicio (FEAT-3 B2).
  *
  * Horario semanal: hours[<weekday>][<i>][start|end] (0=lunes).
- * Excepciones:     exceptions[<i>][date|closed|start|end].
+ * Excepciones:     exceptions[<i>][date|date_end|closed|start|end] (date_end vacío = un día).
+ * Copiar:          copy_to[] + copy_what (exceptions|hours|both), BOOK-VAC.
  * Las filas se añaden/quitan con booking-service-editor.js (plantillas <template>).
  *
  * @var array    $service   booking_services + hours + exceptions
@@ -17,6 +18,7 @@
 $sid = (int) $service['id'];
 $hours = is_array($service['hours'] ?? null) ? $service['hours'] : [];
 $exceptions = is_array($service['exceptions'] ?? null) ? $service['exceptions'] : [];
+$otherServices = isset($otherServices) && is_array($otherServices) ? $otherServices : [];
 ?>
 
 <?php \Core\View::start('title'); ?><?= e(__('bk.title')) ?> · <?= e((string) $service['name']) ?><?php \Core\View::end(); ?>
@@ -196,7 +198,9 @@ $exceptions = is_array($service['exceptions'] ?? null) ? $service['exceptions'] 
         <div class="pp-booking-exceptions" data-exceptions>
             <?php foreach ($exceptions as $i => $ex): ?>
             <div class="pp-booking-exception" data-exception>
-                <input type="date" name="exceptions[<?= (int) $i ?>][date]" value="<?= e($ex['date']) ?>" required>
+                <input type="date" name="exceptions[<?= (int) $i ?>][date]" value="<?= e($ex['date']) ?>" required aria-label="<?= e(__('bk.exc.from_aria')) ?>">
+                <span class="pp-booking-exception__until"><?= e(__('bk.exc.until')) ?></span>
+                <input type="date" name="exceptions[<?= (int) $i ?>][date_end]" value="<?= e((string) ($ex['date_end'] ?? '')) ?>" aria-label="<?= e(__('bk.exc.until_aria')) ?>" title="<?= e(__('bk.exc.until_aria')) ?>" data-ex-end>
                 <label class="pp-booking-exception__closed">
                     <input type="checkbox" name="exceptions[<?= (int) $i ?>][closed]" value="1" <?= $ex['closed'] ? 'checked' : '' ?> data-ex-closed>
                     <?= e(__('bk.exc.closed')) ?>
@@ -212,6 +216,32 @@ $exceptions = is_array($service['exceptions'] ?? null) ? $service['exceptions'] 
         </div>
         <button type="button" class="pp-btn pp-btn--ghost pp-btn--sm" data-add-exception>+ <?= e(__('bk.exc.add')) ?></button>
     </section>
+
+    <?php /* BOOK-VAC — Llevar este horario a otros calendarios al guardar. Va
+             dentro del formulario a propósito: así se copia lo que se está
+             editando, no lo último que se guardó. */ ?>
+    <?php if ($otherServices !== []): ?>
+    <section class="pp-ai-config-panel">
+        <div class="pp-ai-section-head"><div><h3><?= e(__('bk.copy.title')) ?></h3><p><?= e(__('bk.copy.lead')) ?></p></div></div>
+        <div class="pp-booking-copy">
+            <fieldset class="pp-booking-copy__targets">
+                <legend><?= e(__('bk.copy.targets')) ?></legend>
+                <?php foreach ($otherServices as $other): ?>
+                <label class="pp-booking-copy__option">
+                    <input type="checkbox" name="copy_to[]" value="<?= (int) $other['id'] ?>">
+                    <?= e((string) $other['name']) ?><?php if ((int) $other['active'] !== 1): ?> <span class="pp-booking-copy__muted">(<?= e(__('bk.copy.inactive')) ?>)</span><?php endif; ?>
+                </label>
+                <?php endforeach; ?>
+            </fieldset>
+            <fieldset class="pp-booking-copy__what">
+                <legend><?= e(__('bk.copy.what')) ?></legend>
+                <label class="pp-booking-copy__option"><input type="radio" name="copy_what" value="exceptions" checked> <?= e(__('bk.copy.exceptions')) ?></label>
+                <label class="pp-booking-copy__option"><input type="radio" name="copy_what" value="hours"> <?= e(__('bk.copy.hours')) ?></label>
+                <label class="pp-booking-copy__option"><input type="radio" name="copy_what" value="both"> <?= e(__('bk.copy.both')) ?></label>
+            </fieldset>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <?php /* MODULOS M8 — Qué datos se le piden al cliente al reservar.
              Nombre y email no se listan: son fijos y no se pueden quitar (sin
@@ -377,7 +407,9 @@ $exceptions = is_array($service['exceptions'] ?? null) ? $service['exceptions'] 
 
 <template id="pp-booking-exception-tpl">
     <div class="pp-booking-exception" data-exception>
-        <input type="date" data-name="date" required>
+        <input type="date" data-name="date" required aria-label="<?= e(__('bk.exc.from_aria')) ?>">
+        <span class="pp-booking-exception__until"><?= e(__('bk.exc.until')) ?></span>
+        <input type="date" data-name="date_end" aria-label="<?= e(__('bk.exc.until_aria')) ?>" title="<?= e(__('bk.exc.until_aria')) ?>" data-ex-end>
         <label class="pp-booking-exception__closed">
             <input type="checkbox" value="1" checked data-ex-closed data-name="closed">
             <?= e(__('bk.exc.closed')) ?>

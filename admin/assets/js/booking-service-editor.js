@@ -60,6 +60,21 @@
     });
 
     // Checkbox "Cerrado": oculta la franja horaria de la excepción y viceversa.
+    // BOOK-VAC — el «hasta» de un periodo no puede ser anterior al inicio.
+    function syncEndMin(row) {
+        var start = row.querySelector('input[type="date"]:not([data-ex-end])');
+        var end = row.querySelector('[data-ex-end]');
+        if (!start || !end) return;
+        end.min = start.value || '';
+        if (end.value && start.value && end.value < start.value) end.value = '';
+    }
+    form.querySelectorAll('[data-exception]').forEach(syncEndMin);
+    form.addEventListener('change', function (ev) {
+        if (ev.target.type === 'date' && ev.target.closest('[data-exception]')) {
+            syncEndMin(ev.target.closest('[data-exception]'));
+        }
+    });
+
     form.addEventListener('change', function (ev) {
         if (!ev.target.hasAttribute('data-ex-closed')) return;
         var row = ev.target.closest('[data-exception]');
